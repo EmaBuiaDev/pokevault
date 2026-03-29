@@ -11,7 +11,6 @@ import com.example.pokevault.ui.theme.PokeVaultTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContent {
             PokeVaultTheme {
                 val navController = rememberNavController()

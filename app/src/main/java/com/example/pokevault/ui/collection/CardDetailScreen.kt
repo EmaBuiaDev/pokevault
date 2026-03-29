@@ -21,6 +21,7 @@ import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.ui.theme.*
 import kotlinx.coroutines.launch
+import com.example.pokevault.ui.collection.getTypeEmojiForCollection
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,7 +99,14 @@ fun CardDetailScreen(
             }
         } else {
             val c = card!!
-            val typeColor = getTypeColor(c.type)
+            val typeColor = when (c.type.lowercase()) {
+                "fuoco", "fire" -> RedCard
+                "acqua", "water" -> BlueCard
+                "erba", "grass" -> GreenCard
+                "elettro", "lightning" -> YellowCard
+                "psico", "psychic" -> PurpleCard
+                else -> PurpleCard
+            }
 
             Column(
                 modifier = Modifier
@@ -116,7 +124,7 @@ fun CardDetailScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = getTypeEmoji(c.type), fontSize = 72.sp)
+                        Text(text = getTypeEmojiForCollection(c.type), fontSize = 72.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = c.name,
@@ -250,5 +258,20 @@ fun DetailRow(label: String, value: String) {
     ) {
         Text(text = label, color = TextMuted, fontSize = 14.sp)
         Text(text = value, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+    fun getTypeColorForDetail(type: String): androidx.compose.ui.graphics.Color {
+        return when (type.lowercase()) {
+            "fuoco", "fire" -> RedCard
+            "acqua", "water" -> BlueCard
+            "erba", "grass" -> GreenCard
+            "elettro", "lightning" -> YellowCard
+            "psico", "psychic" -> PurpleCard
+            "lotta", "fighting" -> androidx.compose.ui.graphics.Color(0xFFF97316)
+            "buio", "darkness" -> androidx.compose.ui.graphics.Color(0xFF6366F1)
+            "metallo", "metal" -> androidx.compose.ui.graphics.Color(0xFF6B7280)
+            "drago", "dragon" -> androidx.compose.ui.graphics.Color(0xFF7C3AED)
+            "folletto", "fairy" -> androidx.compose.ui.graphics.Color(0xFFEC4899)
+            else -> androidx.compose.ui.graphics.Color(0xFF9CA3AF)
+        }
     }
 }

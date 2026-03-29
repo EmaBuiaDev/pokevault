@@ -18,8 +18,8 @@ data class SetDetailUiState(
     val cards: List<TcgCard> = emptyList(),
     val ownedCardIds: Set<String> = emptySet(),
     val isLoading: Boolean = true,
-    val isAddingCard: String? = null, // card ID in fase di aggiunta
-    val viewMode: String = "grid", // grid, list
+    val isAddingCard: String? = null,
+    val viewMode: String = "grid",
     val errorMessage: String? = null,
     val successMessage: String? = null
 ) {
@@ -40,25 +40,33 @@ class SetDetailViewModel : ViewModel() {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
 
-            // Carica carte dal set
+            // Carica info set (per logo)
+            try {
+                val setResponse = tcgRepository.getSetInfo(setId)
+                setResponse.onSuccess { setInfo ->
+                    uiState = uiState.copy(set = setInfo)
+                }
+            } catch (_: Exception) { }
+
+            // Carica carte del set
             tcgRepository.getCardsBySet(setId)
                 .onSuccess { cards ->
-                    uiState = uiState.copy(
-                        cards = cards,
-                        set = if (cards.isNotEmpty()) {
-                            TcgSet(
+                    // Se non abbiamo ancora il set info, prendilo dalle carte
+                    if (uiState.set == null && cards.isNotEmpty()) {
+                        uiState = uiState.copy(
+                            set = TcgSet(
                                 id = setId,
                                 name = cards.firstOrNull()?.set?.name ?: setId,
                                 series = cards.firstOrNull()?.set?.series ?: ""
                             )
-                        } else null,
-                        isLoading = false
-                    )
+                        )
+                    }
+                    uiState = uiState.copy(cards = cards, isLoading = false)
                 }
                 .onFailure { error ->
                     uiState = uiState.copy(
                         isLoading = false,
-                        errorMessage = "Errore caricamento: ${error.message}"
+                        errorMessage = "Errore: ${error.message}"
                     )
                 }
 
@@ -70,9 +78,8 @@ class SetDetailViewModel : ViewModel() {
     private fun loadOwnedCards() {
         viewModelScope.launch {
             firestoreRepository.getCards()
-                .catch { /* ignora errori */ }
+                .catch { }
                 .collect { ownedCards ->
-                    // Salva gli ID delle carte API che l'utente possiede
                     val ownedIds = ownedCards
                         .filter { it.apiCardId.isNotBlank() }
                         .map { it.apiCardId }
@@ -86,9 +93,9 @@ class SetDetailViewModel : ViewModel() {
         viewModelScope.launch {
             val isOwned = tcgCard.id in uiState.ownedCardIds
 
+            uiState = uiState.copy(isAddingCard = tcgCard.id)
+
             if (isOwned) {
-                // Rimuovi dalla collezione
-                uiState = uiState.copy(isAddingCard = tcgCard.id)
                 firestoreRepository.deleteCardByApiId(tcgCard.id)
                     .onSuccess {
                         uiState = uiState.copy(
@@ -103,9 +110,6 @@ class SetDetailViewModel : ViewModel() {
                         )
                     }
             } else {
-                // Aggiungi alla collezione
-                uiState = uiState.copy(isAddingCard = tcgCard.id)
-
                 val price = tcgCard.cardmarket?.prices?.averageSellPrice
                     ?: tcgCard.tcgplayer?.prices?.values?.firstOrNull()?.market
                     ?: 0.0

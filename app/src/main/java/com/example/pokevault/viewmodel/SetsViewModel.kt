@@ -6,7 +6,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pokevault.data.remote.PokeTcgRepository
+import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.data.remote.TcgSet
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class SetsUiState(
@@ -15,6 +18,11 @@ data class SetsUiState(
     val seriesList: List<String> = emptyList(),
     val selectedSeries: String? = null,
     val searchQuery: String = "",
+    // Ricerca globale carte
+    val cardSearchQuery: String = "",
+    val searchedCards: List<TcgCard> = emptyList(),
+    val isSearchingCards: Boolean = false,
+    // Stato generale
     val isLoading: Boolean = true,
     val errorMessage: String? = null
 )
@@ -22,6 +30,7 @@ data class SetsUiState(
 class SetsViewModel : ViewModel() {
 
     private val repository = PokeTcgRepository()
+    private var searchJob: Job? = null
 
     var uiState by mutableStateOf(SetsUiState())
         private set
@@ -79,6 +88,48 @@ class SetsViewModel : ViewModel() {
                     uiState = uiState.copy(isLoading = false)
                 }
         }
+    }
+
+    // ── Ricerca globale carte con debounce ──
+    fun searchCardsByName(query: String) {
+        uiState = uiState.copy(cardSearchQuery = query)
+
+        // Cancella ricerca precedente
+        searchJob?.cancel()
+
+        if (query.length < 2) {
+            uiState = uiState.copy(searchedCards = emptyList(), isSearchingCards = false)
+            return
+        }
+
+        searchJob = viewModelScope.launch {
+            // Debounce: aspetta 500ms prima di cercare
+            delay(500)
+            uiState = uiState.copy(isSearchingCards = true)
+
+            repository.searchCards(query)
+                .onSuccess { cards ->
+                    uiState = uiState.copy(
+                        searchedCards = cards,
+                        isSearchingCards = false
+                    )
+                }
+                .onFailure {
+                    uiState = uiState.copy(
+                        searchedCards = emptyList(),
+                        isSearchingCards = false
+                    )
+                }
+        }
+    }
+
+    fun clearCardSearch() {
+        searchJob?.cancel()
+        uiState = uiState.copy(
+            cardSearchQuery = "",
+            searchedCards = emptyList(),
+            isSearchingCards = false
+        )
     }
 
     private fun applyFilters() {

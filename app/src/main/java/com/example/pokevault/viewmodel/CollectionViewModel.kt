@@ -18,7 +18,7 @@ data class CollectionUiState(
     val isLoading: Boolean = true,
     val isGridView: Boolean = true,
     val searchQuery: String = "",
-    val selectedType: String? = null,
+    val selectedType: String? = null, // usato come filtro set
     val errorMessage: String? = null,
     val successMessage: String? = null
 )
@@ -41,7 +41,7 @@ class CollectionViewModel : ViewModel() {
                 .catch { error ->
                     uiState = uiState.copy(
                         isLoading = false,
-                        errorMessage = "Errore caricamento: ${error.message}"
+                        errorMessage = "Errore: ${error.message}"
                     )
                 }
                 .collect { cards ->
@@ -68,10 +68,10 @@ class CollectionViewModel : ViewModel() {
         )
     }
 
-    fun filterByType(type: String?) {
+    fun filterByType(setName: String?) {
         uiState = uiState.copy(
-            selectedType = type,
-            filteredCards = applyFilters(uiState.cards, uiState.searchQuery, type)
+            selectedType = setName,
+            filteredCards = applyFilters(uiState.cards, uiState.searchQuery, setName)
         )
     }
 
@@ -99,14 +99,15 @@ class CollectionViewModel : ViewModel() {
     private fun applyFilters(
         cards: List<PokemonCard>,
         query: String,
-        type: String?
+        setFilter: String?
     ): List<PokemonCard> {
         return cards.filter { card ->
             val matchesQuery = query.isBlank() ||
                 card.name.contains(query, ignoreCase = true) ||
-                card.set.contains(query, ignoreCase = true)
-            val matchesType = type == null || card.type == type
-            matchesQuery && matchesType
+                card.set.contains(query, ignoreCase = true) ||
+                card.rarity.contains(query, ignoreCase = true)
+            val matchesSet = setFilter == null || card.set == setFilter
+            matchesQuery && matchesSet
         }
     }
 }
