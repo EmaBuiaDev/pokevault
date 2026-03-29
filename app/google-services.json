@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "533369901523",
+    "project_id": "pokevault-32d28",
+    "storage_bucket": "pokevault-32d28.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:533369901523:android:9edea1be4611a646141f26",
+        "android_client_info": {
+          "package_name": "com.example.pokevault"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA0mt5g9eZpsCWRdXPlzuoU1oHYWy6fy9s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
