@@ -1,6 +1,7 @@
 package com.example.pokevault.ui.pokedex
 
-import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +11,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -19,7 +21,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -32,6 +39,106 @@ import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.data.remote.TcgSet
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.viewmodel.SetsViewModel
+
+// Formatta data
+fun formatDate(date: String): String {
+    return try {
+        val parts = date.split("/")
+        if (parts.size == 3) "${parts[2]}/${parts[1]}/${parts[0]}" else date
+    } catch (_: Exception) { date }
+}
+
+// ── Animazione Pokéball ──
+@Composable
+fun PokeballLoadingAnimation(
+    message: String = "Caricamento...",
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pokeball")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
+    val bounce by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bounce"
+    )
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // Pokéball disegnata con Canvas
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .offset(y = (-8 * bounce).dp)
+                .rotate(rotation)
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val s = size.minDimension
+                val r = s / 2
+                val cx = size.width / 2
+                val cy = size.height / 2
+
+                // Metà superiore rossa
+                drawArc(
+                    color = Color(0xFFEF4444),
+                    startAngle = 180f, sweepAngle = 180f,
+                    useCenter = true,
+                    topLeft = Offset.Zero, size = Size(s, s)
+                )
+                // Metà inferiore bianca
+                drawArc(
+                    color = Color(0xFFF5F5F5),
+                    startAngle = 0f, sweepAngle = 180f,
+                    useCenter = true,
+                    topLeft = Offset.Zero, size = Size(s, s)
+                )
+                // Linea nera centrale
+                drawLine(
+                    color = Color(0xFF2D2D2D),
+                    start = Offset(0f, cy),
+                    end = Offset(s, cy),
+                    strokeWidth = s * 0.06f
+                )
+                // Cerchio esterno
+                drawCircle(
+                    color = Color(0xFF2D2D2D),
+                    radius = r,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = s * 0.05f)
+                )
+                // Cerchio centrale bianco
+                drawCircle(color = Color(0xFFF5F5F5), radius = r * 0.25f, center = Offset(cx, cy))
+                // Cerchio centrale bordo
+                drawCircle(color = Color(0xFF2D2D2D), radius = r * 0.25f, center = Offset(cx, cy), style = Stroke(width = s * 0.05f))
+                // Cerchio interno
+                drawCircle(color = Color(0xFFF5F5F5), radius = r * 0.12f, center = Offset(cx, cy))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = message,
+            color = TextGray,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,12 +163,18 @@ fun SetsListScreen(
                     Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite)
                 }
             },
+            actions = {
+                if (!state.isLoading) {
+                    IconButton(onClick = { viewModel.refresh() }) {
+                        Icon(Icons.Default.Refresh, "Aggiorna", tint = TextMuted)
+                    }
+                }
+            },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
         )
 
-        // ── Barra ricerca con toggle ──
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-            // Toggle: Espansioni / Cerca carte
+            // Toggle
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -69,44 +182,17 @@ fun SetsListScreen(
                     .background(DarkCard),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Text(
-                    text = "Espansioni",
-                    color = if (!isSearchingCards) TextWhite else TextMuted,
-                    fontWeight = if (!isSearchingCards) FontWeight.SemiBold else FontWeight.Normal,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            isSearchingCards = false
-                            viewModel.clearCardSearch()
-                        }
-                        .background(
-                            if (!isSearchingCards) BlueCard.copy(alpha = 0.3f)
-                            else androidx.compose.ui.graphics.Color.Transparent
-                        )
-                        .padding(vertical = 12.dp)
-                )
-                Text(
-                    text = "Cerca carte",
-                    color = if (isSearchingCards) TextWhite else TextMuted,
-                    fontWeight = if (isSearchingCards) FontWeight.SemiBold else FontWeight.Normal,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { isSearchingCards = true }
-                        .background(
-                            if (isSearchingCards) BlueCard.copy(alpha = 0.3f)
-                            else androidx.compose.ui.graphics.Color.Transparent
-                        )
-                        .padding(vertical = 12.dp)
-                )
+                TabItem("Espansioni", !isSearchingCards) {
+                    isSearchingCards = false; viewModel.clearCardSearch()
+                }
+                TabItem("Cerca carte", isSearchingCards) {
+                    isSearchingCards = true
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Barra di ricerca
+            // Search bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -115,48 +201,28 @@ fun SetsListScreen(
                     .padding(horizontal = 14.dp, vertical = 13.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Search, "Cerca",
-                        tint = TextMuted,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Icon(Icons.Default.Search, "Cerca", tint = TextMuted, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Box(modifier = Modifier.weight(1f)) {
-                        val placeholder = if (isSearchingCards) "Cerca una carta tra tutte le espansioni..."
-                        else "Cerca un'espansione..."
+                        val placeholder = if (isSearchingCards) "Cerca tra tutte le espansioni..." else "Cerca un'espansione..."
                         val query = if (isSearchingCards) state.cardSearchQuery else state.searchQuery
-
-                        if (query.isEmpty()) {
-                            Text(placeholder, color = TextMuted, fontSize = 14.sp)
-                        }
+                        if (query.isEmpty()) Text(placeholder, color = TextMuted, fontSize = 14.sp)
                         BasicTextField(
                             value = query,
                             onValueChange = {
-                                if (isSearchingCards) viewModel.searchCardsByName(it)
-                                else viewModel.updateSearch(it)
+                                if (isSearchingCards) viewModel.searchCardsByName(it) else viewModel.updateSearch(it)
                             },
-                            textStyle = androidx.compose.ui.text.TextStyle(
-                                color = TextWhite, fontSize = 14.sp
-                            ),
-                            singleLine = true,
-                            cursorBrush = SolidColor(BlueCard),
+                            textStyle = androidx.compose.ui.text.TextStyle(color = TextWhite, fontSize = 14.sp),
+                            singleLine = true, cursorBrush = SolidColor(BlueCard),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
-
-                    // Bottone cancella
                     val query = if (isSearchingCards) state.cardSearchQuery else state.searchQuery
                     if (query.isNotEmpty()) {
-                        Icon(
-                            Icons.Default.Close, "Cancella",
-                            tint = TextMuted,
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clickable {
-                                    if (isSearchingCards) viewModel.clearCardSearch()
-                                    else viewModel.updateSearch("")
-                                }
-                        )
+                        Icon(Icons.Default.Close, "Cancella", tint = TextMuted,
+                            modifier = Modifier.size(20.dp).clickable {
+                                if (isSearchingCards) viewModel.clearCardSearch() else viewModel.updateSearch("")
+                            })
                     }
                 }
             }
@@ -164,52 +230,47 @@ fun SetsListScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // ── Contenuto basato su modalità ──
         if (isSearchingCards) {
-            // Risultati ricerca carte globale
-            CardSearchResults(
-                cards = state.searchedCards,
-                isLoading = state.isSearchingCards,
-                query = state.cardSearchQuery,
-                onCardSetClick = { setId -> onSetClick(setId) }
-            )
+            CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery) { setId -> onSetClick(setId) }
         } else {
-            // Filtri serie
+            // ── Filtri serie migliorati ──
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
-                    SeriesChip(
+                    SeriesFilterChip(
                         label = "Tutte",
+                        count = state.allSets.size,
                         isSelected = state.selectedSeries == null,
                         onClick = { viewModel.filterBySeries(null) }
                     )
                 }
                 items(state.seriesList) { series ->
-                    SeriesChip(
+                    val count = state.allSets.count { it.series == series }
+                    SeriesFilterChip(
                         label = series,
+                        count = count,
                         isSelected = state.selectedSeries == series,
                         onClick = { viewModel.filterBySeries(series) }
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            Text(
-                text = "${state.filteredSets.size} espansioni",
-                color = TextMuted,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
+            if (!state.isLoading) {
+                Text(
+                    text = "${state.filteredSets.size} espansioni",
+                    color = TextMuted, fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                )
+            }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Griglia espansioni
+            // ── Contenuto ──
             if (state.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = BlueCard)
+                    PokeballLoadingAnimation(message = "Caricamento espansioni...")
                 }
             } else if (state.errorMessage != null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -218,9 +279,11 @@ fun SetsListScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(state.errorMessage, color = TextGray, textAlign = TextAlign.Center)
                         Spacer(modifier = Modifier.height(16.dp))
-                        TextButton(onClick = { viewModel.refresh() }) {
-                            Text("Riprova", color = BlueCard)
-                        }
+                        Button(
+                            onClick = { viewModel.refresh() },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                        ) { Text("Riprova") }
                     }
                 }
             } else {
@@ -239,131 +302,66 @@ fun SetsListScreen(
     }
 }
 
-// ── Risultati ricerca carte ──
+// ── Tab item ──
 @Composable
-fun CardSearchResults(
-    cards: List<TcgCard>,
-    isLoading: Boolean,
-    query: String,
-    onCardSetClick: (String) -> Unit
-) {
-    if (query.length < 2) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("🔍", fontSize = 48.sp)
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "Scrivi almeno 2 caratteri per cercare",
-                    color = TextMuted,
-                    fontSize = 14.sp
-                )
-            }
-        }
-    } else if (isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(color = BlueCard)
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("Cerco \"$query\"...", color = TextGray, fontSize = 14.sp)
-            }
-        }
-    } else if (cards.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("😔", fontSize = 48.sp)
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("Nessuna carta trovata per \"$query\"", color = TextGray, fontSize = 14.sp)
-            }
-        }
-    } else {
-        // Raggruppa per set
-        val grouped = cards.groupBy { it.set?.name ?: "Sconosciuto" }
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Conteggio risultati
-            item(span = { GridItemSpan(3) }) {
-                Text(
-                    text = "${cards.size} carte trovate in ${grouped.size} espansioni",
-                    color = TextMuted,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-            }
-
-            grouped.forEach { (setName, setCards) ->
-                // Header set
-                item(span = { GridItemSpan(3) }) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(DarkCard)
-                            .clickable {
-                                val setId = setCards.firstOrNull()?.set?.id
-                                if (setId != null) onCardSetClick(setId)
-                            }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(setName, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("${setCards.size} risultati", color = TextMuted, fontSize = 11.sp)
-                        }
-                        Icon(
-                            Icons.Default.ChevronRight,
-                            contentDescription = "Apri set",
-                            tint = TextMuted,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-
-                // Carte del set
-                items(
-                    items = setCards.sortedBy { it.number.toIntOrNull() ?: 999 },
-                    key = { it.id }
-                ) { card ->
-                    SearchResultCardItem(card = card, onClick = {
-                        val setId = card.set?.id
-                        if (setId != null) onCardSetClick(setId)
-                    })
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SearchResultCardItem(card: TcgCard, onClick: () -> Unit) {
-    Box(
+fun RowScope.TabItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = if (isSelected) TextWhite else TextMuted,
+        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+        fontSize = 14.sp, textAlign = TextAlign.Center,
         modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.72f)
-            .clip(RoundedCornerShape(10.dp))
+            .weight(1f)
             .clickable(onClick = onClick)
+            .background(if (isSelected) BlueCard.copy(alpha = 0.3f) else Color.Transparent)
+            .padding(vertical = 12.dp)
+    )
+}
+
+// ── Filtro serie migliorato con conteggio ──
+@Composable
+fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isSelected) BlueCard else DarkCard)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        AsyncImage(
-            model = card.images.small,
-            contentDescription = card.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
+        Text(
+            text = label,
+            color = if (isSelected) TextWhite else TextMuted,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            fontSize = 13.sp, maxLines = 1
         )
+        Box(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(
+                    if (isSelected) Color.White.copy(alpha = 0.2f)
+                    else TextMuted.copy(alpha = 0.15f)
+                )
+                .padding(horizontal = 6.dp, vertical = 1.dp)
+        ) {
+            Text(
+                text = "$count",
+                color = if (isSelected) TextWhite else TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }
 
-// ── Set card (invariato ma qui per completezza) ──
+// ── Set Card con total (non printedTotal) e data formattata ──
 @Composable
 fun SetCard(set: TcgSet, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp)
+            .height(185.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(DarkCard)
             .clickable(onClick = onClick)
@@ -372,6 +370,7 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
             modifier = Modifier.fillMaxSize().padding(14.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
+            // Logo
             Box(
                 modifier = Modifier.fillMaxWidth().height(80.dp),
                 contentAlignment = Alignment.Center
@@ -383,6 +382,7 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().height(70.dp)
                 )
             }
+
             Column {
                 Text(
                     text = set.name, color = TextWhite, fontWeight = FontWeight.SemiBold,
@@ -393,26 +393,88 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("${set.printedTotal} carte", color = BlueCard, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                    Text(set.releaseDate, color = TextMuted, fontSize = 11.sp)
+                    // Usa total (include secret rare)
+                    Text(
+                        text = "${set.total} carte",
+                        color = BlueCard,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    // Data formattata GG/MM/AAAA
+                    Text(
+                        text = formatDate(set.releaseDate),
+                        color = TextMuted,
+                        fontSize = 11.sp
+                    )
                 }
-                Text(set.series, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text = set.series, color = TextMuted, fontSize = 11.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
 }
 
+// ── Card search results ──
 @Composable
-fun SeriesChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
-    Text(
-        text = label,
-        color = if (isSelected) TextWhite else TextMuted,
-        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-        fontSize = 13.sp, maxLines = 1,
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (isSelected) BlueCard else DarkCard)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    )
+fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, onCardSetClick: (String) -> Unit) {
+    if (query.length < 2) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("🔍", fontSize = 48.sp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Scrivi almeno 2 caratteri", color = TextMuted, fontSize = 14.sp)
+            }
+        }
+    } else if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            PokeballLoadingAnimation(message = "Cerco \"$query\"...")
+        }
+    } else if (cards.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("😔", fontSize = 48.sp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Nessuna carta trovata", color = TextGray, fontSize = 14.sp)
+            }
+        }
+    } else {
+        val grouped = cards.groupBy { it.set?.name ?: "Sconosciuto" }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item(span = { GridItemSpan(3) }) {
+                Text("${cards.size} carte in ${grouped.size} espansioni", color = TextMuted, fontSize = 13.sp)
+            }
+            grouped.forEach { (setName, setCards) ->
+                item(span = { GridItemSpan(3) }) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DarkCard)
+                            .clickable { setCards.firstOrNull()?.set?.id?.let { onCardSetClick(it) } }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(setName, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("${setCards.size} risultati", color = TextMuted, fontSize = 11.sp)
+                        }
+                        Icon(Icons.Default.ChevronRight, null, tint = TextMuted, modifier = Modifier.size(20.dp))
+                    }
+                }
+                items(setCards.sortedBy { it.number.toIntOrNull() ?: 999 }, key = { it.id }) { card ->
+                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp))
+                        .clickable { card.set?.id?.let { onCardSetClick(it) } }) {
+                        AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    }
+                }
+            }
+        }
+    }
 }
+
+// SeriesChip non più necessario, sostituito da SeriesFilterChip

@@ -1,9 +1,10 @@
 package com.example.pokevault.viewmodel
 
+import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
@@ -18,16 +19,15 @@ data class SetsUiState(
     val seriesList: List<String> = emptyList(),
     val selectedSeries: String? = null,
     val searchQuery: String = "",
-    // Ricerca globale carte
     val cardSearchQuery: String = "",
     val searchedCards: List<TcgCard> = emptyList(),
     val isSearchingCards: Boolean = false,
-    // Stato generale
     val isLoading: Boolean = true,
     val errorMessage: String? = null
 )
 
-class SetsViewModel : ViewModel() {
+// Usa AndroidViewModel per accedere al Context
+class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = PokeTcgRepository()
     private var searchJob: Job? = null
@@ -42,7 +42,8 @@ class SetsViewModel : ViewModel() {
     private fun loadSets() {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
-            repository.getSets()
+            val context = getApplication<Application>().applicationContext
+            repository.getSets(context = context)
                 .onSuccess { sets ->
                     val series = sets.map { it.series }.distinct()
                     uiState = uiState.copy(
@@ -74,7 +75,8 @@ class SetsViewModel : ViewModel() {
     fun refresh() {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
-            repository.getSets(forceRefresh = true)
+            val context = getApplication<Application>().applicationContext
+            repository.getSets(context = context, forceRefresh = true)
                 .onSuccess { sets ->
                     val series = sets.map { it.series }.distinct()
                     uiState = uiState.copy(
@@ -90,52 +92,36 @@ class SetsViewModel : ViewModel() {
         }
     }
 
-    // ── Ricerca globale carte con debounce ──
     fun searchCardsByName(query: String) {
         uiState = uiState.copy(cardSearchQuery = query)
-
-        // Cancella ricerca precedente
         searchJob?.cancel()
-
         if (query.length < 2) {
             uiState = uiState.copy(searchedCards = emptyList(), isSearchingCards = false)
             return
         }
-
         searchJob = viewModelScope.launch {
-            // Debounce: aspetta 500ms prima di cercare
             delay(500)
             uiState = uiState.copy(isSearchingCards = true)
-
             repository.searchCards(query)
                 .onSuccess { cards ->
-                    uiState = uiState.copy(
-                        searchedCards = cards,
-                        isSearchingCards = false
-                    )
+                    uiState = uiState.copy(searchedCards = cards, isSearchingCards = false)
                 }
                 .onFailure {
-                    uiState = uiState.copy(
-                        searchedCards = emptyList(),
-                        isSearchingCards = false
-                    )
+                    uiState = uiState.copy(searchedCards = emptyList(), isSearchingCards = false)
                 }
         }
     }
 
     fun clearCardSearch() {
         searchJob?.cancel()
-        uiState = uiState.copy(
-            cardSearchQuery = "",
-            searchedCards = emptyList(),
-            isSearchingCards = false
-        )
+        uiState = uiState.copy(cardSearchQuery = "", searchedCards = emptyList(), isSearchingCards = false)
     }
 
     private fun applyFilters() {
         val filtered = uiState.allSets.filter { set ->
             val matchesSearch = uiState.searchQuery.isBlank() ||
-                set.name.contains(uiState.searchQuery, ignoreCase = true)
+                set.name.contains(uiState.searchQuery, ignoreCase = true) ||
+                set.series.contains(uiState.searchQuery, ignoreCase = true)
             val matchesSeries = uiState.selectedSeries == null ||
                 set.series == uiState.selectedSeries
             matchesSearch && matchesSeries
