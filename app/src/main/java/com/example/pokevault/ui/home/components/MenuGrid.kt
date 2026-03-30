@@ -61,7 +61,7 @@ fun MenuGrid(
     )
 
     val newsItem = MenuItemData(
-        title = "Notizie e articoli",
+        title = "W ME",
         icon = Icons.Default.Article,
         gradientColors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.7f)),
         badgeCount = 1

@@ -141,7 +141,7 @@ fun AppNavigation(
         composable(Routes.STATS) {
             PlaceholderScreen(
                 title = "Statistiche", emoji = "📊",
-                description = "Dashboard con grafici e valore collezione.\nGiorno 6-7.",
+                description = "Dashboard con qualsiasi funzionalità mi venga in mente.\n.",
                 onBack = { navController.popBackStack() }
             )
         }

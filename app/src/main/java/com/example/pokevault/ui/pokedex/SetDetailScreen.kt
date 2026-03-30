@@ -1,6 +1,5 @@
 package com.example.pokevault.ui.pokedex
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,7 +50,7 @@ fun getRarityInfo(rarity: String?): RarityInfo {
         "rare secret", "special art rare", "hyper rare" -> RarityInfo("★★★★", Color(0xFFE879F9), "Secret Rare", 6)
         "illustration rare" -> RarityInfo("✦", Color(0xFF818CF8), "Illustration Rare", 7)
         "special illustration rare" -> RarityInfo("✦✦", Color(0xFFA78BFA), "Special Illustration", 8)
-        "ace spec rare" -> RarityInfo("◈", Color(0xFF38BDF8), "ACE SPEC", 9)
+        "Gold Rare" -> RarityInfo("◈", Color(0xFF38BDF8), "ACE SPEC", 9)
         else -> RarityInfo("●", Color(0xFF6B7280), rarity ?: "Altro", 10)
     }
 }
