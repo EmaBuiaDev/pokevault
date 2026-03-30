@@ -24,10 +24,7 @@ class FirestoreRepository {
         val listener = cardsCollection
             .orderBy("addedAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    close(error)
-                    return@addSnapshotListener
-                }
+                if (error != null) { close(error); return@addSnapshotListener }
                 val cards = snapshot?.documents?.mapNotNull { doc ->
                     doc.toObject(PokemonCard::class.java)?.copy(id = doc.id)
                 } ?: emptyList()
@@ -53,6 +50,8 @@ class FirestoreRepository {
                 "notes" to card.notes,
                 "apiCardId" to card.apiCardId,
                 "cardNumber" to card.cardNumber,
+                "variant" to card.variant,
+                "language" to card.language,
                 "addedAt" to com.google.firebase.Timestamp.now()
             )
             val docRef = cardsCollection.add(data).await()
@@ -75,7 +74,9 @@ class FirestoreRepository {
                 "estimatedValue" to card.estimatedValue,
                 "quantity" to card.quantity,
                 "condition" to card.condition,
-                "notes" to card.notes
+                "notes" to card.notes,
+                "variant" to card.variant,
+                "language" to card.language
             )
             if (card.grade != null) data["grade"] = card.grade!!
             cardsCollection.document(cardId).update(data).await()
@@ -94,13 +95,11 @@ class FirestoreRepository {
         }
     }
 
-    // Elimina carta tramite apiCardId (usato dal toggle nel set detail)
     suspend fun deleteCardByApiId(apiCardId: String): Result<Unit> {
         return try {
             val snapshot = cardsCollection
                 .whereEqualTo("apiCardId", apiCardId)
-                .get()
-                .await()
+                .get().await()
             for (doc in snapshot.documents) {
                 doc.reference.delete().await()
             }
@@ -122,10 +121,8 @@ class FirestoreRepository {
     }
 
     fun searchCards(query: String): Flow<List<PokemonCard>> = callbackFlow {
-        val listener = cardsCollection
-            .orderBy("name")
-            .startAt(query)
-            .endAt(query + "\uf8ff")
+        val listener = cardsCollection.orderBy("name")
+            .startAt(query).endAt(query + "\uf8ff")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val cards = snapshot?.documents?.mapNotNull { doc ->
@@ -146,9 +143,7 @@ class FirestoreRepository {
                 totalValue = cards.sumOf { it.estimatedValue * it.quantity },
                 mostValuable = cards.maxByOrNull { it.estimatedValue }?.name ?: "-"
             )
-        } catch (e: Exception) {
-            CollectionStats()
-        }
+        } catch (e: Exception) { CollectionStats() }
     }
 }
 

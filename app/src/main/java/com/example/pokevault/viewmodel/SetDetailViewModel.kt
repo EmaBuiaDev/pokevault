@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pokevault.data.firebase.FirestoreRepository
+import com.example.pokevault.data.model.CardOptions
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
@@ -25,7 +26,13 @@ data class SetDetailUiState(
 ) {
     val ownedCount: Int get() = cards.count { it.id in ownedCardIds }
     val totalCount: Int get() = cards.size
-    val completionPercent: Int get() = if (totalCount > 0) (ownedCount * 100 / totalCount) else 0
+    val completionPercent: Int get() {
+        val printed = set?.printedTotal ?: totalCount
+        val ownedOfPrinted = cards
+            .filter { (it.number.toIntOrNull() ?: Int.MAX_VALUE) <= printed }
+            .count { it.id in ownedCardIds }
+        return if (printed > 0) (ownedOfPrinted * 100 / printed) else 0
+    }
 }
 
 class SetDetailViewModel : ViewModel() {
@@ -40,18 +47,16 @@ class SetDetailViewModel : ViewModel() {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
 
-            // Carica info set (per logo)
+            // Carica info set (per logo e printedTotal)
             try {
-                val setResponse = tcgRepository.getSetInfo(setId)
-                setResponse.onSuccess { setInfo ->
+                tcgRepository.getSetInfo(setId).onSuccess { setInfo ->
                     uiState = uiState.copy(set = setInfo)
                 }
             } catch (_: Exception) { }
 
-            // Carica carte del set
+            // Carica carte
             tcgRepository.getCardsBySet(setId)
                 .onSuccess { cards ->
-                    // Se non abbiamo ancora il set info, prendilo dalle carte
                     if (uiState.set == null && cards.isNotEmpty()) {
                         uiState = uiState.copy(
                             set = TcgSet(
@@ -64,13 +69,9 @@ class SetDetailViewModel : ViewModel() {
                     uiState = uiState.copy(cards = cards, isLoading = false)
                 }
                 .onFailure { error ->
-                    uiState = uiState.copy(
-                        isLoading = false,
-                        errorMessage = "Errore: ${error.message}"
-                    )
+                    uiState = uiState.copy(isLoading = false, errorMessage = "Errore: ${error.message}")
                 }
 
-            // Carica carte possedute
             loadOwnedCards()
         }
     }
@@ -89,65 +90,77 @@ class SetDetailViewModel : ViewModel() {
         }
     }
 
-    fun toggleCard(tcgCard: TcgCard) {
+    // Aggiunta carta con dettagli (variante, quantità, condizione, lingua)
+    fun addCardWithDetails(
+        tcgCard: TcgCard,
+        variant: String,
+        quantity: Int,
+        condition: String,
+        language: String
+    ) {
         viewModelScope.launch {
-            val isOwned = tcgCard.id in uiState.ownedCardIds
-
             uiState = uiState.copy(isAddingCard = tcgCard.id)
 
-            if (isOwned) {
-                firestoreRepository.deleteCardByApiId(tcgCard.id)
-                    .onSuccess {
-                        uiState = uiState.copy(
-                            isAddingCard = null,
-                            successMessage = "${tcgCard.name} rimossa"
-                        )
-                    }
-                    .onFailure {
-                        uiState = uiState.copy(
-                            isAddingCard = null,
-                            errorMessage = "Errore nella rimozione"
-                        )
-                    }
-            } else {
-                val price = tcgCard.cardmarket?.prices?.averageSellPrice
-                    ?: tcgCard.tcgplayer?.prices?.values?.firstOrNull()?.market
-                    ?: 0.0
+            // Prendi prezzo della variante specifica
+            val variantKey = CardOptions.getVariantApiKey(variant)
+            val price = tcgCard.tcgplayer?.prices?.get(variantKey)?.market
+                ?: tcgCard.cardmarket?.prices?.averageSellPrice
+                ?: 0.0
 
-                val card = PokemonCard(
-                    name = tcgCard.name,
-                    imageUrl = tcgCard.images.small,
-                    set = tcgCard.set?.name ?: "",
-                    rarity = tcgCard.rarity ?: "Unknown",
-                    type = tcgCard.types?.firstOrNull() ?: "Colorless",
-                    hp = tcgCard.hp?.toIntOrNull() ?: 0,
-                    estimatedValue = price,
-                    apiCardId = tcgCard.id,
-                    cardNumber = tcgCard.number
-                )
+            val card = PokemonCard(
+                name = tcgCard.name,
+                imageUrl = tcgCard.images.small,
+                set = tcgCard.set?.name ?: "",
+                rarity = tcgCard.rarity ?: "Unknown",
+                type = tcgCard.types?.firstOrNull() ?: "Colorless",
+                hp = tcgCard.hp?.toIntOrNull() ?: 0,
+                estimatedValue = price,
+                apiCardId = tcgCard.id,
+                cardNumber = tcgCard.number,
+                variant = variant,
+                quantity = quantity,
+                condition = condition,
+                language = language
+            )
 
-                firestoreRepository.addCard(card)
-                    .onSuccess {
-                        uiState = uiState.copy(
-                            isAddingCard = null,
-                            successMessage = "${tcgCard.name} aggiunta!"
-                        )
-                    }
-                    .onFailure {
-                        uiState = uiState.copy(
-                            isAddingCard = null,
-                            errorMessage = "Errore nell'aggiunta"
-                        )
-                    }
-            }
+            firestoreRepository.addCard(card)
+                .onSuccess {
+                    uiState = uiState.copy(
+                        isAddingCard = null,
+                        successMessage = "${tcgCard.name} ($variant) aggiunta!"
+                    )
+                }
+                .onFailure {
+                    uiState = uiState.copy(
+                        isAddingCard = null,
+                        errorMessage = "Errore nell'aggiunta"
+                    )
+                }
         }
     }
 
-    fun setViewMode(mode: String) {
-        uiState = uiState.copy(viewMode = mode)
+    // Rimuovi carta
+    fun removeCard(tcgCard: TcgCard) {
+        viewModelScope.launch {
+            firestoreRepository.deleteCardByApiId(tcgCard.id)
+                .onSuccess {
+                    uiState = uiState.copy(successMessage = "${tcgCard.name} rimossa")
+                }
+                .onFailure {
+                    uiState = uiState.copy(errorMessage = "Errore nella rimozione")
+                }
+        }
     }
 
-    fun clearMessages() {
-        uiState = uiState.copy(errorMessage = null, successMessage = null)
+    // Legacy toggle (per compatibilità)
+    fun toggleCard(tcgCard: TcgCard) {
+        if (tcgCard.id in uiState.ownedCardIds) {
+            removeCard(tcgCard)
+        } else {
+            addCardWithDetails(tcgCard, "Normal", 1, "Mint", "🇮🇹 Italiano")
+        }
     }
+
+    fun setViewMode(mode: String) { uiState = uiState.copy(viewMode = mode) }
+    fun clearMessages() { uiState = uiState.copy(errorMessage = null, successMessage = null) }
 }

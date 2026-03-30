@@ -14,12 +14,14 @@ data class PokemonCard(
     val grade: Float? = null,
     val estimatedValue: Double = 0.0,
     val quantity: Int = 1,
-    val condition: String = "Near Mint (NM)",
+    val condition: String = "Mint",
     val notes: String = "",
     val addedAt: Timestamp? = null,
-    // Nuovi campi per collegamento API
-    val apiCardId: String = "",      // ID dalla PokéTCG API (es. "sv6-001")
-    val cardNumber: String = ""       // Numero carta nel set (es. "001/142")
+    val apiCardId: String = "",
+    val cardNumber: String = "",
+    // Nuovi campi per varianti
+    val variant: String = "Normal",       // Normal, Reverse Holo, Holofoil, 1st Edition, ecc.
+    val language: String = "Italiano"      // Italiano, Inglese, Giapponese, ecc.
 )
 
 data class MenuSection(
@@ -28,3 +30,49 @@ data class MenuSection(
     val route: String,
     val badgeCount: Int = 0
 )
+
+// Costanti varianti e lingue
+object CardOptions {
+    val CONDITIONS = listOf("Mint", "Near Mint", "Excellent", "Good", "Light Played", "Played", "Poor")
+
+    val LANGUAGES = listOf(
+        "🇮🇹 Italiano",
+        "🇬🇧 Inglese",
+        "🇯🇵 Giapponese",
+        "🇫🇷 Francese",
+        "🇩🇪 Tedesco",
+        "🇪🇸 Spagnolo",
+        "🇰🇷 Coreano",
+        "🇨🇳 Cinese",
+        "🇧🇷 Portoghese"
+    )
+
+    // Le varianti vengono lette dall'API (tcgplayer.prices keys)
+    val DEFAULT_VARIANTS = listOf("Normal", "Reverse Holo", "Holofoil")
+
+    fun getVariantsFromApi(priceKeys: Set<String>): List<String> {
+        return priceKeys.map { key ->
+            when (key) {
+                "normal" -> "Normal"
+                "holofoil" -> "Holofoil"
+                "reverseHolofoil" -> "Reverse Holo"
+                "1stEditionHolofoil" -> "1st Edition Holo"
+                "1stEditionNormal" -> "1st Edition"
+                "unlimitedHolofoil" -> "Unlimited Holo"
+                else -> key.replaceFirstChar { it.uppercase() }
+            }
+        }.ifEmpty { DEFAULT_VARIANTS }
+    }
+
+    fun getVariantApiKey(variant: String): String {
+        return when (variant) {
+            "Normal" -> "normal"
+            "Holofoil" -> "holofoil"
+            "Reverse Holo" -> "reverseHolofoil"
+            "1st Edition Holo" -> "1stEditionHolofoil"
+            "1st Edition" -> "1stEditionNormal"
+            "Unlimited Holo" -> "unlimitedHolofoil"
+            else -> "normal"
+        }
+    }
+}

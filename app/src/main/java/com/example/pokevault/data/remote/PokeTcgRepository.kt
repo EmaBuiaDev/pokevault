@@ -11,7 +11,7 @@ object RetrofitClient {
     private const val BASE_URL = "https://api.pokemontcg.io/"
 
     // Registrati gratis su https://dev.pokemontcg.io/ per una API key
-    private const val API_KEY = "" // TODO: inserisci la tua API key
+    private const val API_KEY = "c1906986-6518-4fd0-9c42-c935bbc9cfde" // TODO: inserisci la tua API key
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
