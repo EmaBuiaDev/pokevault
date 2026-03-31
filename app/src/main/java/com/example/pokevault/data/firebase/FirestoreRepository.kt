@@ -33,6 +33,19 @@ class FirestoreRepository {
         awaitClose { listener.remove() }
     }
 
+    fun getOwnedCardsBySet(setName: String): Flow<List<PokemonCard>> = callbackFlow {
+        val listener = cardsCollection
+            .whereEqualTo("set", setName)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                val cards = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(PokemonCard::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(cards)
+            }
+        awaitClose { listener.remove() }
+    }
+
     suspend fun addCard(card: PokemonCard): Result<String> {
         return try {
             val data = hashMapOf(

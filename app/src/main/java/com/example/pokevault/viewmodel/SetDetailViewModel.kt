@@ -12,7 +12,11 @@ import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.data.remote.TcgSet
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 data class SetDetailUiState(
@@ -27,7 +31,6 @@ data class SetDetailUiState(
 ) {
     val ownedCount: Int get() = cards.count { it.id in ownedCardIds }
     val totalCount: Int get() = cards.size
-    // Usa total (con secret rare) per il conteggio
     val displayTotal: Int get() = set?.total ?: totalCount
     val completionPercent: Int get() =
         if (displayTotal > 0) (ownedCount * 100 / displayTotal) else 0
@@ -41,43 +44,58 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     var uiState by mutableStateOf(SetDetailUiState())
         private set
 
+    // Per gestire il caricamento della collezione in tempo reale senza duplicare i listener
+    private var currentSetId: String? = null
+
     fun loadSet(setId: String) {
+        if (currentSetId == setId) return // Evita ricaricamenti inutili
+        currentSetId = setId
+
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
 
-            // Carica info set
-            try {
-                tcgRepository.getSetInfo(setId).onSuccess { setInfo ->
-                    uiState = uiState.copy(set = setInfo)
-                }
-            } catch (_: Exception) {}
+            // Caricamento PARALLELO: Set Info e Lista Carte
+            val setInfoDeferred = async { tcgRepository.getSetInfo(setId) }
+            val cardsDeferred = async { tcgRepository.getCardsBySet(setId, context = context) }
 
-            // Carica carte (con cache disco)
-            tcgRepository.getCardsBySet(setId, context = context)
-                .onSuccess { cards ->
-                    if (uiState.set == null && cards.isNotEmpty()) {
-                        uiState = uiState.copy(set = TcgSet(
-                            id = setId,
-                            name = cards.firstOrNull()?.set?.name ?: setId,
-                            series = cards.firstOrNull()?.set?.series ?: ""
-                        ))
-                    }
-                    uiState = uiState.copy(cards = cards, isLoading = false)
-                }
-                .onFailure { error ->
-                    uiState = uiState.copy(isLoading = false, errorMessage = "Errore: ${error.message}")
-                }
+            val setInfoResult = setInfoDeferred.await()
+            val cardsResult = cardsDeferred.await()
 
-            loadOwnedCards()
+            var setNameForFirestore = ""
+
+            setInfoResult.onSuccess { setInfo ->
+                uiState = uiState.copy(set = setInfo)
+                setNameForFirestore = setInfo.name
+            }
+
+            cardsResult.onSuccess { cards ->
+                if (uiState.set == null && cards.isNotEmpty()) {
+                    val fallbackSet = TcgSet(
+                        id = setId,
+                        name = cards.firstOrNull()?.set?.name ?: setId,
+                        series = cards.firstOrNull()?.set?.series ?: ""
+                    )
+                    uiState = uiState.copy(set = fallbackSet)
+                    setNameForFirestore = fallbackSet.name
+                }
+                uiState = uiState.copy(cards = cards, isLoading = false)
+            }.onFailure { error ->
+                uiState = uiState.copy(isLoading = false, errorMessage = "Errore: ${error.message}")
+            }
+
+            // Una volta ottenuto il nome del set, iniziamo ad ascoltare Firestore in tempo reale
+            if (setNameForFirestore.isNotBlank()) {
+                observeOwnedCards(setNameForFirestore)
+            }
         }
     }
 
-    private fun loadOwnedCards() {
+    private fun observeOwnedCards(setName: String) {
         viewModelScope.launch {
-            firestoreRepository.getCards()
-                .catch { }
-                .collect { ownedCards ->
+            firestoreRepository.getOwnedCardsBySet(setName)
+                .catch { /* gestisci errore */ }
+                .collectLatest { ownedCards ->
                     val ownedIds = ownedCards
                         .filter { it.apiCardId.isNotBlank() }
                         .map { it.apiCardId }
@@ -96,7 +114,8 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
             val card = PokemonCard(
                 name = tcgCard.name, imageUrl = tcgCard.images.small,
-                set = tcgCard.set?.name ?: "", rarity = tcgCard.rarity ?: "Unknown",
+                set = tcgCard.set?.name ?: uiState.set?.name ?: "", 
+                rarity = tcgCard.rarity ?: "Unknown",
                 type = tcgCard.types?.firstOrNull() ?: "Colorless",
                 hp = tcgCard.hp?.toIntOrNull() ?: 0, estimatedValue = price,
                 apiCardId = tcgCard.id, cardNumber = tcgCard.number,
