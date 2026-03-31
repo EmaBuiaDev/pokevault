@@ -1,5 +1,7 @@
 package com.example.pokevault.ui.pokedex
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,8 +29,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.pokevault.data.model.CardOptions
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.viewmodel.SetDetailViewModel
@@ -70,6 +75,7 @@ fun SetDetailScreen(
 ) {
     val state = viewModel.uiState
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
+    var quickAddCard by remember { mutableStateOf<TcgCard?>(null) }
     var selectedRarityFilter by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(setId) { viewModel.loadSet(setId) }
@@ -80,7 +86,6 @@ fun SetDetailScreen(
         if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
     }
 
-    // OTTIMIZZAZIONE: Calcolo delle carte filtrate e ordinate
     val sortedCards = remember(state.cards, selectedRarityFilter) {
         val filtered = if (selectedRarityFilter != null)
             state.cards.filter { it.rarity == selectedRarityFilter }
@@ -88,14 +93,12 @@ fun SetDetailScreen(
         filtered.sortedBy { it.number.toIntOrNull() ?: Int.MAX_VALUE }
     }
 
-    // OTTIMIZZAZIONE: Calcolo delle statistiche rarità
     val rarityCounts = remember(state.cards, state.ownedCardIds) {
         state.cards.groupBy { getRarityInfo(it.rarity) }
             .mapValues { (_, cards) -> Pair(cards.count { it.id in state.ownedCardIds }, cards.size) }
             .toSortedMap(compareBy { it.sortOrder })
     }
 
-    // OTTIMIZZAZIONE: Lista delle rarità distinte per i chip
     val distinctRarities = remember(state.cards) {
         state.cards.map { it.rarity }.distinct().filterNotNull()
     }
@@ -142,7 +145,6 @@ fun SetDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Header
                     item(span = { GridItemSpan(3) }) {
                         SetInfoHeader(
                             logoUrl = state.set?.images?.logo ?: "",
@@ -153,7 +155,6 @@ fun SetDetailScreen(
                         )
                     }
 
-                    // Filtri rarità
                     item(span = { GridItemSpan(3) }) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
                             item {
@@ -167,7 +168,6 @@ fun SetDetailScreen(
                         }
                     }
 
-                    // Tabs vista (Griglia rimossa)
                     item(span = { GridItemSpan(3) }) {
                         Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DarkCard), horizontalArrangement = Arrangement.SpaceEvenly) {
                             listOf("Carte" to "grid", "Lista" to "list").forEach { (label, mode) ->
@@ -181,10 +181,39 @@ fun SetDetailScreen(
                         }
                     }
 
-                    // Carte
                     when (state.viewMode) {
                         "grid" -> items(sortedCards, key = { it.id }) { card ->
-                            TcgCardCompactItem(card, card.id in state.ownedCardIds) { selectedCard = card }
+                            Box {
+                                TcgCardCompactItem(
+                                    card = card,
+                                    isOwned = card.id in state.ownedCardIds,
+                                    isAdding = state.isAddingCard == card.id,
+                                    isPopupOpen = quickAddCard?.id == card.id,
+                                    onClick = { selectedCard = card },
+                                    onQuickAddClick = {
+                                        val priceKeys = card.tcgplayer?.prices?.keys ?: emptySet()
+                                        val variants = CardOptions.getVariantsFromApi(priceKeys)
+                                        
+                                        if (variants.size <= 1) {
+                                            val variantToAdd = variants.firstOrNull() ?: "Normal"
+                                            viewModel.addCardWithDetails(card, variantToAdd, 1, "Mint", "🇮🇹 Italiano")
+                                        } else {
+                                            quickAddCard = if (quickAddCard?.id == card.id) null else card
+                                        }
+                                    }
+                                )
+
+                                if (quickAddCard?.id == card.id) {
+                                    QuickAddPopup(
+                                        card = card,
+                                        onVariantSelected = { variant ->
+                                            viewModel.addCardWithDetails(card, variant, 1, "Mint", "🇮🇹 Italiano")
+                                            quickAddCard = null
+                                        },
+                                        onDismiss = { quickAddCard = null }
+                                    )
+                                }
+                            }
                         }
                         "list" -> items(sortedCards, key = { it.id }, span = { GridItemSpan(3) }) { card ->
                             TcgCardListRow(card, card.id in state.ownedCardIds) { selectedCard = card }
@@ -192,6 +221,56 @@ fun SetDetailScreen(
                     }
 
                     item(span = { GridItemSpan(3) }) { Spacer(modifier = Modifier.height(40.dp)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickAddPopup(card: TcgCard, onVariantSelected: (String) -> Unit, onDismiss: () -> Unit) {
+    val apiPriceKeys = card.tcgplayer?.prices?.keys ?: emptySet()
+    val variantOptions = CardOptions.getVariantsFromApi(apiPriceKeys)
+
+    Popup(
+        alignment = Alignment.TopCenter,
+        offset = androidx.compose.ui.unit.IntOffset(0, -10),
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true)
+    ) {
+        var visible by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { visible = true }
+
+        AnimatedVisibility(
+            visible = visible,
+            enter = scaleIn(initialScale = 0.7f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)) + fadeIn(),
+            exit = scaleOut(targetScale = 0.7f) + fadeOut()
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(min = 90.dp, max = 130.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(DarkSurface.copy(alpha = 0.98f))
+                    .border(1.dp, BlueCard.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                    .padding(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                variantOptions.forEachIndexed { index, variant ->
+                    Text(
+                        text = variant,
+                        color = TextWhite,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onVariantSelected(variant) }
+                            .padding(horizontal = 8.dp, vertical = 10.dp)
+                    )
+                    if (index < variantOptions.size - 1) {
+                        Divider(color = Color.White.copy(alpha = 0.08f), thickness = 0.5.dp)
+                    }
                 }
             }
         }
@@ -238,19 +317,58 @@ fun RarityFilterChip(label: String, isSelected: Boolean, color: Color = BlueCard
 }
 
 @Composable
-fun TcgCardCompactItem(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
+fun TcgCardCompactItem(
+    card: TcgCard, 
+    isOwned: Boolean, 
+    isAdding: Boolean = false,
+    isPopupOpen: Boolean = false,
+    onClick: () -> Unit, 
+    onQuickAddClick: () -> Unit
+) {
     Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp))
         .then(if (isOwned) Modifier.border(2.dp, GreenCard.copy(alpha = 0.7f), RoundedCornerShape(10.dp)) else Modifier).clickable(onClick = onClick)) {
+        
         AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        
         if (!isOwned) Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
-        if (isOwned) Box(modifier = Modifier.align(Alignment.TopEnd).padding(3.dp).size(18.dp).clip(CircleShape).background(GreenCard), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(12.dp))
+        
+        if (isOwned) {
+            Box(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(18.dp).clip(CircleShape).background(GreenCard), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(12.dp))
+            }
         }
-        Column(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)))).padding(horizontal = 4.dp, vertical = 3.dp)) {
-            val price = card.cardmarket?.prices?.averageSellPrice ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-                Text(card.name, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                if (price != null && price > 0) Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+
+        Column(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)))).padding(horizontal = 6.dp, vertical = 5.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(card.name, color = TextWhite, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val price = card.cardmarket?.prices?.averageSellPrice ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
+                    if (price != null && price > 0) {
+                        Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // PULSANTE QUICK ADD MINIMALE
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(if (isAdding || isPopupOpen) BlueCard.copy(alpha = 0.9f) else DarkSurface.copy(alpha = 0.8f))
+                        .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                        .clickable { onQuickAddClick() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isAdding) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 1.5.dp)
+                    } else {
+                        Icon(
+                            imageVector = if (isPopupOpen) Icons.Default.Close else Icons.Default.Add, 
+                            contentDescription = null, 
+                            tint = Color.White, 
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
             }
         }
     }
