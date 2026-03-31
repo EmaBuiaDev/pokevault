@@ -48,14 +48,14 @@ object CardOptions {
     )
 
     // Le varianti vengono lette dall'API (tcgplayer.prices keys)
-    val DEFAULT_VARIANTS = listOf("Normal", "Reverse Holo", "Holofoil")
+    val DEFAULT_VARIANTS = listOf("Normal", "Reverse", "Holo")
 
     fun getVariantsFromApi(priceKeys: Set<String>): List<String> {
         return priceKeys.map { key ->
             when (key) {
                 "normal" -> "Normal"
-                "holofoil" -> "Holofoil"
-                "reverseHolofoil" -> "Reverse Holo"
+                "holofoil" -> "Holo"
+                "reverseHolofoil" -> "Reverse"
                 "1stEditionHolofoil" -> "1st Edition Holo"
                 "1stEditionNormal" -> "1st Edition"
                 "unlimitedHolofoil" -> "Unlimited Holo"
@@ -67,8 +67,8 @@ object CardOptions {
     fun getVariantApiKey(variant: String): String {
         return when (variant) {
             "Normal" -> "normal"
-            "Holofoil" -> "holofoil"
-            "Reverse Holo" -> "reverseHolofoil"
+            "Holo" -> "holofoil"
+            "Reverse" -> "reverseHolofoil"
             "1st Edition Holo" -> "1stEditionHolofoil"
             "1st Edition" -> "1stEditionNormal"
             "Unlimited Holo" -> "unlimitedHolofoil"
