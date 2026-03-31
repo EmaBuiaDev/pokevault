@@ -13,8 +13,6 @@ import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.data.remote.TcgSet
 import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -31,7 +29,10 @@ data class SetDetailUiState(
 ) {
     val ownedCount: Int get() = cards.count { it.id in ownedCardIds }
     val totalCount: Int get() = cards.size
-    val displayTotal: Int get() = set?.total ?: totalCount
+    
+    // OTTIMIZZAZIONE: Il totale deve corrispondere alla lista reale delle carte caricate
+    val displayTotal: Int get() = if (cards.isNotEmpty()) cards.size else (set?.total ?: 0)
+    
     val completionPercent: Int get() =
         if (displayTotal > 0) (ownedCount * 100 / displayTotal) else 0
 }
@@ -44,18 +45,16 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     var uiState by mutableStateOf(SetDetailUiState())
         private set
 
-    // Per gestire il caricamento della collezione in tempo reale senza duplicare i listener
     private var currentSetId: String? = null
 
     fun loadSet(setId: String) {
-        if (currentSetId == setId) return // Evita ricaricamenti inutili
+        if (currentSetId == setId) return
         currentSetId = setId
 
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
 
-            // Caricamento PARALLELO: Set Info e Lista Carte
             val setInfoDeferred = async { tcgRepository.getSetInfo(setId) }
             val cardsDeferred = async { tcgRepository.getCardsBySet(setId, context = context) }
 
@@ -84,7 +83,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 uiState = uiState.copy(isLoading = false, errorMessage = "Errore: ${error.message}")
             }
 
-            // Una volta ottenuto il nome del set, iniziamo ad ascoltare Firestore in tempo reale
             if (setNameForFirestore.isNotBlank()) {
                 observeOwnedCards(setNameForFirestore)
             }
@@ -94,7 +92,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private fun observeOwnedCards(setName: String) {
         viewModelScope.launch {
             firestoreRepository.getOwnedCardsBySet(setName)
-                .catch { /* gestisci errore */ }
+                .catch { }
                 .collectLatest { ownedCards ->
                     val ownedIds = ownedCards
                         .filter { it.apiCardId.isNotBlank() }
@@ -122,8 +120,8 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 variant = variant, quantity = quantity, condition = condition, language = language
             )
             firestoreRepository.addCard(card)
-                .onSuccess { uiState = uiState.copy(isAddingCard = null, successMessage = "${tcgCard.name} ($variant) aggiunta!") }
-                .onFailure { uiState = uiState.copy(isAddingCard = null, errorMessage = "Errore nell'aggiunta") }
+                .onSuccess { uiState = uiState.copy(isAddingCard = null, successMessage = "${tcgCard.name} aggiunta!") }
+                .onFailure { uiState = uiState.copy(isAddingCard = null, errorMessage = "Errore") }
         }
     }
 
@@ -131,13 +129,8 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             firestoreRepository.deleteCardByApiId(tcgCard.id)
                 .onSuccess { uiState = uiState.copy(successMessage = "${tcgCard.name} rimossa") }
-                .onFailure { uiState = uiState.copy(errorMessage = "Errore nella rimozione") }
+                .onFailure { uiState = uiState.copy(errorMessage = "Errore") }
         }
-    }
-
-    fun toggleCard(tcgCard: TcgCard) {
-        if (tcgCard.id in uiState.ownedCardIds) removeCard(tcgCard)
-        else addCardWithDetails(tcgCard, "Normal", 1, "Mint", "🇮🇹 Italiano")
     }
 
     fun setViewMode(mode: String) { uiState = uiState.copy(viewMode = mode) }

@@ -37,28 +37,8 @@ import com.example.pokevault.data.model.CardOptions
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.viewmodel.SetDetailViewModel
-
-data class RarityInfo(val emoji: String, val color: Color, val label: String, val sortOrder: Int)
-
-fun getRarityInfo(rarity: String?): RarityInfo {
-    return when (rarity?.lowercase()) {
-        "common" -> RarityInfo("●", Color(0xFF9CA3AF), "Comuni", 0)
-        "uncommon" -> RarityInfo("◆", Color(0xFF6B7280), "Non comuni", 1)
-        "rare" -> RarityInfo("★", Color(0xFFEAB308), "Rare", 2)
-        "rare holo" -> RarityInfo("★", Color(0xFFEAB308), "Rare Holo", 3)
-        "rare holo ex", "double rare" -> RarityInfo("★★", Color(0xFFF59E0B), "Doppie Rare", 4)
-        "rare holo gx" -> RarityInfo("★★", Color(0xFFF59E0B), "Rare GX", 4)
-        "rare holo v" -> RarityInfo("★★", Color(0xFFF59E0B), "Rare V", 4)
-        "rare ultra", "ultra rare" -> RarityInfo("★★★", Color(0xFFEC4899), "Ultra Rare", 5)
-        "rare holo vmax" -> RarityInfo("★★★", Color(0xFFEC4899), "Rare VMAX", 5)
-        "rare holo vstar" -> RarityInfo("★★★", Color(0xFFEC4899), "Rare VSTAR", 5)
-        "rare secret", "special art rare", "hyper rare" -> RarityInfo("★★★★", Color(0xFFE879F9), "Secret Rare", 6)
-        "illustration rare" -> RarityInfo("✦", Color(0xFF818CF8), "Illustration Rare", 7)
-        "special illustration rare" -> RarityInfo("✦✦", Color(0xFFA78BFA), "Special Illustration", 8)
-        "Gold Rare" -> RarityInfo("◈", Color(0xFF38BDF8), "ACE SPEC", 9)
-        else -> RarityInfo("●", Color(0xFF6B7280), rarity ?: "Altro", 10)
-    }
-}
+import com.example.pokevault.util.RarityUtils
+import com.example.pokevault.util.RarityInfo
 
 fun formatReleaseDate(date: String): String {
     return try {
@@ -86,21 +66,28 @@ fun SetDetailScreen(
         if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
     }
 
+    // ORDINE PERFETTO: Sorting numerico intelligente (rimuove lettere dai numeri per ordinare correttamente)
     val sortedCards = remember(state.cards, selectedRarityFilter) {
         val filtered = if (selectedRarityFilter != null)
             state.cards.filter { it.rarity == selectedRarityFilter }
         else state.cards
-        filtered.sortedBy { it.number.toIntOrNull() ?: Int.MAX_VALUE }
+        filtered.sortedBy { 
+            it.number.replace(Regex("[^0-9]"), "").toIntOrNull() ?: Int.MAX_VALUE 
+        }
     }
 
+    // ORDINE PERFETTO: Raggruppamento e sorting rarità per l'header
     val rarityCounts = remember(state.cards, state.ownedCardIds) {
-        state.cards.groupBy { getRarityInfo(it.rarity) }
+        state.cards.groupBy { RarityUtils.getRarityInfo(it.rarity) }
             .mapValues { (_, cards) -> Pair(cards.count { it.id in state.ownedCardIds }, cards.size) }
             .toSortedMap(compareBy { it.sortOrder })
     }
 
+    // ORDINE PERFETTO: Filtri rarità ordinati per importanza (sortOrder)
     val distinctRarities = remember(state.cards) {
-        state.cards.map { it.rarity }.distinct().filterNotNull()
+        state.cards.mapNotNull { it.rarity }
+            .distinct()
+            .sortedBy { RarityUtils.getRarityInfo(it).sortOrder }
     }
 
     if (selectedCard != null) {
@@ -156,12 +143,16 @@ fun SetDetailScreen(
                     }
 
                     item(span = { GridItemSpan(3) }) {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp), 
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp)
+                        ) {
                             item {
                                 RarityFilterChip("Tutte (${state.cards.size})", selectedRarityFilter == null) { selectedRarityFilter = null }
                             }
                             items(distinctRarities) { rarity ->
-                                val info = getRarityInfo(rarity)
+                                val info = RarityUtils.getRarityInfo(rarity)
                                 val count = state.cards.count { it.rarity == rarity }
                                 RarityFilterChip("${info.emoji} $rarity ($count)", selectedRarityFilter == rarity, info.color) { selectedRarityFilter = rarity }
                             }
@@ -299,8 +290,8 @@ fun SetInfoHeader(logoUrl: String, ownedCount: Int, displayTotal: Int, completio
         Spacer(modifier = Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             rarityCounts.forEach { (info, counts) ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 2.dp)) {
-                    Text(info.emoji, color = info.color, fontSize = 13.sp)
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 2.dp).weight(1f)) {
+                    Text(info.emoji, color = info.color, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
                     Text("${counts.first}/${counts.second}", color = if (counts.first == counts.second && counts.second > 0) GreenCard else TextWhite, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
@@ -348,13 +339,23 @@ fun TcgCardCompactItem(
                     }
                 }
 
-                // PULSANTE QUICK ADD MINIMALE
+                // QUICK ADD MINIMALE CON MIMETISMO
                 Box(
                     modifier = Modifier
                         .size(24.dp)
                         .clip(CircleShape)
-                        .background(if (isAdding || isPopupOpen) BlueCard.copy(alpha = 0.9f) else DarkSurface.copy(alpha = 0.8f))
-                        .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                        .background(
+                            when {
+                                isAdding || isPopupOpen -> BlueCard.copy(alpha = 0.9f)
+                                isOwned -> Color.Transparent // Mimetismo se già posseduta
+                                else -> DarkSurface.copy(alpha = 0.8f)
+                            }
+                        )
+                        .border(
+                            1.dp, 
+                            if (isOwned && !isAdding && !isPopupOpen) Color.White.copy(alpha = 0.1f) else Color.White.copy(alpha = 0.15f), 
+                            CircleShape
+                        )
                         .clickable { onQuickAddClick() },
                     contentAlignment = Alignment.Center
                 ) {
@@ -364,7 +365,7 @@ fun TcgCardCompactItem(
                         Icon(
                             imageVector = if (isPopupOpen) Icons.Default.Close else Icons.Default.Add, 
                             contentDescription = null, 
-                            tint = Color.White, 
+                            tint = if (isOwned && !isPopupOpen) TextMuted.copy(alpha = 0.5f) else Color.White, // Icona più soft se posseduta
                             modifier = Modifier.size(15.dp)
                         )
                     }
@@ -376,7 +377,7 @@ fun TcgCardCompactItem(
 
 @Composable
 fun TcgCardListRow(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
-    val rarityInfo = getRarityInfo(card.rarity)
+    val rarityInfo = RarityUtils.getRarityInfo(card.rarity)
     Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isOwned) DarkCard else DarkCard.copy(alpha = 0.5f))
         .clickable(onClick = onClick).padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(modifier = Modifier.width(45.dp).height(63.dp).clip(RoundedCornerShape(6.dp))) {
@@ -385,7 +386,7 @@ fun TcgCardListRow(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
         }
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(rarityInfo.emoji, color = rarityInfo.color, fontSize = 12.sp)
+                Text(rarityInfo.emoji, color = rarityInfo.color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(card.name, color = if (isOwned) TextWhite else TextMuted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }

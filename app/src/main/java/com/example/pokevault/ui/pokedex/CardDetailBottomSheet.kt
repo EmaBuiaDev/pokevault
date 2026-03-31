@@ -29,6 +29,7 @@ import coil.compose.AsyncImage
 import com.example.pokevault.data.model.CardOptions
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.ui.theme.*
+import com.example.pokevault.util.RarityUtils.getRarityInfo
 
 @Composable
 fun CardDetailBottomSheet(
