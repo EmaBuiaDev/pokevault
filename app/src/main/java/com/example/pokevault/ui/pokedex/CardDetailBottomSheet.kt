@@ -147,7 +147,7 @@ fun CardDetailBottomSheet(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        InfoPill(icon = rarityInfo.emoji, text = card.rarity ?: "Sconosciuto", color = rarityInfo.color)
+                        InfoPill(icon = "✦", text = card.rarity ?: "Sconosciuto", color = rarityInfo.color)
                         if (price != null && price > 0) {
                             InfoPill(icon = "💰", text = "${"%.2f".format(price)} €", color = GreenCard)
                         }

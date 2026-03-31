@@ -80,23 +80,6 @@ fun SetDetailScreen(
         if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
     }
 
-    val sortedCards = remember(state.cards, selectedRarityFilter) {
-        val filtered = if (selectedRarityFilter != null)
-            state.cards.filter { it.rarity == selectedRarityFilter }
-        else state.cards
-        filtered.sortedBy { it.number.toIntOrNull() ?: Int.MAX_VALUE }
-    }
-
-    val rarityCounts = remember(state.cards, state.ownedCardIds) {
-        state.cards.groupBy { getRarityInfo(it.rarity) }
-            .mapValues { (_, cards) -> Pair(cards.count { it.id in state.ownedCardIds }, cards.size) }
-            .toSortedMap(compareBy { it.sortOrder })
-    }
-
-    val distinctRarities = remember(state.cards) {
-        state.cards.map { it.rarity }.distinct().filterNotNull()
-    }
-
     if (selectedCard != null) {
         CardDetailBottomSheet(
             card = selectedCard!!,
@@ -129,32 +112,50 @@ fun SetDetailScreen(
             )
 
             if (state.isLoading) {
+                // ── Pokéball loading ──
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     PokeballLoadingAnimation(message = "Caricamento carte...")
                 }
             } else {
+                // Usa displayTotal (total con secret rare)
+                val displayTotal = state.displayTotal
+                val ownedCount = state.ownedCount
+                val completionPercent = state.completionPercent
+
+                val filteredCards = if (selectedRarityFilter != null)
+                    state.cards.filter { it.rarity == selectedRarityFilter }
+                else state.cards
+
+                val sortedCards = filteredCards.sortedBy { it.number.toIntOrNull() ?: Int.MAX_VALUE }
+
+                val rarityCounts = state.cards.groupBy { getRarityInfo(it.rarity) }
+                    .mapValues { (_, cards) -> Pair(cards.count { it.id in state.ownedCardIds }, cards.size) }
+                    .toSortedMap(compareBy { it.sortOrder })
+
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Header
                     item(span = { GridItemSpan(3) }) {
                         SetInfoHeader(
                             logoUrl = state.set?.images?.logo ?: "",
-                            ownedCount = state.ownedCount,
-                            displayTotal = state.displayTotal,
-                            completionPercent = state.completionPercent,
+                            ownedCount = ownedCount,
+                            displayTotal = displayTotal,
+                            completionPercent = completionPercent,
                             rarityCounts = rarityCounts
                         )
                     }
 
+                    // Filtri rarità
                     item(span = { GridItemSpan(3) }) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
                             item {
                                 RarityFilterChip("Tutte (${state.cards.size})", selectedRarityFilter == null) { selectedRarityFilter = null }
                             }
-                            items(distinctRarities) { rarity ->
+                            items(state.cards.map { it.rarity }.distinct().filterNotNull()) { rarity ->
                                 val info = getRarityInfo(rarity)
                                 val count = state.cards.count { it.rarity == rarity }
                                 RarityFilterChip("${info.emoji} $rarity ($count)", selectedRarityFilter == rarity, info.color) { selectedRarityFilter = rarity }
@@ -162,9 +163,10 @@ fun SetDetailScreen(
                         }
                     }
 
+                    // Tabs vista
                     item(span = { GridItemSpan(3) }) {
                         Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DarkCard), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            listOf("Carte" to "grid", "Lista" to "list").forEach { (label, mode) ->
+                            listOf("Carte" to "grid", "Lista" to "list", "Griglia" to "large").forEach { (label, mode) ->
                                 Text(label, color = if (state.viewMode == mode) TextWhite else TextMuted,
                                     fontWeight = if (state.viewMode == mode) FontWeight.SemiBold else FontWeight.Normal,
                                     fontSize = 13.sp, textAlign = TextAlign.Center,
@@ -175,12 +177,16 @@ fun SetDetailScreen(
                         }
                     }
 
+                    // Carte
                     when (state.viewMode) {
                         "grid" -> items(sortedCards, key = { it.id }) { card ->
                             TcgCardCompactItem(card, card.id in state.ownedCardIds) { selectedCard = card }
                         }
                         "list" -> items(sortedCards, key = { it.id }, span = { GridItemSpan(3) }) { card ->
                             TcgCardListRow(card, card.id in state.ownedCardIds) { selectedCard = card }
+                        }
+                        "large" -> items(sortedCards, key = { it.id }) { card ->
+                            TcgCardLargeItem(card, card.id in state.ownedCardIds) { selectedCard = card }
                         }
                     }
 
@@ -191,6 +197,7 @@ fun SetDetailScreen(
     }
 }
 
+// ── Header usa displayTotal ──
 @Composable
 fun SetInfoHeader(logoUrl: String, ownedCount: Int, displayTotal: Int, completionPercent: Int, rarityCounts: Map<RarityInfo, Pair<Int, Int>>) {
     Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Brush.verticalGradient(listOf(DarkCard, DarkSurface))).padding(16.dp)) {
@@ -230,6 +237,7 @@ fun RarityFilterChip(label: String, isSelected: Boolean, color: Color = BlueCard
             .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp))
 }
 
+// ── Card items ──
 @Composable
 fun TcgCardCompactItem(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp))
