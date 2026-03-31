@@ -24,15 +24,14 @@ data class SetDetailUiState(
     val isLoading: Boolean = true,
     val isAddingCard: String? = null,
     val viewMode: String = "grid",
+    val searchQuery: String = "",
+    val showOnlyMissing: Boolean = false,
     val errorMessage: String? = null,
     val successMessage: String? = null
 ) {
     val ownedCount: Int get() = cards.count { it.id in ownedCardIds }
     val totalCount: Int get() = cards.size
-    
-    // OTTIMIZZAZIONE: Il totale deve corrispondere alla lista reale delle carte caricate
     val displayTotal: Int get() = if (cards.isNotEmpty()) cards.size else (set?.total ?: 0)
-    
     val completionPercent: Int get() =
         if (displayTotal > 0) (ownedCount * 100 / displayTotal) else 0
 }
@@ -101,6 +100,14 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                     uiState = uiState.copy(ownedCardIds = ownedIds)
                 }
         }
+    }
+
+    fun updateSearchQuery(query: String) {
+        uiState = uiState.copy(searchQuery = query)
+    }
+
+    fun toggleShowOnlyMissing() {
+        uiState = uiState.copy(showOnlyMissing = !uiState.showOnlyMissing)
     }
 
     fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {

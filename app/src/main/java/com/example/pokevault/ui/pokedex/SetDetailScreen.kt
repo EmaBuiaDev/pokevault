@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,7 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,6 +58,7 @@ fun SetDetailScreen(
     viewModel: SetDetailViewModel = viewModel()
 ) {
     val state = viewModel.uiState
+    val haptic = LocalHapticFeedback.current
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     var quickAddCard by remember { mutableStateOf<TcgCard?>(null) }
     var selectedRarityFilter by remember { mutableStateOf<String?>(null) }
@@ -66,24 +71,24 @@ fun SetDetailScreen(
         if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
     }
 
-    // ORDINE PERFETTO: Sorting numerico intelligente (rimuove lettere dai numeri per ordinare correttamente)
-    val sortedCards = remember(state.cards, selectedRarityFilter) {
-        val filtered = if (selectedRarityFilter != null)
-            state.cards.filter { it.rarity == selectedRarityFilter }
-        else state.cards
-        filtered.sortedBy { 
+    // LOGICA FILTRAGGIO AVANZATA: Numero, Ricerca, Rarità, Mancanti
+    val sortedCards = remember(state.cards, state.ownedCardIds, state.searchQuery, state.showOnlyMissing, selectedRarityFilter) {
+        state.cards.filter { card ->
+            val matchesRarity = selectedRarityFilter == null || card.rarity == selectedRarityFilter
+            val matchesSearch = state.searchQuery.isEmpty() || card.name.contains(state.searchQuery, ignoreCase = true)
+            val matchesMissing = !state.showOnlyMissing || card.id !in state.ownedCardIds
+            matchesRarity && matchesSearch && matchesMissing
+        }.sortedBy { 
             it.number.replace(Regex("[^0-9]"), "").toIntOrNull() ?: Int.MAX_VALUE 
         }
     }
 
-    // ORDINE PERFETTO: Raggruppamento e sorting rarità per l'header
     val rarityCounts = remember(state.cards, state.ownedCardIds) {
         state.cards.groupBy { RarityUtils.getRarityInfo(it.rarity) }
             .mapValues { (_, cards) -> Pair(cards.count { it.id in state.ownedCardIds }, cards.size) }
             .toSortedMap(compareBy { it.sortOrder })
     }
 
-    // ORDINE PERFETTO: Filtri rarità ordinati per importanza (sortOrder)
     val distinctRarities = remember(state.cards) {
         state.cards.mapNotNull { it.rarity }
             .distinct()
@@ -95,7 +100,10 @@ fun SetDetailScreen(
             card = selectedCard!!,
             isOwned = selectedCard!!.id in state.ownedCardIds,
             isLoading = state.isAddingCard == selectedCard!!.id,
-            onAddCard = { v, q, c, l -> viewModel.addCardWithDetails(selectedCard!!, v, q, c, l) },
+            onAddCard = { v, q, c, l -> 
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.addCardWithDetails(selectedCard!!, v, q, c, l) 
+            },
             onRemoveCard = { viewModel.removeCard(selectedCard!!); selectedCard = null },
             onDismiss = { selectedCard = null }
         )
@@ -132,6 +140,7 @@ fun SetDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Header con info set e rarità
                     item(span = { GridItemSpan(3) }) {
                         SetInfoHeader(
                             logoUrl = state.set?.images?.logo ?: "",
@@ -142,12 +151,61 @@ fun SetDetailScreen(
                         )
                     }
 
+                    // TOOLBAR RICERCA E FILTRO MANCANTI
                     item(span = { GridItemSpan(3) }) {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp), 
-                            modifier = Modifier.padding(vertical = 6.dp),
-                            contentPadding = PaddingValues(horizontal = 4.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            // Barra di ricerca locale
+                            Box(
+                                modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(DarkCard).padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        if (state.searchQuery.isEmpty()) Text("Cerca nel set...", color = TextMuted, fontSize = 13.sp)
+                                        BasicTextField(
+                                            value = state.searchQuery,
+                                            onValueChange = { viewModel.updateSearchQuery(it) },
+                                            textStyle = androidx.compose.ui.text.TextStyle(color = TextWhite, fontSize = 13.sp),
+                                            singleLine = true,
+                                            cursorBrush = SolidColor(BlueCard)
+                                        )
+                                    }
+                                    if (state.searchQuery.isNotEmpty()) {
+                                        Icon(Icons.Default.Close, null, tint = TextMuted, modifier = Modifier.size(16.dp).clickable { viewModel.updateSearchQuery("") })
+                                    }
+                                }
+                            }
+
+                            // Toggle Mancanti
+                            Box(
+                                modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                                    .background(if (state.showOnlyMissing) BlueCard.copy(alpha = 0.2f) else DarkCard)
+                                    .border(1.dp, if (state.showOnlyMissing) BlueCard else Color.Transparent, RoundedCornerShape(12.dp))
+                                    .clickable { viewModel.toggleShowOnlyMissing() }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (state.showOnlyMissing) Icons.Default.FilterAlt else Icons.Default.FilterAltOff,
+                                        contentDescription = null,
+                                        tint = if (state.showOnlyMissing) BlueCard else TextMuted,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Mancanti", color = if (state.showOnlyMissing) BlueCard else TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+                    }
+
+                    // Chip Rarità
+                    item(span = { GridItemSpan(3) }) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
                             item {
                                 RarityFilterChip("Tutte (${state.cards.size})", selectedRarityFilter == null) { selectedRarityFilter = null }
                             }
@@ -159,6 +217,7 @@ fun SetDetailScreen(
                         }
                     }
 
+                    // Tabs vista
                     item(span = { GridItemSpan(3) }) {
                         Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DarkCard), horizontalArrangement = Arrangement.SpaceEvenly) {
                             listOf("Carte" to "grid", "Lista" to "list").forEach { (label, mode) ->
@@ -172,42 +231,52 @@ fun SetDetailScreen(
                         }
                     }
 
-                    when (state.viewMode) {
-                        "grid" -> items(sortedCards, key = { it.id }) { card ->
-                            Box {
-                                TcgCardCompactItem(
-                                    card = card,
-                                    isOwned = card.id in state.ownedCardIds,
-                                    isAdding = state.isAddingCard == card.id,
-                                    isPopupOpen = quickAddCard?.id == card.id,
-                                    onClick = { selectedCard = card },
-                                    onQuickAddClick = {
-                                        val priceKeys = card.tcgplayer?.prices?.keys ?: emptySet()
-                                        val variants = CardOptions.getVariantsFromApi(priceKeys)
-                                        
-                                        if (variants.size <= 1) {
-                                            val variantToAdd = variants.firstOrNull() ?: "Normal"
-                                            viewModel.addCardWithDetails(card, variantToAdd, 1, "Mint", "🇮🇹 Italiano")
-                                        } else {
-                                            quickAddCard = if (quickAddCard?.id == card.id) null else card
-                                        }
-                                    }
-                                )
-
-                                if (quickAddCard?.id == card.id) {
-                                    QuickAddPopup(
-                                        card = card,
-                                        onVariantSelected = { variant ->
-                                            viewModel.addCardWithDetails(card, variant, 1, "Mint", "🇮🇹 Italiano")
-                                            quickAddCard = null
-                                        },
-                                        onDismiss = { quickAddCard = null }
-                                    )
-                                }
+                    // Griglia Carte
+                    if (sortedCards.isEmpty()) {
+                        item(span = { GridItemSpan(3) }) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                                Text("Nessuna carta trovata con questi filtri", color = TextMuted, fontSize = 14.sp)
                             }
                         }
-                        "list" -> items(sortedCards, key = { it.id }, span = { GridItemSpan(3) }) { card ->
-                            TcgCardListRow(card, card.id in state.ownedCardIds) { selectedCard = card }
+                    } else {
+                        when (state.viewMode) {
+                            "grid" -> items(sortedCards, key = { it.id }) { card ->
+                                Box {
+                                    TcgCardCompactItem(
+                                        card = card,
+                                        isOwned = card.id in state.ownedCardIds,
+                                        isAdding = state.isAddingCard == card.id,
+                                        isPopupOpen = quickAddCard?.id == card.id,
+                                        onClick = { selectedCard = card },
+                                        onQuickAddClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            val priceKeys = card.tcgplayer?.prices?.keys ?: emptySet()
+                                            val variants = CardOptions.getVariantsFromApi(priceKeys)
+                                            if (variants.size <= 1) {
+                                                val variantToAdd = variants.firstOrNull() ?: "Normal"
+                                                viewModel.addCardWithDetails(card, variantToAdd, 1, "Mint", "🇮🇹 Italiano")
+                                            } else {
+                                                quickAddCard = if (quickAddCard?.id == card.id) null else card
+                                            }
+                                        }
+                                    )
+
+                                    if (quickAddCard?.id == card.id) {
+                                        QuickAddPopup(
+                                            card = card,
+                                            onVariantSelected = { variant ->
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                viewModel.addCardWithDetails(card, variant, 1, "Mint", "🇮🇹 Italiano")
+                                                quickAddCard = null
+                                            },
+                                            onDismiss = { quickAddCard = null }
+                                        )
+                                    }
+                                }
+                            }
+                            "list" -> items(sortedCards, key = { it.id }, span = { GridItemSpan(3) }) { card ->
+                                TcgCardListRow(card, card.id in state.ownedCardIds) { selectedCard = card }
+                            }
                         }
                     }
 
@@ -339,7 +408,6 @@ fun TcgCardCompactItem(
                     }
                 }
 
-                // QUICK ADD MINIMALE CON MIMETISMO
                 Box(
                     modifier = Modifier
                         .size(24.dp)
@@ -347,7 +415,7 @@ fun TcgCardCompactItem(
                         .background(
                             when {
                                 isAdding || isPopupOpen -> BlueCard.copy(alpha = 0.9f)
-                                isOwned -> Color.Transparent // Mimetismo se già posseduta
+                                isOwned -> Color.Transparent
                                 else -> DarkSurface.copy(alpha = 0.8f)
                             }
                         )
@@ -365,7 +433,7 @@ fun TcgCardCompactItem(
                         Icon(
                             imageVector = if (isPopupOpen) Icons.Default.Close else Icons.Default.Add, 
                             contentDescription = null, 
-                            tint = if (isOwned && !isPopupOpen) TextMuted.copy(alpha = 0.5f) else Color.White, // Icona più soft se posseduta
+                            tint = if (isOwned && !isPopupOpen) TextMuted.copy(alpha = 0.5f) else Color.White,
                             modifier = Modifier.size(15.dp)
                         )
                     }
