@@ -1,6 +1,7 @@
 package com.example.pokevault.data.remote
 
 import android.content.Context
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import okhttp3.OkHttpClient
@@ -61,7 +62,9 @@ class PokeTcgRepository {
                 .putString(SETS_CACHE_KEY, gson.toJson(sets))
                 .putLong(SETS_TIME_KEY, System.currentTimeMillis())
                 .apply()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w("PokeTcgRepository", "Errore salvataggio cache sets", e)
+        }
     }
 
     private fun loadSetsFromCache(context: Context, ignoreExpiry: Boolean = false): List<TcgSet>? {
@@ -71,7 +74,10 @@ class PokeTcgRepository {
             if (!ignoreExpiry && System.currentTimeMillis() - time > CACHE_DURATION) return null
             val json = prefs.getString(SETS_CACHE_KEY, null) ?: return null
             return gson.fromJson(json, object : TypeToken<List<TcgSet>>() {}.type)
-        } catch (_: Exception) { return null }
+        } catch (e: Exception) {
+            Log.w("PokeTcgRepository", "Errore lettura cache sets", e)
+            return null
+        }
     }
 
     suspend fun getSets(context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgSet>> {
@@ -111,7 +117,9 @@ class PokeTcgRepository {
                 .putString("$CARDS_PREFIX$setId", gson.toJson(cards))
                 .putLong("$CARDS_TIME_PREFIX$setId", System.currentTimeMillis())
                 .apply()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w("PokeTcgRepository", "Errore salvataggio cache cards per set $setId", e)
+        }
     }
 
     private fun loadCardsFromCache(context: Context, setId: String, ignoreExpiry: Boolean = false): List<TcgCard>? {
@@ -121,7 +129,10 @@ class PokeTcgRepository {
             if (!ignoreExpiry && System.currentTimeMillis() - time > CARDS_CACHE_DURATION) return null
             val json = prefs.getString("$CARDS_PREFIX$setId", null) ?: return null
             return gson.fromJson(json, object : TypeToken<List<TcgCard>>() {}.type)
-        } catch (_: Exception) { return null }
+        } catch (e: Exception) {
+            Log.w("PokeTcgRepository", "Errore lettura cache cards per set $setId", e)
+            return null
+        }
     }
 
     suspend fun getCardsBySet(setId: String, context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgCard>> {

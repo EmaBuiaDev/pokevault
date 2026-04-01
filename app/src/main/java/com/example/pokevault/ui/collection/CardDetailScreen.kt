@@ -82,6 +82,9 @@ fun CardDetailScreen(
                 }
             },
             actions = {
+                IconButton(onClick = { onEdit(cardId) }) {
+                    Icon(Icons.Default.Edit, "Modifica", tint = BlueCard)
+                }
                 IconButton(onClick = { showDeleteDialog = true }) {
                     Icon(Icons.Default.Delete, "Elimina", tint = RedCard)
                 }
