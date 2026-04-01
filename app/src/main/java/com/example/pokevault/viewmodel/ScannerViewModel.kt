@@ -10,16 +10,14 @@ import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class ScannerUiState(
-    val isScanning: Boolean = false,
-    val detectedText: String = "",
+    val rawOcrText: String = "",
     val bestGuessName: String = "",
     val searchResults: List<TcgCard> = emptyList(),
     val isSearching: Boolean = false,
+    val isCapturing: Boolean = false,
     val selectedCard: TcgCard? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null,
@@ -31,101 +29,82 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     private val repository = PokeTcgRepository()
     private val firestoreRepository = FirestoreRepository()
-    private var searchJob: Job? = null
-    private var lastSearchedName: String = ""
 
     var uiState by mutableStateOf(ScannerUiState())
         private set
 
+    // Buffer per il testo OCR dell'ultimo frame (aggiornato dalla camera)
+    private var latestOcrText: String = ""
+
+    /**
+     * Chiamata continuamente dalla camera. Salva solo il testo più recente.
+     * NON lancia ricerche automatiche.
+     */
     fun onTextDetected(rawText: String) {
-        if (rawText.isBlank()) return
-        // Non riprocessare se il testo grezzo è identico
-        if (rawText == uiState.detectedText) return
+        if (rawText.isNotBlank()) {
+            latestOcrText = rawText
+        }
+    }
 
-        val cardName = extractCardName(rawText)
-        if (cardName.isBlank()) return
-        // Evita ricerche duplicate per lo stesso nome estratto
-        if (cardName == lastSearchedName && uiState.searchResults.isNotEmpty()) return
+    /**
+     * Bottone "Scansiona": prende il testo OCR corrente, estrae il nome, cerca.
+     */
+    fun captureAndSearch() {
+        val text = latestOcrText
+        if (text.isBlank()) {
+            uiState = uiState.copy(errorMessage = "Nessun testo rilevato. Avvicina la fotocamera alla carta.")
+            return
+        }
 
+        uiState = uiState.copy(isCapturing = true)
+
+        val cardName = extractCardName(text)
         uiState = uiState.copy(
-            detectedText = rawText,
-            bestGuessName = cardName
+            rawOcrText = text,
+            bestGuessName = cardName,
+            isCapturing = false
         )
 
-        // Cerca su API con debounce
-        searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            delay(1200) // debounce più lungo per stabilizzare OCR
-            lastSearchedName = cardName
-            searchCard(cardName)
+        if (cardName.isBlank()) {
+            uiState = uiState.copy(
+                errorMessage = "Non riesco a estrarre il nome. Prova la ricerca manuale."
+            )
+            return
         }
+
+        searchFuzzy(cardName)
     }
 
     fun searchManually(query: String) {
         if (query.isBlank()) return
         uiState = uiState.copy(bestGuessName = query)
-        searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            lastSearchedName = query
-            searchCard(query)
-        }
+        searchFuzzy(query)
     }
 
-    private suspend fun searchCard(name: String) {
+    private fun searchFuzzy(name: String) {
         uiState = uiState.copy(isSearching = true, errorMessage = null)
 
-        // Prima prova: ricerca esatta con wildcard
-        repository.searchCards(name)
-            .onSuccess { cards ->
-                if (cards.isNotEmpty()) {
+        viewModelScope.launch {
+            repository.searchCardsFuzzy(name)
+                .onSuccess { cards ->
                     uiState = uiState.copy(
                         searchResults = cards,
                         isSearching = false,
-                        selectedCard = cards.firstOrNull()
+                        selectedCard = cards.firstOrNull(),
+                        errorMessage = if (cards.isEmpty()) "Nessun risultato per \"$name\". Prova la ricerca manuale." else null
                     )
-                } else {
-                    // Fallback: prova con solo la prima parola (spesso il nome del Pokémon)
-                    val firstName = name.split(" ").firstOrNull()?.trim() ?: ""
-                    if (firstName.length >= 3 && firstName != name) {
-                        retrySearch(firstName)
-                    } else {
-                        uiState = uiState.copy(
-                            searchResults = emptyList(),
-                            isSearching = false,
-                            errorMessage = "Nessun risultato per \"$name\""
-                        )
-                    }
                 }
-            }
-            .onFailure { error ->
-                uiState = uiState.copy(
-                    isSearching = false,
-                    errorMessage = "Errore ricerca: ${error.message}"
-                )
-            }
-    }
-
-    private suspend fun retrySearch(name: String) {
-        repository.searchCards(name)
-            .onSuccess { cards ->
-                uiState = uiState.copy(
-                    searchResults = cards,
-                    isSearching = false,
-                    selectedCard = cards.firstOrNull(),
-                    bestGuessName = name,
-                    errorMessage = if (cards.isEmpty()) "Nessun risultato per \"$name\"" else null
-                )
-            }
-            .onFailure { error ->
-                uiState = uiState.copy(
-                    isSearching = false,
-                    errorMessage = "Errore ricerca: ${error.message}"
-                )
-            }
+                .onFailure { error ->
+                    uiState = uiState.copy(
+                        isSearching = false,
+                        errorMessage = "Errore di rete: ${error.message}"
+                    )
+                }
+        }
     }
 
     /**
-     * Aggiunge direttamente la carta selezionata alla collezione Firestore.
+     * Aggiunge la carta selezionata direttamente alla collezione Firestore.
      */
     fun addCardToCollection(tcgCard: TcgCard) {
         if (uiState.isAdding) return
@@ -160,7 +139,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 .onFailure { error ->
                     uiState = uiState.copy(
                         isAdding = false,
-                        errorMessage = "Errore: ${error.message}"
+                        errorMessage = "Errore salvataggio: ${error.message}"
                     )
                 }
         }
@@ -175,15 +154,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun clearResults() {
-        lastSearchedName = ""
-        uiState = uiState.copy(
-            detectedText = "",
-            bestGuessName = "",
-            searchResults = emptyList(),
-            selectedCard = null,
-            errorMessage = null,
-            successMessage = null
-        )
+        latestOcrText = ""
+        uiState = ScannerUiState(flashEnabled = uiState.flashEnabled)
     }
 
     fun clearMessages() {
@@ -192,39 +164,44 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     /**
      * Estrae il nome della carta dal testo OCR.
-     * Strategia: il nome è la prima riga significativa (parte superiore della carta).
-     * Mantiene suffissi importanti come "ex", "V", "VMAX", "VSTAR", "GX", "EX".
+     * Le carte Pokémon hanno il nome in alto, spesso la riga più lunga
+     * con solo lettere (e spazi). Prova più strategie.
      */
     private fun extractCardName(rawText: String): String {
         val lines = rawText.lines()
             .map { it.trim() }
             .filter { it.length >= 2 }
 
-        // Filtra linee che chiaramente NON sono il nome
+        // Rimuovi linee che sono chiaramente non-nome
         val candidates = lines.filter { line ->
-            !line.matches(Regex("^\\d+[/\\\\]?\\d*$")) &&                     // "123" o "123/456"
-            !line.matches(Regex("^HP\\s*\\d+$", RegexOption.IGNORE_CASE)) &&   // "HP 120"
-            !line.matches(Regex("^\\d+\\s*HP$", RegexOption.IGNORE_CASE)) &&   // "120 HP"
-            !line.matches(Regex("^(BASIC|STAGE\\s*\\d|MEGA)$", RegexOption.IGNORE_CASE)) &&
+            !line.matches(Regex("^[\\d\\s/\\\\]+$")) &&                          // solo numeri
+            !line.matches(Regex("^HP\\s*\\d+$", RegexOption.IGNORE_CASE)) &&
+            !line.matches(Regex("^\\d+\\s*HP$", RegexOption.IGNORE_CASE)) &&
             !line.contains("Weakness", ignoreCase = true) &&
             !line.contains("Resistance", ignoreCase = true) &&
             !line.contains("Retreat", ignoreCase = true) &&
             !line.contains("Illustrator", ignoreCase = true) &&
-            !line.contains("©", ignoreCase = true) &&
+            !line.contains("©") &&
+            !line.contains("®") &&
             !line.contains("Pokémon", ignoreCase = true) &&
             !line.contains("Pokemon", ignoreCase = true) &&
-            !line.contains("TM", ignoreCase = false) &&
-            !line.matches(Regex("^[^a-zA-Z]*$")) // Solo simboli/numeri
+            !line.contains("damage", ignoreCase = true) &&
+            !line.contains("opponent", ignoreCase = true) &&
+            !line.contains("energy", ignoreCase = true) &&
+            !line.contains("coin", ignoreCase = true) &&
+            !line.matches(Regex("^[^a-zA-ZÀ-ÿ]*$"))  // no lettere
         }
 
-        val name = candidates.firstOrNull() ?: return ""
+        // Strategia 1: Prima riga candidata (solitamente il nome è in alto)
+        val firstCandidate = candidates.firstOrNull() ?: return ""
 
-        // Pulisci: rimuovi "HP 120" attaccato alla fine, numeri trailing
-        return name
+        // Pulisci
+        return firstCandidate
             .replace(Regex("\\s+HP\\s*\\d+.*$", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\s+\\d+/\\d+$"), "")     // "123/456" trailing
-            .replace(Regex("^(BASIC|Stage\\s*\\d)\\s+", RegexOption.IGNORE_CASE), "") // "BASIC Pikachu" → "Pikachu"
+            .replace(Regex("\\s+\\d+/\\d+$"), "")
+            .replace(Regex("^(BASIC|Stage\\s*\\d)\\s+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("[^a-zA-ZÀ-ÿ\\s'-]"), "") // rimuovi caratteri non-nome
             .trim()
-            .take(50)
+            .take(40)
     }
 }

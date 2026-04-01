@@ -2,9 +2,12 @@ package com.example.pokevault.ui.scanner
 
 import android.Manifest
 import android.util.Log
+import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -14,13 +17,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
@@ -35,6 +40,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,7 +70,6 @@ fun ScannerScreen(
     val state = viewModel.uiState
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Mostra messaggi
     LaunchedEffect(state.successMessage) {
         state.successMessage?.let {
             snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
@@ -118,62 +123,51 @@ fun ScannerScreen(
                     onRequestPermission = { cameraPermission.launchPermissionRequest() }
                 )
             } else {
-                // Camera Preview
+                // Camera Preview con bottone scansiona
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(0.45f)
+                        .weight(0.4f)
                 ) {
                     CameraPreview(
                         onTextDetected = { viewModel.onTextDetected(it) },
                         flashEnabled = state.flashEnabled
                     )
 
-                    // Overlay con nome rilevato
-                    if (state.bestGuessName.isNotBlank()) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(12.dp)
-                                .background(
-                                    DarkSurface.copy(alpha = 0.9f),
-                                    RoundedCornerShape(12.dp)
-                                )
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Search, null, tint = StarGold, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = state.bestGuessName,
-                                    color = StarGold,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 14.sp
-                                )
-                            }
+                    // Bottone grande "Scansiona"
+                    Button(
+                        onClick = { viewModel.captureAndSearch() },
+                        colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(16.dp),
+                        enabled = !state.isSearching
+                    ) {
+                        if (state.isSearching) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = TextWhite,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Cerco...", fontSize = 15.sp)
+                        } else {
+                            Icon(Icons.Default.CameraAlt, null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Scansiona", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         }
-                    }
-
-                    // Loading indicator sulla camera
-                    if (state.isSearching) {
-                        LinearProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.BottomCenter),
-                            color = BlueCard,
-                            trackColor = Color.Transparent
-                        )
                     }
                 }
 
-                // Pannello risultati (scrollabile)
+                // Pannello risultati
                 ResultsPanel(
                     state = state,
                     onSearch = { viewModel.searchManually(it) },
                     onSelectCard = { viewModel.selectCard(it) },
                     onAddCard = { viewModel.addCardToCollection(it) },
                     onClear = { viewModel.clearResults() },
-                    modifier = Modifier.weight(0.55f)
+                    modifier = Modifier.weight(0.6f)
                 )
             }
         }
@@ -201,7 +195,7 @@ private fun PermissionRequest(
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = if (shouldShowRationale)
-                "La fotocamera serve per scansionare le carte Pokémon e riconoscerne il nome automaticamente."
+                "La fotocamera serve per scansionare le carte e riconoscerne il nome automaticamente."
             else
                 "Per usare lo scanner serve il permesso fotocamera.",
             color = TextGray,
@@ -228,7 +222,6 @@ private fun CameraPreview(
     val recognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
     var cameraRef by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
 
-    // Aggiorna flash in tempo reale
     LaunchedEffect(flashEnabled) {
         cameraRef?.cameraControl?.enableTorch(flashEnabled)
     }
@@ -244,7 +237,18 @@ private fun CameraPreview(
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
 
+                // Risoluzione più alta per migliore OCR
+                val resolutionSelector = ResolutionSelector.Builder()
+                    .setResolutionStrategy(
+                        ResolutionStrategy(
+                            Size(1280, 720),
+                            ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                        )
+                    )
+                    .build()
+
                 val imageAnalysis = ImageAnalysis.Builder()
+                    .setResolutionSelector(resolutionSelector)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also { analysis ->
@@ -302,6 +306,13 @@ private fun ResultsPanel(
 ) {
     var manualQuery by remember { mutableStateOf("") }
 
+    // Se OCR ha trovato un nome, pre-riempi la ricerca manuale
+    LaunchedEffect(state.bestGuessName) {
+        if (state.bestGuessName.isNotBlank() && manualQuery.isBlank()) {
+            manualQuery = state.bestGuessName
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -309,11 +320,28 @@ private fun ResultsPanel(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
+        // Testo OCR grezzo (debug/trasparenza)
+        if (state.rawOcrText.isNotBlank()) {
+            Text("Testo rilevato:", color = TextMuted, fontSize = 11.sp)
+            Text(
+                state.rawOcrText.take(200),
+                color = TextGray,
+                fontSize = 11.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(DarkCard, RoundedCornerShape(8.dp))
+                    .padding(8.dp)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+
         // Ricerca manuale
         OutlinedTextField(
             value = manualQuery,
             onValueChange = { manualQuery = it },
-            placeholder = { Text("Cerca carta manualmente...", color = TextMuted, fontSize = 14.sp) },
+            placeholder = { Text("Nome carta (es. Charizard)", color = TextMuted, fontSize = 14.sp) },
             leadingIcon = { Icon(Icons.Default.Search, null, tint = TextMuted) },
             trailingIcon = {
                 if (manualQuery.isNotBlank()) {
@@ -323,6 +351,10 @@ private fun ResultsPanel(
                 }
             },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(
+                onSearch = { if (manualQuery.length >= 2) onSearch(manualQuery) }
+            ),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = TextWhite,
                 unfocusedTextColor = TextWhite,
@@ -334,24 +366,30 @@ private fun ResultsPanel(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Bottone cerca
-        if (manualQuery.length >= 3) {
-            Spacer(modifier = Modifier.height(6.dp))
+        if (manualQuery.length >= 2) {
+            Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = { onSearch(manualQuery) },
+                enabled = !state.isSearching,
                 colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                if (state.isSearching) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = TextWhite,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
                 Text("Cerca \"$manualQuery\"")
             }
         }
 
         // Errore
         state.errorMessage?.let { error ->
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(error, color = Color(0xFFEF4444), fontSize = 13.sp)
         }
 
@@ -364,15 +402,15 @@ private fun ResultsPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "${state.searchResults.size} risultati trovati",
+                    "${state.searchResults.size} risultati",
                     color = TextGray,
-                    fontSize = 13.sp
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
                 )
                 TextButton(onClick = onClear) {
                     Text("Pulisci", color = TextMuted, fontSize = 12.sp)
                 }
             }
-            Spacer(modifier = Modifier.height(6.dp))
 
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -386,7 +424,7 @@ private fun ResultsPanel(
                 }
             }
 
-            // Carta selezionata - dettagli + bottone aggiungi
+            // Dettaglio carta selezionata + Aggiungi
             state.selectedCard?.let { card ->
                 Spacer(modifier = Modifier.height(12.dp))
                 SelectedCardDetails(
@@ -395,7 +433,7 @@ private fun ResultsPanel(
                     onAdd = { onAddCard(card) }
                 )
             }
-        } else if (!state.isSearching && state.bestGuessName.isBlank() && manualQuery.isBlank()) {
+        } else if (!state.isSearching && state.rawOcrText.isBlank() && manualQuery.isBlank()) {
             Spacer(modifier = Modifier.height(24.dp))
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -405,14 +443,15 @@ private fun ResultsPanel(
                     Icons.Default.CameraAlt,
                     null,
                     tint = TextMuted.copy(alpha = 0.5f),
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(36.dp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Punta la fotocamera su una carta\noppure cerca manualmente",
+                    "Premi \"Scansiona\" per leggere il nome dalla carta\noppure cerca manualmente per nome",
                     color = TextMuted,
                     textAlign = TextAlign.Center,
-                    fontSize = 14.sp
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
                 )
             }
         }
@@ -508,11 +547,11 @@ private fun SelectedCardDetails(
                 disabledContainerColor = GreenCard.copy(alpha = 0.5f)
             ),
             shape = RoundedCornerShape(10.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
         ) {
             if (isAdding) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                     color = TextWhite,
                     strokeWidth = 2.dp
                 )

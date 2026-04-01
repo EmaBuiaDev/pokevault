@@ -174,6 +174,29 @@ class PokeTcgRepository {
         catch (e: Exception) { Result.failure(e) }
     }
 
+    /**
+     * Ricerca più tollerante: senza virgolette, ogni parola con wildcard.
+     * Utile per testo OCR impreciso. Es: "Chari" → name:Chari*
+     */
+    suspend fun searchCardsFuzzy(name: String, page: Int = 1): Result<List<TcgCard>> {
+        return try {
+            // Prima prova con wildcard senza virgolette (match parziale)
+            val query = "name:${name}*"
+            val result = api.searchCards(query = query, page = page, pageSize = 30)
+            if (result.data.isNotEmpty()) {
+                return Result.success(result.data)
+            }
+            // Fallback: cerca solo la prima parola
+            val firstWord = name.split(" ", "-").firstOrNull()?.trim() ?: name
+            if (firstWord.length >= 3 && firstWord != name) {
+                val fallbackResult = api.searchCards(query = "name:${firstWord}*", page = page, pageSize = 30)
+                Result.success(fallbackResult.data)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
     suspend fun getCard(cardId: String): Result<TcgCard> {
         return try { Result.success(api.getCard(cardId).data) }
         catch (e: Exception) { Result.failure(e) }
