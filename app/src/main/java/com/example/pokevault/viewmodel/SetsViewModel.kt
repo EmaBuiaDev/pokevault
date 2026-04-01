@@ -31,6 +31,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = PokeTcgRepository()
     private var searchJob: Job? = null
+    private var setSearchJob: Job? = null
 
     var uiState by mutableStateOf(SetsUiState())
         private set
@@ -64,7 +65,11 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateSearch(query: String) {
         uiState = uiState.copy(searchQuery = query)
-        applyFilters()
+        setSearchJob?.cancel()
+        setSearchJob = viewModelScope.launch {
+            delay(300)
+            applyFilters()
+        }
     }
 
     fun filterBySeries(series: String?) {

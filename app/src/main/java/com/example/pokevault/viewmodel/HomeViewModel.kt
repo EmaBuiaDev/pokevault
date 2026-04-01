@@ -4,61 +4,53 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.pokevault.data.firebase.CollectionStats
+import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.PokemonCard
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.launch
 
 class HomeViewModel : ViewModel() {
+
+    private val repository = FirestoreRepository()
 
     var searchQuery by mutableStateOf("")
         private set
 
-    var isGridView by mutableStateOf(true)
+    var collectionCards by mutableStateOf<List<PokemonCard>>(emptyList())
         private set
 
-    // Carte di esempio per la collezione
-    var collectionCards by mutableStateOf(
-        listOf(
-            PokemonCard(
-                id = "1",
-                name = "Charizard",
-                type = "Fuoco",
-                hp = 180,
-                set = "Base Set",
-                rarity = "Holo Rare"
-            ),
-            PokemonCard(
-                id = "2",
-                name = "Pikachu",
-                type = "Elettro",
-                hp = 60,
-                set = "Base Set",
-                rarity = "Common"
-            ),
-            PokemonCard(
-                id = "3",
-                name = "Mewtwo",
-                type = "Psico",
-                hp = 150,
-                set = "Base Set",
-                rarity = "Holo Rare"
-            ),
-            PokemonCard(
-                id = "4",
-                name = "Blastoise",
-                type = "Acqua",
-                hp = 170,
-                set = "Base Set",
-                rarity = "Holo Rare"
-            )
-        )
-    )
+    var stats by mutableStateOf(CollectionStats())
         private set
+
+    var isLoading by mutableStateOf(true)
+        private set
+
+    init {
+        loadCards()
+        loadStats()
+    }
+
+    private fun loadCards() {
+        viewModelScope.launch {
+            repository.getCards()
+                .catch { isLoading = false }
+                .collect { cards ->
+                    collectionCards = cards
+                    isLoading = false
+                }
+        }
+    }
+
+    private fun loadStats() {
+        viewModelScope.launch {
+            stats = repository.getCollectionStats()
+        }
+    }
 
     fun updateSearchQuery(query: String) {
         searchQuery = query
-    }
-
-    fun toggleViewMode() {
-        isGridView = !isGridView
     }
 
     fun getFilteredCards(): List<PokemonCard> {
@@ -67,12 +59,8 @@ class HomeViewModel : ViewModel() {
         } else {
             collectionCards.filter {
                 it.name.contains(searchQuery, ignoreCase = true) ||
-                it.type.contains(searchQuery, ignoreCase = true)
+                it.set.contains(searchQuery, ignoreCase = true)
             }
         }
     }
-
-    fun getTotalCards(): Int = collectionCards.size
-
-    fun getTotalValue(): Double = collectionCards.sumOf { it.estimatedValue }
 }

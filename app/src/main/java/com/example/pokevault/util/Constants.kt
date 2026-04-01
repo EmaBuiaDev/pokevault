@@ -7,8 +7,6 @@ object Constants {
 
     // PokéTCG API
     const val POKETCG_BASE_URL = "https://api.pokemontcg.io/v2/"
-    // Registrati su pokemontcg.io per ottenere la tua API key
-    const val POKETCG_API_KEY = "" // TODO: inserisci la tua API key
 
     // Tipi Pokémon con colori (hex)
     val POKEMON_TYPES = mapOf(

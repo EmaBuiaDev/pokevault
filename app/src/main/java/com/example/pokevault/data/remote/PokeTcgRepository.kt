@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
     private const val BASE_URL = "https://api.pokemontcg.io/"
-    private const val API_KEY = "7c4ca936-e212-4fce-85f2-0b6c56b41eec" // TODO: inserisci la tua API key
+    private val API_KEY = com.example.pokevault.BuildConfig.POKETCG_API_KEY
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
