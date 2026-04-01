@@ -8,17 +8,19 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
@@ -56,54 +58,71 @@ import com.example.pokevault.viewmodel.ScannerViewModel
 @Composable
 fun ScannerScreen(
     onBack: () -> Unit,
-    onAddCard: (TcgCard) -> Unit = {},
     viewModel: ScannerViewModel = viewModel()
 ) {
     val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
     val state = viewModel.uiState
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-            .statusBarsPadding()
-    ) {
-        // Top Bar
-        TopAppBar(
-            title = { Text("Scanner", fontWeight = FontWeight.SemiBold, color = TextWhite) },
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite)
-                }
-            },
-            actions = {
-                if (cameraPermission.status.isGranted) {
-                    IconButton(onClick = { viewModel.toggleFlash() }) {
-                        Icon(
-                            if (state.flashEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                            "Flash",
-                            tint = if (state.flashEnabled) StarGold else TextWhite
-                        )
+    // Mostra messaggi
+    LaunchedEffect(state.successMessage) {
+        state.successMessage?.let {
+            snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
+            viewModel.clearMessages()
+        }
+    }
+
+    Scaffold(
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = GreenCard,
+                    contentColor = TextWhite,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        },
+        topBar = {
+            TopAppBar(
+                title = { Text("Scanner", fontWeight = FontWeight.SemiBold, color = TextWhite) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite)
                     }
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
-        )
-
-        if (!cameraPermission.status.isGranted) {
-            // Permesso non concesso
-            PermissionRequest(
-                shouldShowRationale = cameraPermission.status.shouldShowRationale,
-                onRequestPermission = { cameraPermission.launchPermissionRequest() }
+                },
+                actions = {
+                    if (cameraPermission.status.isGranted) {
+                        IconButton(onClick = { viewModel.toggleFlash() }) {
+                            Icon(
+                                if (state.flashEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                                "Flash",
+                                tint = if (state.flashEnabled) StarGold else TextWhite
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
             )
-        } else {
-            // Camera + risultati
-            Column(modifier = Modifier.fillMaxSize()) {
+        },
+        containerColor = DarkBackground
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            if (!cameraPermission.status.isGranted) {
+                PermissionRequest(
+                    shouldShowRationale = cameraPermission.status.shouldShowRationale,
+                    onRequestPermission = { cameraPermission.launchPermissionRequest() }
+                )
+            } else {
                 // Camera Preview
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .weight(0.45f)
                 ) {
                     CameraPreview(
                         onTextDetected = { viewModel.onTextDetected(it) },
@@ -115,30 +134,46 @@ fun ScannerScreen(
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(16.dp)
+                                .padding(12.dp)
                                 .background(
-                                    DarkSurface.copy(alpha = 0.85f),
+                                    DarkSurface.copy(alpha = 0.9f),
                                     RoundedCornerShape(12.dp)
                                 )
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
-                            Text(
-                                text = "Rilevato: ${state.bestGuessName}",
-                                color = StarGold,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Search, null, tint = StarGold, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = state.bestGuessName,
+                                    color = StarGold,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp
+                                )
+                            }
                         }
+                    }
+
+                    // Loading indicator sulla camera
+                    if (state.isSearching) {
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter),
+                            color = BlueCard,
+                            trackColor = Color.Transparent
+                        )
                     }
                 }
 
-                // Risultati / Ricerca manuale
+                // Pannello risultati (scrollabile)
                 ResultsPanel(
                     state = state,
                     onSearch = { viewModel.searchManually(it) },
                     onSelectCard = { viewModel.selectCard(it) },
-                    onAddCard = onAddCard,
-                    onClear = { viewModel.clearResults() }
+                    onAddCard = { viewModel.addCardToCollection(it) },
+                    onClear = { viewModel.clearResults() },
+                    modifier = Modifier.weight(0.55f)
                 )
             }
         }
@@ -189,9 +224,14 @@ private fun CameraPreview(
     onTextDetected: (String) -> Unit,
     flashEnabled: Boolean
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val recognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+    var cameraRef by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+
+    // Aggiorna flash in tempo reale
+    LaunchedEffect(flashEnabled) {
+        cameraRef?.cameraControl?.enableTorch(flashEnabled)
+    }
 
     AndroidView(
         factory = { ctx ->
@@ -238,6 +278,7 @@ private fun CameraPreview(
                         preview,
                         imageAnalysis
                     )
+                    cameraRef = camera
                     camera.cameraControl.enableTorch(flashEnabled)
                 } catch (e: Exception) {
                     Log.e("ScannerScreen", "Camera bind failed", e)
@@ -248,16 +289,6 @@ private fun CameraPreview(
         },
         modifier = Modifier.fillMaxSize()
     )
-
-    // Update flash when toggled
-    val context2 = LocalContext.current
-    LaunchedEffect(flashEnabled) {
-        try {
-            val cameraProvider = ProcessCameraProvider.getInstance(context2).get()
-            // Flash is handled at bind time; re-toggling needs camera reference
-            // This is a simplified approach - flash toggles on next camera rebind
-        } catch (_: Exception) {}
-    }
 }
 
 @Composable
@@ -266,21 +297,23 @@ private fun ResultsPanel(
     onSearch: (String) -> Unit,
     onSelectCard: (TcgCard) -> Unit,
     onAddCard: (TcgCard) -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var manualQuery by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(DarkSurface, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         // Ricerca manuale
         OutlinedTextField(
             value = manualQuery,
             onValueChange = { manualQuery = it },
-            placeholder = { Text("Cerca carta manualmente...", color = TextMuted) },
+            placeholder = { Text("Cerca carta manualmente...", color = TextMuted, fontSize = 14.sp) },
             leadingIcon = { Icon(Icons.Default.Search, null, tint = TextMuted) },
             trailingIcon = {
                 if (manualQuery.isNotBlank()) {
@@ -301,23 +334,19 @@ private fun ResultsPanel(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
-
         // Bottone cerca
         if (manualQuery.length >= 3) {
-            TextButton(onClick = { onSearch(manualQuery) }) {
-                Text("Cerca \"$manualQuery\"", color = BlueCard)
+            Spacer(modifier = Modifier.height(6.dp))
+            Button(
+                onClick = { onSearch(manualQuery) },
+                colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Cerca \"$manualQuery\"")
             }
-        }
-
-        // Loading
-        if (state.isSearching) {
-            Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(),
-                color = BlueCard,
-                trackColor = DarkCard
-            )
         }
 
         // Errore
@@ -329,12 +358,21 @@ private fun ResultsPanel(
         // Risultati
         if (state.searchResults.isNotEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                "${state.searchResults.size} risultati",
-                color = TextGray,
-                fontSize = 13.sp
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "${state.searchResults.size} risultati trovati",
+                    color = TextGray,
+                    fontSize = 13.sp
+                )
+                TextButton(onClick = onClear) {
+                    Text("Pulisci", color = TextMuted, fontSize = 12.sp)
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
 
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -351,17 +389,32 @@ private fun ResultsPanel(
             // Carta selezionata - dettagli + bottone aggiungi
             state.selectedCard?.let { card ->
                 Spacer(modifier = Modifier.height(12.dp))
-                SelectedCardDetails(card = card, onAdd = { onAddCard(card) })
+                SelectedCardDetails(
+                    card = card,
+                    isAdding = state.isAdding,
+                    onAdd = { onAddCard(card) }
+                )
             }
         } else if (!state.isSearching && state.bestGuessName.isBlank() && manualQuery.isBlank()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                "Punta la fotocamera su una carta Pokémon\noppure cerca manualmente.",
-                color = TextMuted,
-                textAlign = TextAlign.Center,
-                fontSize = 14.sp,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.CameraAlt,
+                    null,
+                    tint = TextMuted.copy(alpha = 0.5f),
+                    modifier = Modifier.size(40.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Punta la fotocamera su una carta\noppure cerca manualmente",
+                    color = TextMuted,
+                    textAlign = TextAlign.Center,
+                    fontSize = 14.sp
+                )
+            }
         }
     }
 }
@@ -376,7 +429,11 @@ private fun ScanResultCard(
         modifier = Modifier
             .width(100.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (isSelected) BlueCard.copy(alpha = 0.2f) else DarkCard)
+            .then(
+                if (isSelected) Modifier.border(2.dp, BlueCard, RoundedCornerShape(10.dp))
+                else Modifier
+            )
+            .background(if (isSelected) BlueCard.copy(alpha = 0.15f) else DarkCard)
             .clickable { onClick() }
             .padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -414,6 +471,7 @@ private fun ScanResultCard(
 @Composable
 private fun SelectedCardDetails(
     card: TcgCard,
+    isAdding: Boolean,
     onAdd: () -> Unit
 ) {
     Row(
@@ -439,16 +497,30 @@ private fun SelectedCardDetails(
             card.rarity?.let {
                 Text(it, color = StarGold, fontSize = 12.sp)
             }
-            card.number.let {
-                Text("#$it", color = TextMuted, fontSize = 11.sp)
-            }
+            Text("#${card.number}", color = TextMuted, fontSize = 11.sp)
         }
+        Spacer(modifier = Modifier.width(8.dp))
         Button(
             onClick = onAdd,
-            colors = ButtonDefaults.buttonColors(containerColor = GreenCard),
-            shape = RoundedCornerShape(10.dp)
+            enabled = !isAdding,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = GreenCard,
+                disabledContainerColor = GreenCard.copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            Text("Aggiungi", fontSize = 13.sp)
+            if (isAdding) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = TextWhite,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Aggiungi", fontSize = 13.sp)
+            }
         }
     }
 }

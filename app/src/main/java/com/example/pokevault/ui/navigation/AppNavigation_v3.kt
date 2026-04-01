@@ -169,11 +169,7 @@ fun AppNavigation(
         // ── Scanner ──
         composable(Routes.SCANNER) {
             ScannerScreen(
-                onBack = { navController.popBackStack() },
-                onAddCard = { tcgCard ->
-                    // Naviga ad aggiungi carta con il nome precompilato
-                    navController.navigate(Routes.ADD_CARD)
-                }
+                onBack = { navController.popBackStack() }
             )
         }
 
