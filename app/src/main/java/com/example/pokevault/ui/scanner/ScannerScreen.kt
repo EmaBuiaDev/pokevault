@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -37,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -123,7 +121,7 @@ fun ScannerScreen(
                     onRequestPermission = { cameraPermission.launchPermissionRequest() }
                 )
             } else {
-                // Camera Preview con bottone scansiona
+                // Camera Preview - scanning automatico
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -134,33 +132,45 @@ fun ScannerScreen(
                         flashEnabled = state.flashEnabled
                     )
 
-                    // Bottone grande "Scansiona"
-                    Button(
-                        onClick = { viewModel.captureAndSearch() },
-                        colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
-                        shape = RoundedCornerShape(16.dp),
+                    // Overlay: nome rilevato + stato
+                    Column(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(16.dp),
-                        enabled = !state.isSearching
+                            .padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         if (state.isSearching) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = TextWhite,
-                                strokeWidth = 2.dp
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(4.dp)),
+                                color = BlueCard,
+                                trackColor = Color.Transparent
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Cerco...", fontSize = 15.sp)
-                        } else {
-                            Icon(Icons.Default.CameraAlt, null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Scansiona", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+
+                        if (state.bestGuessName.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        DarkSurface.copy(alpha = 0.9f),
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = state.bestGuessName,
+                                    color = StarGold,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp
+                                )
+                            }
                         }
                     }
                 }
 
-                // Pannello risultati
+                // Pannello risultati + ricerca manuale
                 ResultsPanel(
                     state = state,
                     onSearch = { viewModel.searchManually(it) },
@@ -195,7 +205,7 @@ private fun PermissionRequest(
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = if (shouldShowRationale)
-                "La fotocamera serve per scansionare le carte e riconoscerne il nome automaticamente."
+                "La fotocamera serve per scansionare le carte e riconoscerne il nome."
             else
                 "Per usare lo scanner serve il permesso fotocamera.",
             color = TextGray,
@@ -237,7 +247,6 @@ private fun CameraPreview(
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
 
-                // Risoluzione più alta per migliore OCR
                 val resolutionSelector = ResolutionSelector.Builder()
                     .setResolutionStrategy(
                         ResolutionStrategy(
@@ -306,13 +315,6 @@ private fun ResultsPanel(
 ) {
     var manualQuery by remember { mutableStateOf("") }
 
-    // Se OCR ha trovato un nome, pre-riempi la ricerca manuale
-    LaunchedEffect(state.bestGuessName) {
-        if (state.bestGuessName.isNotBlank() && manualQuery.isBlank()) {
-            manualQuery = state.bestGuessName
-        }
-    }
-
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -320,28 +322,11 @@ private fun ResultsPanel(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // Testo OCR grezzo (debug/trasparenza)
-        if (state.rawOcrText.isNotBlank()) {
-            Text("Testo rilevato:", color = TextMuted, fontSize = 11.sp)
-            Text(
-                state.rawOcrText.take(200),
-                color = TextGray,
-                fontSize = 11.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DarkCard, RoundedCornerShape(8.dp))
-                    .padding(8.dp)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-
         // Ricerca manuale
         OutlinedTextField(
             value = manualQuery,
             onValueChange = { manualQuery = it },
-            placeholder = { Text("Nome carta (es. Charizard)", color = TextMuted, fontSize = 14.sp) },
+            placeholder = { Text("Cerca carta per nome...", color = TextMuted, fontSize = 14.sp) },
             leadingIcon = { Icon(Icons.Default.Search, null, tint = TextMuted) },
             trailingIcon = {
                 if (manualQuery.isNotBlank()) {
@@ -424,7 +409,6 @@ private fun ResultsPanel(
                 }
             }
 
-            // Dettaglio carta selezionata + Aggiungi
             state.selectedCard?.let { card ->
                 Spacer(modifier = Modifier.height(12.dp))
                 SelectedCardDetails(
@@ -433,7 +417,7 @@ private fun ResultsPanel(
                     onAdd = { onAddCard(card) }
                 )
             }
-        } else if (!state.isSearching && state.rawOcrText.isBlank() && manualQuery.isBlank()) {
+        } else if (!state.isSearching && state.bestGuessName.isBlank() && manualQuery.isBlank()) {
             Spacer(modifier = Modifier.height(24.dp))
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -447,7 +431,7 @@ private fun ResultsPanel(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Premi \"Scansiona\" per leggere il nome dalla carta\noppure cerca manualmente per nome",
+                    "Inquadra una carta Pokémon\noppure cerca per nome",
                     color = TextMuted,
                     textAlign = TextAlign.Center,
                     fontSize = 13.sp,
