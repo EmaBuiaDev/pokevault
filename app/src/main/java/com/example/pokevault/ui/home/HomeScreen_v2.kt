@@ -5,9 +5,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,9 +21,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pokevault.ui.home.components.*
 import com.example.pokevault.ui.navigation.Routes
+import com.example.pokevault.ui.theme.BlueCard
 import com.example.pokevault.ui.theme.DarkBackground
 import com.example.pokevault.ui.theme.DarkCard
 import com.example.pokevault.ui.theme.TextMuted
+import com.example.pokevault.ui.theme.TextWhite
 import com.example.pokevault.viewmodel.HomeViewModel
 
 @Composable
@@ -32,73 +37,95 @@ fun HomeScreen(
 ) {
     val scrollState = rememberScrollState()
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .verticalScroll(scrollState)
             .statusBarsPadding()
     ) {
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Header con bottone logout
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .verticalScroll(scrollState)
         ) {
-            WelcomeHeader(
-                userName = userName,
-                modifier = Modifier.weight(1f)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Header con bottone logout
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                WelcomeHeader(
+                    userName = userName,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Bottone logout
+                Icon(
+                    imageVector = Icons.Default.Logout,
+                    contentDescription = "Logout",
+                    tint = TextMuted,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(DarkCard)
+                        .clickable { onLogout() }
+                        .padding(8.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Barra di ricerca
+            SearchBar(
+                query = viewModel.searchQuery,
+                onQueryChange = { viewModel.updateSearchQuery(it) }
             )
 
-            // Bottone logout
-            Icon(
-                imageVector = Icons.Default.Logout,
-                contentDescription = "Logout",
-                tint = TextMuted,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(DarkCard)
-                    .clickable { onLogout() }
-                    .padding(8.dp)
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Griglia menu — collega navigazione
+            MenuGrid(
+                onItemClick = { menuRoute ->
+                    val route = when (menuRoute) {
+                        "my_cards" -> Routes.COLLECTION
+                        "statistics" -> Routes.STATS
+                        "graded" -> Routes.GRADED
+                        "pokedex" -> Routes.POKEDEX
+                        "news" -> Routes.NEWS
+                        else -> Routes.HOME
+                    }
+                    onNavigate(route)
+                }
             )
+
+            // Sezione Collezione con dati reali
+            CollectionSection(
+                cards = viewModel.getFilteredCards(),
+                onCardClick = { cardId -> onNavigate(Routes.cardDetail(cardId)) }
+            )
+
+            Spacer(modifier = Modifier.height(80.dp))
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Barra di ricerca
-        SearchBar(
-            query = viewModel.searchQuery,
-            onQueryChange = { viewModel.updateSearchQuery(it) }
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Griglia menu — collega navigazione
-        MenuGrid(
-            onItemClick = { menuRoute ->
-                val route = when (menuRoute) {
-                    "my_cards" -> Routes.COLLECTION
-                    "statistics" -> Routes.STATS
-                    "graded" -> Routes.GRADED
-                    "pokedex" -> Routes.POKEDEX
-                    "news" -> Routes.NEWS
-                    else -> Routes.HOME
-                }
-                onNavigate(route)
-            }
-        )
-
-        // Sezione Collezione con dati reali
-        CollectionSection(
-            cards = viewModel.getFilteredCards(),
-            onCardClick = { cardId -> onNavigate(Routes.cardDetail(cardId)) }
-        )
-
-        Spacer(modifier = Modifier.height(80.dp))
+        // FAB Scanner
+        FloatingActionButton(
+            onClick = { onNavigate(Routes.SCANNER) },
+            containerColor = BlueCard,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp)
+                .navigationBarsPadding()
+        ) {
+            Icon(
+                Icons.Default.CameraAlt,
+                contentDescription = "Scansiona carta",
+                tint = TextWhite
+            )
+        }
     }
 }

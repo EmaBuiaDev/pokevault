@@ -16,6 +16,7 @@ import com.example.pokevault.ui.placeholder.PlaceholderScreen
 import com.example.pokevault.ui.pokedex.SetDetailScreen
 import com.example.pokevault.ui.pokedex.SetsListScreen
 import com.example.pokevault.ui.graded.GradedCardsScreen
+import com.example.pokevault.ui.scanner.ScannerScreen
 import com.example.pokevault.ui.stats.StatsScreen
 import com.example.pokevault.viewmodel.AuthViewModel
 import java.net.URLDecoder
@@ -167,9 +168,7 @@ fun AppNavigation(
 
         // ── Scanner ──
         composable(Routes.SCANNER) {
-            PlaceholderScreen(
-                title = "Scanner", emoji = "📷",
-                description = "Scansiona le tue carte con la fotocamera.\nGiorno 8-9.",
+            ScannerScreen(
                 onBack = { navController.popBackStack() }
             )
         }

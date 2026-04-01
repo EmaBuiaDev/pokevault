@@ -170,8 +170,46 @@ class PokeTcgRepository {
     }
 
     suspend fun searchCards(name: String, page: Int = 1): Result<List<TcgCard>> {
-        return try { Result.success(api.searchCards(query = "name:\"$name*\"", page = page).data) }
-        catch (e: Exception) { Result.failure(e) }
+        val clean = sanitizeQuery(name)
+        if (clean.isBlank()) return Result.success(emptyList())
+        return try {
+            Result.success(api.searchCards(query = "name:\"$clean\"", page = page).data)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Ricerca tollerante per lo scanner.
+     * Sanitizza il testo OCR, prova prima il nome completo, poi solo la prima parola.
+     */
+    suspend fun searchCardsFuzzy(name: String, page: Int = 1): Result<List<TcgCard>> {
+        val clean = sanitizeQuery(name)
+        if (clean.isBlank()) return Result.success(emptyList())
+        return try {
+            // Prima prova: nome completo con wildcard (tra virgolette per gestire spazi)
+            val result = api.searchCards(query = "name:\"$clean*\"", page = page, pageSize = 30)
+            if (result.data.isNotEmpty()) {
+                return Result.success(result.data)
+            }
+            // Fallback: solo prima parola con wildcard
+            val firstWord = clean.split(" ").firstOrNull()?.trim() ?: clean
+            if (firstWord.length >= 3 && firstWord != clean) {
+                val fallback = api.searchCards(query = "name:\"$firstWord*\"", page = page, pageSize = 30)
+                Result.success(fallback.data)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Rimuove caratteri speciali che rompono la query Lucene dell'API PokéTCG.
+     */
+    private fun sanitizeQuery(raw: String): String {
+        return raw
+            .replace(Regex("[+\\-=&|><!(){}\\[\\]^~?:\\\\/]"), "") // chars speciali Lucene
+            .replace(Regex("[^a-zA-ZÀ-ÿ0-9\\s'-]"), "")            // solo lettere, numeri, spazi, apostrofo, trattino
+            .replace(Regex("\\s+"), " ")                             // spazi multipli
+            .trim()
     }
 
     suspend fun getCard(cardId: String): Result<TcgCard> {
