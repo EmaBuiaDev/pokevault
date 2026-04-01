@@ -88,9 +88,22 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    // Networking (PokéTCG API) Sperando che funzioni
+    // Networking (PokéTCG API)
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    // ── CameraX ──
+    val cameraxVersion = "1.3.4"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+
+    // ── ML Kit Text Recognition ──
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+
+    // ── Accompanist Permissions ──
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 
 }
