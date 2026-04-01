@@ -30,9 +30,17 @@ import com.example.pokevault.viewmodel.AddCardViewModel
 @Composable
 fun AddCardScreen(
     onBack: () -> Unit,
+    cardId: String? = null,
     viewModel: AddCardViewModel = viewModel()
 ) {
     val state = viewModel.uiState
+
+    // Carica carta in modalità edit
+    LaunchedEffect(cardId) {
+        if (cardId != null) {
+            viewModel.loadCardForEdit(cardId)
+        }
+    }
 
     // Torna indietro quando salvata
     LaunchedEffect(state.isSaved) {
@@ -47,7 +55,13 @@ fun AddCardScreen(
     ) {
         // ── Top Bar ──
         TopAppBar(
-            title = { Text("Aggiungi carta", fontWeight = FontWeight.SemiBold, color = TextWhite) },
+            title = {
+                Text(
+                    if (state.isEditMode) "Modifica carta" else "Aggiungi carta",
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextWhite
+                )
+            },
             navigationIcon = {
                 IconButton(onClick = onBack) {
                     Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite)

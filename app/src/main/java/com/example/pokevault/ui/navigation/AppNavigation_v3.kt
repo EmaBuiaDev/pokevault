@@ -15,6 +15,7 @@ import com.example.pokevault.ui.home.HomeScreen
 import com.example.pokevault.ui.placeholder.PlaceholderScreen
 import com.example.pokevault.ui.pokedex.SetDetailScreen
 import com.example.pokevault.ui.pokedex.SetsListScreen
+import com.example.pokevault.ui.stats.StatsScreen
 import com.example.pokevault.viewmodel.AuthViewModel
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -24,6 +25,7 @@ object Routes {
     const val HOME = "home"
     const val COLLECTION = "collection"
     const val ADD_CARD = "add_card"
+    const val EDIT_CARD = "edit_card/{cardId}"
     const val CARD_DETAIL = "card_detail/{cardId}"
     const val POKEDEX = "pokedex"
     const val SET_DETAIL = "set_detail/{setId}/{setName}"
@@ -33,6 +35,7 @@ object Routes {
     const val GRADED = "graded"
 
     fun cardDetail(cardId: String) = "card_detail/$cardId"
+    fun editCard(cardId: String) = "edit_card/$cardId"
     fun setDetail(setId: String, setName: String): String {
         val encoded = URLEncoder.encode(setName, "UTF-8")
         return "set_detail/$setId/$encoded"
@@ -94,6 +97,18 @@ fun AppNavigation(
             AddCardScreen(onBack = { navController.popBackStack() })
         }
 
+        // ── Modifica Carta ──
+        composable(
+            route = Routes.EDIT_CARD,
+            arguments = listOf(navArgument("cardId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val cardId = backStackEntry.arguments?.getString("cardId") ?: ""
+            AddCardScreen(
+                onBack = { navController.popBackStack() },
+                cardId = cardId
+            )
+        }
+
         // ── Dettaglio Carta ──
         composable(
             route = Routes.CARD_DETAIL,
@@ -103,7 +118,7 @@ fun AppNavigation(
             CardDetailScreen(
                 cardId = cardId,
                 onBack = { navController.popBackStack() },
-                onEdit = { }
+                onEdit = { navController.navigate(Routes.editCard(cardId)) }
             )
         }
 
@@ -139,9 +154,7 @@ fun AppNavigation(
 
         // ── Statistiche ──
         composable(Routes.STATS) {
-            PlaceholderScreen(
-                title = "Statistiche", emoji = "📊",
-                description = "Dashboard con qualsiasi funzionalità mi venga in mente.\n.",
+            StatsScreen(
                 onBack = { navController.popBackStack() }
             )
         }

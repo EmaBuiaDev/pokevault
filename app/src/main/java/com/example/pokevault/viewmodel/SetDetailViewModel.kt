@@ -91,7 +91,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private fun observeOwnedCards(setName: String) {
         viewModelScope.launch {
             firestoreRepository.getOwnedCardsBySet(setName)
-                .catch { }
+                .catch { e -> android.util.Log.w("SetDetailVM", "Errore osservazione carte possedute", e as? Throwable) }
                 .collectLatest { ownedCards ->
                     val ownedIds = ownedCards
                         .filter { it.apiCardId.isNotBlank() }
