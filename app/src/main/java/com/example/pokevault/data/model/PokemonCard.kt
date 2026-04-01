@@ -12,6 +12,7 @@ data class PokemonCard(
     val hp: Int = 0,
     val isGraded: Boolean = false,
     val grade: Float? = null,
+    val gradingCompany: String = "",  // PSA, BGS, CGC
     val estimatedValue: Double = 0.0,
     val quantity: Int = 1,
     val condition: String = "Mint",
@@ -34,6 +35,8 @@ data class MenuSection(
 // Costanti varianti e lingue
 object CardOptions {
     val CONDITIONS = listOf("Mint", "Near Mint", "Excellent", "Good", "Light Played", "Played", "Poor")
+
+    val GRADING_COMPANIES = listOf("PSA", "BGS", "CGC", "ACE", "SGC")
 
     val LANGUAGES = listOf(
         "🇮🇹 Italiano",

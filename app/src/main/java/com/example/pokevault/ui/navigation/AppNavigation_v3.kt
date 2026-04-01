@@ -15,6 +15,7 @@ import com.example.pokevault.ui.home.HomeScreen
 import com.example.pokevault.ui.placeholder.PlaceholderScreen
 import com.example.pokevault.ui.pokedex.SetDetailScreen
 import com.example.pokevault.ui.pokedex.SetsListScreen
+import com.example.pokevault.ui.graded.GradedCardsScreen
 import com.example.pokevault.ui.stats.StatsScreen
 import com.example.pokevault.viewmodel.AuthViewModel
 import java.net.URLDecoder
@@ -45,7 +46,8 @@ object Routes {
 @Composable
 fun AppNavigation(
     navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = viewModel(),
+    onLaunchGoogleSignIn: ((onIdToken: (String) -> Unit) -> Unit)? = null
 ) {
     val startDestination = if (authViewModel.uiState.isLoggedIn) Routes.HOME else Routes.AUTH
 
@@ -58,7 +60,11 @@ fun AppNavigation(
             AuthScreen(
                 onLogin = { email, password -> authViewModel.login(email, password) },
                 onRegister = { email, password, name -> authViewModel.register(email, password, name) },
-                onGoogleSignIn = { },
+                onGoogleSignIn = {
+                    onLaunchGoogleSignIn?.invoke { idToken ->
+                        authViewModel.loginWithGoogle(idToken)
+                    }
+                },
                 onForgotPassword = { email -> authViewModel.resetPassword(email) },
                 isLoading = authViewModel.uiState.isLoading,
                 errorMessage = authViewModel.uiState.errorMessage,
@@ -170,10 +176,9 @@ fun AppNavigation(
 
         // ── Carte Gradate ──
         composable(Routes.GRADED) {
-            PlaceholderScreen(
-                title = "Carte gradate", emoji = "⭐",
-                description = "Le tue carte certificate PSA, BGS, CGC.",
-                onBack = { navController.popBackStack() }
+            GradedCardsScreen(
+                onBack = { navController.popBackStack() },
+                onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
             )
         }
 

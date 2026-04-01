@@ -20,6 +20,7 @@ data class AddCardUiState(
     val condition: String = "Near Mint (NM)",
     val isGraded: Boolean = false,
     val grade: String = "",
+    val gradingCompany: String = "PSA",
     val notes: String = "",
     val imageUrl: String = "",
     val isLoading: Boolean = false,
@@ -49,6 +50,7 @@ class AddCardViewModel : ViewModel() {
     fun updateCondition(value: String) { uiState = uiState.copy(condition = value) }
     fun updateIsGraded(value: Boolean) { uiState = uiState.copy(isGraded = value) }
     fun updateGrade(value: String) { uiState = uiState.copy(grade = value) }
+    fun updateGradingCompany(value: String) { uiState = uiState.copy(gradingCompany = value) }
     fun updateNotes(value: String) { uiState = uiState.copy(notes = value) }
     fun updateImageUrl(value: String) { uiState = uiState.copy(imageUrl = value) }
 
@@ -68,6 +70,7 @@ class AddCardViewModel : ViewModel() {
                         condition = card.condition.ifBlank { "Near Mint (NM)" },
                         isGraded = card.isGraded,
                         grade = card.grade?.toString() ?: "",
+                        gradingCompany = card.gradingCompany.ifBlank { "PSA" },
                         notes = card.notes,
                         imageUrl = card.imageUrl,
                         isLoading = false,
@@ -102,6 +105,7 @@ class AddCardViewModel : ViewModel() {
                 hp = uiState.hp.toIntOrNull() ?: 0,
                 isGraded = uiState.isGraded,
                 grade = if (uiState.isGraded) uiState.grade.toFloatOrNull() else null,
+                gradingCompany = if (uiState.isGraded) uiState.gradingCompany else "",
                 estimatedValue = uiState.estimatedValue.toDoubleOrNull() ?: 0.0,
                 quantity = uiState.quantity.toIntOrNull() ?: 1,
                 condition = uiState.condition,
