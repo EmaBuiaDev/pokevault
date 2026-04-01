@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pokevault.ui.home.components.*
 import com.example.pokevault.ui.navigation.Routes
@@ -94,11 +93,10 @@ fun HomeScreen(
             }
         )
 
-        // Sezione Collezione
+        // Sezione Collezione con dati reali
         CollectionSection(
             cards = viewModel.getFilteredCards(),
-            isGridView = viewModel.isGridView,
-            onToggleView = { viewModel.toggleViewMode() }
+            onCardClick = { cardId -> onNavigate(Routes.cardDetail(cardId)) }
         )
 
         Spacer(modifier = Modifier.height(80.dp))

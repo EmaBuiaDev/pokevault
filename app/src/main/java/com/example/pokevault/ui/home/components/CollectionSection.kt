@@ -13,22 +13,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.ui.theme.*
 
 @Composable
 fun CollectionSection(
     cards: List<PokemonCard>,
-    isGridView: Boolean,
-    onToggleView: () -> Unit,
+    onCardClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.padding(top = 24.dp)) {
-        // Header con toggle Lista/Griglia
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -41,27 +42,15 @@ fun CollectionSection(
                 style = MaterialTheme.typography.headlineMedium
             )
 
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(DarkCard)
-            ) {
-                ViewToggleButton(
-                    text = "Lista",
-                    isSelected = !isGridView,
-                    onClick = { if (isGridView) onToggleView() }
-                )
-                ViewToggleButton(
-                    text = "Griglia",
-                    isSelected = isGridView,
-                    onClick = { if (!isGridView) onToggleView() }
-                )
-            }
+            Text(
+                text = "${cards.size} carte",
+                color = TextMuted,
+                fontSize = 14.sp
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Cards orizzontali
         if (cards.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -80,8 +69,11 @@ fun CollectionSection(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(cards) { card ->
-                    PokemonCardItem(card = card)
+                items(cards.take(20)) { card ->
+                    PokemonCardItem(
+                        card = card,
+                        onClick = { onCardClick(card.id) }
+                    )
                 }
             }
         }
@@ -89,89 +81,69 @@ fun CollectionSection(
 }
 
 @Composable
-fun ViewToggleButton(
-    text: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Text(
-        text = text,
-        color = if (isSelected) TextWhite else TextMuted,
-        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-        fontSize = 13.sp,
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .background(
-                if (isSelected) BlueCard.copy(alpha = 0.3f)
-                else Color.Transparent
-            )
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    )
-}
-
-@Composable
 fun PokemonCardItem(
     card: PokemonCard,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // Colore basato sul tipo
-    val typeColor = when (card.type.lowercase()) {
-        "fuoco" -> RedCard
-        "acqua" -> BlueCard
-        "elettro" -> YellowCard
-        "psico" -> PurpleCard
-        "erba" -> GreenCard
-        else -> DarkCard
-    }
-
-    Box(
+    Column(
         modifier = modifier
             .width(120.dp)
-            .height(160.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(typeColor.copy(alpha = 0.15f))
-            .clickable { /* TODO: apri dettaglio carta */ }
-            .padding(12.dp),
-        contentAlignment = Alignment.Center
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            // Emoji placeholder (poi sostituire con immagine reale)
-            Text(
-                text = when (card.type.lowercase()) {
-                    "fuoco" -> "🔥"
-                    "acqua" -> "💧"
-                    "elettro" -> "⚡"
-                    "psico" -> "🔮"
-                    "erba" -> "🌿"
-                    else -> "🎴"
-                },
-                fontSize = 40.sp
+        if (card.imageUrl.isNotBlank()) {
+            AsyncImage(
+                model = card.imageUrl,
+                contentDescription = card.name,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(168.dp)
+                    .clip(RoundedCornerShape(12.dp))
             )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = card.name,
-                color = TextWhite,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
-            )
-
-            Text(
-                text = "${card.hp} HP",
-                color = typeColor,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-
-            Text(
-                text = card.rarity,
-                color = TextMuted,
-                fontSize = 10.sp
-            )
+        } else {
+            // Fallback emoji se non c'è immagine
+            val typeColor = when (card.type.lowercase()) {
+                "fuoco", "fire" -> RedCard
+                "acqua", "water" -> BlueCard
+                "elettro", "lightning" -> YellowCard
+                "psico", "psychic" -> PurpleCard
+                "erba", "grass" -> GreenCard
+                else -> DarkCard
+            }
+            Box(
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(168.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(typeColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = when (card.type.lowercase()) {
+                        "fuoco", "fire" -> "🔥"
+                        "acqua", "water" -> "💧"
+                        "elettro", "lightning" -> "⚡"
+                        "psico", "psychic" -> "🔮"
+                        "erba", "grass" -> "🌿"
+                        else -> "🎴"
+                    },
+                    fontSize = 40.sp
+                )
+            }
         }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = card.name,
+            color = TextWhite,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
