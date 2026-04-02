@@ -15,7 +15,7 @@ data class PokemonCard(
     val gradingCompany: String = "",  // PSA, BGS, CGC
     val estimatedValue: Double = 0.0,
     val quantity: Int = 1,
-    val condition: String = "Mint",
+    val condition: String = "Near Mint",
     val notes: String = "",
     val addedAt: Timestamp? = null,
     val apiCardId: String = "",

@@ -254,7 +254,7 @@ fun SetDetailScreen(
                                             val variants = CardOptions.getVariantsFromApi(priceKeys)
                                             if (variants.size <= 1) {
                                                 val variantToAdd = variants.firstOrNull() ?: "Normal"
-                                                viewModel.addCardWithDetails(card, variantToAdd, 1, "Mint", "🇮🇹 Italiano")
+                                                viewModel.addCardWithDetails(card, variantToAdd, 1, "Near Mint", "🇮🇹 Italiano")
                                             } else {
                                                 quickAddCard = if (quickAddCard?.id == card.id) null else card
                                             }
@@ -266,7 +266,7 @@ fun SetDetailScreen(
                                             card = card,
                                             onVariantSelected = { variant ->
                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                viewModel.addCardWithDetails(card, variant, 1, "Mint", "🇮🇹 Italiano")
+                                                viewModel.addCardWithDetails(card, variant, 1, "Near Mint", "🇮🇹 Italiano")
                                                 quickAddCard = null
                                             },
                                             onDismiss = { quickAddCard = null }

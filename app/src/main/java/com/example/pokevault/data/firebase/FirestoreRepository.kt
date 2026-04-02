@@ -48,26 +48,30 @@ class FirestoreRepository {
 
     suspend fun addCard(card: PokemonCard): Result<String> {
         return try {
-            // Controlla se esiste già una carta identica (stesso apiCardId + variante + lingua + condizione)
-            // Se sì, incrementa quantity invece di creare un duplicato
+            // Controlla se esiste già una carta identica.
+            // Usa solo apiCardId (non richiede indice composito Firestore),
+            // poi filtra lato client per variante/lingua/condizione.
             val existingDoc = if (card.apiCardId.isNotBlank()) {
                 val query = cardsCollection
                     .whereEqualTo("apiCardId", card.apiCardId)
-                    .whereEqualTo("variant", card.variant)
-                    .whereEqualTo("language", card.language)
-                    .whereEqualTo("condition", card.condition)
                     .get().await()
-                query.documents.firstOrNull()
+                // Filtra lato client per match esatto su variante, lingua, condizione
+                query.documents.firstOrNull { doc ->
+                    doc.getString("variant") == card.variant &&
+                    doc.getString("language") == card.language &&
+                    doc.getString("condition") == card.condition
+                }
             } else {
-                // Per carte senza apiCardId, cerca per nome + set + variante + lingua + condizione
+                // Per carte senza apiCardId, cerca per nome + set
                 val query = cardsCollection
                     .whereEqualTo("name", card.name)
                     .whereEqualTo("set", card.set)
-                    .whereEqualTo("variant", card.variant)
-                    .whereEqualTo("language", card.language)
-                    .whereEqualTo("condition", card.condition)
                     .get().await()
-                query.documents.firstOrNull()
+                query.documents.firstOrNull { doc ->
+                    doc.getString("variant") == card.variant &&
+                    doc.getString("language") == card.language &&
+                    doc.getString("condition") == card.condition
+                }
             }
 
             if (existingDoc != null) {
