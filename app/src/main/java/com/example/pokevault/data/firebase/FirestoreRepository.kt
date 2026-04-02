@@ -48,28 +48,63 @@ class FirestoreRepository {
 
     suspend fun addCard(card: PokemonCard): Result<String> {
         return try {
-            val data = hashMapOf(
-                "name" to card.name,
-                "imageUrl" to card.imageUrl,
-                "set" to card.set,
-                "rarity" to card.rarity,
-                "type" to card.type,
-                "hp" to card.hp,
-                "isGraded" to card.isGraded,
-                "grade" to card.grade,
-                "gradingCompany" to card.gradingCompany,
-                "estimatedValue" to card.estimatedValue,
-                "quantity" to card.quantity,
-                "condition" to card.condition,
-                "notes" to card.notes,
-                "apiCardId" to card.apiCardId,
-                "cardNumber" to card.cardNumber,
-                "variant" to card.variant,
-                "language" to card.language,
-                "addedAt" to com.google.firebase.Timestamp.now()
-            )
-            val docRef = cardsCollection.add(data).await()
-            Result.success(docRef.id)
+            // Controlla se esiste già una carta identica.
+            // Usa solo apiCardId (non richiede indice composito Firestore),
+            // poi filtra lato client per variante/lingua/condizione.
+            val existingDoc = if (card.apiCardId.isNotBlank()) {
+                val query = cardsCollection
+                    .whereEqualTo("apiCardId", card.apiCardId)
+                    .get().await()
+                // Filtra lato client per match esatto su variante, lingua, condizione
+                query.documents.firstOrNull { doc ->
+                    doc.getString("variant") == card.variant &&
+                    doc.getString("language") == card.language &&
+                    doc.getString("condition") == card.condition
+                }
+            } else {
+                // Per carte senza apiCardId, cerca per nome + set
+                val query = cardsCollection
+                    .whereEqualTo("name", card.name)
+                    .whereEqualTo("set", card.set)
+                    .get().await()
+                query.documents.firstOrNull { doc ->
+                    doc.getString("variant") == card.variant &&
+                    doc.getString("language") == card.language &&
+                    doc.getString("condition") == card.condition
+                }
+            }
+
+            if (existingDoc != null) {
+                // Carta già presente: incrementa quantity
+                val currentQty = (existingDoc.getLong("quantity") ?: 1).toInt()
+                val newQty = currentQty + card.quantity
+                existingDoc.reference.update("quantity", newQty).await()
+                Result.success(existingDoc.id)
+            } else {
+                // Carta nuova: crea documento
+                val data = hashMapOf(
+                    "name" to card.name,
+                    "imageUrl" to card.imageUrl,
+                    "set" to card.set,
+                    "rarity" to card.rarity,
+                    "type" to card.type,
+                    "hp" to card.hp,
+                    "isGraded" to card.isGraded,
+                    "grade" to card.grade,
+                    "gradingCompany" to card.gradingCompany,
+                    "estimatedValue" to card.estimatedValue,
+                    "quantity" to card.quantity,
+                    "condition" to card.condition,
+                    "notes" to card.notes,
+                    "apiCardId" to card.apiCardId,
+                    "cardNumber" to card.cardNumber,
+                    "variant" to card.variant,
+                    "language" to card.language,
+                    "addedAt" to com.google.firebase.Timestamp.now()
+                )
+                val docRef = cardsCollection.add(data).await()
+                Result.success(docRef.id)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
