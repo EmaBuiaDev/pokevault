@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pokevault.ui.theme.*
+import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.StatsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,10 +36,10 @@ fun StatsScreen(
             .statusBarsPadding()
     ) {
         TopAppBar(
-            title = { Text("Statistiche", fontWeight = FontWeight.SemiBold, color = TextWhite) },
+            title = { Text(AppLocale.statistics, fontWeight = FontWeight.SemiBold, color = TextWhite) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite)
+                    Icon(Icons.Default.ArrowBack, AppLocale.back, tint = TextWhite)
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
@@ -61,13 +62,13 @@ fun StatsScreen(
                 // ── Stat Cards 2x2 ──
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     StatCard(
-                        label = "Carte Totali",
+                        label = AppLocale.totalCards,
                         value = "${state.stats.totalCards}",
                         color = BlueCard,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        label = "Carte Uniche",
+                        label = AppLocale.uniqueCards,
                         value = "${state.stats.uniqueCards}",
                         color = PurpleCard,
                         modifier = Modifier.weight(1f)
@@ -75,13 +76,13 @@ fun StatsScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     StatCard(
-                        label = "Valore Totale",
+                        label = AppLocale.totalValue,
                         value = "\u20AC${"%.2f".format(state.stats.totalValue)}",
                         color = GreenCard,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        label = "Valore Medio",
+                        label = AppLocale.averageValue,
                         value = "\u20AC${"%.2f".format(state.averageValue)}",
                         color = YellowCard,
                         modifier = Modifier.weight(1f)
@@ -91,13 +92,13 @@ fun StatsScreen(
                 // ── Carta più preziosa + Graduate ──
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     StatCard(
-                        label = "Più Preziosa",
+                        label = AppLocale.mostValuable,
                         value = state.stats.mostValuable,
                         color = StarGold,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        label = "Graduate",
+                        label = AppLocale.graded,
                         value = "${state.gradedCount}",
                         color = RedCard,
                         modifier = Modifier.weight(1f)
@@ -107,7 +108,7 @@ fun StatsScreen(
                 // ── Per Set ──
                 if (state.cardsBySet.isNotEmpty()) {
                     DistributionSection(
-                        title = "Per Set",
+                        title = AppLocale.bySet,
                         items = state.cardsBySet.take(10),
                         maxValue = state.cardsBySet.maxOf { it.second },
                         color = BlueCard
@@ -117,7 +118,7 @@ fun StatsScreen(
                 // ── Per Rarità ──
                 if (state.cardsByRarity.isNotEmpty()) {
                     DistributionSection(
-                        title = "Per Rarità",
+                        title = AppLocale.byRarity,
                         items = state.cardsByRarity,
                         maxValue = state.cardsByRarity.maxOf { it.second },
                         color = PurpleCard
@@ -127,7 +128,7 @@ fun StatsScreen(
                 // ── Per Tipo ──
                 if (state.cardsByType.isNotEmpty()) {
                     DistributionSection(
-                        title = "Per Tipo",
+                        title = AppLocale.byType,
                         items = state.cardsByType,
                         maxValue = state.cardsByType.maxOf { it.second },
                         color = GreenCard
