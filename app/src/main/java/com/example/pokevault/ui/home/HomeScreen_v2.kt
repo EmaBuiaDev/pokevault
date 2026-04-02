@@ -17,7 +17,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pokevault.ui.home.components.*
 import com.example.pokevault.ui.navigation.Routes
@@ -26,6 +29,7 @@ import com.example.pokevault.ui.theme.DarkBackground
 import com.example.pokevault.ui.theme.DarkCard
 import com.example.pokevault.ui.theme.TextMuted
 import com.example.pokevault.ui.theme.TextWhite
+import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.HomeViewModel
 
 @Composable
@@ -62,6 +66,23 @@ fun HomeScreen(
                     userName = userName,
                     modifier = Modifier.weight(1f)
                 )
+
+                // Toggle lingua IT/EN
+                val context = LocalContext.current
+                Text(
+                    text = if (AppLocale.isItalian) "IT" else "EN",
+                    color = TextWhite,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(DarkCard)
+                        .clickable { AppLocale.toggle(context) }
+                        .wrapContentSize(Alignment.Center)
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 // Bottone logout
                 Icon(

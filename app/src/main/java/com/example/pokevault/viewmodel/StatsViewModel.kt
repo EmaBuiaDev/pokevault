@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.pokevault.data.firebase.CollectionStats
 import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.PokemonCard
+import com.example.pokevault.util.AppLocale
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 
@@ -42,17 +43,21 @@ class StatsViewModel : ViewModel() {
                     val stats = repository.getCollectionStats()
                     val totalCards = cards.sumOf { it.quantity }
 
-                    val bySet = cards.groupBy { it.set.ifBlank { "Sconosciuto" } }
+                    val bySet = cards.groupBy { it.set.ifBlank { AppLocale.unknown } }
                         .mapValues { (_, v) -> v.sumOf { it.quantity } }
                         .entries.sortedByDescending { it.value }
                         .map { it.key to it.value }
 
-                    val byRarity = cards.groupBy { it.rarity.ifBlank { "Sconosciuta" } }
+                    val byRarity = cards.groupBy {
+                            AppLocale.translateRarity(it.rarity).ifBlank { AppLocale.unknown }
+                        }
                         .mapValues { (_, v) -> v.sumOf { it.quantity } }
                         .entries.sortedByDescending { it.value }
                         .map { it.key to it.value }
 
-                    val byType = cards.groupBy { it.type.ifBlank { "Altro" } }
+                    val byType = cards.groupBy {
+                            AppLocale.translateType(it.type).ifBlank { AppLocale.other }
+                        }
                         .mapValues { (_, v) -> v.sumOf { it.quantity } }
                         .entries.sortedByDescending { it.value }
                         .map { it.key to it.value }
