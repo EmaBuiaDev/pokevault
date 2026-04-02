@@ -202,6 +202,61 @@ class PokeTcgRepository {
     }
 
     /**
+     * Ricerca precisa per lo scanner: combina nome + numero carta.
+     * Il numero (es. "25" da "025/198") è il dato OCR più affidabile.
+     * Cerca con: name + number → solo name → solo number
+     */
+    suspend fun searchByNameAndNumber(name: String?, number: String?): Result<List<TcgCard>> {
+        val cleanName = name?.let { sanitizeQuery(it) }?.takeIf { it.isNotBlank() }
+        val cleanNumber = number?.trim()?.trimStart('0')?.takeIf { it.isNotBlank() }
+
+        if (cleanName == null && cleanNumber == null) return Result.success(emptyList())
+
+        return try {
+            // Strategia 1: nome + numero (match molto preciso)
+            if (cleanName != null && cleanNumber != null) {
+                val query = "name:\"$cleanName*\" number:\"$cleanNumber\""
+                val result = api.searchCards(query = query, pageSize = 10)
+                if (result.data.isNotEmpty()) return Result.success(result.data)
+            }
+
+            // Strategia 2: solo nome con wildcard
+            if (cleanName != null && cleanName.length >= 3) {
+                val query = "name:\"$cleanName*\""
+                val result = api.searchCards(query = query, pageSize = 10)
+                if (result.data.isNotEmpty()) {
+                    // Se abbiamo anche il numero, filtra lato client
+                    if (cleanNumber != null) {
+                        val filtered = result.data.filter { it.number == cleanNumber }
+                        if (filtered.isNotEmpty()) return Result.success(filtered)
+                    }
+                    return Result.success(result.data)
+                }
+                // Prova solo prima parola
+                val firstWord = cleanName.split(" ").firstOrNull()?.trim() ?: cleanName
+                if (firstWord.length >= 3 && firstWord != cleanName) {
+                    val fallback = api.searchCards(query = "name:\"$firstWord*\"", pageSize = 15)
+                    if (fallback.data.isNotEmpty()) {
+                        if (cleanNumber != null) {
+                            val filtered = fallback.data.filter { it.number == cleanNumber }
+                            if (filtered.isNotEmpty()) return Result.success(filtered)
+                        }
+                        return Result.success(fallback.data)
+                    }
+                }
+            }
+
+            // Strategia 3: solo numero (meno preciso, molti risultati)
+            if (cleanNumber != null) {
+                val result = api.searchCards(query = "number:\"$cleanNumber\"", pageSize = 20)
+                return Result.success(result.data)
+            }
+
+            Result.success(emptyList())
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
      * Rimuove caratteri speciali che rompono la query Lucene dell'API PokéTCG.
      */
     private fun sanitizeQuery(raw: String): String {
