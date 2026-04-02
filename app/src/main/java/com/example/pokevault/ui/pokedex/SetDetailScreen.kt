@@ -114,7 +114,10 @@ fun SetDetailScreen(
         containerColor = DarkBackground
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).statusBarsPadding()
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .statusBarsPadding()
         ) {
             TopAppBar(
                 title = {
@@ -154,13 +157,19 @@ fun SetDetailScreen(
                     // TOOLBAR RICERCA E FILTRO MANCANTI
                     item(span = { GridItemSpan(3) }) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // Barra di ricerca locale
                             Box(
-                                modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(DarkCard).padding(horizontal = 12.dp, vertical = 8.dp)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(DarkCard)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(16.dp))
@@ -176,16 +185,23 @@ fun SetDetailScreen(
                                         )
                                     }
                                     if (state.searchQuery.isNotEmpty()) {
-                                        Icon(Icons.Default.Close, null, tint = TextMuted, modifier = Modifier.size(16.dp).clickable { viewModel.updateSearchQuery("") })
+                                        Icon(Icons.Default.Close, null, tint = TextMuted, modifier = Modifier
+                                            .size(16.dp)
+                                            .clickable { viewModel.updateSearchQuery("") })
                                     }
                                 }
                             }
 
                             // Toggle Mancanti
                             Box(
-                                modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
                                     .background(if (state.showOnlyMissing) BlueCard.copy(alpha = 0.2f) else DarkCard)
-                                    .border(1.dp, if (state.showOnlyMissing) BlueCard else Color.Transparent, RoundedCornerShape(12.dp))
+                                    .border(
+                                        1.dp,
+                                        if (state.showOnlyMissing) BlueCard else Color.Transparent,
+                                        RoundedCornerShape(12.dp)
+                                    )
                                     .clickable { viewModel.toggleShowOnlyMissing() }
                                     .padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
@@ -219,12 +235,17 @@ fun SetDetailScreen(
 
                     // Tabs vista
                     item(span = { GridItemSpan(3) }) {
-                        Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DarkCard), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        Row(modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(DarkCard), horizontalArrangement = Arrangement.SpaceEvenly) {
                             listOf("Carte" to "grid", "Lista" to "list").forEach { (label, mode) ->
                                 Text(label, color = if (state.viewMode == mode) TextWhite else TextMuted,
                                     fontWeight = if (state.viewMode == mode) FontWeight.SemiBold else FontWeight.Normal,
                                     fontSize = 13.sp, textAlign = TextAlign.Center,
-                                    modifier = Modifier.weight(1f).clickable { viewModel.setViewMode(mode) }
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { viewModel.setViewMode(mode) }
                                         .background(if (state.viewMode == mode) BlueCard.copy(alpha = 0.3f) else Color.Transparent)
                                         .padding(vertical = 10.dp))
                             }
@@ -234,7 +255,9 @@ fun SetDetailScreen(
                     // Griglia Carte
                     if (sortedCards.isEmpty()) {
                         item(span = { GridItemSpan(3) }) {
-                            Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 40.dp), contentAlignment = Alignment.Center) {
                                 Text("Nessuna carta trovata con questi filtri", color = TextMuted, fontSize = 14.sp)
                             }
                         }
@@ -338,30 +361,154 @@ fun QuickAddPopup(card: TcgCard, onVariantSelected: (String) -> Unit, onDismiss:
 }
 
 @Composable
-fun SetInfoHeader(logoUrl: String, ownedCount: Int, displayTotal: Int, completionPercent: Int, rarityCounts: Map<RarityInfo, Pair<Int, Int>>) {
-    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Brush.verticalGradient(listOf(DarkCard, DarkSurface))).padding(16.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            if (logoUrl.isNotBlank()) AsyncImage(model = logoUrl, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.weight(1f).height(55.dp))
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(horizontalAlignment = Alignment.End) {
-                Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).border(1.dp, GreenCard.copy(alpha = 0.4f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                    Text("${completionPercent}%", color = GreenCard, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+fun RarityStatsHeader(cards: List<TcgCard>, ownedIds: Set<String>) {
+    // Raggruppa le carte per rarità e conta quante ne hai
+    val stats = remember(cards, ownedIds) {
+        cards.groupBy { RarityUtils.getRarityInfo(it.rarity) }
+            .mapValues { entry ->
+                val total = entry.value.size
+                val owned = entry.value.count { it.id in ownedIds }
+                Pair(owned, total)
+            }
+            .toSortedMap(compareBy { it.sortOrder }) // Ordina da Common a Promo
+    }
+
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        stats.forEach { (rarityInfo, counts) ->
+            item {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = rarityInfo.emoji,
+                        color = rarityInfo.color,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = "${counts.first}/${counts.second}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White
+                    )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("$ownedCount/$displayTotal", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         }
-        Spacer(modifier = Modifier.height(10.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF1A1A30))) {
-            Box(modifier = Modifier.fillMaxWidth(completionPercent / 100f).height(8.dp).clip(RoundedCornerShape(4.dp))
-                .background(Brush.horizontalGradient(listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6), Color(0xFFEC4899)))))
+    }
+}
+
+@Composable
+fun SetInfoHeader(
+    logoUrl: String,
+    ownedCount: Int,
+    displayTotal: Int,
+    completionPercent: Int,
+    rarityCounts: Map<RarityInfo, Pair<Int, Int>>
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.verticalGradient(listOf(DarkCard, DarkSurface)))
+            .padding(16.dp)
+    ) {
+
+        // --- Riga Logo e Percentuale ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (logoUrl.isNotBlank()) {
+                AsyncImage(
+                    model = logoUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(55.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.dp, GreenCard.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        "${completionPercent}%",
+                        color = GreenCard,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "$ownedCount/$displayTotal",
+                    color = TextWhite,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
         }
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // --- Barra di Progresso ---
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color(0xFF1A1A30))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(completionPercent / 100f)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color(0xFF3B82F6),
+                                Color(0xFF8B5CF6),
+                                Color(0xFFEC4899)
+                            )
+                        )
+                    )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // --- STATISTICHE RARITÀ (Dinamiche e Ordinate) ---
+        // Usiamo un FlowRow o un Row con scorrimento se le rarità sono molte
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             rarityCounts.forEach { (info, counts) ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 2.dp).weight(1f)) {
-                    Text(info.emoji, color = info.color, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("${counts.first}/${counts.second}", color = if (counts.first == counts.second && counts.second > 0) GreenCard else TextWhite, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                // Visualizza solo se la rarità esiste nel set (counts.second > 0)
+                if (counts.second > 0) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Text(
+                            text = info.emoji,
+                            color = info.color,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "${counts.first}/${counts.second}",
+                            color = if (counts.first == counts.second) GreenCard else TextWhite.copy(
+                                alpha = 0.8f
+                            ),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -372,8 +519,11 @@ fun SetInfoHeader(logoUrl: String, ownedCount: Int, displayTotal: Int, completio
 fun RarityFilterChip(label: String, isSelected: Boolean, color: Color = BlueCard, onClick: () -> Unit) {
     Text(label, maxLines = 1, color = if (isSelected) TextWhite else TextMuted,
         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal, fontSize = 12.sp,
-        modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (isSelected) color.copy(alpha = 0.5f) else DarkCard)
-            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp))
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isSelected) color.copy(alpha = 0.5f) else DarkCard)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp))
 }
 
 @Composable
@@ -385,20 +535,48 @@ fun TcgCardCompactItem(
     onClick: () -> Unit, 
     onQuickAddClick: () -> Unit
 ) {
-    Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp))
-        .then(if (isOwned) Modifier.border(2.dp, GreenCard.copy(alpha = 0.7f), RoundedCornerShape(10.dp)) else Modifier).clickable(onClick = onClick)) {
+    Box(modifier = Modifier
+        .fillMaxWidth()
+        .aspectRatio(0.72f)
+        .clip(RoundedCornerShape(10.dp))
+        .then(
+            if (isOwned) Modifier.border(
+                2.dp,
+                GreenCard.copy(alpha = 0.7f),
+                RoundedCornerShape(10.dp)
+            ) else Modifier
+        )
+        .clickable(onClick = onClick)) {
         
         AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         
-        if (!isOwned) Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
+        if (!isOwned) Box(modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.55f)))
         
         if (isOwned) {
-            Box(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(18.dp).clip(CircleShape).background(GreenCard), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(4.dp)
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(GreenCard), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(12.dp))
             }
         }
 
-        Column(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)))).padding(horizontal = 6.dp, vertical = 5.dp)) {
+        Column(modifier = Modifier
+            .align(Alignment.BottomStart)
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.Transparent,
+                        Color.Black.copy(alpha = 0.9f)
+                    )
+                )
+            )
+            .padding(horizontal = 6.dp, vertical = 5.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(card.name, color = TextWhite, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -420,8 +598,10 @@ fun TcgCardCompactItem(
                             }
                         )
                         .border(
-                            1.dp, 
-                            if (isOwned && !isAdding && !isPopupOpen) Color.White.copy(alpha = 0.1f) else Color.White.copy(alpha = 0.15f), 
+                            1.dp,
+                            if (isOwned && !isAdding && !isPopupOpen) Color.White.copy(alpha = 0.1f) else Color.White.copy(
+                                alpha = 0.15f
+                            ),
                             CircleShape
                         )
                         .clickable { onQuickAddClick() },
@@ -446,11 +626,20 @@ fun TcgCardCompactItem(
 @Composable
 fun TcgCardListRow(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
     val rarityInfo = RarityUtils.getRarityInfo(card.rarity)
-    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isOwned) DarkCard else DarkCard.copy(alpha = 0.5f))
-        .clickable(onClick = onClick).padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(modifier = Modifier.width(45.dp).height(63.dp).clip(RoundedCornerShape(6.dp))) {
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(12.dp))
+        .background(if (isOwned) DarkCard else DarkCard.copy(alpha = 0.5f))
+        .clickable(onClick = onClick)
+        .padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(modifier = Modifier
+            .width(45.dp)
+            .height(63.dp)
+            .clip(RoundedCornerShape(6.dp))) {
             AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            if (!isOwned) Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
+            if (!isOwned) Box(modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f)))
         }
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -462,8 +651,17 @@ fun TcgCardListRow(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
         }
         val price = card.cardmarket?.prices?.averageSellPrice ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
         if (price != null && price > 0) Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-        Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(if (isOwned) GreenCard else Color.Transparent)
-            .then(if (!isOwned) Modifier.border(1.5.dp, TextMuted.copy(alpha = 0.3f), CircleShape) else Modifier), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(if (isOwned) GreenCard else Color.Transparent)
+            .then(
+                if (!isOwned) Modifier.border(
+                    1.5.dp,
+                    TextMuted.copy(alpha = 0.3f),
+                    CircleShape
+                ) else Modifier
+            ), contentAlignment = Alignment.Center) {
             if (isOwned) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
         }
     }
