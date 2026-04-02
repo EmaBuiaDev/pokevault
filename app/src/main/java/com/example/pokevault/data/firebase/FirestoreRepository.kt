@@ -2,6 +2,7 @@ package com.example.pokevault.data.firebase
 
 import com.example.pokevault.data.model.PokemonCard
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
@@ -48,27 +49,54 @@ class FirestoreRepository {
 
     suspend fun addCard(card: PokemonCard): Result<String> {
         return try {
-            val data = hashMapOf(
-                "name" to card.name,
-                "imageUrl" to card.imageUrl,
-                "set" to card.set,
-                "rarity" to card.rarity,
-                "type" to card.type,
-                "hp" to card.hp,
-                "isGraded" to card.isGraded,
-                "grade" to card.grade,
-                "estimatedValue" to card.estimatedValue,
-                "quantity" to card.quantity,
-                "condition" to card.condition,
-                "notes" to card.notes,
-                "apiCardId" to card.apiCardId,
-                "cardNumber" to card.cardNumber,
-                "variant" to card.variant,
-                "language" to card.language,
-                "addedAt" to com.google.firebase.Timestamp.now()
-            )
-            val docRef = cardsCollection.add(data).await()
-            Result.success(docRef.id)
+            // Cerca una carta identica già esistente (stesso apiCardId o stesso nome+set,
+            // stessa variante, lingua e condizione)
+            val existingQuery = if (card.apiCardId.isNotBlank()) {
+                cardsCollection
+                    .whereEqualTo("apiCardId", card.apiCardId)
+                    .whereEqualTo("variant", card.variant)
+                    .whereEqualTo("language", card.language)
+                    .whereEqualTo("condition", card.condition)
+                    .get().await()
+            } else {
+                cardsCollection
+                    .whereEqualTo("name", card.name)
+                    .whereEqualTo("set", card.set)
+                    .whereEqualTo("variant", card.variant)
+                    .whereEqualTo("language", card.language)
+                    .whereEqualTo("condition", card.condition)
+                    .get().await()
+            }
+
+            val existingDoc = existingQuery.documents.firstOrNull()
+            if (existingDoc != null) {
+                // Carta già presente: incrementa la quantità
+                existingDoc.reference.update("quantity", FieldValue.increment(card.quantity.toLong())).await()
+                Result.success(existingDoc.id)
+            } else {
+                // Carta nuova: crea un documento
+                val data = hashMapOf(
+                    "name" to card.name,
+                    "imageUrl" to card.imageUrl,
+                    "set" to card.set,
+                    "rarity" to card.rarity,
+                    "type" to card.type,
+                    "hp" to card.hp,
+                    "isGraded" to card.isGraded,
+                    "grade" to card.grade,
+                    "estimatedValue" to card.estimatedValue,
+                    "quantity" to card.quantity,
+                    "condition" to card.condition,
+                    "notes" to card.notes,
+                    "apiCardId" to card.apiCardId,
+                    "cardNumber" to card.cardNumber,
+                    "variant" to card.variant,
+                    "language" to card.language,
+                    "addedAt" to com.google.firebase.Timestamp.now()
+                )
+                val docRef = cardsCollection.add(data).await()
+                Result.success(docRef.id)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
