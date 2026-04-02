@@ -10,21 +10,16 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
@@ -40,7 +35,6 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -54,11 +48,10 @@ import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.viewmodel.ScannerViewModel
 
-@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun ScannerScreen(
     onBack: () -> Unit,
@@ -66,118 +59,209 @@ fun ScannerScreen(
 ) {
     val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
     val state = viewModel.uiState
-    val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(state.successMessage) {
-        state.successMessage?.let {
-            snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
-            viewModel.clearMessages()
-        }
+    if (!cameraPermission.status.isGranted) {
+        PermissionRequest(
+            shouldShowRationale = cameraPermission.status.shouldShowRationale,
+            onRequestPermission = { cameraPermission.launchPermissionRequest() },
+            onBack = onBack
+        )
+        return
     }
 
-    Scaffold(
-        snackbarHost = {
-            SnackbarHost(snackbarHostState) { data ->
-                Snackbar(
-                    snackbarData = data,
-                    containerColor = GreenCard,
-                    contentColor = TextWhite,
-                    shape = RoundedCornerShape(12.dp)
+    // ── Camera full screen con overlay ──
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        // Camera a tutto schermo
+        CameraPreview(
+            onTextDetected = { viewModel.onTextDetected(it) },
+            flashEnabled = state.flashEnabled
+        )
+
+        // Top bar trasparente
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.Default.ArrowBack, "Indietro",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        .padding(6.dp)
                 )
             }
-        },
-        topBar = {
-            TopAppBar(
-                title = { Text("Scanner", fontWeight = FontWeight.SemiBold, color = TextWhite) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite)
-                    }
-                },
-                actions = {
-                    if (cameraPermission.status.isGranted) {
-                        IconButton(onClick = { viewModel.toggleFlash() }) {
-                            Icon(
-                                if (state.flashEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                                "Flash",
-                                tint = if (state.flashEnabled) StarGold else TextWhite
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
-            )
-        },
-        containerColor = DarkBackground
-    ) { paddingValues ->
+
+            // Contatore carte aggiunte
+            if (state.addedCount > 0) {
+                Text(
+                    text = "${state.addedCount} aggiunte",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .background(GreenCard.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+
+            IconButton(onClick = { viewModel.toggleFlash() }) {
+                Icon(
+                    if (state.flashEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                    "Flash",
+                    tint = if (state.flashEnabled) StarGold else Color.White,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        .padding(6.dp)
+                )
+            }
+        }
+
+        // Centro: stato rilevamento
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+                .align(Alignment.Center)
+                .padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (!cameraPermission.status.isGranted) {
-                PermissionRequest(
-                    shouldShowRationale = cameraPermission.status.shouldShowRationale,
-                    onRequestPermission = { cameraPermission.launchPermissionRequest() }
-                )
-            } else {
-                // Camera Preview - scanning automatico
-                Box(
+            if (state.lastAddedCard == null && !state.isSearching &&
+                state.detectedName.isBlank() && state.detectedNumber.isBlank()
+            ) {
+                // Istruzione iniziale
+                Text(
+                    "Inquadra una carta Pokémon",
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.4f)
+                        .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                )
+            }
+        }
+
+        // Bottom: stato + ricerca manuale
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Errore
+            state.errorMessage?.let { error ->
+                Text(
+                    error,
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .background(Color(0xCCEF4444), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            // Searching indicator
+            if (state.isSearching) {
+                Row(
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CameraPreview(
-                        onTextDetected = { viewModel.onTextDetected(it) },
-                        flashEnabled = state.flashEnabled
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = BlueCard,
+                        strokeWidth = 2.dp
                     )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        buildString {
+                            append("Cerco")
+                            if (state.detectedName.isNotBlank()) append(" \"${state.detectedName}\"")
+                            if (state.detectedNumber.isNotBlank()) append(" #${state.detectedNumber}")
+                            append("...")
+                        },
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
-                    // Overlay: nome rilevato + stato
-                    Column(
+            // Carta appena aggiunta - conferma visiva
+            AnimatedVisibility(
+                visible = state.lastAddedCard != null,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            ) {
+                state.lastAddedCard?.let { card ->
+                    Row(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        if (state.isSearching) {
-                            LinearProgressIndicator(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(4.dp)),
-                                color = BlueCard,
-                                trackColor = Color.Transparent
+                            .fillMaxWidth()
+                            .background(
+                                GreenCard.copy(alpha = 0.95f),
+                                RoundedCornerShape(16.dp)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
-
-                        if (state.bestGuessName.isNotBlank()) {
-                            Box(
-                                modifier = Modifier
-                                    .background(
-                                        DarkSurface.copy(alpha = 0.9f),
-                                        RoundedCornerShape(10.dp)
-                                    )
-                                    .padding(horizontal = 14.dp, vertical = 6.dp)
-                            ) {
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(
+                            model = card.images.small,
+                            contentDescription = card.name,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .height(70.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Check, null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = state.bestGuessName,
-                                    color = StarGold,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 14.sp
+                                    "Aggiunta!",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
                                 )
                             }
+                            Text(
+                                card.name,
+                                color = Color.White.copy(alpha = 0.95f),
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                "${card.set?.name ?: ""} #${card.number}",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 12.sp
+                            )
                         }
                     }
                 }
+            }
 
-                // Pannello risultati + ricerca manuale
-                ResultsPanel(
-                    state = state,
-                    onSearch = { viewModel.searchManually(it) },
-                    onSelectCard = { viewModel.selectCard(it) },
-                    onAddCard = { viewModel.addCardToCollection(it) },
-                    onClear = { viewModel.clearResults() },
-                    modifier = Modifier.weight(0.6f)
+            // Se non sta rilevando nulla, mostra ricerca manuale
+            if (state.lastAddedCard == null && !state.isSearching) {
+                Spacer(modifier = Modifier.height(8.dp))
+                ManualSearchBar(
+                    onSearch = { viewModel.searchManually(it) }
                 )
             }
         }
@@ -185,27 +269,58 @@ fun ScannerScreen(
 }
 
 @Composable
+private fun ManualSearchBar(onSearch: (String) -> Unit) {
+    var query by remember { mutableStateOf("") }
+
+    OutlinedTextField(
+        value = query,
+        onValueChange = { query = it },
+        placeholder = { Text("Cerca manualmente...", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp) },
+        leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.White.copy(alpha = 0.6f)) },
+        trailingIcon = {
+            if (query.isNotBlank()) {
+                IconButton(onClick = { query = "" }) {
+                    Icon(Icons.Default.Close, null, tint = Color.White.copy(alpha = 0.6f))
+                }
+            }
+        },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(
+            onSearch = { if (query.length >= 2) onSearch(query) }
+        ),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White,
+            cursorColor = BlueCard,
+            focusedBorderColor = Color.White.copy(alpha = 0.4f),
+            unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+        ),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+    )
+}
+
+@Composable
 private fun PermissionRequest(
     shouldShowRationale: Boolean,
-    onRequestPermission: () -> Unit
+    onRequestPermission: () -> Unit,
+    onBack: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(DarkBackground)
+            .statusBarsPadding()
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            Icons.Default.CameraAlt,
-            contentDescription = null,
-            tint = TextMuted,
-            modifier = Modifier.size(80.dp)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = if (shouldShowRationale)
-                "La fotocamera serve per scansionare le carte e riconoscerne il nome."
+                "La fotocamera serve per scansionare le carte Pokémon e aggiungerle automaticamente alla collezione."
             else
                 "Per usare lo scanner serve il permesso fotocamera.",
             color = TextGray,
@@ -218,6 +333,10 @@ private fun PermissionRequest(
             colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
         ) {
             Text("Concedi permesso")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        TextButton(onClick = onBack) {
+            Text("Torna indietro", color = TextMuted)
         }
     }
 }
@@ -238,7 +357,9 @@ private fun CameraPreview(
 
     AndroidView(
         factory = { ctx ->
-            val previewView = PreviewView(ctx)
+            val previewView = PreviewView(ctx).apply {
+                scaleType = PreviewView.ScaleType.FILL_CENTER
+            }
             val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
 
             cameraProviderFuture.addListener({
@@ -250,7 +371,7 @@ private fun CameraPreview(
                 val resolutionSelector = ResolutionSelector.Builder()
                     .setResolutionStrategy(
                         ResolutionStrategy(
-                            Size(1280, 720),
+                            Size(1920, 1080),
                             ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
                         )
                     )
@@ -293,6 +414,8 @@ private fun CameraPreview(
                     )
                     cameraRef = camera
                     camera.cameraControl.enableTorch(flashEnabled)
+                    // Autofocus continuo
+                    camera.cameraControl.cancelFocusAndMetering()
                 } catch (e: Exception) {
                     Log.e("ScannerScreen", "Camera bind failed", e)
                 }
@@ -302,248 +425,4 @@ private fun CameraPreview(
         },
         modifier = Modifier.fillMaxSize()
     )
-}
-
-@Composable
-private fun ResultsPanel(
-    state: com.example.pokevault.viewmodel.ScannerUiState,
-    onSearch: (String) -> Unit,
-    onSelectCard: (TcgCard) -> Unit,
-    onAddCard: (TcgCard) -> Unit,
-    onClear: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var manualQuery by remember { mutableStateOf("") }
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(DarkSurface, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        // Ricerca manuale
-        OutlinedTextField(
-            value = manualQuery,
-            onValueChange = { manualQuery = it },
-            placeholder = { Text("Cerca carta per nome...", color = TextMuted, fontSize = 14.sp) },
-            leadingIcon = { Icon(Icons.Default.Search, null, tint = TextMuted) },
-            trailingIcon = {
-                if (manualQuery.isNotBlank()) {
-                    IconButton(onClick = { manualQuery = ""; onClear() }) {
-                        Icon(Icons.Default.Close, null, tint = TextMuted)
-                    }
-                }
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(
-                onSearch = { if (manualQuery.length >= 2) onSearch(manualQuery) }
-            ),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = TextWhite,
-                unfocusedTextColor = TextWhite,
-                cursorColor = BlueCard,
-                focusedBorderColor = BlueCard,
-                unfocusedBorderColor = DarkCard
-            ),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        if (manualQuery.length >= 2) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = { onSearch(manualQuery) },
-                enabled = !state.isSearching,
-                colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (state.isSearching) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = TextWhite,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text("Cerca \"$manualQuery\"")
-            }
-        }
-
-        // Errore
-        state.errorMessage?.let { error ->
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(error, color = Color(0xFFEF4444), fontSize = 13.sp)
-        }
-
-        // Risultati
-        if (state.searchResults.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "${state.searchResults.size} risultati",
-                    color = TextGray,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                TextButton(onClick = onClear) {
-                    Text("Pulisci", color = TextMuted, fontSize = 12.sp)
-                }
-            }
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(state.searchResults) { card ->
-                    ScanResultCard(
-                        card = card,
-                        isSelected = card.id == state.selectedCard?.id,
-                        onClick = { onSelectCard(card) }
-                    )
-                }
-            }
-
-            state.selectedCard?.let { card ->
-                Spacer(modifier = Modifier.height(12.dp))
-                SelectedCardDetails(
-                    card = card,
-                    isAdding = state.isAdding,
-                    onAdd = { onAddCard(card) }
-                )
-            }
-        } else if (!state.isSearching && state.bestGuessName.isBlank() && manualQuery.isBlank()) {
-            Spacer(modifier = Modifier.height(24.dp))
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    Icons.Default.CameraAlt,
-                    null,
-                    tint = TextMuted.copy(alpha = 0.5f),
-                    modifier = Modifier.size(36.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Inquadra una carta Pokémon\noppure cerca per nome",
-                    color = TextMuted,
-                    textAlign = TextAlign.Center,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScanResultCard(
-    card: TcgCard,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .width(100.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .then(
-                if (isSelected) Modifier.border(2.dp, BlueCard, RoundedCornerShape(10.dp))
-                else Modifier
-            )
-            .background(if (isSelected) BlueCard.copy(alpha = 0.15f) else DarkCard)
-            .clickable { onClick() }
-            .padding(6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        AsyncImage(
-            model = card.images.small,
-            contentDescription = card.name,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .height(120.dp)
-                .clip(RoundedCornerShape(6.dp))
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            card.name,
-            color = TextWhite,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
-        card.set?.name?.let { setName ->
-            Text(
-                setName,
-                color = TextMuted,
-                fontSize = 9.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun SelectedCardDetails(
-    card: TcgCard,
-    isAdding: Boolean,
-    onAdd: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(DarkCard, RoundedCornerShape(12.dp))
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = card.images.small,
-            contentDescription = card.name,
-            modifier = Modifier
-                .height(80.dp)
-                .clip(RoundedCornerShape(8.dp))
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(card.name, color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            card.set?.name?.let {
-                Text(it, color = TextGray, fontSize = 12.sp)
-            }
-            card.rarity?.let {
-                Text(it, color = StarGold, fontSize = 12.sp)
-            }
-            Text("#${card.number}", color = TextMuted, fontSize = 11.sp)
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Button(
-            onClick = onAdd,
-            enabled = !isAdding,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = GreenCard,
-                disabledContainerColor = GreenCard.copy(alpha = 0.5f)
-            ),
-            shape = RoundedCornerShape(10.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            if (isAdding) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    color = TextWhite,
-                    strokeWidth = 2.dp
-                )
-            } else {
-                Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Aggiungi", fontSize = 13.sp)
-            }
-        }
-    }
 }

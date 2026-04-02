@@ -1,6 +1,7 @@
 package com.example.pokevault.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -15,15 +16,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class ScannerUiState(
-    val rawOcrText: String = "",
-    val bestGuessName: String = "",
-    val searchResults: List<TcgCard> = emptyList(),
     val isSearching: Boolean = false,
-    val selectedCard: TcgCard? = null,
+    val lastAddedCard: TcgCard? = null,
+    val addedCount: Int = 0,
     val errorMessage: String? = null,
-    val successMessage: String? = null,
     val flashEnabled: Boolean = false,
-    val isAdding: Boolean = false
+    val detectedName: String = "",
+    val detectedNumber: String = ""
 )
 
 class ScannerViewModel(application: Application) : AndroidViewModel(application) {
@@ -31,144 +30,172 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private val repository = PokeTcgRepository()
     private val firestoreRepository = FirestoreRepository()
     private var searchJob: Job? = null
-    private var lastSearchedName: String = ""
+
+    // Evita di aggiungere la stessa carta più volte nella stessa sessione
+    private val recentlyAddedIds = mutableSetOf<String>()
+    private var lastSearchKey = ""
 
     var uiState by mutableStateOf(ScannerUiState())
         private set
 
     /**
-     * Chiamata dalla camera ad ogni frame con testo riconosciuto.
-     * Estrae il nome, debounce, e cerca automaticamente.
+     * Chiamata dalla camera ad ogni frame con testo OCR.
+     * Estrae numero carta + nome, cerca e aggiunge automaticamente.
      */
     fun onTextDetected(rawText: String) {
         if (rawText.isBlank()) return
 
-        val cardName = extractCardName(rawText)
-        if (cardName.isBlank() || cardName.length < 3) return
+        val number = extractCardNumber(rawText)
+        val name = extractCardName(rawText)
 
-        // Non ricercare se è lo stesso nome già cercato con risultati
-        if (cardName == lastSearchedName && uiState.searchResults.isNotEmpty()) return
-        // Non ricercare se è lo stesso nome senza risultati (evita loop)
-        if (cardName == lastSearchedName) return
+        // Serve almeno un nome di 3+ caratteri o un numero
+        if ((name.isNullOrBlank() || name.length < 3) && number == null) return
+
+        val searchKey = "${name ?: ""}_${number ?: ""}"
+        if (searchKey == lastSearchKey) return
 
         uiState = uiState.copy(
-            rawOcrText = rawText,
-            bestGuessName = cardName
+            detectedName = name ?: "",
+            detectedNumber = number ?: ""
         )
 
-        // Debounce: aspetta che il testo si stabilizzi
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            delay(1500)
-            lastSearchedName = cardName
-            searchFuzzy(cardName)
+            delay(1200) // debounce per stabilizzare OCR
+            lastSearchKey = searchKey
+            searchAndAutoAdd(name, number)
         }
     }
 
+    private suspend fun searchAndAutoAdd(name: String?, number: String?) {
+        uiState = uiState.copy(isSearching = true, errorMessage = null)
+
+        repository.searchByNameAndNumber(name, number)
+            .onSuccess { cards ->
+                val bestMatch = cards.firstOrNull()
+                if (bestMatch != null && bestMatch.id !in recentlyAddedIds) {
+                    // Auto-add alla collezione
+                    recentlyAddedIds.add(bestMatch.id)
+                    addToFirestore(bestMatch)
+                } else {
+                    uiState = uiState.copy(isSearching = false)
+                }
+            }
+            .onFailure { error ->
+                Log.w("ScannerVM", "Search failed: ${error.message}")
+                uiState = uiState.copy(
+                    isSearching = false,
+                    errorMessage = "Errore ricerca: ${error.message}"
+                )
+            }
+    }
+
+    private suspend fun addToFirestore(tcgCard: TcgCard) {
+        val price = tcgCard.tcgplayer?.prices?.values?.firstOrNull()?.let { p ->
+            p.market ?: p.mid ?: p.low ?: 0.0
+        } ?: tcgCard.cardmarket?.prices?.averageSellPrice ?: 0.0
+
+        val pokemonCard = PokemonCard(
+            name = tcgCard.name,
+            imageUrl = tcgCard.images.large.ifBlank { tcgCard.images.small },
+            set = tcgCard.set?.name ?: "",
+            rarity = tcgCard.rarity ?: "",
+            type = tcgCard.types?.firstOrNull() ?: tcgCard.supertype,
+            hp = tcgCard.hp?.toIntOrNull() ?: 0,
+            estimatedValue = price,
+            quantity = 1,
+            condition = "Near Mint",
+            apiCardId = tcgCard.id,
+            cardNumber = tcgCard.number
+        )
+
+        firestoreRepository.addCard(pokemonCard)
+            .onSuccess {
+                uiState = uiState.copy(
+                    isSearching = false,
+                    lastAddedCard = tcgCard,
+                    addedCount = uiState.addedCount + 1,
+                    errorMessage = null
+                )
+                // Reset dopo 3 secondi per essere pronti alla prossima carta
+                viewModelScope.launch {
+                    delay(3000)
+                    if (uiState.lastAddedCard?.id == tcgCard.id) {
+                        uiState = uiState.copy(lastAddedCard = null)
+                        lastSearchKey = "" // permetti nuove scansioni
+                    }
+                }
+            }
+            .onFailure { error ->
+                recentlyAddedIds.remove(tcgCard.id) // permetti retry
+                uiState = uiState.copy(
+                    isSearching = false,
+                    errorMessage = "Errore salvataggio: ${error.message}"
+                )
+            }
+    }
+
+    /**
+     * Ricerca manuale: cerca e auto-aggiunge.
+     */
     fun searchManually(query: String) {
         if (query.isBlank()) return
         searchJob?.cancel()
-        lastSearchedName = query
-        uiState = uiState.copy(bestGuessName = query)
+        lastSearchKey = "manual_$query"
+        uiState = uiState.copy(detectedName = query)
         searchJob = viewModelScope.launch {
-            searchFuzzy(query)
+            searchAndAutoAdd(query, null)
         }
-    }
-
-    private suspend fun searchFuzzy(name: String) {
-        uiState = uiState.copy(isSearching = true, errorMessage = null)
-
-        repository.searchCardsFuzzy(name)
-            .onSuccess { cards ->
-                uiState = uiState.copy(
-                    searchResults = cards,
-                    isSearching = false,
-                    selectedCard = cards.firstOrNull(),
-                    errorMessage = if (cards.isEmpty()) "Nessun risultato per \"$name\"" else null
-                )
-            }
-            .onFailure { error ->
-                uiState = uiState.copy(
-                    isSearching = false,
-                    errorMessage = "Errore: ${error.message}"
-                )
-            }
-    }
-
-    fun addCardToCollection(tcgCard: TcgCard) {
-        if (uiState.isAdding) return
-        uiState = uiState.copy(isAdding = true, errorMessage = null, successMessage = null)
-
-        viewModelScope.launch {
-            val price = tcgCard.tcgplayer?.prices?.values?.firstOrNull()?.let { p ->
-                p.market ?: p.mid ?: p.low ?: 0.0
-            } ?: tcgCard.cardmarket?.prices?.averageSellPrice ?: 0.0
-
-            val pokemonCard = PokemonCard(
-                name = tcgCard.name,
-                imageUrl = tcgCard.images.large.ifBlank { tcgCard.images.small },
-                set = tcgCard.set?.name ?: "",
-                rarity = tcgCard.rarity ?: "",
-                type = tcgCard.types?.firstOrNull() ?: tcgCard.supertype,
-                hp = tcgCard.hp?.toIntOrNull() ?: 0,
-                estimatedValue = price,
-                quantity = 1,
-                condition = "Near Mint",
-                apiCardId = tcgCard.id,
-                cardNumber = tcgCard.number
-            )
-
-            firestoreRepository.addCard(pokemonCard)
-                .onSuccess {
-                    uiState = uiState.copy(
-                        isAdding = false,
-                        successMessage = "${tcgCard.name} aggiunta!"
-                    )
-                }
-                .onFailure { error ->
-                    uiState = uiState.copy(
-                        isAdding = false,
-                        errorMessage = "Errore salvataggio: ${error.message}"
-                    )
-                }
-        }
-    }
-
-    fun selectCard(card: TcgCard) {
-        uiState = uiState.copy(selectedCard = card)
     }
 
     fun toggleFlash() {
         uiState = uiState.copy(flashEnabled = !uiState.flashEnabled)
     }
 
-    fun clearResults() {
-        lastSearchedName = ""
+    fun resetScanner() {
+        lastSearchKey = ""
+        recentlyAddedIds.clear()
         searchJob?.cancel()
-        uiState = ScannerUiState(flashEnabled = uiState.flashEnabled)
+        uiState = ScannerUiState(
+            flashEnabled = uiState.flashEnabled,
+            addedCount = uiState.addedCount
+        )
     }
 
-    fun clearMessages() {
-        uiState = uiState.copy(errorMessage = null, successMessage = null)
+    fun clearError() {
+        uiState = uiState.copy(errorMessage = null)
+    }
+
+    /**
+     * Estrae il numero della carta dal testo OCR.
+     * Formato: "025/198", "25/198", "025 / 198", ecc.
+     * Questo è il dato OCR PIÙ AFFIDABILE su una carta Pokémon.
+     */
+    private fun extractCardNumber(rawText: String): String? {
+        // Pattern: 1-3 cifre / 1-3 cifre (con spazi opzionali)
+        val match = Regex("(\\d{1,3})\\s*/\\s*(\\d{1,3})").find(rawText)
+        if (match != null) {
+            val num = match.groupValues[1].trimStart('0')
+            return if (num.isNotBlank()) num else "0"
+        }
+        return null
     }
 
     /**
      * Estrae il nome della carta dal testo OCR.
-     * Il nome è nella parte superiore: prima riga con lettere, non keyword.
+     * Il nome è nella parte superiore della carta.
      */
-    private fun extractCardName(rawText: String): String {
+    private fun extractCardName(rawText: String): String? {
         val lines = rawText.lines()
             .map { it.trim() }
             .filter { it.length >= 3 }
 
         val candidates = lines.filter { line ->
             val lower = line.lowercase()
-            // Deve contenere almeno una lettera
             line.any { it.isLetter() } &&
-            // Escludi linee chiaramente non-nome
             !lower.matches(Regex("^\\d+\\s*hp$")) &&
             !lower.matches(Regex("^hp\\s*\\d+$")) &&
-            !lower.matches(Regex("^\\d+[/\\\\]\\d+$")) &&
+            !lower.matches(Regex("^\\d+\\s*/\\s*\\d+$")) &&
             !lower.startsWith("weakness") &&
             !lower.startsWith("resistance") &&
             !lower.startsWith("retreat") &&
@@ -186,14 +213,15 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             !lower.contains("coin") &&
             !lower.contains("discard") &&
             !lower.contains("shuffle") &&
-            !lower.contains("your") &&
-            !lower.contains("this") &&
+            !lower.contains("your ") &&
+            !lower.contains("this ") &&
+            !lower.contains("each ") &&
+            !lower.contains("does ") &&
             !lower.matches(Regex("^(basic|stage \\d|mega)$"))
         }
 
-        val name = candidates.firstOrNull() ?: return ""
+        val name = candidates.firstOrNull() ?: return null
 
-        // Pulisci il nome
         return name
             .replace(Regex("\\s+HP\\s*\\d+.*$", RegexOption.IGNORE_CASE), "")
             .replace(Regex("\\s+\\d+/\\d+$"), "")
@@ -202,5 +230,6 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             .replace(Regex("\\s+"), " ")
             .trim()
             .take(40)
+            .takeIf { it.length >= 3 }
     }
 }
