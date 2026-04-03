@@ -1,6 +1,7 @@
 package com.example.pokevault.data.model
 
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.PropertyName
 
 data class PokemonCard(
     val id: String = "",
@@ -10,7 +11,11 @@ data class PokemonCard(
     val rarity: String = "",
     val type: String = "",
     val hp: Int = 0,
-    val isGraded: Boolean = false,
+    
+    @get:PropertyName("isGraded")
+    @set:PropertyName("isGraded")
+    var isGraded: Boolean = false,
+    
     val grade: Float? = null,
     val gradingCompany: String = "",  // PSA, BGS, CGC
     val estimatedValue: Double = 0.0,
@@ -20,9 +25,8 @@ data class PokemonCard(
     val addedAt: Timestamp? = null,
     val apiCardId: String = "",
     val cardNumber: String = "",
-    // Nuovi campi per varianti
-    val variant: String = "Normal",       // Normal, Reverse Holo, Holofoil, 1st Edition, ecc.
-    val language: String = "Italiano"      // Italiano, Inglese, Giapponese, ecc.
+    val variant: String = "Normal",
+    val language: String = "Italiano"
 )
 
 data class MenuSection(
@@ -32,12 +36,9 @@ data class MenuSection(
     val badgeCount: Int = 0
 )
 
-// Costanti varianti e lingue
 object CardOptions {
     val CONDITIONS = listOf("Mint", "Near Mint", "Excellent", "Good", "Light Played", "Played", "Poor")
-
     val GRADING_COMPANIES = listOf("PSA", "BGS", "CGC", "ACE", "SGC")
-
     val LANGUAGES = listOf(
         "🇮🇹 Italiano",
         "🇬🇧 Inglese",
@@ -49,8 +50,6 @@ object CardOptions {
         "🇨🇳 Cinese",
         "🇧🇷 Portoghese"
     )
-
-    // Le varianti vengono lette dall'API (tcgplayer.prices keys)
     val DEFAULT_VARIANTS = listOf("Normal", "Reverse", "Holo")
 
     fun getVariantsFromApi(priceKeys: Set<String>): List<String> {

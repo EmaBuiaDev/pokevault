@@ -20,13 +20,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.ui.theme.*
+import com.example.pokevault.util.getTypeEmojiForCollection
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -43,6 +43,10 @@ fun CardDetailScreen(
     var isLoading by remember { mutableStateOf(true) }
     var selectedVariantIndex by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
+
+    var tempIsGraded by remember { mutableStateOf(false) }
+    var tempGrade by remember { mutableStateOf<Float?>(null) }
+    var tempCompany by remember { mutableStateOf("") }
 
     fun loadData() {
         scope.launch {
@@ -73,15 +77,30 @@ fun CardDetailScreen(
         loadData()
     }
 
-    fun confirmVariantChange(card: PokemonCard, newQty: Int) {
+    LaunchedEffect(selectedVariantIndex, variants) {
+        variants.getOrNull(selectedVariantIndex)?.let {
+            tempIsGraded = it.isGraded
+            tempGrade = it.grade
+            tempCompany = it.gradingCompany
+        }
+    }
+
+    fun confirmVariantChange(card: PokemonCard, newQty: Int, isGraded: Boolean? = null, grade: Float? = null, company: String? = null) {
         scope.launch {
+            val updatedCard = card.copy(
+                quantity = newQty,
+                isGraded = isGraded ?: card.isGraded,
+                grade = grade ?: card.grade,
+                gradingCompany = company ?: card.gradingCompany
+            )
+            
             if (newQty <= 0) {
                 repository.deleteCard(card.id).onSuccess {
                     val remaining = variants.filter { it.id != card.id }
                     if (remaining.isEmpty()) onBack() else loadData()
                 }
             } else {
-                repository.updateCard(card.id, card.copy(quantity = newQty)).onSuccess {
+                repository.updateCard(card.id, updatedCard).onSuccess {
                     loadData()
                 }
             }
@@ -113,6 +132,10 @@ fun CardDetailScreen(
         } else {
             val currentCard = variants.getOrNull(selectedVariantIndex) ?: variants.first()
             val totalQty = variants.sumOf { editedQuantities[it.id] ?: it.quantity }
+            
+            val isGradingChanged = tempIsGraded != currentCard.isGraded || 
+                                 tempGrade != currentCard.grade || 
+                                 tempCompany != currentCard.gradingCompany
 
             Column(
                 modifier = Modifier
@@ -122,7 +145,6 @@ fun CardDetailScreen(
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // ── Immagine Carta ──
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
@@ -130,12 +152,18 @@ fun CardDetailScreen(
                         .clip(RoundedCornerShape(16.dp))
                         .background(DarkCard)
                 ) {
-                    AsyncImage(
-                        model = currentCard.imageUrl,
-                        contentDescription = currentCard.name,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    if (currentCard.imageUrl.isNotBlank()) {
+                        AsyncImage(
+                            model = currentCard.imageUrl,
+                            contentDescription = currentCard.name,
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(getTypeEmojiForCollection(currentCard.type), fontSize = 64.sp)
+                        }
+                    }
                     
                     Box(
                         modifier = Modifier
@@ -179,13 +207,68 @@ fun CardDetailScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                DetailSection(title = "Certificazione Grading") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Stars, contentDescription = null, tint = StarGold, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Carta Gradata", color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text("Inserisci nelle carte gradate", color = TextMuted, fontSize = 11.sp)
+                            }
+                        }
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(
+                                checked = tempIsGraded,
+                                onCheckedChange = { tempIsGraded = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = StarGold)
+                            )
+                            
+                            AnimatedVisibility(visible = isGradingChanged) {
+                                IconButton(
+                                    onClick = { confirmVariantChange(currentCard, currentCard.quantity, tempIsGraded, tempGrade, tempCompany) },
+                                    modifier = Modifier.padding(start = 8.dp).size(28.dp).background(GreenCard, CircleShape)
+                                ) {
+                                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    if (tempIsGraded) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = tempGrade?.toString() ?: "",
+                                onValueChange = { tempGrade = it.toFloatOrNull() },
+                                label = { Text("Voto (1-10)", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextWhite, unfocusedTextColor = TextWhite)
+                            )
+                            OutlinedTextField(
+                                value = tempCompany,
+                                onValueChange = { tempCompany = it },
+                                label = { Text("Ente (PSA...)", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextWhite, unfocusedTextColor = TextWhite)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 DetailSection(title = "Dettagli ${currentCard.variant}") {
                     DetailRow("Condizione", currentCard.condition)
                     DetailRow("Lingua", currentCard.language)
                     DetailRow("Valore stimato", "€${"%.2f".format(currentCard.estimatedValue)}")
-                    if (currentCard.isGraded) {
-                        DetailRow("Grading", "${currentCard.gradingCompany} ${currentCard.grade}")
-                    }
                     if (currentCard.notes.isNotBlank()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(currentCard.notes, color = TextGray, fontSize = 13.sp)
@@ -224,12 +307,20 @@ fun VariantRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = variant.variant,
-                color = if (isSelected) BlueCard else TextWhite,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = variant.variant,
+                    color = if (isSelected) BlueCard else TextWhite,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+                if (variant.isGraded) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(StarGold).padding(horizontal = 4.dp, vertical = 1.dp)) {
+                        Text("⭐ ${variant.grade}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
             Text(
                 text = "${variant.condition} · ${variant.language}",
                 color = TextMuted,
@@ -260,14 +351,13 @@ fun VariantRow(
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
                 modifier = Modifier.widthIn(min = 20.dp),
-                textAlign = TextAlign.Center
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
             
             IconButton(onClick = { onQtyChange(editedQuantity + 1) }, modifier = Modifier.size(28.dp)) {
                 Icon(Icons.Default.Add, null, tint = BlueCard, modifier = Modifier.size(16.dp))
             }
 
-            // Tasto Conferma Piccolo e Moderno
             AnimatedVisibility(
                 visible = isChanged,
                 enter = scaleIn() + fadeIn(),
@@ -297,7 +387,9 @@ fun DetailSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DarkCard).padding(16.dp)
     ) {
-        Text(text = title, color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = title, color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        }
         Spacer(modifier = Modifier.height(12.dp))
         content()
     }
@@ -311,22 +403,5 @@ fun DetailRow(label: String, value: String) {
     ) {
         Text(text = label, color = TextMuted, fontSize = 14.sp)
         Text(text = value, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-fun getTypeEmojiForCollection(type: String): String {
-    return when (type.lowercase()) {
-        "fire", "fuoco" -> "🔥"
-        "water", "acqua" -> "💧"
-        "grass", "erba" -> "🌿"
-        "lightning", "elettro" -> "⚡"
-        "psychic", "psico" -> "🔮"
-        "fighting", "lotta" -> "👊"
-        "darkness", "buio" -> "🌑"
-        "metal", "metallo" -> "⚙️"
-        "dragon", "drago" -> "🐉"
-        "fairy", "folletto" -> "🧚"
-        "colorless" -> "⭐"
-        else -> "🎴"
     }
 }

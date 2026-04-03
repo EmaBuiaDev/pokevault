@@ -30,6 +30,7 @@ import coil.compose.AsyncImage
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.ui.home.components.SearchBar
 import com.example.pokevault.ui.theme.*
+import com.example.pokevault.util.getTypeEmojiForCollection
 import com.example.pokevault.viewmodel.CollectionViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
