@@ -53,16 +53,6 @@ fun CollectionScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddCard,
-                containerColor = BlueCard,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Aggiungi carta")
-            }
-        },
         containerColor = DarkBackground
     ) { padding ->
         Column(
