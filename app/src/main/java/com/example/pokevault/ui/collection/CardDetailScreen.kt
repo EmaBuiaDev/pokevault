@@ -1,5 +1,6 @@
 package com.example.pokevault.ui.collection
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -37,50 +39,59 @@ fun CardDetailScreen(
 ) {
     val repository = remember { FirestoreRepository() }
     var variants by remember { mutableStateOf<List<PokemonCard>>(emptyList()) }
-    var editedVariants by remember { mutableStateOf<List<PokemonCard>>(emptyList()) }
+    var editedQuantities by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(true) }
-    var isSaving by remember { mutableStateOf(false) }
     var selectedVariantIndex by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(cardId) {
-        repository.getCard(cardId).onSuccess { initialCard ->
-            val apiId = initialCard.apiCardId
-            if (apiId.isNotBlank()) {
-                repository.getCards().first().let { allCards ->
-                    val found = allCards.filter { it.apiCardId == apiId }
-                    variants = found
-                    editedVariants = found
+    fun loadData() {
+        scope.launch {
+            repository.getCard(cardId).onSuccess { initialCard ->
+                val apiId = initialCard.apiCardId
+                if (apiId.isNotBlank()) {
+                    repository.getCards().first().let { allCards ->
+                        val found = allCards.filter { it.apiCardId == apiId }
+                        variants = found
+                        editedQuantities = found.associate { it.id to it.quantity }
+                    }
+                } else {
+                    variants = listOf(initialCard)
+                    editedQuantities = mapOf(initialCard.id to initialCard.quantity)
                 }
-            } else {
-                variants = listOf(initialCard)
-                editedVariants = listOf(initialCard)
+            }.onFailure {
+                repository.getCards().first().let { allCards ->
+                    val found = allCards.filter { it.apiCardId == cardId || it.id == cardId }
+                    variants = found
+                    editedQuantities = found.associate { it.id to it.quantity }
+                }
             }
-        }.onFailure {
-            repository.getCards().first().let { allCards ->
-                val found = allCards.filter { it.apiCardId == cardId || it.id == cardId }
-                variants = found
-                editedVariants = found
-            }
+            isLoading = false
         }
-        isLoading = false
     }
 
-    fun saveChanges() {
+    LaunchedEffect(cardId) {
+        loadData()
+    }
+
+    fun confirmVariantChange(card: PokemonCard, newQty: Int) {
         scope.launch {
-            isSaving = true
-            editedVariants.forEach { card ->
-                repository.updateCard(card.id, card)
+            if (newQty <= 0) {
+                repository.deleteCard(card.id).onSuccess {
+                    val remaining = variants.filter { it.id != card.id }
+                    if (remaining.isEmpty()) onBack() else loadData()
+                }
+            } else {
+                repository.updateCard(card.id, card.copy(quantity = newQty)).onSuccess {
+                    loadData()
+                }
             }
-            isSaving = false
-            onBack()
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(editedVariants.firstOrNull()?.name ?: "Dettaglio", fontWeight = FontWeight.Bold, color = TextWhite) },
+                title = { Text(variants.firstOrNull()?.name ?: "Dettaglio", fontWeight = FontWeight.Bold, color = TextWhite) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro", tint = TextWhite)
@@ -89,46 +100,19 @@ fun CardDetailScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
             )
         },
-        bottomBar = {
-            if (editedVariants != variants && !isLoading) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = DarkSurface,
-                    tonalElevation = 8.dp
-                ) {
-                    Button(
-                        onClick = { saveChanges() },
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
-                        shape = RoundedCornerShape(12.dp),
-                        enabled = !isSaving
-                    ) {
-                        if (isSaving) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text("CONFERMA MODIFICHE", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        },
         containerColor = DarkBackground
     ) { padding ->
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = BlueCard)
             }
-        } else if (editedVariants.isEmpty()) {
+        } else if (variants.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Carta non trovata", color = TextGray)
             }
         } else {
-            val currentCard = editedVariants[selectedVariantIndex]
-            val totalQty = editedVariants.sumOf { it.quantity }
+            val currentCard = variants.getOrNull(selectedVariantIndex) ?: variants.first()
+            val totalQty = variants.sumOf { editedQuantities[it.id] ?: it.quantity }
 
             Column(
                 modifier = Modifier
@@ -176,23 +160,19 @@ fun CardDetailScreen(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
                 )
 
-                editedVariants.forEachIndexed { index, variant ->
+                variants.forEachIndexed { index, variant ->
+                    val editedQty = editedQuantities[variant.id] ?: variant.quantity
                     VariantRow(
                         variant = variant,
+                        editedQuantity = editedQty,
                         isSelected = selectedVariantIndex == index,
                         onClick = { selectedVariantIndex = index },
-                        onIncrement = {
-                            editedVariants = editedVariants.toMutableList().apply {
-                                this[index] = variant.copy(quantity = variant.quantity + 1)
+                        onQtyChange = { newQty ->
+                            if (newQty >= 0) {
+                                editedQuantities = editedQuantities.toMutableMap().apply { put(variant.id, newQty) }
                             }
                         },
-                        onDecrement = {
-                            if (variant.quantity > 1) {
-                                editedVariants = editedVariants.toMutableList().apply {
-                                    this[index] = variant.copy(quantity = variant.quantity - 1)
-                                }
-                            }
-                        }
+                        onConfirm = { confirmVariantChange(variant, editedQty) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -221,11 +201,14 @@ fun CardDetailScreen(
 @Composable
 fun VariantRow(
     variant: PokemonCard,
+    editedQuantity: Int,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onIncrement: () -> Unit,
-    onDecrement: () -> Unit
+    onQtyChange: (Int) -> Unit,
+    onConfirm: () -> Unit
 ) {
+    val isChanged = editedQuantity != variant.quantity
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -256,21 +239,54 @@ fun VariantRow(
         
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            IconButton(onClick = onDecrement, modifier = Modifier.size(30.dp)) {
-                Icon(Icons.Default.Remove, null, tint = if (variant.quantity > 1) TextWhite else TextMuted, modifier = Modifier.size(18.dp))
+            IconButton(
+                onClick = { if (editedQuantity > 0) onQtyChange(editedQuantity - 1) }, 
+                modifier = Modifier.size(28.dp),
+                enabled = editedQuantity > 0
+            ) {
+                Icon(
+                    imageVector = if (editedQuantity <= 1) Icons.Default.Delete else Icons.Default.Remove, 
+                    contentDescription = null, 
+                    tint = if (editedQuantity <= 1) RedCard.copy(alpha = if(editedQuantity > 0) 1f else 0.3f) else TextWhite, 
+                    modifier = Modifier.size(16.dp)
+                )
             }
+            
             Text(
-                text = "x${variant.quantity}",
-                color = TextWhite,
+                text = "x$editedQuantity",
+                color = if (editedQuantity == 0) RedCard else TextWhite,
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                modifier = Modifier.widthIn(min = 24.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                fontSize = 14.sp,
+                modifier = Modifier.widthIn(min = 20.dp),
+                textAlign = TextAlign.Center
             )
-            IconButton(onClick = onIncrement, modifier = Modifier.size(30.dp)) {
-                Icon(Icons.Default.Add, null, tint = BlueCard, modifier = Modifier.size(18.dp))
+            
+            IconButton(onClick = { onQtyChange(editedQuantity + 1) }, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.Add, null, tint = BlueCard, modifier = Modifier.size(16.dp))
+            }
+
+            // Tasto Conferma Piccolo e Moderno
+            AnimatedVisibility(
+                visible = isChanged,
+                enter = scaleIn() + fadeIn(),
+                exit = scaleOut() + fadeOut()
+            ) {
+                IconButton(
+                    onClick = onConfirm,
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .size(26.dp)
+                        .background(if (editedQuantity == 0) RedCard else GreenCard, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (editedQuantity == 0) Icons.Default.DeleteForever else Icons.Default.Check,
+                        contentDescription = "Conferma",
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
     }
