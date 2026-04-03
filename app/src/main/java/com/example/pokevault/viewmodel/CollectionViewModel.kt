@@ -18,7 +18,7 @@ data class CollectionUiState(
     val isLoading: Boolean = true,
     val isGridView: Boolean = true,
     val searchQuery: String = "",
-    val selectedType: String? = null, // usato come filtro set
+    val selectedType: String? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null
 )
@@ -32,7 +32,6 @@ class CollectionViewModel : ViewModel() {
 
     init {
         loadCards()
-        loadStats()
     }
 
     private fun loadCards() {
@@ -45,19 +44,20 @@ class CollectionViewModel : ViewModel() {
                     )
                 }
                 .collect { cards ->
+                    // Ricalcola statistiche localmente per reattività immediata
+                    val newStats = CollectionStats(
+                        totalCards = cards.sumOf { it.quantity },
+                        uniqueCards = cards.size,
+                        totalValue = cards.sumOf { it.estimatedValue * it.quantity }
+                    )
+                    
                     uiState = uiState.copy(
                         cards = cards,
                         filteredCards = applyFilters(cards, uiState.searchQuery, uiState.selectedType),
+                        stats = newStats,
                         isLoading = false
                     )
                 }
-        }
-    }
-
-    private fun loadStats() {
-        viewModelScope.launch {
-            val stats = repository.getCollectionStats()
-            uiState = uiState.copy(stats = stats)
         }
     }
 
@@ -84,7 +84,6 @@ class CollectionViewModel : ViewModel() {
             repository.deleteCard(cardId)
                 .onSuccess {
                     uiState = uiState.copy(successMessage = "Carta eliminata")
-                    loadStats()
                 }
                 .onFailure { error ->
                     uiState = uiState.copy(errorMessage = "Errore: ${error.message}")
