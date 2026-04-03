@@ -1,6 +1,7 @@
 package com.example.pokevault.ui.collection
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,18 +12,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -73,19 +73,16 @@ fun CollectionScreen(
         ) {
             // ── Top Bar ──
             TopAppBar(
-                title = {
-                    Text("Le mie carte", fontWeight = FontWeight.Bold, color = TextWhite)
-                },
+                title = { Text("Le mie carte", fontWeight = FontWeight.Bold, color = TextWhite) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro", tint = TextWhite)
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.toggleViewMode() }) {
                         Icon(
-                            imageVector = if (state.isGridView) Icons.Default.ViewList
-                            else Icons.Default.GridView,
+                            imageVector = if (state.isGridView) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
                             contentDescription = "Cambia vista",
                             tint = TextWhite
                         )
@@ -110,16 +107,51 @@ fun CollectionScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // ── Contenuto Raggruppato ──
+            // ── FILTRI ESPANSIONI CON CONTEGGIO ──
+            val setCounts = remember(state.cards) {
+                state.cards.groupBy { it.set }
+                    .mapValues { it.value.sumOf { c -> c.quantity } }
+                    .toList()
+                    .sortedByDescending { it.second }
+            }
+
+            if (setCounts.isNotEmpty()) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    item {
+                        FilterChip(
+                            label = "Tutte (${state.stats.totalCards})",
+                            isSelected = state.selectedType == null,
+                            onClick = { viewModel.filterByType(null) }
+                        )
+                    }
+                    items(setCounts) { (setName, count) ->
+                        FilterChip(
+                            label = "$setName ($count)",
+                            isSelected = state.selectedType == setName,
+                            onClick = { viewModel.filterByType(setName) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // ── Contenuto Raggruppato e Ordinato per ID ──
             if (state.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = BlueCard)
                 }
             } else {
-                // RAGGRUPPAMENTO: Per apiCardId (o combinazione nome+set)
                 val groupedCards = state.filteredCards
                     .groupBy { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }
                     .values
+                    .sortedBy { group -> 
+                        val representative = group.first()
+                        representative.cardNumber.toIntOrNull() ?: Int.MAX_VALUE 
+                    }
                     .toList()
 
                 LazyColumn(
@@ -159,23 +191,47 @@ fun CollectionScreen(
 }
 
 @Composable
+fun FilterChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick),
+        color = if (isSelected) BlueCard else DarkCard,
+        border = if (!isSelected) BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f)) else null
+    ) {
+        Text(
+            text = label,
+            color = if (isSelected) Color.White else TextWhite,
+            fontSize = 12.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
 fun CollectionCardGridItem(card: PokemonCard, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .aspectRatio(0.72f)
             .clip(RoundedCornerShape(10.dp))
             .background(DarkCard)
-            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+            .border(1.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
     ) {
-        AsyncImage(
-            model = card.imageUrl,
-            contentDescription = card.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
+        if (card.imageUrl.isNotBlank()) {
+            AsyncImage(
+                model = card.imageUrl,
+                contentDescription = card.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(getTypeEmojiForCollection(card.type), fontSize = 32.sp)
+            }
+        }
         
-        // Badge Quantità Totale
         Box(
             modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(22.dp)
                 .clip(CircleShape).background(BlueCard),
@@ -194,11 +250,17 @@ fun CollectionCardListItem(card: PokemonCard, onClick: () -> Unit, onDelete: () 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        AsyncImage(
-            model = card.imageUrl,
-            contentDescription = card.name,
-            modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp))
-        )
+        if (card.imageUrl.isNotBlank()) {
+            AsyncImage(
+                model = card.imageUrl,
+                contentDescription = card.name,
+                modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp))
+            )
+        } else {
+            Box(modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp)).background(DarkSurface), contentAlignment = Alignment.Center) {
+                Text(getTypeEmojiForCollection(card.type), fontSize = 24.sp)
+            }
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(card.name, color = TextWhite, fontWeight = FontWeight.Bold)
             Text("${card.set} · x${card.quantity}", color = TextMuted, fontSize = 12.sp)
