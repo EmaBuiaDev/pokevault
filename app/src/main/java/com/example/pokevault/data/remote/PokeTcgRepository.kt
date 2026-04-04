@@ -2,6 +2,7 @@ package com.example.pokevault.data.remote
 
 import android.content.Context
 import android.util.Log
+import com.example.pokevault.util.AppLocale
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import okhttp3.OkHttpClient
@@ -161,7 +162,7 @@ class PokeTcgRepository {
     }
 
     // ══════════════════════════════════════
-    // ALTRI METODI (invariati)
+    // ALTRI METODI
     // ══════════════════════════════════════
 
     suspend fun getSetInfo(setId: String): Result<TcgSet> {
@@ -169,11 +170,67 @@ class PokeTcgRepository {
         catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun searchCards(name: String, page: Int = 1): Result<List<TcgCard>> {
-        val clean = sanitizeQuery(name)
-        if (clean.isBlank()) return Result.success(emptyList())
+    suspend fun searchCards(query: String, page: Int = 1): Result<List<TcgCard>> {
+        if (query.isBlank()) return Result.success(emptyList())
+        
+        val trimmed = query.trim()
+        val isIt = AppLocale.isItalian
+        
+        // Gestione numero con totale (es. 001/217)
+        val fullNumberRegex = Regex("""^(\d+)/(\d+)$""")
+        val match = fullNumberRegex.find(trimmed)
+        
+        if (match != null) {
+            val number = match.groupValues[1].trimStart('0').ifEmpty { "0" }
+            val total = match.groupValues[2]
+            
+            // Cerchiamo i set che hanno quel totale stampato
+            val candidateSets = memorySets?.filter { it.printedTotal.toString() == total } ?: emptyList()
+            
+            return if (candidateSets.isNotEmpty()) {
+                val setIds = candidateSets.joinToString(" OR ") { "set.id:${it.id}" }
+                val apiQuery = "($setIds) number:\"$number\""
+                try {
+                    Result.success(api.searchCards(query = apiQuery, page = page).data)
+                } catch (e: Exception) { Result.failure(e) }
+            } else {
+                // Fallback: cerca solo per numero se non troviamo il set corrispondente al totale
+                try {
+                    Result.success(api.searchCards(query = "number:\"$number\"", page = page).data)
+                } catch (e: Exception) { Result.failure(e) }
+            }
+        }
+
+        val apiQuery = when {
+            // Caso solo numero (es. "001")
+            trimmed.matches(Regex("""^\d+$""")) -> {
+                val number = trimmed.trimStart('0').ifEmpty { "0" }
+                "number:\"$number\""
+            }
+            // Caso 2: Termini comuni in italiano
+            isIt && trimmed.equals("energia", ignoreCase = true) -> "supertype:energy"
+            isIt && trimmed.equals("allenatore", ignoreCase = true) -> "supertype:trainer"
+            isIt && trimmed.equals("aiuto", ignoreCase = true) -> "subtypes:supporter"
+            isIt && trimmed.equals("strumento", ignoreCase = true) -> "subtypes:item"
+            isIt && trimmed.equals("stadio", ignoreCase = true) -> "subtypes:stadium"
+            // Caso 3: Tipi in italiano
+            isIt && trimmed.equals("fuoco", ignoreCase = true) -> "types:fire"
+            isIt && trimmed.equals("acqua", ignoreCase = true) -> "types:water"
+            isIt && trimmed.equals("erba", ignoreCase = true) -> "types:grass"
+            isIt && trimmed.equals("elettro", ignoreCase = true) -> "types:lightning"
+            isIt && trimmed.equals("psico", ignoreCase = true) -> "types:psychic"
+            isIt && trimmed.equals("lotta", ignoreCase = true) -> "types:fighting"
+            isIt && trimmed.equals("buio", ignoreCase = true) -> "types:darkness"
+            isIt && trimmed.equals("metallo", ignoreCase = true) -> "types:metal"
+            isIt && trimmed.equals("drago", ignoreCase = true) -> "types:dragon"
+            isIt && trimmed.equals("folletto", ignoreCase = true) -> "types:fairy"
+            isIt && trimmed.equals("incolore", ignoreCase = true) -> "types:colorless"
+            // Default: Cerca per nome con wildcard
+            else -> "name:\"${sanitizeQuery(trimmed)}*\""
+        }
+
         return try {
-            Result.success(api.searchCards(query = "name:\"$clean\"", page = page).data)
+            Result.success(api.searchCards(query = apiQuery, page = page).data)
         } catch (e: Exception) { Result.failure(e) }
     }
 

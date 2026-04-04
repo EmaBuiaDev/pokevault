@@ -38,6 +38,7 @@ import coil.compose.AsyncImage
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.data.remote.TcgSet
 import com.example.pokevault.ui.theme.*
+import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.SetsViewModel
 
 // Formatta data
@@ -160,7 +161,7 @@ fun SetsListScreen(
             title = { Text("Pokédex", fontWeight = FontWeight.Bold, color = TextWhite) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite)
+                    Icon(Icons.Default.ArrowBack, AppLocale.back, tint = TextWhite)
                 }
             },
             actions = {
@@ -182,10 +183,10 @@ fun SetsListScreen(
                     .background(DarkCard),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                TabItem("Espansioni", !isSearchingCards) {
+                TabItem(AppLocale.extensions, !isSearchingCards) {
                     isSearchingCards = false; viewModel.clearCardSearch()
                 }
-                TabItem("Cerca carte", isSearchingCards) {
+                TabItem(AppLocale.searchCards, isSearchingCards) {
                     isSearchingCards = true
                 }
             }
@@ -201,10 +202,10 @@ fun SetsListScreen(
                     .padding(horizontal = 14.dp, vertical = 13.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Search, "Cerca", tint = TextMuted, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Search, AppLocale.search, tint = TextMuted, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Box(modifier = Modifier.weight(1f)) {
-                        val placeholder = if (isSearchingCards) "Cerca tra tutte le espansioni..." else "Cerca un'espansione..."
+                        val placeholder = if (isSearchingCards) AppLocale.searchCardPlaceholder else AppLocale.searchSetPlaceholder
                         val query = if (isSearchingCards) state.cardSearchQuery else state.searchQuery
                         if (query.isEmpty()) Text(placeholder, color = TextMuted, fontSize = 14.sp)
                         BasicTextField(
@@ -219,7 +220,7 @@ fun SetsListScreen(
                     }
                     val query = if (isSearchingCards) state.cardSearchQuery else state.searchQuery
                     if (query.isNotEmpty()) {
-                        Icon(Icons.Default.Close, "Cancella", tint = TextMuted,
+                        Icon(Icons.Default.Close, AppLocale.cancel, tint = TextMuted,
                             modifier = Modifier.size(20.dp).clickable {
                                 if (isSearchingCards) viewModel.clearCardSearch() else viewModel.updateSearch("")
                             })
@@ -240,7 +241,7 @@ fun SetsListScreen(
             ) {
                 item {
                     SeriesFilterChip(
-                        label = "Tutte",
+                        label = AppLocale.all,
                         count = state.allSets.size,
                         isSelected = state.selectedSeries == null,
                         onClick = { viewModel.filterBySeries(null) }
@@ -261,7 +262,7 @@ fun SetsListScreen(
 
             if (!state.isLoading) {
                 Text(
-                    text = "${state.filteredSets.size} espansioni",
+                    text = AppLocale.expansionsCount(state.filteredSets.size),
                     color = TextMuted, fontSize = 13.sp,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
                 )
@@ -270,7 +271,7 @@ fun SetsListScreen(
             // ── Contenuto ──
             if (state.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    PokeballLoadingAnimation(message = "Caricamento espansioni...")
+                    PokeballLoadingAnimation(message = AppLocale.loadingSets)
                 }
             } else if (state.errorMessage != null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -283,7 +284,7 @@ fun SetsListScreen(
                             onClick = { viewModel.refresh() },
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
-                        ) { Text("Riprova") }
+                        ) { Text(AppLocale.retry) }
                     }
                 }
             } else {
@@ -395,7 +396,7 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
                 ) {
                     // Usa total (include secret rare)
                     Text(
-                        text = "${set.total} carte",
+                        text = AppLocale.cardsCount(set.total),
                         color = BlueCard,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
@@ -424,23 +425,23 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("🔍", fontSize = 48.sp)
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("Scrivi almeno 2 caratteri", color = TextMuted, fontSize = 14.sp)
+                Text(AppLocale.writeAtLeast2, color = TextMuted, fontSize = 14.sp)
             }
         }
     } else if (isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            PokeballLoadingAnimation(message = "Cerco \"$query\"...")
+            PokeballLoadingAnimation(message = AppLocale.searchFor(query))
         }
     } else if (cards.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("😔", fontSize = 48.sp)
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("Nessuna carta trovata", color = TextGray, fontSize = 14.sp)
+                Text(AppLocale.noResults, color = TextGray, fontSize = 14.sp)
             }
         }
     } else {
-        val grouped = cards.groupBy { it.set?.name ?: "Sconosciuto" }
+        val grouped = cards.groupBy { it.set?.name ?: AppLocale.unknown }
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -448,7 +449,7 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item(span = { GridItemSpan(3) }) {
-                Text("${cards.size} carte in ${grouped.size} espansioni", color = TextMuted, fontSize = 13.sp)
+                Text(AppLocale.resultsCountInExpansions(cards.size, grouped.size), color = TextMuted, fontSize = 13.sp)
             }
             grouped.forEach { (setName, setCards) ->
                 item(span = { GridItemSpan(3) }) {
@@ -461,7 +462,7 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
                     ) {
                         Column {
                             Text(setName, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("${setCards.size} risultati", color = TextMuted, fontSize = 11.sp)
+                            Text(AppLocale.resultsCount(setCards.size), color = TextMuted, fontSize = 11.sp)
                         }
                         Icon(Icons.Default.ChevronRight, null, tint = TextMuted, modifier = Modifier.size(20.dp))
                     }
