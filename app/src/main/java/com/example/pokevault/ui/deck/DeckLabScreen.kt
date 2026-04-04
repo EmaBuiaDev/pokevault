@@ -302,24 +302,28 @@ fun DeckDetailView(
     onDelete: () -> Unit,
     onDuplicate: () -> Unit
 ) {
-    // 1. Conta occorrenze di ogni ID nel deck
-    val cardCounts = remember(deck.cards) {
-        deck.cards.groupingBy { it }.eachCount()
+    // Helper function per coerenza con il ViewModel
+    fun getCardKey(card: PokemonCard): String =
+        card.apiCardId.ifEmpty { "${card.name}-${card.set}-${card.cardNumber}-${card.variant}" }
+
+    // 1. Mappa ID -> Card per recuperare i dati completi
+    val idToCard = remember(allOwnedCards) { allOwnedCards.associateBy { it.id } }
+    
+    // 2. Raggruppa le carte per identità visiva (Key) invece che per ID documento
+    val groupedCards = remember(deck.cards, idToCard) {
+        deck.cards.mapNotNull { idToCard[it] }
+            .groupBy { getCardKey(it) }
+            .map { (_, instances) -> instances.first() to instances.size }
     }
     
-    // 2. Ottiene le carte uniche presenti nel deck
-    val uniqueDeckCards = remember(deck.cards, allOwnedCards) {
-        allOwnedCards.filter { it.id in cardCounts.keys }
-    }
-    
-    // 3. Categorizza le carte uniche associando la quantità
-    val cardsByCategory = remember(uniqueDeckCards, cardCounts) {
+    // 3. Categorizza le carte raggruppate
+    val cardsByCategory = remember(groupedCards) {
         listOf("Pokémon", "Trainer", "Energia").map { cat ->
-            val filtered = uniqueDeckCards.filter { 
-                val category = classifyCard(it)
+            val filtered = groupedCards.filter { (card, _) ->
+                val category = classifyCard(card)
                 if (cat == "Trainer") category == "Trainer" || category == "Aiuto"
                 else category == cat
-            }.map { it to (cardCounts[it.id] ?: 1) }
+            }
             cat to filtered
         }.filter { it.second.isNotEmpty() }
     }
@@ -467,7 +471,7 @@ fun DeckDetailView(
                                             .clip(RoundedCornerShape(8.dp))
                                             .clickable { onCardClick(card.id) }
                                     )
-                                    // Badge Quantità non invasivo
+                                    // Badge Quantità visibile se > 1
                                     if (quantity > 1) {
                                         Surface(
                                             color = Color.Black.copy(alpha = 0.7f),
