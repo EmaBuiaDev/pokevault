@@ -5,7 +5,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
-
 }
 
 val localProperties = Properties().apply {
@@ -80,6 +79,7 @@ dependencies {
 
     // ── Coil (caricamento immagini) ──
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("io.coil-kt:coil-gif:2.6.0")
 
     // ── Google Sign-In ──
     implementation("com.google.android.gms:play-services-auth:21.0.0")
@@ -105,5 +105,4 @@ dependencies {
 
     // ── Accompanist Permissions ──
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
-
 }
