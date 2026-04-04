@@ -1,30 +1,69 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:pathData="M31,63.928c0,0 6.4,-11 12.1,-13.1c7.2,-2.6 26,-1.4 26,-1.4l38.1,38.1L107,108.928l-32,-1L31,63.928z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="85.84757"
-                android:endY="92.4963"
-                android:startX="42.9492"
-                android:startY="49.59793"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
+
+    <!-- Ombra portata (Soft Shadow) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M65.3,45.828l3.8,-6.6c0.2,-0.4 0.1,-0.9 -0.3,-1.1c-0.4,-0.2 -0.9,-0.1 -1.1,0.3l-3.9,6.7c-6.3,-2.8 -13.4,-2.8 -19.7,0l-3.9,-6.7c-0.2,-0.4 -0.7,-0.5 -1.1,-0.3C38.8,38.328 38.7,38.828 38.9,39.228l3.8,6.6C36.2,49.428 31.7,56.028 31,63.928h46C76.3,56.028 71.8,49.428 65.3,45.828zM43.4,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2c-0.3,-0.7 -0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C45.3,56.528 44.5,57.328 43.4,57.328L43.4,57.328zM64.6,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2s-0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C66.5,56.528 65.6,57.328 64.6,57.328L64.6,57.328z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
+        android:fillColor="#60000000"
+        android:pathData="M25,84 q29,6 58,0 q0,6 -8,6 h-42 q-8,0 -8,-6 z" />
+
+    <!-- Corpo del Vault (Metallo scuro spazzolato) -->
+    <path
+        android:fillColor="#1C2833"
+        android:pathData="M24,56 h60 v24 q0,8 -8,8 h-44 q-8,0 -8,-8 z" />
+    
+    <!-- Pannelli Tech laterali con Glow Neon -->
+    <path
+        android:fillColor="#D81B60"
+        android:pathData="M24,62 h2 v12 h-2 z M82,62 h2 v12 h-2 z" />
+
+    <!-- Coperchio (Design angolare moderno) -->
+    <path
+        android:fillColor="#2E4053"
+        android:pathData="M24,56 l-10,-20 h80 l-10,20 z" />
+    
+    <!-- Master Ball Hi-Tech -->
+    <group android:translateX="54" android:translateY="50">
+        <!-- Aura Glow Master Ball -->
+        <path
+            android:fillColor="#25D81B60"
+            android:pathData="M-16,0 a16,16 0 1,0 32,0 a16,16 0 1,0 -32,0" />
+        
+        <!-- Sfera: Parte Inferiore (Bianco Ceramica) -->
+        <path
+            android:fillColor="#FDFEFE"
+            android:pathData="M-12,0 a12,12 0 1,0 24,0 z" />
+        <!-- Sfera: Parte Superiore (Viola Royal) -->
+        <path
+            android:fillColor="#6A1B9A"
+            android:pathData="M-12,0 a12,12 0 1,1 24,0 z" />
+        
+        <!-- Dettagli Rosa (Sensori Master Ball) -->
+        <path
+            android:fillColor="#EC407A"
+            android:pathData="M-10,-6 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0 M2,-6 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0" />
+        
+        <!-- Fascia di chiusura Tech -->
+        <path android:fillColor="#17202A" android:pathData="M-12,-1 h24 v2.5 h-24 z" />
+        
+        <!-- Pulsante Centrale Multi-livello -->
+        <path android:fillColor="#FDFEFE" android:pathData="M-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
+        <path android:fillColor="#17202A" android:pathData="M-1.8,0 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0" />
+        
+        <!-- La "M" stilizzata (Iconica) -->
+        <path
+            android:fillColor="#FDFEFE"
+            android:pathData="M-3,-9.5 l3,3 l3,-3 v5 h-1.5 v-2.2 l-1.5,1.5 l-1.5,-1.5 v2.2 h-1.5 z" />
+    </group>
+
+    <!-- Riflessi di luce sui bordi -->
+    <path
+        android:fillColor="#15FFFFFF"
+        android:pathData="M24,56 h60 v1.5 h-60 z" />
+    <path
+        android:fillColor="#08FFFFFF"
+        android:pathData="M14,36 h80 v1 h-80 z" />
+
 </vector>
