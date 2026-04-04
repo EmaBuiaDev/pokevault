@@ -171,18 +171,48 @@ fun DeckLabScreen(
     }
 }
 
+// Funzione helper per classificare le carte in modo robusto
+private fun classifyCard(card: PokemonCard): String {
+    val s = card.supertype.lowercase()
+    val n = card.name.lowercase()
+    val sub = card.subtypes.map { it.lowercase() }
+    val hasHp = card.hp > 0
+
+    // 1. Energia ha la priorità assoluta
+    if (s.contains("energy") || sub.contains("energy") || n.contains("energy") || n.contains("energia")) {
+        return "Energia"
+    }
+
+    // 2. Trainer (Incluso Aiuto/Supporter, Strumenti, Stadi, etc)
+    if (s.contains("trainer") || sub.contains("item") || sub.contains("stadium") || sub.contains("supporter") || s.contains("aiuto") || !hasHp) {
+        return "Trainer"
+    }
+
+    // 3. Se ha HP e non è altro, è un Pokémon
+    return "Pokémon"
+}
+
 @Composable
 fun DeckItem(
     deck: Deck,
     onClick: () -> Unit,
     allOwnedCards: List<PokemonCard>
 ) {
-    val deckCards = remember(deck.cards, allOwnedCards) {
-        allOwnedCards.filter { it.id in deck.cards }
+    // Conteggio basato su deck.cards (che contiene gli ID ripetuti)
+    val cardCounts = remember(deck.cards) { deck.cards.groupingBy { it }.eachCount() }
+    val uniqueDeckCards = remember(deck.cards, allOwnedCards) {
+        allOwnedCards.filter { it.id in cardCounts.keys }
     }
-    val pokemonCount = remember(deckCards) { deckCards.count { it.supertype.equals("Pokémon", ignoreCase = true) } }
-    val trainerCount = remember(deckCards) { deckCards.count { it.supertype.equals("Trainer", ignoreCase = true) } }
-    val energyCount = remember(deckCards) { deckCards.count { it.supertype.equals("Energy", ignoreCase = true) } }
+    
+    val pokemonCount = remember(uniqueDeckCards, cardCounts) { 
+        uniqueDeckCards.filter { classifyCard(it) == "Pokémon" }.sumOf { cardCounts[it.id] ?: 0 } 
+    }
+    val trainerCount = remember(uniqueDeckCards, cardCounts) { 
+        uniqueDeckCards.filter { val cat = classifyCard(it); cat == "Trainer" || cat == "Aiuto" }.sumOf { cardCounts[it.id] ?: 0 } 
+    }
+    val energyCount = remember(uniqueDeckCards, cardCounts) { 
+        uniqueDeckCards.filter { classifyCard(it) == "Energia" }.sumOf { cardCounts[it.id] ?: 0 } 
+    }
 
     Card(
         modifier = Modifier
@@ -272,13 +302,25 @@ fun DeckDetailView(
     onDelete: () -> Unit,
     onDuplicate: () -> Unit
 ) {
-    val deckCards = remember(deck.cards, allOwnedCards) {
-        allOwnedCards.filter { it.id in deck.cards }
+    // 1. Conta occorrenze di ogni ID nel deck
+    val cardCounts = remember(deck.cards) {
+        deck.cards.groupingBy { it }.eachCount()
     }
     
-    val cardsByCategory = remember(deckCards) {
-        listOf("Pokémon", "Trainer", "Energy").map { cat ->
-            cat to deckCards.filter { it.supertype.equals(cat, ignoreCase = true) }
+    // 2. Ottiene le carte uniche presenti nel deck
+    val uniqueDeckCards = remember(deck.cards, allOwnedCards) {
+        allOwnedCards.filter { it.id in cardCounts.keys }
+    }
+    
+    // 3. Categorizza le carte uniche associando la quantità
+    val cardsByCategory = remember(uniqueDeckCards, cardCounts) {
+        listOf("Pokémon", "Trainer", "Energia").map { cat ->
+            val filtered = uniqueDeckCards.filter { 
+                val category = classifyCard(it)
+                if (cat == "Trainer") category == "Trainer" || category == "Aiuto"
+                else category == cat
+            }.map { it to (cardCounts[it.id] ?: 1) }
+            cat to filtered
         }.filter { it.second.isNotEmpty() }
     }
 
@@ -359,7 +401,7 @@ fun DeckDetailView(
                     fontWeight = FontWeight.Black
                 )
                 Text(
-                    text = "Totale: ${deckCards.size} carte",
+                    text = "Totale: ${deck.cards.size} carte",
                     color = TextMuted,
                     fontSize = 13.sp
                 )
@@ -371,14 +413,18 @@ fun DeckDetailView(
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            items(cardsByCategory) { (category, cards) ->
+            items(cardsByCategory) { (category, cardsList) ->
                 Column {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                        val displayTitle = when(category) {
+                            "Energia" -> "ENERGIA"
+                            else -> category.uppercase()
+                        }
                         Text(
-                            text = category.uppercase(),
+                            text = displayTitle,
                             color = LavenderCard,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -388,7 +434,7 @@ fun DeckDetailView(
                         HorizontalDivider(modifier = Modifier.weight(1f), color = Color.White.copy(alpha = 0.1f))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "${cards.size}",
+                            text = "${cardsList.sumOf { it.second }}",
                             color = TextMuted,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -397,26 +443,47 @@ fun DeckDetailView(
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    cards.chunked(4).forEach { rowItems ->
+                    cardsList.chunked(4).forEach { rowItems ->
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            rowItems.forEach { card ->
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current)
-                                        .data(card.imageUrl)
-                                        .crossfade(true)
-                                        .size(250, 350)
-                                        .build(),
-                                    contentDescription = card.name,
-                                    contentScale = ContentScale.Fit,
+                            rowItems.forEach { (card, quantity) ->
+                                Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .aspectRatio(0.71f)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { onCardClick(card.id) }
-                                )
+                                ) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(card.imageUrl)
+                                            .crossfade(true)
+                                            .size(250, 350)
+                                            .build(),
+                                        contentDescription = card.name,
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { onCardClick(card.id) }
+                                    )
+                                    // Badge Quantità non invasivo
+                                    if (quantity > 1) {
+                                        Surface(
+                                            color = Color.Black.copy(alpha = 0.7f),
+                                            shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
+                                            modifier = Modifier.align(Alignment.BottomEnd)
+                                        ) {
+                                            Text(
+                                                text = "x$quantity",
+                                                color = Color.White,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                             repeat(4 - rowItems.size) {
                                 Spacer(modifier = Modifier.weight(1f))
@@ -502,6 +569,22 @@ fun NewDeckBottomSheetContent(
     onSave: () -> Unit
 ) {
     var showCoverPicker by remember { mutableStateOf(false) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val tabs = listOf("Pokémon", "Trainer", "Energia")
+
+    val filteredCards = remember(selectedTabIndex, viewModel.ownedCards) {
+        viewModel.ownedCards
+            .filter { card ->
+                val category = classifyCard(card)
+                when (selectedTabIndex) {
+                    0 -> category == "Pokémon"
+                    1 -> category == "Trainer" || category == "Aiuto"
+                    2 -> category == "Energia"
+                    else -> true
+                }
+            }
+            .distinctBy { viewModel.getCardKey(it) }
+    }
 
     Column(
         modifier = Modifier
@@ -629,8 +712,32 @@ fun NewDeckBottomSheetContent(
         }
 
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "Tua Collezione", color = LavenderCard, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Tab Row per filtraggio collezione
+        SecondaryTabRow(
+            selectedTabIndex = selectedTabIndex,
+            containerColor = Color.Transparent,
+            contentColor = BlueCard,
+            divider = {}
+        ) {
+            tabs.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTabIndex == index,
+                    onClick = { selectedTabIndex = index },
+                    text = { 
+                        Text(
+                            text = title, 
+                            fontSize = 12.sp, 
+                            fontWeight = if(selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal 
+                        ) 
+                    },
+                    selectedContentColor = BlueCard,
+                    unselectedContentColor = TextMuted
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(4),
@@ -638,11 +745,15 @@ fun NewDeckBottomSheetContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(viewModel.ownedCards, key = { it.id }) { card ->
+            items(filteredCards, key = { viewModel.getCardKey(it) }) { card ->
+                val inDeckCount = viewModel.getQuantityInDeck(card)
+                val totalOwned = viewModel.getTotalOwnedQuantity(card)
                 CardSelectionItem(
                     card = card,
-                    isSelected = viewModel.selectedCardsIds.contains(card.id),
-                    onClick = { viewModel.toggleCardSelection(card.id) }
+                    inDeckCount = inDeckCount,
+                    totalOwned = totalOwned,
+                    onAdd = { viewModel.addCardToDeck(card) },
+                    onRemove = { viewModel.removeCardFromDeck(card) }
                 )
             }
         }
@@ -679,18 +790,23 @@ fun NewDeckBottomSheetContent(
 @Composable
 fun CardSelectionItem(
     card: PokemonCard,
-    isSelected: Boolean,
-    onClick: () -> Unit
+    inDeckCount: Int,
+    totalOwned: Int,
+    onAdd: () -> Unit,
+    onRemove: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .aspectRatio(0.71f)
             .clip(RoundedCornerShape(8.dp))
             .border(
-                BorderStroke(if (isSelected) 2.dp else 0.dp, BlueCard),
+                BorderStroke(
+                    if (inDeckCount > 0) 2.dp else 1.dp, 
+                    if (inDeckCount > 0) BlueCard else Color.White.copy(alpha = 0.1f)
+                ),
                 RoundedCornerShape(8.dp)
             )
-            .clickable(onClick = onClick)
+            .clickable(onClick = onAdd)
     ) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
@@ -701,12 +817,56 @@ fun CardSelectionItem(
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize()
         )
-        if (isSelected) {
+        
+        if (inDeckCount > 0) {
             Box(
-                modifier = Modifier.fillMaxSize().background(BlueCard.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.TopEnd
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f)),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = BlueCard, modifier = Modifier.padding(4.dp).size(18.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    IconButton(
+                        onClick = onRemove,
+                        modifier = Modifier.size(24.dp).background(DarkCard, CircleShape)
+                    ) {
+                        Icon(Icons.Default.Remove, contentDescription = null, tint = TextWhite, modifier = Modifier.size(14.dp))
+                    }
+                    
+                    Text(
+                        text = "$inDeckCount",
+                        color = TextWhite,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    
+                    IconButton(
+                        onClick = onAdd,
+                        enabled = inDeckCount < totalOwned,
+                        modifier = Modifier.size(24.dp).background(if (inDeckCount < totalOwned) BlueCard else TextMuted, CircleShape)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = TextWhite, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+        } else if (totalOwned > 1) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(bottomStart = 6.dp),
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
+                Text(
+                    text = "x$totalOwned",
+                    color = Color.White,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
             }
         }
     }
@@ -735,7 +895,7 @@ fun AnalysisSection(viewModel: DeckLabViewModel) {
             AnalysisInfoItem("Tipi", analysis.typesCount.size.toString())
             
             val p = analysis.supertypesCount["Pokémon"] ?: 0
-            val t = analysis.supertypesCount["Trainer"] ?: 0
+            val t = (analysis.supertypesCount["Trainer"] ?: 0)
             val e = analysis.supertypesCount["Energy"] ?: 0
             
             Column(horizontalAlignment = Alignment.End) {

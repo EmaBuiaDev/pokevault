@@ -112,7 +112,7 @@ class DeckLabViewModel : ViewModel() {
             }
         }
 
-        // Find which specific ID to add (from documents of the same card type)
+        // Trova quale ID specifico aggiungere (gestendo documenti multipli con quantità > 1)
         val availableId = ownedCards
             .filter { getCardKey(it) == key }
             .firstOrNull { doc ->
