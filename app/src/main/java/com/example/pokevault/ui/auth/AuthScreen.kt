@@ -50,7 +50,6 @@ fun AuthScreen(
         listOf(DarkBackground, Color(0xFF16213E))
     )
 
-    // Animazione per la Pokéball durante il caricamento
     val infiniteTransition = rememberInfiniteTransition(label = "loading")
     val rotation by infiniteTransition.animateFloat(
         initialValue = -15f,
@@ -67,7 +66,6 @@ fun AuthScreen(
             .fillMaxSize()
             .background(mainGradient)
     ) {
-        // Decorazione Pokéball sfumata in alto a destra
         Box(
             modifier = Modifier
                 .size(300.dp)
@@ -92,7 +90,6 @@ fun AuthScreen(
         ) {
             Spacer(modifier = Modifier.height(40.dp))
 
-            // ── Logo Pokéball Stilizzato ──
             Box(
                 modifier = Modifier.graphicsLayer {
                     if (isLoading) rotationZ = rotation
@@ -119,38 +116,28 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(40.dp))
 
-            // ── Toggle Login / Registrazione ──
             Surface(
                 modifier = Modifier
                     .clip(RoundedCornerShape(24.dp))
                     .border(BorderStroke(1.dp, TextMuted.copy(alpha = 0.2f)), RoundedCornerShape(24.dp)),
                 color = DarkCard.copy(alpha = 0.6f)
             ) {
-                Row(
-                    modifier = Modifier.padding(4.dp)
-                ) {
+                Row(modifier = Modifier.padding(4.dp)) {
                     AuthTabButton(
                         text = AppLocale.loginTab,
                         isSelected = isLoginMode,
-                        onClick = {
-                            isLoginMode = true
-                            onClearError()
-                        }
+                        onClick = { isLoginMode = true; onClearError() }
                     )
                     AuthTabButton(
                         text = AppLocale.registerTab,
                         isSelected = !isLoginMode,
-                        onClick = {
-                            isLoginMode = false
-                            onClearError()
-                        }
+                        onClick = { isLoginMode = false; onClearError() }
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // ── Form Card ──
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -159,12 +146,7 @@ fun AuthScreen(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Campo Nome (solo registrazione)
-                AnimatedVisibility(
-                    visible = !isLoginMode,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
+                AnimatedVisibility(visible = !isLoginMode) {
                     AuthTextField(
                         value = name,
                         onValueChange = { name = it },
@@ -175,7 +157,6 @@ fun AuthScreen(
                     )
                 }
 
-                // Campo Email
                 AuthTextField(
                     value = email,
                     onValueChange = { email = it },
@@ -185,7 +166,6 @@ fun AuthScreen(
                     imeAction = ImeAction.Next
                 )
 
-                // Campo Password
                 Column {
                     AuthTextField(
                         value = password,
@@ -216,7 +196,6 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // ── Messaggio errore ──
             AnimatedVisibility(visible = errorMessage != null) {
                 Row(
                     modifier = Modifier
@@ -228,30 +207,17 @@ fun AuthScreen(
                 ) {
                     Icon(Icons.Default.ErrorOutline, null, tint = RedCard, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = errorMessage ?: "",
-                        color = RedCard,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Text(text = errorMessage ?: "", color = RedCard, fontSize = 13.sp)
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Bottone principale ──
+            // ── Bottone Principale Login/Register ──
             Button(
-                onClick = {
-                    if (isLoginMode) {
-                        onLogin(email, password)
-                    } else {
-                        onRegister(email, password, name)
-                    }
-                },
+                onClick = { if (isLoginMode) onLogin(email, password) else onRegister(email, password, name) },
                 enabled = !isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (isLoginMode) RedCard else BlueCard,
@@ -260,54 +226,53 @@ fun AuthScreen(
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
             ) {
                 if (isLoading) {
-                    Text(
-                        text = AppLocale.loadingAuth,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        letterSpacing = 1.sp
-                    )
+                    Text(text = AppLocale.loadingAuth, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 } else {
-                    Text(
-                        text = if (isLoginMode) AppLocale.loginButton else AppLocale.registerButton,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        letterSpacing = 1.sp
-                    )
+                    Text(text = if (isLoginMode) AppLocale.loginButton else AppLocale.registerButton, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // ── Social Login ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
-                Text(AppLocale.or, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                Text(AppLocale.or, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp))
                 HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            OutlinedButton(
+            // ── Bottone Google Ottimizzato (Ora più visibile) ──
+            Button(
                 onClick = onGoogleSignIn,
                 enabled = !isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp),
+                    .height(56.dp),
                 shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f)),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextWhite)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF2D2D2D)
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
+                // Icona Google (Simulata con AccountCircle ma puoi usare un'immagine PNG per il logo reale)
                 Icon(
                     imageVector = Icons.Default.AccountCircle,
                     contentDescription = null,
-                    tint = StarGold,
-                    modifier = Modifier.size(20.dp)
+                    tint = Color(0xFF4285F4), // Colore blu Google
+                    modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(AppLocale.googleSignInLabel, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = AppLocale.googleSignInLabel,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    letterSpacing = 0.5.sp
+                )
             }
 
             Spacer(modifier = Modifier.height(40.dp))
@@ -330,7 +295,6 @@ fun PokeballLogo() {
             Box(modifier = Modifier.height(6.dp).fillMaxWidth().background(Color(0xFF2D2D2D)))
             Box(modifier = Modifier.weight(1f).fillMaxWidth().background(TextWhite))
         }
-        // Bottone centrale
         Box(
             modifier = Modifier
                 .size(28.dp)
@@ -350,11 +314,7 @@ fun PokeballLogo() {
 }
 
 @Composable
-private fun AuthTabButton(
-    text: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
+private fun AuthTabButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
@@ -363,12 +323,7 @@ private fun AuthTabButton(
             .padding(horizontal = 40.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            color = if (isSelected) TextWhite else TextGray,
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp
-        )
+        Text(text = text, color = if (isSelected) TextWhite else TextGray, fontWeight = FontWeight.Bold, fontSize = 15.sp)
     }
 }
 
@@ -390,7 +345,6 @@ private fun AuthTextField(
             color = TextMuted,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 0.5.sp,
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
         Box(
@@ -408,40 +362,23 @@ private fun AuthTextField(
                     tint = if (value.isNotEmpty()) StarGold else TextMuted,
                     modifier = Modifier.size(20.dp)
                 )
-
                 Spacer(modifier = Modifier.width(12.dp))
-
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = TextWhite,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Medium),
                     singleLine = true,
                     cursorBrush = SolidColor(StarGold),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = keyboardType,
-                        imeAction = imeAction
-                    ),
-                    visualTransformation = if (isPassword && !passwordVisible) {
-                        PasswordVisualTransformation()
-                    } else {
-                        VisualTransformation.None
-                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+                    visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
                     modifier = Modifier.weight(1f)
                 )
-
                 if (isPassword && onTogglePassword != null) {
                     Icon(
-                        imageVector = if (passwordVisible) Icons.Default.VisibilityOff
-                                      else Icons.Default.Visibility,
-                        contentDescription = "Toggle password",
+                        imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = null,
                         tint = TextMuted,
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clickable { onTogglePassword() }
+                        modifier = Modifier.size(20.dp).clickable { onTogglePassword() }
                     )
                 }
             }
