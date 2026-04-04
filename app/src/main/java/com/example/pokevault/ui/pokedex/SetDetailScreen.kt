@@ -43,6 +43,7 @@ import com.example.pokevault.ui.theme.*
 import com.example.pokevault.viewmodel.SetDetailViewModel
 import com.example.pokevault.util.RarityUtils
 import com.example.pokevault.util.RarityInfo
+import com.example.pokevault.util.AppLocale
 
 fun formatReleaseDate(date: String): String {
     return try {
@@ -71,7 +72,6 @@ fun SetDetailScreen(
         if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
     }
 
-    // LOGICA FILTRAGGIO AVANZATA: Numero, Ricerca, Rarità, Mancanti
     val sortedCards = remember(state.cards, state.ownedCardIds, state.searchQuery, state.showOnlyMissing, selectedRarityFilter) {
         state.cards.filter { card ->
             val matchesRarity = selectedRarityFilter == null || card.rarity == selectedRarityFilter
@@ -124,17 +124,17 @@ fun SetDetailScreen(
                     Column {
                         Text(state.set?.name ?: setName, fontWeight = FontWeight.Bold, color = TextWhite, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (!state.isLoading && state.set != null) {
-                            Text("Data di uscita: ${formatReleaseDate(state.set.releaseDate)}", color = TextMuted, fontSize = 12.sp)
+                            Text("${if (AppLocale.isItalian) "Data di uscita" else "Release date"}: ${formatReleaseDate(state.set.releaseDate)}", color = TextMuted, fontSize = 12.sp)
                         }
                     }
                 },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite) } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, AppLocale.back, tint = TextWhite) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
             )
 
             if (state.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    PokeballLoadingAnimation(message = "Caricamento carte...")
+                    PokeballLoadingAnimation(message = AppLocale.loading)
                 }
             } else {
                 LazyVerticalGrid(
@@ -143,7 +143,6 @@ fun SetDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Header con info set e rarità
                     item(span = { GridItemSpan(3) }) {
                         SetInfoHeader(
                             logoUrl = state.set?.images?.logo ?: "",
@@ -154,7 +153,6 @@ fun SetDetailScreen(
                         )
                     }
 
-                    // TOOLBAR RICERCA E FILTRO MANCANTI
                     item(span = { GridItemSpan(3) }) {
                         Row(
                             modifier = Modifier
@@ -163,7 +161,6 @@ fun SetDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Barra di ricerca locale
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -175,7 +172,7 @@ fun SetDetailScreen(
                                     Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Box(modifier = Modifier.weight(1f)) {
-                                        if (state.searchQuery.isEmpty()) Text("Cerca nel set...", color = TextMuted, fontSize = 13.sp)
+                                        if (state.searchQuery.isEmpty()) Text(if (AppLocale.isItalian) "Cerca nel set..." else "Search in set...", color = TextMuted, fontSize = 13.sp)
                                         BasicTextField(
                                             value = state.searchQuery,
                                             onValueChange = { viewModel.updateSearchQuery(it) },
@@ -192,7 +189,6 @@ fun SetDetailScreen(
                                 }
                             }
 
-                            // Toggle Mancanti
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(12.dp))
@@ -213,33 +209,31 @@ fun SetDetailScreen(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Mancanti", color = if (state.showOnlyMissing) BlueCard else TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    Text(if (AppLocale.isItalian) "Mancanti" else "Missing", color = if (state.showOnlyMissing) BlueCard else TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                                 }
                             }
                         }
                     }
 
-                    // Chip Rarità
                     item(span = { GridItemSpan(3) }) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
                             item {
-                                RarityFilterChip("Tutte (${state.cards.size})", selectedRarityFilter == null) { selectedRarityFilter = null }
+                                RarityFilterChip("${AppLocale.all} (${state.cards.size})", selectedRarityFilter == null) { selectedRarityFilter = null }
                             }
                             items(distinctRarities) { rarity ->
                                 val info = RarityUtils.getRarityInfo(rarity)
                                 val count = state.cards.count { it.rarity == rarity }
-                                RarityFilterChip("${info.emoji} $rarity ($count)", selectedRarityFilter == rarity, info.color) { selectedRarityFilter = rarity }
+                                RarityFilterChip("${info.emoji} ${AppLocale.translateRarity(rarity)} ($count)", selectedRarityFilter == rarity, info.color) { selectedRarityFilter = rarity }
                             }
                         }
                     }
 
-                    // Tabs vista
                     item(span = { GridItemSpan(3) }) {
                         Row(modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .background(DarkCard), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            listOf("Carte" to "grid", "Lista" to "list").forEach { (label, mode) ->
+                            listOf((if (AppLocale.isItalian) "Carte" else "Cards") to "grid", (if (AppLocale.isItalian) "Lista" else "List") to "list").forEach { (label, mode) ->
                                 Text(label, color = if (state.viewMode == mode) TextWhite else TextMuted,
                                     fontWeight = if (state.viewMode == mode) FontWeight.SemiBold else FontWeight.Normal,
                                     fontSize = 13.sp, textAlign = TextAlign.Center,
@@ -252,13 +246,12 @@ fun SetDetailScreen(
                         }
                     }
 
-                    // Griglia Carte
                     if (sortedCards.isEmpty()) {
                         item(span = { GridItemSpan(3) }) {
                             Box(modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 40.dp), contentAlignment = Alignment.Center) {
-                                Text("Nessuna carta trovata con questi filtri", color = TextMuted, fontSize = 14.sp)
+                                Text(AppLocale.noResults, color = TextMuted, fontSize = 14.sp)
                             }
                         }
                     } else {
@@ -361,44 +354,6 @@ fun QuickAddPopup(card: TcgCard, onVariantSelected: (String) -> Unit, onDismiss:
 }
 
 @Composable
-fun RarityStatsHeader(cards: List<TcgCard>, ownedIds: Set<String>) {
-    // Raggruppa le carte per rarità e conta quante ne hai
-    val stats = remember(cards, ownedIds) {
-        cards.groupBy { RarityUtils.getRarityInfo(it.rarity) }
-            .mapValues { entry ->
-                val total = entry.value.size
-                val owned = entry.value.count { it.id in ownedIds }
-                Pair(owned, total)
-            }
-            .toSortedMap(compareBy { it.sortOrder }) // Ordina da Common a Promo
-    }
-
-    LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        stats.forEach { (rarityInfo, counts) ->
-            item {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = rarityInfo.emoji,
-                        color = rarityInfo.color,
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        text = "${counts.first}/${counts.second}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun SetInfoHeader(
     logoUrl: String,
     ownedCount: Int,
@@ -413,8 +368,6 @@ fun SetInfoHeader(
             .background(Brush.verticalGradient(listOf(DarkCard, DarkSurface)))
             .padding(16.dp)
     ) {
-
-        // --- Riga Logo e Percentuale ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (logoUrl.isNotBlank()) {
                 AsyncImage(
@@ -453,7 +406,6 @@ fun SetInfoHeader(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // --- Barra di Progresso ---
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -480,15 +432,12 @@ fun SetInfoHeader(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- STATISTICHE RARITÀ (Dinamiche e Ordinate) ---
-        // Usiamo un FlowRow o un Row con scorrimento se le rarità sono molte
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
             rarityCounts.forEach { (info, counts) ->
-                // Visualizza solo se la rarità esiste nel set (counts.second > 0)
                 if (counts.second > 0) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -647,7 +596,7 @@ fun TcgCardListRow(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(card.name, color = if (isOwned) TextWhite else TextMuted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text("#${card.number} · ${card.rarity ?: ""}", color = TextMuted, fontSize = 11.sp)
+            Text("#${card.number} · ${AppLocale.translateRarity(card.rarity ?: "")}", color = TextMuted, fontSize = 11.sp)
         }
         val price = card.cardmarket?.prices?.averageSellPrice ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
         if (price != null && price > 0) Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 13.sp, fontWeight = FontWeight.Medium)

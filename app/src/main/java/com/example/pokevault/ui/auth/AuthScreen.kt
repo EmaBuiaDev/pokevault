@@ -83,7 +83,6 @@ fun AuthScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // systemBarsPadding() gestisce sia la barra di stato (sopra) che quella di navigazione (sotto)
                 .systemBarsPadding() 
                 .verticalScroll(scrollState)
                 .padding(horizontal = 24.dp),
@@ -277,7 +276,6 @@ fun AuthScreen(
                 )
             }
 
-            // Un ultimo spacer per distanziare dal bordo inferiore se la barra è trasparente
             Spacer(modifier = Modifier.height(32.dp))
         }
     }

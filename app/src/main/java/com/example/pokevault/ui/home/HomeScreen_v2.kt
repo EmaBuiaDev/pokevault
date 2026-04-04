@@ -144,7 +144,7 @@ fun HomeScreen(
         ) {
             Icon(
                 Icons.Default.CameraAlt,
-                contentDescription = "Scansiona carta",
+                contentDescription = AppLocale.scanCard,
                 tint = TextWhite
             )
         }

@@ -20,6 +20,7 @@ import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
 import com.example.pokevault.ui.theme.TextGray
+import com.example.pokevault.util.AppLocale
 import kotlin.random.Random
 
 @Composable
@@ -27,14 +28,11 @@ fun WelcomeHeader(
     userName: String = "Allenatore",
     modifier: Modifier = Modifier
 ) {
-    // Lista di alcuni ID di Pokemon popolari (Gen 1-5 hanno sprite animati compatibili)
     val pokemonIds = remember { listOf(25, 1, 4, 7, 133, 150, 151, 384, 448, 94, 158, 258, 393, 6, 9, 3) }
     val randomPokemonId = remember { pokemonIds[Random.nextInt(pokemonIds.size)] }
     
-    // URL per sprite animati di Gen 5 (Black/White)
     val pokemonImageUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/$randomPokemonId.gif"
 
-    // Animazione di rimbalzo (floating)
     val infiniteTransition = rememberInfiniteTransition(label = "bobbing")
     val offsetY by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -48,7 +46,6 @@ fun WelcomeHeader(
 
     val context = LocalContext.current
     
-    // Configurazione per Coil per supportare le GIF
     val imageLoader = remember {
         ImageLoader.Builder(context)
             .components {
@@ -67,7 +64,6 @@ fun WelcomeHeader(
             .padding(vertical = 24.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Pokemon Animato
         Box(
             modifier = Modifier
                 .size(70.dp)
@@ -82,7 +78,7 @@ fun WelcomeHeader(
                     .crossfade(true)
                     .build(),
                 imageLoader = imageLoader,
-                contentDescription = "Pokemon Casuale",
+                contentDescription = "Pokemon",
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -91,13 +87,13 @@ fun WelcomeHeader(
 
         Column {
             Text(
-                text = "Ciao, $userName!",
+                text = AppLocale.helloUser(userName),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
             Text(
-                text = "Gestisci la tua collezione con stile ✨",
+                text = AppLocale.homeSubtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextGray.copy(alpha = 0.9f),
                 letterSpacing = 0.2.sp

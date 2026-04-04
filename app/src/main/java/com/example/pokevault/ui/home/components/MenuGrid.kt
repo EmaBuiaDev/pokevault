@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.pokevault.ui.theme.*
+import com.example.pokevault.util.AppLocale
 
 data class MenuItemData(
     val title: String,
@@ -35,19 +36,19 @@ fun MenuGrid(
 ) {
     val menuItems = listOf(
         MenuItemData(
-            title = "Le mie\ncarte",
+            title = AppLocale.myCards,
             icon = Icons.Default.Style,
             gradientColors = listOf(BlueCard, BlueCard.copy(alpha = 0.7f)),
             routeKey = "my_cards"
         ),
         MenuItemData(
-            title = "Statistiche",
+            title = AppLocale.statistics,
             icon = Icons.Default.BarChart,
             gradientColors = listOf(PurpleCard, PurpleCard.copy(alpha = 0.7f)),
             routeKey = "statistics"
         ),
         MenuItemData(
-            title = "Carte\ngradate",
+            title = AppLocale.gradedCardsTitle,
             icon = Icons.Default.Star,
             gradientColors = listOf(GreenCard, GreenCard.copy(alpha = 0.7f)),
             routeKey = "graded"
@@ -62,7 +63,7 @@ fun MenuGrid(
 
     val deckLabItem = MenuItemData(
         title = "Deck Lab",
-        icon = Icons.Default.Layers, // Icona che richiama i livelli/mazzi
+        icon = Icons.Default.Layers,
         gradientColors = listOf(LavenderCard, DarkCard),
         routeKey = "deck_lab"
     )
@@ -71,7 +72,6 @@ fun MenuGrid(
         modifier = modifier.padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Prima riga: 2 card
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -88,7 +88,6 @@ fun MenuGrid(
             )
         }
 
-        // Seconda riga: 2 card
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -105,7 +104,6 @@ fun MenuGrid(
             )
         }
 
-        // Terza riga: Deck Lab "Premium"
         DeckLabFeaturedCard(
             item = deckLabItem,
             onClick = { onItemClick(deckLabItem.routeKey) }
@@ -131,7 +129,6 @@ fun DeckLabFeaturedCard(
             )
             .clickable(onClick = onClick)
     ) {
-        // Elementi decorativi di sfondo (Icone soffuse)
         Icon(
             imageVector = Icons.Default.Style,
             contentDescription = null,
@@ -148,7 +145,6 @@ fun DeckLabFeaturedCard(
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
         ) {
-            // Icona principale in un cerchio
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -174,7 +170,7 @@ fun DeckLabFeaturedCard(
                     fontSize = 18.sp
                 )
                 Text(
-                    text = "Crea e gestisci i tuoi mazzi",
+                    text = AppLocale.deckLabSubtitle,
                     color = Color.White.copy(alpha = 0.8f),
                     fontSize = 12.sp
                 )
@@ -182,7 +178,6 @@ fun DeckLabFeaturedCard(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Freccia o badge "Nuovo" (opzionale)
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,

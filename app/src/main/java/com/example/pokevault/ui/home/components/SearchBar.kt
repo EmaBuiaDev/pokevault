@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import com.example.pokevault.ui.theme.SearchBarBg
 import com.example.pokevault.ui.theme.TextMuted
 import com.example.pokevault.ui.theme.TextWhite
+import com.example.pokevault.util.AppLocale
 
 @Composable
 fun SearchBar(
@@ -39,7 +40,7 @@ fun SearchBar(
         ) {
             Icon(
                 imageVector = Icons.Default.Search,
-                contentDescription = "Cerca",
+                contentDescription = AppLocale.search,
                 tint = TextMuted,
                 modifier = Modifier.size(20.dp)
             )
@@ -49,7 +50,7 @@ fun SearchBar(
             Box(modifier = Modifier.weight(1f)) {
                 if (query.isEmpty()) {
                     Text(
-                        text = "Cerca una carta",
+                        text = AppLocale.searchCard,
                         color = TextMuted,
                         fontSize = 14.sp
                     )

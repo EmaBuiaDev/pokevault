@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.ui.theme.*
+import com.example.pokevault.util.AppLocale
 
 @Composable
 fun CollectionSection(
@@ -38,12 +39,12 @@ fun CollectionSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Collezione",
+                text = AppLocale.collection,
                 style = MaterialTheme.typography.headlineMedium
             )
 
             Text(
-                text = "${cards.size} carte",
+                text = AppLocale.cardsCount(cards.size),
                 color = TextMuted,
                 fontSize = 14.sp
             )
@@ -59,7 +60,7 @@ fun CollectionSection(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Nessuna carta trovata.\nAggiungi la tua prima carta!",
+                    text = AppLocale.noCardsFound,
                     color = TextMuted,
                     textAlign = TextAlign.Center
                 )
