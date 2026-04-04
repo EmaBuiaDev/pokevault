@@ -1,5 +1,6 @@
 package com.example.pokevault.data.firebase
 
+import com.example.pokevault.data.model.Deck
 import com.example.pokevault.data.model.PokemonCard
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -19,6 +20,9 @@ class FirestoreRepository {
 
     private val cardsCollection
         get() = firestore.collection("users").document(userId).collection("cards")
+
+    private val decksCollection
+        get() = firestore.collection("users").document(userId).collection("decks")
 
     fun getCards(): Flow<List<PokemonCard>> = callbackFlow {
         val listener = cardsCollection
@@ -129,6 +133,49 @@ class FirestoreRepository {
                 mostValuable = mostValuable
             )
         } catch (e: Exception) { CollectionStats() }
+    }
+
+    // --- DECK METHODS ---
+
+    fun getDecks(): Flow<List<Deck>> = callbackFlow {
+        val listener = decksCollection
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                val decks = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(Deck::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(decks)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun saveDeck(deck: Deck): Result<String> {
+        return try {
+            val data = hashMapOf(
+                "name" to deck.name,
+                "cards" to deck.cards,
+                "mainTypes" to deck.mainTypes,
+                "averageHp" to deck.averageHp,
+                "totalCards" to deck.totalCards,
+                "recommendedEnergy" to deck.recommendedEnergy,
+                "createdAt" to com.google.firebase.Timestamp.now()
+            )
+            val docRef = if (deck.id.isEmpty()) {
+                decksCollection.add(data).await()
+            } else {
+                decksCollection.document(deck.id).set(data).await()
+                decksCollection.document(deck.id)
+            }
+            Result.success(docRef.id)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun deleteDeck(deckId: String): Result<Unit> {
+        return try {
+            decksCollection.document(deckId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
     }
 }
 

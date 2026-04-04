@@ -11,6 +11,8 @@ data class PokemonCard(
     val rarity: String = "",
     val type: String = "",
     val hp: Int = 0,
+    val supertype: String = "Pokémon", // Pokémon, Trainer, Energy
+    val subtypes: List<String> = emptyList(), // Basic, Stage 1, Item, Supporter (Aiuto), etc.
     
     @get:PropertyName("isGraded")
     @set:PropertyName("isGraded")

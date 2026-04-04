@@ -23,7 +23,8 @@ import com.example.pokevault.ui.theme.*
 data class MenuItemData(
     val title: String,
     val icon: ImageVector,
-    val gradientColors: List<Color>
+    val gradientColors: List<Color>,
+    val routeKey: String
 )
 
 @Composable
@@ -35,29 +36,34 @@ fun MenuGrid(
         MenuItemData(
             title = "Le mie\ncarte",
             icon = Icons.Default.Style,
-            gradientColors = listOf(BlueCard, BlueCard.copy(alpha = 0.7f))
+            gradientColors = listOf(BlueCard, BlueCard.copy(alpha = 0.7f)),
+            routeKey = "my_cards"
         ),
         MenuItemData(
             title = "Statistiche",
             icon = Icons.Default.BarChart,
-            gradientColors = listOf(PurpleCard, PurpleCard.copy(alpha = 0.7f))
+            gradientColors = listOf(PurpleCard, PurpleCard.copy(alpha = 0.7f)),
+            routeKey = "statistics"
         ),
         MenuItemData(
             title = "Carte\ngradate",
             icon = Icons.Default.Star,
-            gradientColors = listOf(GreenCard, GreenCard.copy(alpha = 0.7f))
+            gradientColors = listOf(GreenCard, GreenCard.copy(alpha = 0.7f)),
+            routeKey = "graded"
         ),
         MenuItemData(
             title = "Pokédex",
             icon = Icons.Default.CatchingPokemon,
-            gradientColors = listOf(YellowCard, RedCard)
+            gradientColors = listOf(YellowCard, RedCard),
+            routeKey = "pokedex"
         )
     )
 
-    val newsItem = MenuItemData(
-        title = "W ME",
-        icon = Icons.Default.Article,
-        gradientColors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.7f))
+    val deckLabItem = MenuItemData(
+        title = "Deck Lab",
+        icon = Icons.Default.Science,
+        gradientColors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.7f)),
+        routeKey = "deck_lab"
     )
 
     Column(
@@ -71,12 +77,12 @@ fun MenuGrid(
         ) {
             MenuCard(
                 item = menuItems[0],
-                onClick = { onItemClick("my_cards") },
+                onClick = { onItemClick(menuItems[0].routeKey) },
                 modifier = Modifier.weight(1f)
             )
             MenuCard(
                 item = menuItems[1],
-                onClick = { onItemClick("statistics") },
+                onClick = { onItemClick(menuItems[1].routeKey) },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -88,20 +94,20 @@ fun MenuGrid(
         ) {
             MenuCard(
                 item = menuItems[2],
-                onClick = { onItemClick("graded") },
+                onClick = { onItemClick(menuItems[2].routeKey) },
                 modifier = Modifier.weight(1f)
             )
             MenuCard(
                 item = menuItems[3],
-                onClick = { onItemClick("pokedex") },
+                onClick = { onItemClick(menuItems[3].routeKey) },
                 modifier = Modifier.weight(1f)
             )
         }
 
-        // Terza riga: card larga
+        // Terza riga: card larga - Deck Lab
         MenuCard(
-            item = newsItem,
-            onClick = { onItemClick("news") },
+            item = deckLabItem,
+            onClick = { onItemClick(deckLabItem.routeKey) },
             modifier = Modifier.fillMaxWidth(),
             isWide = true
         )
@@ -126,7 +132,6 @@ fun MenuCard(
             .padding(14.dp)
     ) {
         if (isWide) {
-            // Layout orizzontale per card larga
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxSize()
@@ -146,7 +151,6 @@ fun MenuCard(
                 )
             }
         } else {
-            // Layout verticale per card quadrata
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Bottom

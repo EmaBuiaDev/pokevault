@@ -18,6 +18,7 @@ import com.example.pokevault.ui.pokedex.SetsListScreen
 import com.example.pokevault.ui.graded.GradedCardsScreen
 import com.example.pokevault.ui.scanner.ScannerScreen
 import com.example.pokevault.ui.stats.StatsScreen
+import com.example.pokevault.ui.deck.DeckLabScreen
 import com.example.pokevault.viewmodel.AuthViewModel
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -33,7 +34,7 @@ object Routes {
     const val SET_DETAIL = "set_detail/{setId}/{setName}"
     const val STATS = "stats"
     const val SCANNER = "scanner"
-    const val NEWS = "news"
+    const val DECK_LAB = "deck_lab"
     const val GRADED = "graded"
 
     fun cardDetail(cardId: String) = "card_detail/$cardId"
@@ -181,12 +182,11 @@ fun AppNavigation(
             )
         }
 
-        // ── Notizie ──
-        composable(Routes.NEWS) {
-            PlaceholderScreen(
-                title = "Notizie e articoli", emoji = "📰",
-                description = "Le ultime notizie dal mondo Pokémon TCG.",
-                onBack = { navController.popBackStack() }
+        // ── Deck Lab ──
+        composable(Routes.DECK_LAB) {
+            DeckLabScreen(
+                onBack = { navController.popBackStack() },
+                onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
             )
         }
     }

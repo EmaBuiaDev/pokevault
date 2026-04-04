@@ -108,7 +108,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Griglia menu — collega navigazione
+            // Griglia menu
             MenuGrid(
                 onItemClick = { menuRoute ->
                     val route = when (menuRoute) {
@@ -116,7 +116,7 @@ fun HomeScreen(
                         "statistics" -> Routes.STATS
                         "graded" -> Routes.GRADED
                         "pokedex" -> Routes.POKEDEX
-                        "news" -> Routes.NEWS
+                        "deck_lab" -> Routes.DECK_LAB
                         else -> Routes.HOME
                     }
                     onNavigate(route)
