@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -61,8 +62,8 @@ fun MenuGrid(
 
     val deckLabItem = MenuItemData(
         title = "Deck Lab",
-        icon = Icons.Default.Science,
-        gradientColors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.7f)),
+        icon = Icons.Default.Layers, // Icona che richiama i livelli/mazzi
+        gradientColors = listOf(LavenderCard, DarkCard),
         routeKey = "deck_lab"
     )
 
@@ -104,13 +105,90 @@ fun MenuGrid(
             )
         }
 
-        // Terza riga: card larga - Deck Lab
-        MenuCard(
+        // Terza riga: Deck Lab "Premium"
+        DeckLabFeaturedCard(
             item = deckLabItem,
-            onClick = { onItemClick(deckLabItem.routeKey) },
-            modifier = Modifier.fillMaxWidth(),
-            isWide = true
+            onClick = { onItemClick(deckLabItem.routeKey) }
         )
+    }
+}
+
+@Composable
+fun DeckLabFeaturedCard(
+    item: MenuItemData,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(80.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.6f))
+                )
+            )
+            .clickable(onClick = onClick)
+    ) {
+        // Elementi decorativi di sfondo (Icone soffuse)
+        Icon(
+            imageVector = Icons.Default.Style,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.1f),
+            modifier = Modifier
+                .size(100.dp)
+                .align(Alignment.CenterEnd)
+                .offset(x = 20.dp, y = 10.dp)
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+        ) {
+            // Icona principale in un cerchio
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column {
+                Text(
+                    text = item.title,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+                Text(
+                    text = "Crea e gestisci i tuoi mazzi",
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 12.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Freccia o badge "Nuovo" (opzionale)
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.7f)
+            )
+        }
     }
 }
 
@@ -118,12 +196,11 @@ fun MenuGrid(
 fun MenuCard(
     item: MenuItemData,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    isWide: Boolean = false
+    modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
-            .height(if (isWide) 60.dp else 100.dp)
+            .height(100.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(
                 brush = Brush.linearGradient(item.gradientColors)
@@ -131,45 +208,24 @@ fun MenuCard(
             .clickable(onClick = onClick)
             .padding(14.dp)
     ) {
-        if (isWide) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = item.title,
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = item.title.replace("\n", " "),
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp
-                )
-            }
-        } else {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Bottom
-            ) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = item.title,
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = item.title,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp
-                )
-            }
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Bottom
+        ) {
+            Icon(
+                imageVector = item.icon,
+                contentDescription = item.title,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = item.title,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                lineHeight = 16.sp
+            )
         }
     }
 }
