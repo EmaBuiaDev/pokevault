@@ -24,7 +24,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.pokevault.ui.theme.*
@@ -66,6 +65,7 @@ fun AuthScreen(
             .fillMaxSize()
             .background(mainGradient)
     ) {
+        // Pokéball decorativa
         Box(
             modifier = Modifier
                 .size(300.dp)
@@ -83,7 +83,8 @@ fun AuthScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
+                // systemBarsPadding() gestisce sia la barra di stato (sopra) che quella di navigazione (sotto)
+                .systemBarsPadding() 
                 .verticalScroll(scrollState)
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -116,6 +117,7 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(40.dp))
 
+            // Toggle Tab
             Surface(
                 modifier = Modifier
                     .clip(RoundedCornerShape(24.dp))
@@ -138,6 +140,7 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            // Form
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -196,6 +199,7 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Errore
             AnimatedVisibility(visible = errorMessage != null) {
                 Row(
                     modifier = Modifier
@@ -213,7 +217,7 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Bottone Principale Login/Register ──
+            // Bottone Login
             Button(
                 onClick = { if (isLoginMode) onLogin(email, password) else onRegister(email, password, name) },
                 enabled = !isLoading,
@@ -245,7 +249,7 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Bottone Google Ottimizzato (Ora più visibile) ──
+            // Bottone Google
             Button(
                 onClick = onGoogleSignIn,
                 enabled = !isLoading,
@@ -259,23 +263,22 @@ fun AuthScreen(
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
-                // Icona Google (Simulata con AccountCircle ma puoi usare un'immagine PNG per il logo reale)
                 Icon(
                     imageVector = Icons.Default.AccountCircle,
                     contentDescription = null,
-                    tint = Color(0xFF4285F4), // Colore blu Google
+                    tint = Color(0xFF4285F4),
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = AppLocale.googleSignInLabel,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    letterSpacing = 0.5.sp
+                    fontSize = 16.sp
                 )
             }
 
-            Spacer(modifier = Modifier.height(40.dp))
+            // Un ultimo spacer per distanziare dal bordo inferiore se la barra è trasparente
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
