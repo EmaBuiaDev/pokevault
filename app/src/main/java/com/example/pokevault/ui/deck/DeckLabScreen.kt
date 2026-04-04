@@ -1,7 +1,6 @@
 package com.example.pokevault.ui.deck
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -72,7 +72,7 @@ fun DeckLabScreen(
                                 .clip(CircleShape)
                                 .background(DarkCard)
                         ) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Indietro", tint = TextWhite)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro", tint = TextWhite)
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
@@ -322,7 +322,7 @@ fun DeckDetailView(
                     onClick = onBack,
                     modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
                 ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                 }
                 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -385,7 +385,7 @@ fun DeckDetailView(
                             letterSpacing = 1.sp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Divider(modifier = Modifier.weight(1f), color = Color.White.copy(alpha = 0.1f))
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = Color.White.copy(alpha = 0.1f))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "${cards.size}",
@@ -576,9 +576,11 @@ fun NewDeckBottomSheetContent(
                         onValueChange = { viewModel.newDeckName = it },
                         placeholder = { Text("Nome deck...", color = TextMuted, fontSize = 14.sp) },
                         modifier = Modifier.weight(1f),
-                        colors = TextFieldDefaults.textFieldColors(
-                            containerColor = Color.Transparent,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
                             focusedIndicatorColor = BlueCard,
+                            unfocusedIndicatorColor = TextMuted.copy(alpha = 0.5f),
                             cursorColor = BlueCard,
                             focusedTextColor = TextWhite,
                             unfocusedTextColor = TextWhite
