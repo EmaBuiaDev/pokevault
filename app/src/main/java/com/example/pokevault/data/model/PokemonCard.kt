@@ -29,7 +29,22 @@ data class PokemonCard(
     val cardNumber: String = "",
     val variant: String = "Normal",
     val language: String = "Italiano"
-)
+) {
+    fun classify(): String {
+        val s = supertype.lowercase()
+        val n = name.lowercase()
+        val sub = subtypes.map { it.lowercase() }
+        val hasHp = hp > 0
+
+        if (s.contains("energy") || sub.contains("energy") || n.contains("energy") || n.contains("energia")) {
+            return "Energy"
+        }
+        if (s.contains("trainer") || sub.contains("item") || sub.contains("stadium") || sub.contains("supporter") || s.contains("aiuto") || !hasHp) {
+            return "Trainer"
+        }
+        return "Pokémon"
+    }
+}
 
 data class MenuSection(
     val title: String,

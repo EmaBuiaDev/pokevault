@@ -174,21 +174,6 @@ fun DeckLabScreen(
     }
 }
 
-private fun classifyCard(card: PokemonCard): String {
-    val s = card.supertype.lowercase()
-    val n = card.name.lowercase()
-    val sub = card.subtypes.map { it.lowercase() }
-    val hasHp = card.hp > 0
-
-    if (s.contains("energy") || sub.contains("energy") || n.contains("energy") || n.contains("energia")) {
-        return "Energia"
-    }
-    if (s.contains("trainer") || sub.contains("item") || sub.contains("stadium") || sub.contains("supporter") || s.contains("aiuto") || !hasHp) {
-        return "Trainer"
-    }
-    return "Pokémon"
-}
-
 @Composable
 fun DeckItem(
     deck: Deck,
@@ -201,13 +186,13 @@ fun DeckItem(
     }
     
     val pokemonCount = remember(uniqueDeckCards, cardCounts) { 
-        uniqueDeckCards.filter { classifyCard(it) == "Pokémon" }.sumOf { cardCounts[it.id] ?: 0 } 
+        uniqueDeckCards.filter { it.classify() == "Pokémon" }.sumOf { cardCounts[it.id] ?: 0 } 
     }
     val trainerCount = remember(uniqueDeckCards, cardCounts) { 
-        uniqueDeckCards.filter { val cat = classifyCard(it); cat == "Trainer" || cat == "Aiuto" }.sumOf { cardCounts[it.id] ?: 0 } 
+        uniqueDeckCards.filter { it.classify() == "Trainer" }.sumOf { cardCounts[it.id] ?: 0 } 
     }
     val energyCount = remember(uniqueDeckCards, cardCounts) { 
-        uniqueDeckCards.filter { classifyCard(it) == "Energia" }.sumOf { cardCounts[it.id] ?: 0 } 
+        uniqueDeckCards.filter { it.classify() == "Energy" }.sumOf { cardCounts[it.id] ?: 0 } 
     }
 
     Card(
@@ -310,11 +295,9 @@ fun DeckDetailView(
     }
     
     val cardsByCategory = remember(groupedCards) {
-        listOf("Pokémon", "Trainer", "Energia").map { cat ->
+        listOf("Pokémon", "Trainer", "Energy").map { cat ->
             val filtered = groupedCards.filter { (card, _) ->
-                val category = classifyCard(card)
-                if (cat == "Trainer") category == "Trainer" || category == "Aiuto"
-                else category == cat
+                card.classify() == cat
             }
             cat to filtered
         }.filter { it.second.isNotEmpty() }
@@ -416,7 +399,7 @@ fun DeckDetailView(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         val displayTitle = when(category) {
-                            "Energia" -> "ENERGIA"
+                            "Energy" -> "ENERGIA"
                             else -> category.uppercase()
                         }
                         Text(
@@ -524,6 +507,7 @@ fun TypeBadge(type: String, small: Boolean = false) {
 
 @Composable
 fun EmptyDecksPlaceholder() {
+    // ... (rest of the code remains the same)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -570,11 +554,11 @@ fun NewDeckBottomSheetContent(
     val filteredCards = remember(selectedTabIndex, viewModel.ownedCards) {
         viewModel.ownedCards
             .filter { card ->
-                val category = classifyCard(card)
+                val category = card.classify()
                 when (selectedTabIndex) {
                     0 -> category == "Pokémon"
-                    1 -> category == "Trainer" || category == "Aiuto"
-                    2 -> category == "Energia"
+                    1 -> category == "Trainer"
+                    2 -> category == "Energy"
                     else -> true
                 }
             }

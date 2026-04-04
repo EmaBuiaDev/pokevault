@@ -67,11 +67,11 @@ class DeckLabViewModel : ViewModel() {
             repository.getCards().collectLatest { cards ->
                 ownedCards = cards.sortedWith(
                     compareBy<PokemonCard> { 
-                        val s = it.supertype.lowercase()
-                        when {
-                            s.contains("pok") -> 0
-                            s.contains("train") -> 1
-                            s.contains("energ") -> 2
+                        val category = classifyCard(it)
+                        when (category) {
+                            "Pokémon" -> 0
+                            "Trainer" -> 1
+                            "Energy" -> 2
                             else -> 3
                         }
                     }.thenBy { it.name }
@@ -92,10 +92,23 @@ class DeckLabViewModel : ViewModel() {
         return ownedCards.filter { getCardKey(it) == key }.sumOf { it.quantity }
     }
 
+    fun classifyCard(card: PokemonCard): String {
+        val s = card.supertype.lowercase()
+        val n = card.name.lowercase()
+        val sub = card.subtypes.map { it.lowercase() }
+        val hasHp = card.hp > 0
+
+        if (s.contains("energy") || sub.contains("energy") || n.contains("energy") || n.contains("energia")) {
+            return "Energy"
+        }
+        if (s.contains("trainer") || sub.contains("item") || sub.contains("stadium") || sub.contains("supporter") || s.contains("aiuto") || !hasHp) {
+            return "Trainer"
+        }
+        return "Pokémon"
+    }
+
     private fun isEnergy(card: PokemonCard): Boolean {
-        return card.supertype.lowercase().contains("energ") || 
-               card.subtypes.any { it.lowercase().contains("energ") } ||
-               card.name.lowercase().contains("energy")
+        return classifyCard(card) == "Energy"
     }
 
     fun addCardToDeck(card: PokemonCard) {
@@ -169,15 +182,7 @@ class DeckLabViewModel : ViewModel() {
             .groupingBy { it }
             .eachCount()
 
-        val supertypesCount = selectedCards.groupingBy { 
-            val s = it.supertype.lowercase()
-            when {
-                s.contains("pok") -> "Pokémon"
-                s.contains("train") -> "Trainer"
-                s.contains("energ") -> "Energy"
-                else -> "Pokémon"
-            }
-        }.eachCount()
+        val supertypesCount = selectedCards.groupingBy { classifyCard(it) }.eachCount()
 
         val avgHp = if (selectedCards.any { it.hp > 0 }) selectedCards.filter { it.hp > 0 }.map { it.hp }.average() else 0.0
         
