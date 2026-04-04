@@ -3,7 +3,6 @@ package com.example.pokevault.ui.home.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -24,8 +23,7 @@ import com.example.pokevault.ui.theme.*
 data class MenuItemData(
     val title: String,
     val icon: ImageVector,
-    val gradientColors: List<Color>,
-    val badgeCount: Int = 0
+    val gradientColors: List<Color>
 )
 
 @Composable
@@ -37,34 +35,29 @@ fun MenuGrid(
         MenuItemData(
             title = "Le mie\ncarte",
             icon = Icons.Default.Style,
-            gradientColors = listOf(BlueCard, BlueCard.copy(alpha = 0.7f)),
-            badgeCount = 3
+            gradientColors = listOf(BlueCard, BlueCard.copy(alpha = 0.7f))
         ),
         MenuItemData(
             title = "Statistiche",
             icon = Icons.Default.BarChart,
-            gradientColors = listOf(PurpleCard, PurpleCard.copy(alpha = 0.7f)),
-            badgeCount = 2
+            gradientColors = listOf(PurpleCard, PurpleCard.copy(alpha = 0.7f))
         ),
         MenuItemData(
             title = "Carte\ngradate",
             icon = Icons.Default.Star,
-            gradientColors = listOf(GreenCard, GreenCard.copy(alpha = 0.7f)),
-            badgeCount = 1
+            gradientColors = listOf(GreenCard, GreenCard.copy(alpha = 0.7f))
         ),
         MenuItemData(
             title = "Pokédex",
             icon = Icons.Default.CatchingPokemon,
-            gradientColors = listOf(YellowCard, RedCard),
-            badgeCount = 5
+            gradientColors = listOf(YellowCard, RedCard)
         )
     )
 
     val newsItem = MenuItemData(
         title = "W ME",
         icon = Icons.Default.Article,
-        gradientColors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.7f)),
-        badgeCount = 1
+        gradientColors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.7f))
     )
 
     Column(
@@ -132,24 +125,6 @@ fun MenuCard(
             .clickable(onClick = onClick)
             .padding(14.dp)
     ) {
-        // Badge in alto a destra
-        if (item.badgeCount > 0) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size(20.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.3f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "✦",
-                    fontSize = 10.sp,
-                    color = Color.White
-                )
-            }
-        }
-
         if (isWide) {
             // Layout orizzontale per card larga
             Row(
