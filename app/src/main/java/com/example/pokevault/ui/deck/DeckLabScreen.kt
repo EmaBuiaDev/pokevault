@@ -173,75 +173,87 @@ fun DeckItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onExpandClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard)
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        Column {
+            // Hero Section con Mascotte
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = deck.name,
-                        color = TextWhite,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "$pokemonCount Pokémon, $trainerCount Trainer, $energyCount Energy",
-                        color = BlueCard,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    deck.mainTypes.take(2).forEach { type ->
-                        TypeBadge(type)
-                    }
-                }
-            }
-
-            // Area "Vetrina" sotto il riepilogo
-            if (deck.coverImageUrl.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DarkBackground)
-                ) {
+                if (deck.coverImageUrl.isNotEmpty()) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(deck.coverImageUrl)
                             .crossfade(true)
                             .build(),
                         contentDescription = null,
-                        contentScale = ContentScale.Fit,
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.2f))
+                } else {
+                    Box(modifier = Modifier.fillMaxSize().background(
+                        Brush.linearGradient(listOf(DarkCard, BlueCard.copy(alpha = 0.2f)))
+                    ))
+                }
+
+                // Overlay Gradiente Moderno per leggibilità
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.1f),
+                                    Color.Black.copy(alpha = 0.4f),
+                                    Color.Black.copy(alpha = 0.95f)
                                 )
                             )
+                        )
+                )
+
+                // Badge Tipi (Top Right)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    deck.mainTypes.take(3).forEach { type ->
+                        TypeBadge(type)
+                    }
+                }
+
+                // Info Deck (Bottom Left)
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(20.dp)
+                ) {
+                    Text(
+                        text = deck.name,
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "$pokemonCount Pokémon • $trainerCount Trainer • $energyCount Energy",
+                        color = BlueCard,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
                     )
                 }
             }
 
             AnimatedVisibility(visible = isExpanded) {
-                Column {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
+                Column(modifier = Modifier.padding(20.dp)) {
                     Text(
                         text = "Carte nel deck (${deckCards.size})",
                         color = LavenderCard,
@@ -249,10 +261,10 @@ fun DeckItem(
                         fontWeight = FontWeight.Bold
                     )
                     
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 8.dp)
                     ) {
                         items(deckCards.take(25)) { card ->
@@ -265,9 +277,9 @@ fun DeckItem(
                                 contentDescription = card.name,
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
-                                    .width(60.dp)
+                                    .width(65.dp)
                                     .aspectRatio(0.71f)
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .clip(RoundedCornerShape(8.dp))
                                     .clickable { onCardClick(card.id) }
                             )
                         }
@@ -275,32 +287,35 @@ fun DeckItem(
                             item {
                                 Box(
                                     modifier = Modifier
-                                        .size(60.dp, 84.dp)
-                                        .clip(RoundedCornerShape(6.dp))
+                                        .size(65.dp, 92.dp)
+                                        .clip(RoundedCornerShape(8.dp))
                                         .background(DarkBackground),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(text = "+${deckCards.size - 25}", color = TextMuted, fontSize = 12.sp)
+                                    Text(text = "+${deckCards.size - 25}", color = TextMuted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
                     }
                     
-                    Divider(color = DarkBackground.copy(alpha = 0.5f), thickness = 1.dp, modifier = Modifier.padding(vertical = 12.dp))
+                    Divider(color = Color.White.copy(alpha = 0.05f), thickness = 1.dp, modifier = Modifier.padding(vertical = 16.dp))
                     
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = onEdit) {
-                            Icon(Icons.Default.Edit, contentDescription = "Modifica", tint = BlueCard, modifier = Modifier.size(22.dp))
+                        TextButton(onClick = onEdit) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = BlueCard, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Modifica", color = BlueCard, fontWeight = FontWeight.SemiBold)
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                         IconButton(onClick = onDuplicate) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Duplica", tint = GreenCard, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Duplica", tint = GreenCard, modifier = Modifier.size(20.dp))
                         }
                         IconButton(onClick = onDelete) {
-                            Icon(Icons.Default.DeleteOutline, contentDescription = "Elimina", tint = RedCard, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Default.DeleteOutline, contentDescription = "Elimina", tint = RedCard, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -325,14 +340,17 @@ fun TypeBadge(type: String) {
         "normale", "colorless" -> "⚪"
         else -> "🔘"
     }
-    Box(
-        modifier = Modifier
-            .size(24.dp)
-            .clip(CircleShape)
-            .background(DarkBackground),
-        contentAlignment = Alignment.Center
+    Surface(
+        color = Color.Black.copy(alpha = 0.5f),
+        shape = CircleShape,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
     ) {
-        Text(text = emoji, fontSize = 12.sp)
+        Box(
+            modifier = Modifier.size(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = emoji, fontSize = 16.sp)
+        }
     }
 }
 
