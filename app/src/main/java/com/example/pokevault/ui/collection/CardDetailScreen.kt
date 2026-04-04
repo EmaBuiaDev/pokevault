@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.pokevault.data.firebase.FirestoreRepository
+import com.example.pokevault.data.model.CardOptions
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.util.getTypeEmojiForCollection
@@ -47,6 +48,8 @@ fun CardDetailScreen(
     var tempIsGraded by remember { mutableStateOf(false) }
     var tempGrade by remember { mutableStateOf<Float?>(null) }
     var tempCompany by remember { mutableStateOf("") }
+
+    var expandedGrading by remember { mutableStateOf(false) }
 
     fun loadData() {
         scope.launch {
@@ -81,11 +84,17 @@ fun CardDetailScreen(
         variants.getOrNull(selectedVariantIndex)?.let {
             tempIsGraded = it.isGraded
             tempGrade = it.grade
-            tempCompany = it.gradingCompany
+            tempCompany = it.gradingCompany // Inizializza esattamente come salvato
         }
     }
 
     fun confirmVariantChange(card: PokemonCard, newQty: Int, isGraded: Boolean? = null, grade: Float? = null, company: String? = null) {
+        // Validazione se gradata
+        if (isGraded == true) {
+            if (grade == null) return
+            if (company.isNullOrBlank()) return 
+        }
+
         scope.launch {
             val updatedCard = card.copy(
                 quantity = newQty,
@@ -133,9 +142,17 @@ fun CardDetailScreen(
             val currentCard = variants.getOrNull(selectedVariantIndex) ?: variants.first()
             val totalQty = variants.sumOf { editedQuantities[it.id] ?: it.quantity }
             
+            // Unificata la logica di cambio: mostriamo il bottone solo se c'è un cambiamento REALE rispetto al database
             val isGradingChanged = tempIsGraded != currentCard.isGraded || 
                                  tempGrade != currentCard.grade || 
                                  tempCompany != currentCard.gradingCompany
+            
+            // Validazione per abilitare il tasto di salvataggio
+            val canSaveGrading = if (tempIsGraded) {
+                tempGrade != null && tempCompany.isNotBlank()
+            } else {
+                true // Se non è gradata, posso sempre salvare il cambio di stato
+            }
 
             Column(
                 modifier = Modifier
@@ -225,11 +242,17 @@ fun CardDetailScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Switch(
                                 checked = tempIsGraded,
-                                onCheckedChange = { tempIsGraded = it },
+                                onCheckedChange = { 
+                                    tempIsGraded = it
+                                    // Se attivato e vuoto, metti PSA come default
+                                    if (it && tempCompany.isBlank()) {
+                                        tempCompany = "PSA"
+                                    }
+                                },
                                 colors = SwitchDefaults.colors(checkedThumbColor = StarGold)
                             )
                             
-                            AnimatedVisibility(visible = isGradingChanged) {
+                            AnimatedVisibility(visible = isGradingChanged && canSaveGrading) {
                                 IconButton(
                                     onClick = { confirmVariantChange(currentCard, currentCard.quantity, tempIsGraded, tempGrade, tempCompany) },
                                     modifier = Modifier.padding(start = 8.dp).size(28.dp).background(GreenCard, CircleShape)
@@ -245,20 +268,54 @@ fun CardDetailScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
                                 value = tempGrade?.toString() ?: "",
-                                onValueChange = { tempGrade = it.toFloatOrNull() },
+                                onValueChange = { tempGrade = it.replace(",", ".").toFloatOrNull() },
                                 label = { Text("Voto (1-10)", fontSize = 10.sp) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextWhite, unfocusedTextColor = TextWhite)
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = TextWhite, 
+                                    unfocusedTextColor = TextWhite,
+                                    focusedLabelColor = BlueCard,
+                                    unfocusedLabelColor = TextMuted
+                                )
                             )
-                            OutlinedTextField(
-                                value = tempCompany,
-                                onValueChange = { tempCompany = it },
-                                label = { Text("Ente (PSA...)", fontSize = 10.sp) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = TextWhite, unfocusedTextColor = TextWhite)
-                            )
+                            
+                            // Dropdown per Ente Grading
+                            ExposedDropdownMenuBox(
+                                expanded = expandedGrading,
+                                onExpandedChange = { expandedGrading = it },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                OutlinedTextField(
+                                    value = tempCompany.ifBlank { "PSA" },
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Ente", fontSize = 10.sp) },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedGrading) },
+                                    modifier = Modifier.menuAnchor(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = TextWhite, 
+                                        unfocusedTextColor = TextWhite,
+                                        focusedLabelColor = BlueCard,
+                                        unfocusedLabelColor = TextMuted
+                                    )
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = expandedGrading,
+                                    onDismissRequest = { expandedGrading = false },
+                                    modifier = Modifier.background(DarkSurface)
+                                ) {
+                                    CardOptions.GRADING_COMPANIES.forEach { company ->
+                                        DropdownMenuItem(
+                                            text = { Text(company, color = TextWhite) },
+                                            onClick = {
+                                                tempCompany = company
+                                                expandedGrading = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

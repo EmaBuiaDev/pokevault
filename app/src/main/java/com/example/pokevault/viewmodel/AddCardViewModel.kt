@@ -93,6 +93,22 @@ class AddCardViewModel : ViewModel() {
             return
         }
 
+        // Validazione gradazione
+        if (uiState.isGraded) {
+            if (uiState.grade.isBlank()) {
+                uiState = uiState.copy(errorMessage = "Inserisci il voto della gradazione")
+                return
+            }
+            if (uiState.grade.toFloatOrNull() == null) {
+                uiState = uiState.copy(errorMessage = "Inserisci un voto valido (es. 10 o 9.5)")
+                return
+            }
+            if (uiState.gradingCompany.isBlank()) {
+                uiState = uiState.copy(errorMessage = "Seleziona un'azienda di grading")
+                return
+            }
+        }
+
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true, errorMessage = null)
 
