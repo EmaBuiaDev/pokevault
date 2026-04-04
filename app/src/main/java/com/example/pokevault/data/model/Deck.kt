@@ -10,7 +10,8 @@ data class Deck(
     val mainTypes: List<String> = emptyList(),
     val averageHp: Double = 0.0,
     val totalCards: Int = 0,
-    val recommendedEnergy: List<String> = emptyList()
+    val recommendedEnergy: List<String> = emptyList(),
+    val coverImageUrl: String = ""
 )
 
 data class DeckAnalysis(

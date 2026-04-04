@@ -27,10 +27,14 @@ class DeckLabViewModel : ViewModel() {
     var isSaving by mutableStateOf(false)
         private set
 
-    // New Deck State
+    // New/Edit Deck State
+    var editingDeckId by mutableStateOf<String?>(null)
     var newDeckName by mutableStateOf("")
     var selectedCardsIds by mutableStateOf<Set<String>>(emptySet())
+    var coverImageUrl by mutableStateOf("")
     var currentAnalysis by mutableStateOf(DeckAnalysis())
+    var validationError by mutableStateOf<String?>(null)
+        private set
 
     init {
         loadDecks()
@@ -54,11 +58,35 @@ class DeckLabViewModel : ViewModel() {
     }
 
     fun toggleCardSelection(cardId: String) {
-        selectedCardsIds = if (selectedCardsIds.contains(cardId)) {
-            selectedCardsIds - cardId
+        val card = ownedCards.find { it.id == cardId } ?: return
+        
+        if (!selectedCardsIds.contains(cardId)) {
+            // Rule: Max 60 cards
+            if (selectedCardsIds.size >= 60) {
+                validationError = "Limite massimo di 60 carte raggiunto."
+                return
+            }
+            
+            // Rule: Max 4 cards with same name (unless Energy)
+            if (!card.supertype.equals("Energy", ignoreCase = true)) {
+                val sameNameCount = ownedCards.filter { it.id in selectedCardsIds && it.name == card.name }.size
+                if (sameNameCount >= 4) {
+                    validationError = "Massimo 4 copie di ${card.name}."
+                    return
+                }
+            }
+            
+            selectedCardsIds = selectedCardsIds + cardId
+            if (coverImageUrl.isEmpty()) coverImageUrl = card.imageUrl
         } else {
-            selectedCardsIds + cardId
+            selectedCardsIds = selectedCardsIds - cardId
+            if (coverImageUrl == card.imageUrl) {
+                val nextCardId = selectedCardsIds.firstOrNull()
+                coverImageUrl = ownedCards.find { it.id == nextCardId }?.imageUrl ?: ""
+            }
         }
+        
+        validationError = null
         analyzeDeck()
     }
 
@@ -75,18 +103,17 @@ class DeckLabViewModel : ViewModel() {
             .eachCount()
 
         val supertypesCount = selectedCards.groupingBy { it.supertype }.eachCount()
-
-        val avgHp = selectedCards.map { it.hp }.average()
+        val avgHp = if (selectedCards.any { it.hp > 0 }) selectedCards.filter { it.hp > 0 }.map { it.hp }.average() else 0.0
         
         val mainTypes = typesCount.entries.sortedByDescending { it.value }.take(2).map { it.key }
         val recommendedEnergy = mainTypes.map { "$it Energy" }
         
         val synergies = mutableListOf<String>()
         if (selectedCards.any { it.name.contains("Mewtwo", true) } && selectedCards.any { it.name.contains("Mew", true) }) {
-            synergies.add("Duo Psichico Leggendario")
+            synergies.add("Duo Mew & Mewtwo")
         }
-        if (typesCount.size == 1 && selectedCards.size > 5) {
-            synergies.add("Mono-tipo: Massima coerenza")
+        if (typesCount.size == 1 && selectedCards.size > 10) {
+            synergies.add("Specialista Mono-Tipo")
         }
 
         currentAnalysis = DeckAnalysis(
@@ -99,19 +126,36 @@ class DeckLabViewModel : ViewModel() {
         )
     }
 
+    fun prepareEdit(deck: Deck) {
+        editingDeckId = deck.id
+        newDeckName = deck.name
+        selectedCardsIds = deck.cards.toSet()
+        coverImageUrl = deck.coverImageUrl
+        analyzeDeck()
+    }
+
     fun saveDeck(onSuccess: () -> Unit) {
-        if (newDeckName.isBlank()) return
+        if (newDeckName.isBlank()) {
+            validationError = "Inserisci un nome per il deck."
+            return
+        }
+        if (selectedCardsIds.isEmpty()) {
+            validationError = "Seleziona almeno una carta."
+            return
+        }
         
         isSaving = true
         val mainTypes = currentAnalysis.typesCount.entries.sortedByDescending { it.value }.take(2).map { it.key }
         
         val deck = Deck(
+            id = editingDeckId ?: "",
             name = newDeckName,
             cards = selectedCardsIds.toList(),
             mainTypes = mainTypes,
             averageHp = currentAnalysis.averageHp,
             totalCards = selectedCardsIds.size,
-            recommendedEnergy = currentAnalysis.recommendedEnergy
+            recommendedEnergy = currentAnalysis.recommendedEnergy,
+            coverImageUrl = coverImageUrl
         )
 
         viewModelScope.launch {
@@ -121,6 +165,7 @@ class DeckLabViewModel : ViewModel() {
                 onSuccess()
             }.onFailure {
                 isSaving = false
+                validationError = "Errore database: ${it.localizedMessage}"
             }
         }
     }
@@ -132,9 +177,12 @@ class DeckLabViewModel : ViewModel() {
     }
 
     fun resetNewDeckState() {
+        editingDeckId = null
         newDeckName = ""
         selectedCardsIds = emptySet()
+        coverImageUrl = ""
         currentAnalysis = DeckAnalysis()
+        validationError = null
     }
     
     fun duplicateDeck(deck: Deck) {
@@ -142,5 +190,13 @@ class DeckLabViewModel : ViewModel() {
             val duplicated = deck.copy(id = "", name = "${deck.name} (Copia)")
             repository.saveDeck(duplicated)
         }
+    }
+
+    fun clearError() {
+        validationError = null
+    }
+
+    fun selectCoverCard(url: String) {
+        coverImageUrl = url
     }
 }

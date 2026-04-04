@@ -1,6 +1,7 @@
 package com.example.pokevault.ui.deck
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.pokevault.data.model.Deck
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.ui.theme.*
@@ -103,7 +106,7 @@ fun DeckLabScreen(
                     contentPadding = PaddingValues(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(viewModel.decks) { deck ->
+                    items(viewModel.decks, key = { it.id }) { deck ->
                         var isExpanded by remember { mutableStateOf(false) }
                         
                         DeckItem(
@@ -113,7 +116,8 @@ fun DeckLabScreen(
                             onDelete = { viewModel.deleteDeck(deck.id) },
                             onDuplicate = { viewModel.duplicateDeck(deck) },
                             onEdit = { 
-                                // Setup VM for editing and show sheet
+                                viewModel.prepareEdit(deck)
+                                showSheet = true
                             },
                             onCardClick = onCardClick,
                             allOwnedCards = viewModel.ownedCards
@@ -125,13 +129,17 @@ fun DeckLabScreen(
 
         if (showSheet) {
             ModalBottomSheet(
-                onDismissRequest = { showSheet = false },
+                onDismissRequest = { 
+                    showSheet = false
+                    viewModel.resetNewDeckState()
+                },
                 sheetState = sheetState,
                 containerColor = DarkSurface,
                 dragHandle = { BottomSheetDefaults.DragHandle(color = TextMuted) }
             ) {
                 NewDeckBottomSheetContent(
                     viewModel = viewModel,
+                    isEditing = viewModel.editingDeckId != null,
                     onSave = {
                         viewModel.saveDeck {
                             showSheet = false
@@ -154,10 +162,12 @@ fun DeckItem(
     onCardClick: (String) -> Unit,
     allOwnedCards: List<PokemonCard>
 ) {
-    val deckCards = allOwnedCards.filter { it.id in deck.cards }
-    val pokemonCount = deckCards.count { it.supertype.equals("Pokémon", ignoreCase = true) }
-    val trainerCount = deckCards.count { it.supertype.equals("Trainer", ignoreCase = true) }
-    val energyCount = deckCards.count { it.supertype.equals("Energy", ignoreCase = true) }
+    val deckCards = remember(deck.cards, allOwnedCards) {
+        allOwnedCards.filter { it.id in deck.cards }
+    }
+    val pokemonCount = remember(deckCards) { deckCards.count { it.supertype.equals("Pokémon", ignoreCase = true) } }
+    val trainerCount = remember(deckCards) { deckCards.count { it.supertype.equals("Trainer", ignoreCase = true) } }
+    val energyCount = remember(deckCards) { deckCards.count { it.supertype.equals("Energy", ignoreCase = true) } }
 
     Card(
         modifier = Modifier
@@ -170,38 +180,61 @@ fun DeckItem(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = deck.name,
                         color = TextWhite,
                         fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    
-                    // Sezione Tipologie richieste
                     Text(
-                        text = "$pokemonCount Pokémon, $trainerCount Allenatore, $energyCount Energia",
+                        text = "$pokemonCount Pokémon, $trainerCount Trainer, $energyCount Energy",
                         color = BlueCard,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     )
-                    
-                    Spacer(modifier = Modifier.height(2.dp))
-                    
-                    Text(
-                        text = "${deck.totalCards} carte totali",
-                        color = TextMuted,
-                        fontSize = 12.sp
-                    )
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    deck.mainTypes.forEach { type ->
+                    deck.mainTypes.take(2).forEach { type ->
                         TypeBadge(type)
                     }
+                }
+            }
+
+            // Area "Vetrina" sotto il riepilogo
+            if (deck.coverImageUrl.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(DarkBackground)
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(deck.coverImageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.2f))
+                                )
+                            )
+                    )
                 }
             }
 
@@ -210,7 +243,7 @@ fun DeckItem(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     Text(
-                        text = "Carte nel deck",
+                        text = "Carte nel deck (${deckCards.size})",
                         color = LavenderCard,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -219,23 +252,41 @@ fun DeckItem(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp)
                     ) {
-                        items(deckCards) { card ->
+                        items(deckCards.take(25)) { card ->
                             AsyncImage(
-                                model = card.imageUrl,
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(card.imageUrl)
+                                    .crossfade(true)
+                                    .size(200, 280)
+                                    .build(),
                                 contentDescription = card.name,
-                                contentScale = ContentScale.Crop,
+                                contentScale = ContentScale.Fit,
                                 modifier = Modifier
                                     .width(60.dp)
                                     .aspectRatio(0.71f)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(6.dp))
                                     .clickable { onCardClick(card.id) }
                             )
                         }
+                        if (deckCards.size > 25) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .size(60.dp, 84.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(DarkBackground),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = "+${deckCards.size - 25}", color = TextMuted, fontSize = 12.sp)
+                                }
+                            }
+                        }
                     }
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Divider(color = DarkBackground.copy(alpha = 0.5f), thickness = 1.dp, modifier = Modifier.padding(vertical = 12.dp))
                     
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -243,13 +294,13 @@ fun DeckItem(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = onEdit) {
-                            Icon(Icons.Default.Edit, contentDescription = "Modifica", tint = BlueCard, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Edit, contentDescription = "Modifica", tint = BlueCard, modifier = Modifier.size(22.dp))
                         }
                         IconButton(onClick = onDuplicate) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Duplica", tint = GreenCard, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Duplica", tint = GreenCard, modifier = Modifier.size(22.dp))
                         }
                         IconButton(onClick = onDelete) {
-                            Icon(Icons.Default.DeleteOutline, contentDescription = "Elimina", tint = RedCard, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.DeleteOutline, contentDescription = "Elimina", tint = RedCard, modifier = Modifier.size(22.dp))
                         }
                     }
                 }
@@ -276,12 +327,12 @@ fun TypeBadge(type: String) {
     }
     Box(
         modifier = Modifier
-            .size(28.dp)
+            .size(24.dp)
             .clip(CircleShape)
             .background(DarkBackground),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = emoji, fontSize = 14.sp)
+        Text(text = emoji, fontSize = 12.sp)
     }
 }
 
@@ -324,94 +375,185 @@ fun EmptyDecksPlaceholder() {
 @Composable
 fun NewDeckBottomSheetContent(
     viewModel: DeckLabViewModel,
+    isEditing: Boolean = false,
     onSave: () -> Unit
 ) {
+    var showCoverPicker by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(0.9f)
+            .fillMaxHeight(0.92f)
             .padding(horizontal = 20.dp)
             .navigationBarsPadding()
     ) {
-        Text(
-            text = "Nuovo Deck",
-            color = TextWhite,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold
-        )
+        // Header Area - Pulita senza sfondi invasivi
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(DarkCard)
+                .padding(16.dp)
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isEditing) "Modifica Deck" else "Nuovo Deck",
+                        color = TextWhite,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = "${viewModel.selectedCardsIds.size} / 60",
+                            color = TextWhite,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
 
-        Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-        // 1) Nome del deck
-        OutlinedTextField(
-            value = viewModel.newDeckName,
-            onValueChange = { viewModel.newDeckName = it },
-            placeholder = { Text("Nome del deck", color = TextMuted) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedBorderColor = BlueCard,
-                unfocusedBorderColor = DarkCard,
-                cursorColor = BlueCard,
-                containerColor = DarkCard
-            )
-        )
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    // Anteprima copertina cliccabile
+                    Box(
+                        modifier = Modifier
+                            .size(45.dp, 63.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(DarkBackground)
+                            .border(BorderStroke(1.dp, BlueCard.copy(alpha = 0.5f)), RoundedCornerShape(6.dp))
+                            .clickable { if(viewModel.selectedCardsIds.isNotEmpty()) showCoverPicker = !showCoverPicker },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (viewModel.coverImageUrl.isNotEmpty()) {
+                            AsyncImage(
+                                model = viewModel.coverImageUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = TextMuted, modifier = Modifier.size(20.dp))
+                        }
+                    }
 
-        Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
-        // 2) Selezione carte
-        Text(
-            text = "Seleziona le tue carte (${viewModel.selectedCardsIds.size})",
-            color = TextWhite,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(12.dp))
+                    TextField(
+                        value = viewModel.newDeckName,
+                        onValueChange = { viewModel.newDeckName = it },
+                        placeholder = { Text("Nome deck...", color = TextMuted) },
+                        modifier = Modifier.weight(1f),
+                        colors = TextFieldDefaults.textFieldColors(
+                            containerColor = Color.Transparent,
+                            focusedIndicatorColor = BlueCard,
+                            cursorColor = BlueCard,
+                            focusedTextColor = TextWhite,
+                            unfocusedTextColor = TextWhite
+                        ),
+                        singleLine = true
+                    )
+                }
+            }
+        }
+
+        // Integrated Cover Picker
+        if (showCoverPicker && viewModel.selectedCardsIds.isNotEmpty()) {
+            Column(modifier = Modifier.padding(vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = "Scegli Copertina", color = LavenderCard, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(onClick = { showCoverPicker = false }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val selectedCards = viewModel.ownedCards.filter { it.id in viewModel.selectedCardsIds }.distinctBy { it.imageUrl }
+                    items(selectedCards) { card ->
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(card.imageUrl)
+                                .size(150, 210)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .size(50.dp, 70.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .border(
+                                    BorderStroke(if (viewModel.coverImageUrl == card.imageUrl) 2.dp else 0.dp, BlueCard),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .clickable { 
+                                    viewModel.selectCoverCard(card.imageUrl)
+                                    showCoverPicker = false
+                                }
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Grid Collection
+        Text(text = "Tua Collezione", color = LavenderCard, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(8.dp))
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(viewModel.ownedCards) { card ->
-                val isSelected = viewModel.selectedCardsIds.contains(card.id)
+            items(viewModel.ownedCards, key = { it.id }) { card ->
                 CardSelectionItem(
                     card = card,
-                    isSelected = isSelected,
+                    isSelected = viewModel.selectedCardsIds.contains(card.id),
                     onClick = { viewModel.toggleCardSelection(card.id) }
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        if (viewModel.validationError != null) {
+            Text(text = viewModel.validationError!!, color = RedCard, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
+        }
 
-        // 3) Analisi intelligente
         if (viewModel.selectedCardsIds.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
             AnalysisSection(viewModel)
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
+        val canSave = viewModel.newDeckName.isNotBlank() && viewModel.selectedCardsIds.isNotEmpty()
         Button(
             onClick = onSave,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
+            modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
-            enabled = viewModel.newDeckName.isNotBlank() && viewModel.selectedCardsIds.isNotEmpty() && !viewModel.isSaving
+            colors = ButtonDefaults.buttonColors(containerColor = if (canSave) BlueCard else DarkCard),
+            enabled = canSave && !viewModel.isSaving
         ) {
             if (viewModel.isSaving) {
                 CircularProgressIndicator(color = TextWhite, modifier = Modifier.size(24.dp))
             } else {
-                Text("Salva Deck", fontWeight = FontWeight.Bold)
+                Text(text = if (isEditing) "Salva Modifiche" else "Salva Deck", fontWeight = FontWeight.Bold)
             }
         }
         
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -426,31 +568,26 @@ fun CardSelectionItem(
             .aspectRatio(0.71f)
             .clip(RoundedCornerShape(12.dp))
             .border(
-                width = if (isSelected) 3.dp else 0.dp,
-                color = if (isSelected) BlueCard else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
+                BorderStroke(if (isSelected) 3.dp else 0.dp, BlueCard),
+                RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
     ) {
         AsyncImage(
-            model = card.imageUrl,
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(card.imageUrl)
+                .size(250, 350)
+                .build(),
             contentDescription = card.name,
-            contentScale = ContentScale.Crop,
+            contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize()
         )
         if (isSelected) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(BlueCard.copy(alpha = 0.2f)),
+                modifier = Modifier.fillMaxSize().background(BlueCard.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.TopEnd
             ) {
-                Icon(
-                    Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = BlueCard,
-                    modifier = Modifier.padding(4.dp).size(20.dp)
-                )
+                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = BlueCard, modifier = Modifier.padding(6.dp).size(22.dp))
             }
         }
     }
@@ -464,55 +601,27 @@ fun AnalysisSection(viewModel: DeckLabViewModel) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(DarkCard)
-            .padding(16.dp)
+            .padding(14.dp)
     ) {
-        Text(
-            text = "Analisi Lab",
-            color = LavenderCard,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Analytics, contentDescription = null, tint = LavenderCard, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = "Analisi Lab", color = LavenderCard, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
+        
+        Spacer(modifier = Modifier.height(10.dp))
         
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             AnalysisInfoItem("Media HP", analysis.averageHp.toInt().toString())
             AnalysisInfoItem("Tipi", analysis.typesCount.size.toString())
-        }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        // Nuova visualizzazione suddivisione in analisi
-        val p = analysis.supertypesCount["Pokémon"] ?: 0
-        val t = analysis.supertypesCount["Trainer"] ?: 0
-        val e = analysis.supertypesCount["Energy"] ?: 0
-        Text(
-            text = "$p Pokémon, $t Allenatore, $e Energia",
-            color = TextWhite,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        if (analysis.recommendedEnergy.isNotEmpty()) {
-            Text(
-                text = "Energia consigliata: ${analysis.recommendedEnergy.joinToString(", ")}",
-                color = TextGray,
-                fontSize = 12.sp
-            )
-        }
-
-        if (analysis.synergies.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = YellowCard, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = analysis.synergies.first(),
-                    color = YellowCard,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
+            
+            val p = analysis.supertypesCount["Pokémon"] ?: 0
+            val t = analysis.supertypesCount["Trainer"] ?: 0
+            val e = analysis.supertypesCount["Energy"] ?: 0
+            
+            Column(horizontalAlignment = Alignment.End) {
+                Text(text = "Ripartizione", color = TextMuted, fontSize = 11.sp)
+                Text(text = "$p Pokémon / $t Trainer / $e Energy", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -522,6 +631,6 @@ fun AnalysisSection(viewModel: DeckLabViewModel) {
 fun AnalysisInfoItem(label: String, value: String) {
     Column {
         Text(text = label, color = TextMuted, fontSize = 11.sp)
-        Text(text = value, color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(text = value, color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }
