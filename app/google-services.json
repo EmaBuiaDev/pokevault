@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "533369901523-pouku1m5f7lau5daar20n6hb3v62955i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pokevault",
+            "certificate_hash": "4d7c3f828b332dca9e08223e0bfb42ceb45c4a43"
+          }
+        },
+        {
           "client_id": "533369901523-m2bt2p8644am5a9gmoh48c4lhgnb5v0j.apps.googleusercontent.com",
           "client_type": 3
         }
