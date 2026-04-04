@@ -16,7 +16,8 @@ import kotlinx.coroutines.launch
 data class SetCompletion(
     val setName: String,
     val ownedUnique: Int,
-    val totalCards: Int
+    val totalCards: Int,
+    val symbolUrl: String? = null
 ) {
     val percentage: Float get() = if (totalCards > 0) ownedUnique.toFloat() / totalCards else 0f
 }
@@ -69,7 +70,7 @@ class StatsViewModel : ViewModel() {
                             val uniqueOwned = setCards.map { it.apiCardId }.distinct().count { it.isNotBlank() }
                             val tcgSet = allSets.find { it.name == setName }
                             val totalInSet = tcgSet?.total ?: 0
-                            SetCompletion(setName, uniqueOwned, totalInSet)
+                            SetCompletion(setName, uniqueOwned, totalInSet, tcgSet?.images?.symbol)
                         }
                         .filter { it.totalCards > 0 }
                         .sortedByDescending { it.percentage }

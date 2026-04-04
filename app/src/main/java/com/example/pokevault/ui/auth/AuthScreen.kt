@@ -1,14 +1,13 @@
 package com.example.pokevault.ui.auth
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.pokevault.ui.theme.*
+import com.example.pokevault.util.AppLocale
 
 @Composable
 fun AuthScreen(
@@ -45,226 +46,306 @@ fun AuthScreen(
     var name by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
-    Column(
+    val mainGradient = Brush.verticalGradient(
+        listOf(DarkBackground, Color(0xFF16213E))
+    )
+
+    // Animazione per la Pokéball durante il caricamento
+    val infiniteTransition = rememberInfiniteTransition(label = "loading")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = -15f,
+        targetValue = 15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(150, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shake"
+    )
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
-            .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(mainGradient)
     ) {
-        Spacer(modifier = Modifier.height(60.dp))
-
-        // ── Logo e Titolo ──
-        Text(text = "🔴", fontSize = 64.sp)
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "PokeVault",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextWhite
-        )
-        Text(
-            text = "La tua collezione, sempre con te",
-            fontSize = 14.sp,
-            color = TextGray
-        )
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        // ── Toggle Login / Registrazione ──
-        Row(
+        // Decorazione Pokéball sfumata in alto a destra
+        Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(DarkCard)
-                .padding(4.dp)
-        ) {
-            AuthTabButton(
-                text = "Accedi",
-                isSelected = isLoginMode,
-                onClick = {
-                    isLoginMode = true
-                    onClearError()
-                }
-            )
-            AuthTabButton(
-                text = "Registrati",
-                isSelected = !isLoginMode,
-                onClick = {
-                    isLoginMode = false
-                    onClearError()
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // ── Campo Nome (solo registrazione) ──
-        AnimatedVisibility(
-            visible = !isLoginMode,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically()
-        ) {
-            Column {
-                AuthTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    placeholder = "Nome allenatore",
-                    leadingIcon = Icons.Default.Person,
-                    keyboardType = KeyboardType.Text,
-                    imeAction = ImeAction.Next
+                .size(300.dp)
+                .offset(x = 150.dp, y = (-100).dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        listOf(RedCard.copy(alpha = 0.15f), Color.Transparent)
+                    )
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-        }
-
-        // ── Campo Email ──
-        AuthTextField(
-            value = email,
-            onValueChange = { email = it },
-            placeholder = "Email",
-            leadingIcon = Icons.Default.Email,
-            keyboardType = KeyboardType.Email,
-            imeAction = ImeAction.Next
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        val scrollState = rememberScrollState()
 
-        // ── Campo Password ──
-        AuthTextField(
-            value = password,
-            onValueChange = { password = it },
-            placeholder = "Password",
-            leadingIcon = Icons.Default.Lock,
-            keyboardType = KeyboardType.Password,
-            imeAction = ImeAction.Done,
-            isPassword = true,
-            passwordVisible = passwordVisible,
-            onTogglePassword = { passwordVisible = !passwordVisible }
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(40.dp))
 
-        // ── Password dimenticata (solo login) ──
-        if (isLoginMode) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Password dimenticata?",
-                color = BlueCard,
-                fontSize = 13.sp,
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .clickable { onForgotPassword(email) }
-                    .padding(4.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // ── Messaggio errore ──
-        AnimatedVisibility(visible = errorMessage != null) {
+            // ── Logo Pokéball Stilizzato ──
             Box(
+                modifier = Modifier.graphicsLayer {
+                    if (isLoading) rotationZ = rotation
+                }
+            ) {
+                PokeballLogo()
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "PokeVault",
+                fontSize = 36.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = TextWhite,
+                letterSpacing = 1.sp
+            )
+            Text(
+                text = AppLocale.legendaryCollection,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = TextGray
+            )
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // ── Toggle Login / Registrazione ──
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(24.dp))
+                    .border(BorderStroke(1.dp, TextMuted.copy(alpha = 0.2f)), RoundedCornerShape(24.dp)),
+                color = DarkCard.copy(alpha = 0.6f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(4.dp)
+                ) {
+                    AuthTabButton(
+                        text = AppLocale.loginTab,
+                        isSelected = isLoginMode,
+                        onClick = {
+                            isLoginMode = true
+                            onClearError()
+                        }
+                    )
+                    AuthTabButton(
+                        text = AppLocale.registerTab,
+                        isSelected = !isLoginMode,
+                        onClick = {
+                            isLoginMode = false
+                            onClearError()
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // ── Form Card ──
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(RedCard.copy(alpha = 0.15f))
-                    .padding(12.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(DarkCard.copy(alpha = 0.4f))
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = errorMessage ?: "",
-                    color = RedCard,
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ── Bottone principale ──
-        Button(
-            onClick = {
-                if (isLoginMode) {
-                    onLogin(email, password)
-                } else {
-                    onRegister(email, password, name)
+                // Campo Nome (solo registrazione)
+                AnimatedVisibility(
+                    visible = !isLoginMode,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    AuthTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        placeholder = AppLocale.nameTrainer,
+                        leadingIcon = Icons.Default.CatchingPokemon,
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    )
                 }
-            },
-            enabled = !isLoading,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = BlueCard,
-                disabledContainerColor = BlueCard.copy(alpha = 0.5f)
-            )
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                    color = TextWhite,
-                    strokeWidth = 2.dp
+
+                // Campo Email
+                AuthTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    placeholder = AppLocale.emailPokemonCenter,
+                    leadingIcon = Icons.Default.Email,
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next
                 )
-            } else {
-                Text(
-                    text = if (isLoginMode) "Accedi" else "Crea account",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp
-                )
+
+                // Campo Password
+                Column {
+                    AuthTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        placeholder = AppLocale.passwordSecret,
+                        leadingIcon = Icons.Default.Lock,
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
+                        isPassword = true,
+                        passwordVisible = passwordVisible,
+                        onTogglePassword = { passwordVisible = !passwordVisible }
+                    )
+                    
+                    if (isLoginMode) {
+                        Text(
+                            text = AppLocale.forgotPassword,
+                            color = BlueCard,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .clickable { onForgotPassword(email) }
+                                .padding(top = 8.dp, end = 4.dp)
+                        )
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ── Messaggio errore ──
+            AnimatedVisibility(visible = errorMessage != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(RedCard.copy(alpha = 0.2f))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.ErrorOutline, null, tint = RedCard, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = errorMessage ?: "",
+                        color = RedCard,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── Bottone principale ──
+            Button(
+                onClick = {
+                    if (isLoginMode) {
+                        onLogin(email, password)
+                    } else {
+                        onRegister(email, password, name)
+                    }
+                },
+                enabled = !isLoading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isLoginMode) RedCard else BlueCard,
+                    disabledContainerColor = (if (isLoginMode) RedCard else BlueCard).copy(alpha = 0.5f)
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
+            ) {
+                if (isLoading) {
+                    Text(
+                        text = AppLocale.loadingAuth,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        letterSpacing = 1.sp
+                    )
+                } else {
+                    Text(
+                        text = if (isLoginMode) AppLocale.loginButton else AppLocale.registerButton,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        letterSpacing = 1.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // ── Social Login ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
+                Text(AppLocale.or, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            OutlinedButton(
+                onClick = onGoogleSignIn,
+                enabled = !isLoading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextWhite)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = null,
+                    tint = StarGold,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(AppLocale.googleSignInLabel, fontWeight = FontWeight.SemiBold)
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // ── Divider "oppure" ──
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            HorizontalDivider(
-                modifier = Modifier.weight(1f),
-                color = TextMuted.copy(alpha = 0.3f)
-            )
-            Text(
-                text = "  oppure  ",
-                color = TextMuted,
-                fontSize = 12.sp
-            )
-            HorizontalDivider(
-                modifier = Modifier.weight(1f),
-                color = TextMuted.copy(alpha = 0.3f)
-            )
+@Composable
+fun PokeballLogo() {
+    Box(
+        modifier = Modifier
+            .size(100.dp)
+            .clip(CircleShape)
+            .background(TextWhite)
+            .border(4.dp, Color(0xFF2D2D2D), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth().background(RedCard))
+            Box(modifier = Modifier.height(6.dp).fillMaxWidth().background(Color(0xFF2D2D2D)))
+            Box(modifier = Modifier.weight(1f).fillMaxWidth().background(TextWhite))
         }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // ── Bottone Google ──
-        OutlinedButton(
-            onClick = onGoogleSignIn,
-            enabled = !isLoading,
+        // Bottone centrale
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = TextWhite
-            ),
-            border = androidx.compose.foundation.BorderStroke(
-                width = 1.dp,
-                color = TextMuted.copy(alpha = 0.3f)
-            )
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF2D2D2D)),
+            contentAlignment = Alignment.Center
         ) {
-            Text(text = "🔵", fontSize = 18.sp)
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = "Continua con Google",
-                fontWeight = FontWeight.Medium,
-                fontSize = 15.sp
+            Box(
+                modifier = Modifier
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(TextWhite)
+                    .border(2.dp, Color(0xFFBCBCBC), CircleShape)
             )
         }
-
-        Spacer(modifier = Modifier.height(40.dp))
     }
 }
 
@@ -274,18 +355,21 @@ private fun AuthTabButton(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    Text(
-        text = text,
-        color = if (isSelected) TextWhite else TextMuted,
-        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-        fontSize = 14.sp,
-        textAlign = TextAlign.Center,
+    Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isSelected) RedCard else Color.Transparent)
             .clickable(onClick = onClick)
-            .background(if (isSelected) BlueCard else Color.Transparent)
-            .padding(horizontal = 32.dp, vertical = 10.dp)
-    )
+            .padding(horizontal = 40.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = if (isSelected) TextWhite else TextGray,
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp
+        )
+    }
 }
 
 @Composable
@@ -300,42 +384,43 @@ private fun AuthTextField(
     passwordVisible: Boolean = false,
     onTogglePassword: (() -> Unit)? = null
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
-            .padding(horizontal = 16.dp, vertical = 16.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically
+    Column {
+        Text(
+            text = placeholder.uppercase(),
+            color = TextMuted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp,
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(DarkSurface)
+                .border(BorderStroke(1.dp, TextMuted.copy(alpha = 0.1f)), RoundedCornerShape(16.dp))
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
-            Icon(
-                imageVector = leadingIcon,
-                contentDescription = null,
-                tint = TextMuted,
-                modifier = Modifier.size(20.dp)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = if (value.isNotEmpty()) StarGold else TextMuted,
+                    modifier = Modifier.size(20.dp)
+                )
 
-            Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
-            Box(modifier = Modifier.weight(1f)) {
-                if (value.isEmpty()) {
-                    Text(
-                        text = placeholder,
-                        color = TextMuted,
-                        fontSize = 14.sp
-                    )
-                }
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
                     textStyle = androidx.compose.ui.text.TextStyle(
                         color = TextWhite,
-                        fontSize = 14.sp
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
                     ),
                     singleLine = true,
-                    cursorBrush = SolidColor(BlueCard),
+                    cursorBrush = SolidColor(StarGold),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = keyboardType,
                         imeAction = imeAction
@@ -345,22 +430,20 @@ private fun AuthTextField(
                     } else {
                         VisualTransformation.None
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.weight(1f)
                 )
-            }
 
-            // Icona mostra/nascondi password
-            if (isPassword && onTogglePassword != null) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = if (passwordVisible) Icons.Default.VisibilityOff
-                                  else Icons.Default.Visibility,
-                    contentDescription = "Toggle password",
-                    tint = TextMuted,
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clickable { onTogglePassword() }
-                )
+                if (isPassword && onTogglePassword != null) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.VisibilityOff
+                                      else Icons.Default.Visibility,
+                        contentDescription = "Toggle password",
+                        tint = TextMuted,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clickable { onTogglePassword() }
+                    )
+                }
             }
         }
     }

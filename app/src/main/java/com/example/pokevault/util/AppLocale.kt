@@ -1,7 +1,6 @@
 package com.example.pokevault.util
 
 import android.content.Context
-import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,9 +11,9 @@ import androidx.compose.runtime.setValue
  */
 object AppLocale {
 
-    enum class Language(val code: String, val displayName: String) {
-        IT("it", "Italiano"),
-        EN("en", "English")
+    enum class Language(val code: String) {
+        IT("it"),
+        EN("en")
     }
 
     var current by mutableStateOf(Language.IT)
@@ -188,9 +187,9 @@ object AppLocale {
     val editCard: String get() = if (isItalian) "Modifica carta" else "Edit Card"
     val myCards: String get() = if (isItalian) "Le mie carte" else "My Cards"
     val cards: String get() = if (isItalian) "Carte" else "Cards"
-    val unique: String get() = if (isItalian) "Uniche" else "Unique"
+    val uniqueOwned: String get() = if (isItalian) "Uniche possedute" else "Unique owned"
     val value: String get() = if (isItalian) "Valore" else "Value"
-    val set: String get() = if (isItalian) "Set" else "Set"
+    val set: String get() = "Set"
     val rarity: String get() = if (isItalian) "Rarità" else "Rarity"
     val type: String get() = if (isItalian) "Tipo" else "Type"
     val condition: String get() = if (isItalian) "Condizione" else "Condition"
@@ -204,4 +203,19 @@ object AppLocale {
     val noResults: String get() = if (isItalian) "Nessun risultato trovato" else "No results found"
     val unknown: String get() = if (isItalian) "Sconosciuto" else "Unknown"
     val other: String get() = if (isItalian) "Altro" else "Other"
+
+    // Auth
+    val welcomeTrainer: String get() = if (isItalian) "Benvenuto, Allenatore!" else "Welcome, Trainer!"
+    val legendaryCollection: String get() = if (isItalian) "La tua collezione leggendaria" else "Your legendary collection"
+    val emailPokemonCenter: String get() = if (isItalian) "Email Centro Pokémon" else "Pokémon Center Email"
+    val passwordSecret: String get() = if (isItalian) "Password Segreta" else "Secret Password"
+    val nameTrainer: String get() = if (isItalian) "Nome Allenatore" else "Trainer Name"
+    val loginButton: String get() = if (isItalian) "INIZIA L'AVVENTURA" else "START ADVENTURE"
+    val registerButton: String get() = if (isItalian) "CREA PROFILO" else "CREATE PROFILE"
+    val forgotPassword: String get() = if (isItalian) "Password dimenticata?" else "Forgot password?"
+    val loadingAuth: String get() = if (isItalian) "CATTURANDO SESSIONE..." else "CATCHING SESSION..."
+    val googleSignInLabel: String get() = if (isItalian) "Continua con Google" else "Continue with Google"
+    val loginTab: String get() = if (isItalian) "Accedi" else "Login"
+    val registerTab: String get() = if (isItalian) "Unisciti" else "Join"
+    val or: String get() = if (isItalian) " oppure " else " or "
 }

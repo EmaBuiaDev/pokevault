@@ -22,6 +22,12 @@ class AuthViewModel : ViewModel() {
     var uiState by mutableStateOf(AuthUiState())
         private set
 
+    private val validProviders = listOf(
+        "gmail.com", "outlook.com", "hotmail.it", "hotmail.com", 
+        "yahoo.com", "yahoo.it", "icloud.com", "libero.it", "virgilio.it", 
+        "live.it", "fastwebnet.it", "tiscali.it", "alice.it", "tim.it", "poste.it"
+    )
+
     init {
         // Controlla se utente già loggato
         if (authManager.isLoggedIn) {
@@ -32,9 +38,22 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    private fun isValidEmail(email: String): Boolean {
+        val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$".toRegex()
+        if (!email.matches(emailRegex)) return false
+        
+        val domain = email.substringAfterLast("@").lowercase()
+        return validProviders.any { domain == it || domain.endsWith(".$it") }
+    }
+
     fun login(email: String, password: String) {
         if (email.isBlank() || password.isBlank()) {
             uiState = uiState.copy(errorMessage = "Compila tutti i campi")
+            return
+        }
+        
+        if (!isValidEmail(email)) {
+            uiState = uiState.copy(errorMessage = "Inserisci un'email valida (es. Gmail, Outlook, Libero)")
             return
         }
 
@@ -63,6 +82,12 @@ class AuthViewModel : ViewModel() {
             uiState = uiState.copy(errorMessage = "Compila tutti i campi")
             return
         }
+        
+        if (!isValidEmail(email)) {
+            uiState = uiState.copy(errorMessage = "Provider email non supportato o non valido")
+            return
+        }
+
         if (password.length < 6) {
             uiState = uiState.copy(errorMessage = "La password deve avere almeno 6 caratteri")
             return
