@@ -1,5 +1,6 @@
 package com.example.pokevault.viewmodel
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -36,6 +37,18 @@ class DeckLabViewModel : ViewModel() {
     var validationError by mutableStateOf<String?>(null)
         private set
 
+    // Optimized map for quick lookups during UI rendering
+    private val cardIdToKeyMap by derivedStateOf {
+        ownedCards.associate { it.id to getCardKey(it) }
+    }
+
+    // Counts of each card key currently in the deck
+    private val deckQuantitiesByKey by derivedStateOf {
+        selectedCardsIds.mapNotNull { cardIdToKeyMap[it] }
+            .groupingBy { it }
+            .eachCount()
+    }
+
     init {
         loadDecks()
         loadOwnedCards()
@@ -71,9 +84,7 @@ class DeckLabViewModel : ViewModel() {
         card.apiCardId.ifEmpty { "${card.name}-${card.set}-${card.cardNumber}-${card.variant}" }
 
     fun getQuantityInDeck(card: PokemonCard): Int {
-        val key = getCardKey(card)
-        val cardIdToKey = ownedCards.associate { it.id to getCardKey(it) }
-        return selectedCardsIds.count { cardIdToKey[it] == key }
+        return deckQuantitiesByKey[getCardKey(card)] ?: 0
     }
 
     fun getTotalOwnedQuantity(card: PokemonCard): Int {
@@ -112,7 +123,6 @@ class DeckLabViewModel : ViewModel() {
             }
         }
 
-        // Find which specific ID to add (from documents of the same card type)
         val availableId = ownedCards
             .filter { getCardKey(it) == key }
             .firstOrNull { doc ->
@@ -130,8 +140,8 @@ class DeckLabViewModel : ViewModel() {
 
     fun removeCardFromDeck(card: PokemonCard) {
         val key = getCardKey(card)
-        val idToRemove = selectedCardsIds.find { id ->
-            ownedCards.find { it.id == id }?.let { getCardKey(it) == key } ?: false
+        val idToRemove = selectedCardsIds.findLast { id ->
+            cardIdToKeyMap[id] == key
         }
         
         if (idToRemove != null) {
@@ -171,28 +181,18 @@ class DeckLabViewModel : ViewModel() {
 
         val avgHp = if (selectedCards.any { it.hp > 0 }) selectedCards.filter { it.hp > 0 }.map { it.hp }.average() else 0.0
         
-        val mainTypes = typesCount.entries.sortedByDescending { it.value }.take(2).map { it.key }
-        val recommendedEnergy = mainTypes.map { "$it Energy" }
-        
-        val synergies = mutableListOf<String>()
-        if (selectedCards.any { it.name.contains("Mewtwo", true) } && selectedCards.any { it.name.contains("Mew", true) }) {
-            synergies.add("Duo Mew & Mewtwo")
-        }
-        if (typesCount.size == 1 && selectedCards.size > 10) {
-            synergies.add("Specialista Mono-Tipo")
-        }
-
         currentAnalysis = DeckAnalysis(
             typesCount = typesCount,
             averageHp = avgHp,
-            recommendedEnergy = recommendedEnergy,
-            synergies = synergies,
+            recommendedEnergy = emptyList(),
+            synergies = emptyList(),
             commonWeaknesses = listOf("Variabile"),
             supertypesCount = supertypesCount
         )
     }
 
     fun prepareEdit(deck: Deck) {
+        resetNewDeckState()
         editingDeckId = deck.id
         newDeckName = deck.name
         selectedCardsIds = deck.cards

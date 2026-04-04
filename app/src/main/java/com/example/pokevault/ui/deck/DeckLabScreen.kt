@@ -2,9 +2,11 @@ package com.example.pokevault.ui.deck
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -171,24 +174,18 @@ fun DeckLabScreen(
     }
 }
 
-// Funzione helper per classificare le carte in modo robusto
 private fun classifyCard(card: PokemonCard): String {
     val s = card.supertype.lowercase()
     val n = card.name.lowercase()
     val sub = card.subtypes.map { it.lowercase() }
     val hasHp = card.hp > 0
 
-    // 1. Energia ha la priorità assoluta
     if (s.contains("energy") || sub.contains("energy") || n.contains("energy") || n.contains("energia")) {
         return "Energia"
     }
-
-    // 2. Trainer (Incluso Aiuto/Supporter, Strumenti, Stadi, etc)
     if (s.contains("trainer") || sub.contains("item") || sub.contains("stadium") || sub.contains("supporter") || s.contains("aiuto") || !hasHp) {
         return "Trainer"
     }
-
-    // 3. Se ha HP e non è altro, è un Pokémon
     return "Pokémon"
 }
 
@@ -198,7 +195,6 @@ fun DeckItem(
     onClick: () -> Unit,
     allOwnedCards: List<PokemonCard>
 ) {
-    // Conteggio basato su deck.cards (che contiene gli ID ripetuti)
     val cardCounts = remember(deck.cards) { deck.cards.groupingBy { it }.eachCount() }
     val uniqueDeckCards = remember(deck.cards, allOwnedCards) {
         allOwnedCards.filter { it.id in cardCounts.keys }
@@ -302,21 +298,17 @@ fun DeckDetailView(
     onDelete: () -> Unit,
     onDuplicate: () -> Unit
 ) {
-    // Helper function per coerenza con il ViewModel
     fun getCardKey(card: PokemonCard): String =
         card.apiCardId.ifEmpty { "${card.name}-${card.set}-${card.cardNumber}-${card.variant}" }
 
-    // 1. Mappa ID -> Card per recuperare i dati completi
     val idToCard = remember(allOwnedCards) { allOwnedCards.associateBy { it.id } }
     
-    // 2. Raggruppa le carte per identità visiva (Key) invece che per ID documento
     val groupedCards = remember(deck.cards, idToCard) {
         deck.cards.mapNotNull { idToCard[it] }
             .groupBy { getCardKey(it) }
             .map { (_, instances) -> instances.first() to instances.size }
     }
     
-    // 3. Categorizza le carte raggruppate
     val cardsByCategory = remember(groupedCards) {
         listOf("Pokémon", "Trainer", "Energia").map { cat ->
             val filtered = groupedCards.filter { (card, _) ->
@@ -471,7 +463,6 @@ fun DeckDetailView(
                                             .clip(RoundedCornerShape(8.dp))
                                             .clickable { onCardClick(card.id) }
                                     )
-                                    // Badge Quantità visibile se > 1
                                     if (quantity > 1) {
                                         Surface(
                                             color = Color.Black.copy(alpha = 0.7f),
@@ -717,7 +708,6 @@ fun NewDeckBottomSheetContent(
 
         Spacer(modifier = Modifier.height(12.dp))
         
-        // Tab Row per filtraggio collezione
         SecondaryTabRow(
             selectedTabIndex = selectedTabIndex,
             containerColor = Color.Transparent,
@@ -756,6 +746,7 @@ fun NewDeckBottomSheetContent(
                     card = card,
                     inDeckCount = inDeckCount,
                     totalOwned = totalOwned,
+                    isEditable = true,
                     onAdd = { viewModel.addCardToDeck(card) },
                     onRemove = { viewModel.removeCardFromDeck(card) }
                 )
@@ -791,26 +782,34 @@ fun NewDeckBottomSheetContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CardSelectionItem(
     card: PokemonCard,
     inDeckCount: Int,
     totalOwned: Int,
-    onAdd: () -> Unit,
-    onRemove: () -> Unit
+    isEditable: Boolean = false,
+    onAdd: () -> Unit = {},
+    onRemove: () -> Unit = {}
 ) {
+    val canAddMore = totalOwned > inDeckCount
+
     Box(
         modifier = Modifier
             .aspectRatio(0.71f)
             .clip(RoundedCornerShape(8.dp))
             .border(
                 BorderStroke(
-                    if (inDeckCount > 0) 2.dp else 1.dp, 
-                    if (inDeckCount > 0) BlueCard else Color.White.copy(alpha = 0.1f)
+                    if (inDeckCount > 0 && isEditable) 2.dp else 1.dp, 
+                    if (inDeckCount > 0 && isEditable) BlueCard else Color.White.copy(alpha = 0.1f)
                 ),
                 RoundedCornerShape(8.dp)
             )
-            .clickable(onClick = onAdd)
+            .combinedClickable(
+                enabled = isEditable,
+                onClick = onAdd,
+                onLongClick = { if(inDeckCount > 0) onRemove() }
+            )
     ) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
@@ -819,46 +818,37 @@ fun CardSelectionItem(
                 .build(),
             contentDescription = card.name,
             contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(if (isEditable && !canAddMore && inDeckCount == 0) 0.5f else 1f)
         )
         
-        if (inDeckCount > 0) {
-            Box(
+        if (isEditable && !canAddMore) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+        }
+
+        if (inDeckCount > 0 && isEditable) {
+            Surface(
+                color = BlueCard,
+                shape = CircleShape,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f)),
-                contentAlignment = Alignment.Center
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(20.dp),
+                shadowElevation = 4.dp
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    IconButton(
-                        onClick = onRemove,
-                        modifier = Modifier.size(24.dp).background(DarkCard, CircleShape)
-                    ) {
-                        Icon(Icons.Default.Remove, contentDescription = null, tint = TextWhite, modifier = Modifier.size(14.dp))
-                    }
-                    
+                Box(contentAlignment = Alignment.Center) {
                     Text(
                         text = "$inDeckCount",
-                        color = TextWhite,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black
                     )
-                    
-                    IconButton(
-                        onClick = onAdd,
-                        enabled = inDeckCount < totalOwned,
-                        modifier = Modifier.size(24.dp).background(if (inDeckCount < totalOwned) BlueCard else TextMuted, CircleShape)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = TextWhite, modifier = Modifier.size(14.dp))
-                    }
                 }
             }
-        } else if (totalOwned > 1) {
+        }
+
+        if (totalOwned > 1 && inDeckCount < totalOwned) {
             Surface(
                 color = Color.Black.copy(alpha = 0.6f),
                 shape = RoundedCornerShape(bottomStart = 6.dp),
