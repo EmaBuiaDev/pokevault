@@ -175,6 +175,7 @@ object AppLocale {
     val mostValuable: String get() = if (isItalian) "Più Preziosa" else "Most Valuable"
     val graded: String get() = if (isItalian) "Graduate" else "Graded"
     val bySet: String get() = if (isItalian) "Per Set" else "By Set"
+    val setCompletion: String get() = if (isItalian) "Completamento Set" else "Set Completion"
     val byRarity: String get() = if (isItalian) "Per Rarità" else "By Rarity"
     val byType: String get() = if (isItalian) "Per Tipo" else "By Type"
     val statistics: String get() = if (isItalian) "Statistiche" else "Statistics"

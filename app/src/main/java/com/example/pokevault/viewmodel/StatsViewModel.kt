@@ -8,9 +8,18 @@ import androidx.lifecycle.viewModelScope
 import com.example.pokevault.data.firebase.CollectionStats
 import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.PokemonCard
+import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.util.AppLocale
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+
+data class SetCompletion(
+    val setName: String,
+    val ownedUnique: Int,
+    val totalCards: Int
+) {
+    val percentage: Float get() = if (totalCards > 0) ownedUnique.toFloat() / totalCards else 0f
+}
 
 data class StatsUiState(
     val stats: CollectionStats = CollectionStats(),
@@ -18,6 +27,7 @@ data class StatsUiState(
     val isLoading: Boolean = true,
     // Distribuzioni calcolate
     val cardsBySet: List<Pair<String, Int>> = emptyList(),
+    val setCompletions: List<SetCompletion> = emptyList(),
     val cardsByRarity: List<Pair<String, Int>> = emptyList(),
     val cardsByType: List<Pair<String, Int>> = emptyList(),
     val gradedCount: Int = 0,
@@ -27,6 +37,7 @@ data class StatsUiState(
 class StatsViewModel : ViewModel() {
 
     private val repository = FirestoreRepository()
+    private val tcgRepository = PokeTcgRepository()
 
     var uiState by mutableStateOf(StatsUiState())
         private set
@@ -48,6 +59,21 @@ class StatsViewModel : ViewModel() {
                         .entries.sortedByDescending { it.value }
                         .map { it.key to it.value }
 
+                    // Calcolo completamento set
+                    val setsResult = tcgRepository.getSets()
+                    val allSets = setsResult.getOrNull() ?: emptyList()
+                    
+                    val completions = cards.filter { it.set.isNotBlank() }
+                        .groupBy { it.set }
+                        .map { (setName, setCards) ->
+                            val uniqueOwned = setCards.map { it.apiCardId }.distinct().count { it.isNotBlank() }
+                            val tcgSet = allSets.find { it.name == setName }
+                            val totalInSet = tcgSet?.total ?: 0
+                            SetCompletion(setName, uniqueOwned, totalInSet)
+                        }
+                        .filter { it.totalCards > 0 }
+                        .sortedByDescending { it.percentage }
+
                     val byRarity = cards.groupBy {
                             AppLocale.translateRarity(it.rarity).ifBlank { AppLocale.unknown }
                         }
@@ -67,6 +93,7 @@ class StatsViewModel : ViewModel() {
                         cards = cards,
                         isLoading = false,
                         cardsBySet = bySet,
+                        setCompletions = completions,
                         cardsByRarity = byRarity,
                         cardsByType = byType,
                         gradedCount = cards.count { it.isGraded },

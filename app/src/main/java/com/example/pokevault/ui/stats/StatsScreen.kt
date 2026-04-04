@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.util.AppLocale
+import com.example.pokevault.viewmodel.SetCompletion
 import com.example.pokevault.viewmodel.StatsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,13 +78,13 @@ fun StatsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     StatCard(
                         label = AppLocale.totalValue,
-                        value = "\u20AC${"%.2f".format(state.stats.totalValue)}",
+                        value = "€${"%.2f".format(state.stats.totalValue)}",
                         color = GreenCard,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
                         label = AppLocale.averageValue,
-                        value = "\u20AC${"%.2f".format(state.averageValue)}",
+                        value = "€${"%.2f".format(state.averageValue)}",
                         color = YellowCard,
                         modifier = Modifier.weight(1f)
                     )
@@ -105,7 +106,15 @@ fun StatsScreen(
                     )
                 }
 
-                // ── Per Set ──
+                // ── Completamento Set ──
+                if (state.setCompletions.isNotEmpty()) {
+                    CompletionSection(
+                        title = AppLocale.setCompletion,
+                        items = state.setCompletions.take(10)
+                    )
+                }
+
+                // ── Distribuzione Per Set (Quantità) ──
                 if (state.cardsBySet.isNotEmpty()) {
                     DistributionSection(
                         title = AppLocale.bySet,
@@ -167,6 +176,80 @@ fun StatCard(
             color = TextMuted,
             fontSize = 12.sp
         )
+    }
+}
+
+@Composable
+fun CompletionSection(
+    title: String,
+    items: List<SetCompletion>
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(DarkCard)
+            .padding(16.dp)
+    ) {
+        Text(
+            text = title,
+            color = TextWhite,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        items.forEach { completion ->
+            CompletionBar(completion)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+fun CompletionBar(item: SetCompletion) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = item.setName,
+                color = TextGray,
+                fontSize = 13.sp,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${(item.percentage * 100).toInt()}% (${item.ownedUnique}/${item.totalCards})",
+                color = TextWhite,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(DarkSurface)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(item.percentage)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(
+                        when {
+                            item.percentage >= 1f -> GreenCard
+                            item.percentage >= 0.5f -> YellowCard
+                            else -> BlueCard
+                        }
+                    )
+            )
+        }
     }
 }
 
