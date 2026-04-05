@@ -47,7 +47,7 @@ class CollectionViewModel : ViewModel() {
                     // Ricalcola statistiche localmente per reattività immediata
                     val newStats = CollectionStats(
                         totalCards = cards.sumOf { it.quantity },
-                        uniqueCards = cards.size,
+                        uniqueCards = cards.map { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }.toSet().size,
                         totalValue = cards.sumOf { it.estimatedValue * it.quantity }
                     )
                     

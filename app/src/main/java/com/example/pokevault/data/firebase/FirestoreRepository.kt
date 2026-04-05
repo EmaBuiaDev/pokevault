@@ -51,6 +51,26 @@ class FirestoreRepository {
 
     suspend fun addCard(card: PokemonCard): Result<String> {
         return try {
+            // Se esiste gia' una carta con stesso apiCardId e variante, incrementa la quantita'
+            if (card.apiCardId.isNotBlank()) {
+                val existing = cardsCollection
+                    .whereEqualTo("apiCardId", card.apiCardId)
+                    .whereEqualTo("variant", card.variant)
+                    .get().await()
+
+                if (existing.documents.isNotEmpty()) {
+                    val doc = existing.documents.first()
+                    val currentQty = doc.getLong("quantity")?.toInt() ?: 1
+                    doc.reference.update(
+                        mapOf(
+                            "quantity" to (currentQty + card.quantity),
+                            "estimatedValue" to card.estimatedValue
+                        )
+                    ).await()
+                    return Result.success(doc.id)
+                }
+            }
+
             val data = hashMapOf(
                 "name" to card.name,
                 "imageUrl" to card.imageUrl,
@@ -125,10 +145,10 @@ class FirestoreRepository {
             val snapshot = cardsCollection.get().await()
             val cards = snapshot.documents.mapNotNull { it.toObject(PokemonCard::class.java) }
             val mostValuable = cards.maxByOrNull { it.estimatedValue }?.name ?: "-"
-            
+
             CollectionStats(
                 totalCards = cards.sumOf { it.quantity },
-                uniqueCards = cards.size,
+                uniqueCards = cards.map { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }.toSet().size,
                 totalValue = cards.sumOf { it.estimatedValue * it.quantity },
                 mostValuable = mostValuable
             )
