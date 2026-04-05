@@ -218,7 +218,7 @@ object AppLocale {
     val searchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
     val searchInSets: String get() = if (isItalian) "Cerca tra tutte le espansioni..." else "Search across all expansions..."
     val searchSetPlaceholder: String get() = if (isItalian) "Cerca un'espansione..." else "Search an expansion..."
-    val searchCardPlaceholder: String get() = if (isItalian) "Cerca per nome o numero (es. 001/217)..." else "Search by name or number (e.g. 001/217)..."
+    val searchCardPlaceholder: String get() = if (isItalian) "Cerca in italiano o inglese (es. Gabbia di Lotta)..." else "Search in Italian or English (e.g. Battle Cage)..."
     val loadingSets: String get() = if (isItalian) "Caricamento espansioni..." else "Loading expansions..."
     fun expansionsCount(count: Int) = if (isItalian) "$count espansioni" else "$count expansions"
     fun searchFor(query: String) = if (isItalian) "Cerco \"$query\"..." else "Searching for \"$query\"..."

@@ -9,7 +9,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.data.remote.TcgSet
+import com.example.pokevault.data.remote.TranslationService
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -107,13 +109,23 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         searchJob = viewModelScope.launch {
             delay(500)
             uiState = uiState.copy(isSearchingCards = true)
-            repository.searchCards(query)
-                .onSuccess { cards ->
-                    uiState = uiState.copy(searchedCards = cards, isSearchingCards = false)
-                }
-                .onFailure {
-                    uiState = uiState.copy(searchedCards = emptyList(), isSearchingCards = false)
-                }
+            val context = getApplication<Application>().applicationContext
+            TranslationService.loadCache(context)
+
+            // Search with original query + translate in parallel
+            val directDeferred = async { repository.searchCards(query) }
+            val translatedDeferred = async {
+                val translated = TranslationService.translateItToEn(query, context)
+                if (translated != null && translated.lowercase() != query.lowercase()) {
+                    repository.searchCards(translated)
+                } else null
+            }
+
+            val directCards = directDeferred.await().getOrDefault(emptyList())
+            val translatedCards = translatedDeferred.await()?.getOrDefault(emptyList()) ?: emptyList()
+
+            val allCards = (directCards + translatedCards).distinctBy { it.id }
+            uiState = uiState.copy(searchedCards = allCards, isSearchingCards = false)
         }
     }
 
