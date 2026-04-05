@@ -42,10 +42,9 @@ fun CardDetailBottomSheet(
 ) {
     val rarityInfo = getRarityInfo(card.rarity)
 
-    // Varianti disponibili dall'API
+    // Varianti disponibili (API + fallback per rarità)
     val availableVariants = remember(card) {
-        val priceKeys = card.tcgplayer?.prices?.keys ?: emptySet()
-        CardOptions.getVariantsFromApi(priceKeys)
+        CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity)
     }
 
     // State form
