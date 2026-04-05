@@ -6,6 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pokevault.data.firebase.FirestoreRepository
+import com.example.pokevault.data.model.CardOptions
+import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.data.remote.TcgSet
@@ -25,13 +28,16 @@ data class SetsUiState(
     val searchedCards: List<TcgCard> = emptyList(),
     val isSearchingCards: Boolean = false,
     val isLoading: Boolean = true,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isAddingCard: String? = null,
+    val successMessage: String? = null
 )
 
 // Usa AndroidViewModel per accedere al Context
 class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = PokeTcgRepository()
+    private val firestoreRepository = FirestoreRepository()
     private var searchJob: Job? = null
     private var setSearchJob: Job? = null
 
@@ -132,6 +138,33 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     fun clearCardSearch() {
         searchJob?.cancel()
         uiState = uiState.copy(cardSearchQuery = "", searchedCards = emptyList(), isSearchingCards = false)
+    }
+
+    fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {
+        viewModelScope.launch {
+            uiState = uiState.copy(isAddingCard = tcgCard.id)
+            val variantKey = CardOptions.getVariantApiKey(variant)
+            val price = tcgCard.tcgplayer?.prices?.get(variantKey)?.market
+                ?: tcgCard.cardmarket?.prices?.lowPrice
+                ?: tcgCard.cardmarket?.prices?.averageSellPrice ?: 0.0
+
+            val card = PokemonCard(
+                name = tcgCard.name, imageUrl = tcgCard.images.small,
+                set = tcgCard.set?.name ?: "",
+                rarity = tcgCard.rarity ?: "Unknown",
+                type = tcgCard.types?.firstOrNull() ?: "Colorless",
+                hp = tcgCard.hp?.toIntOrNull() ?: 0, estimatedValue = price,
+                apiCardId = tcgCard.id, cardNumber = tcgCard.number,
+                variant = variant, quantity = quantity, condition = condition, language = language
+            )
+            firestoreRepository.addCard(card)
+                .onSuccess { uiState = uiState.copy(isAddingCard = null, successMessage = "${tcgCard.name} aggiunta!") }
+                .onFailure { uiState = uiState.copy(isAddingCard = null, errorMessage = "Errore") }
+        }
+    }
+
+    fun clearMessages() {
+        uiState = uiState.copy(successMessage = null, errorMessage = null)
     }
 
     private fun applyFilters() {

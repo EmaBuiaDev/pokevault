@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.data.remote.TcgSet
 import com.example.pokevault.ui.theme.*
@@ -150,6 +152,28 @@ fun SetsListScreen(
 ) {
     val state = viewModel.uiState
     var isSearchingCards by remember { mutableStateOf(false) }
+    var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
+    val haptic = LocalHapticFeedback.current
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.successMessage, state.errorMessage) {
+        val msg = state.successMessage ?: state.errorMessage
+        if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
+    }
+
+    if (selectedCard != null) {
+        CardDetailBottomSheet(
+            card = selectedCard!!,
+            isOwned = false,
+            isLoading = state.isAddingCard == selectedCard!!.id,
+            onAddCard = { v, q, c, l ->
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.addCardWithDetails(selectedCard!!, v, q, c, l)
+            },
+            onRemoveCard = {},
+            onDismiss = { selectedCard = null }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -232,7 +256,7 @@ fun SetsListScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isSearchingCards) {
-            CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery) { setId -> onSetClick(setId) }
+            CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery, onCardClick = { card -> selectedCard = card }) { setId -> onSetClick(setId) }
         } else {
             // ── Filtri serie migliorati ──
             LazyRow(
@@ -419,7 +443,7 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
 
 // ── Card search results ──
 @Composable
-fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, onCardSetClick: (String) -> Unit) {
+fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, onCardClick: (TcgCard) -> Unit = {}, onCardSetClick: (String) -> Unit) {
     if (query.length < 2) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -472,7 +496,7 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
                 // Usiamo "id_setName" per garantire l'univocità assoluta.
                 items(setCards.sortedBy { it.number.toIntOrNull() ?: 999 }, key = { "${it.id}_$setName" }) { card ->
                     Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp))
-                        .clickable { card.set?.id?.let { onCardSetClick(it) } }) {
+                        .clickable { onCardClick(card) }) {
                         AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     }
                 }
