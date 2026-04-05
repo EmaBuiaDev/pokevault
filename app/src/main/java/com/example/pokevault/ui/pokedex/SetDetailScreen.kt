@@ -81,12 +81,15 @@ private val ITALIAN_RARITY_MAP = mapOf(
     "doppia rara" to "double rare", "olografica" to "holo"
 )
 
-fun matchesItalianSearch(card: TcgCard, query: String): Boolean {
+fun matchesItalianSearch(card: TcgCard, query: String, translatedQuery: String = ""): Boolean {
     val q = query.lowercase().trim()
     if (q.isEmpty()) return true
 
     // Name match (English)
     if (card.name.contains(q, ignoreCase = true)) return true
+
+    // Translated query match (from MyMemory API)
+    if (translatedQuery.isNotBlank() && card.name.contains(translatedQuery, ignoreCase = true)) return true
 
     // Card number match
     if (card.number == q || card.number.contains(q)) return true
@@ -159,14 +162,14 @@ fun SetDetailScreen(
         if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
     }
 
-    val sortedCards = remember(state.cards, state.ownedCardIds, state.searchQuery, state.showOnlyMissing, selectedRarityFilter) {
+    val sortedCards = remember(state.cards, state.ownedCardIds, state.searchQuery, state.translatedQuery, state.showOnlyMissing, selectedRarityFilter) {
         state.cards.filter { card ->
             val matchesRarity = selectedRarityFilter == null || card.rarity == selectedRarityFilter
-            val matchesSearch = matchesItalianSearch(card, state.searchQuery)
+            val matchesSearch = matchesItalianSearch(card, state.searchQuery, state.translatedQuery)
             val matchesMissing = !state.showOnlyMissing || card.id !in state.ownedCardIds
             matchesRarity && matchesSearch && matchesMissing
-        }.sortedBy { 
-            it.number.replace(Regex("[^0-9]"), "").toIntOrNull() ?: Int.MAX_VALUE 
+        }.sortedBy {
+            it.number.replace(Regex("[^0-9]"), "").toIntOrNull() ?: Int.MAX_VALUE
         }
     }
 
@@ -297,7 +300,7 @@ fun SetDetailScreen(
                                     Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Box(modifier = Modifier.weight(1f)) {
-                                        if (state.searchQuery.isEmpty()) Text(if (AppLocale.isItalian) "Cerca nel set..." else "Search in set...", color = TextMuted, fontSize = 13.sp)
+                                        if (state.searchQuery.isEmpty()) Text(if (AppLocale.isItalian) "Cerca in italiano o inglese..." else "Search in Italian or English...", color = TextMuted, fontSize = 13.sp)
                                         BasicTextField(
                                             value = state.searchQuery,
                                             onValueChange = { viewModel.updateSearchQuery(it) },
@@ -305,6 +308,20 @@ fun SetDetailScreen(
                                             singleLine = true,
                                             cursorBrush = SolidColor(BlueCard)
                                         )
+                                    }
+                                    // Translation indicator
+                                    val isTranslating = state.searchQuery.length >= 3 && state.translatedQuery.isEmpty()
+                                        && !state.cards.any { it.name.contains(state.searchQuery, ignoreCase = true) }
+                                    if (isTranslating && state.searchQuery.isNotEmpty()) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(12.dp),
+                                            color = BlueCard,
+                                            strokeWidth = 1.5.dp
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    } else if (state.translatedQuery.isNotBlank() && state.searchQuery.isNotEmpty()) {
+                                        Icon(Icons.Default.Translate, null, tint = GreenCard, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
                                     }
                                     if (state.searchQuery.isNotEmpty()) {
                                         Icon(Icons.Default.Close, null, tint = TextMuted, modifier = Modifier

@@ -12,8 +12,11 @@ import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.data.remote.TcgSet
+import com.example.pokevault.data.remote.TranslationService
 import com.example.pokevault.util.AppLocale
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -26,6 +29,7 @@ data class SetDetailUiState(
     val isAddingCard: String? = null,
     val viewMode: String = "grid",
     val searchQuery: String = "",
+    val translatedQuery: String = "",
     val showOnlyMissing: Boolean = false,
     val errorMessage: String? = null,
     val successMessage: String? = null
@@ -46,8 +50,10 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         private set
 
     private var currentSetId: String? = null
+    private var translationJob: Job? = null
 
     fun loadSet(setId: String) {
+        TranslationService.loadCache(getApplication<Application>().applicationContext)
         if (currentSetId == setId) return
         currentSetId = setId
 
@@ -104,7 +110,22 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun updateSearchQuery(query: String) {
-        uiState = uiState.copy(searchQuery = query)
+        // Check cached translation first for instant results
+        val cached = TranslationService.getCached(query)
+        uiState = uiState.copy(searchQuery = query, translatedQuery = cached ?: "")
+
+        // Translate async if no cache and query is long enough
+        translationJob?.cancel()
+        if (query.length >= 3 && cached == null) {
+            translationJob = viewModelScope.launch {
+                delay(400)
+                val context = getApplication<Application>().applicationContext
+                val translated = TranslationService.translateItToEn(query, context)
+                if (translated != null && uiState.searchQuery == query) {
+                    uiState = uiState.copy(translatedQuery = translated)
+                }
+            }
+        }
     }
 
     fun toggleShowOnlyMissing() {
