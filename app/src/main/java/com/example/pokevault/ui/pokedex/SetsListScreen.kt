@@ -467,7 +467,10 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
                         Icon(Icons.Default.ChevronRight, null, tint = TextMuted, modifier = Modifier.size(20.dp))
                     }
                 }
-                items(setCards.sortedBy { it.number.toIntOrNull() ?: 999 }, key = { it.id }) { card ->
+                // FIX DEFINITIVO: La chiave deve essere unica in tutta la LazyVerticalGrid.
+                // Se una carta appare in più set raggruppati, "it.id" non basta perché si ripete.
+                // Usiamo "id_setName" per garantire l'univocità assoluta.
+                items(setCards.sortedBy { it.number.toIntOrNull() ?: 999 }, key = { "${it.id}_$setName" }) { card ->
                     Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp))
                         .clickable { card.set?.id?.let { onCardSetClick(it) } }) {
                         AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

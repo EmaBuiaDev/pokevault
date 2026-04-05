@@ -94,9 +94,11 @@ class PokeTcgRepository {
                 allSets.addAll(response.data)
                 page++
             } while (response.data.size == 250)
-            memorySets = allSets
-            context?.let { saveSetsToCache(it, allSets) }
-            Result.success(allSets)
+            
+            val uniqueSets = allSets.distinctBy { it.id }
+            memorySets = uniqueSets
+            context?.let { saveSetsToCache(it, uniqueSets) }
+            Result.success(uniqueSets)
         } catch (e: Exception) {
             if (context != null) {
                 loadSetsFromCache(context, ignoreExpiry = true)?.let {
@@ -137,16 +139,11 @@ class PokeTcgRepository {
     }
 
     suspend fun getCardsBySet(setId: String, context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgCard>> {
-        // 1. Controllo Cache (Memoria o Disco)
+        // 1. Controllo Cache
         if (!forceRefresh) {
             val cached = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId) })
-            
-            // LOGICA DI SICUREZZA: Se abbiamo dati e NON sono esattamente 250, 
-            // assumiamo che il set sia completo. Se sono esattamente 250, sospettiamo il vecchio bug
-            // e procediamo comunque all'API per scaricare il resto.
             if (cached != null && cached.isNotEmpty()) {
-                val isSuspiciouslyTruncated = cached.size == 250 
-                if (!isSuspiciouslyTruncated) {
+                if (cached.size != 250) {
                     memoryCards[setId] = cached
                     return Result.success(cached)
                 }
@@ -165,11 +162,12 @@ class PokeTcgRepository {
                 page++
             } while (fetchedCount == 250)
 
-            memoryCards[setId] = allCards
-            context?.let { saveCardsToCache(it, setId, allCards) }
-            Result.success(allCards)
+            val uniqueCards = allCards.distinctBy { it.id }
+
+            memoryCards[setId] = uniqueCards
+            context?.let { saveCardsToCache(it, setId, uniqueCards) }
+            Result.success(uniqueCards)
         } catch (e: Exception) {
-            // Fallback su cache in caso di errore
             val fallback = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId, ignoreExpiry = true) })
             if (fallback != null) return Result.success(fallback)
             Result.failure(e)
@@ -206,29 +204,28 @@ class PokeTcgRepository {
                 val setIds = candidateSets.joinToString(" OR ") { "set.id:${it.id}" }
                 val apiQuery = "($setIds) number:\"$number\""
                 try {
-                    Result.success(api.searchCards(query = apiQuery, page = page).data)
+                    val res = api.searchCards(query = apiQuery, page = page)
+                    Result.success(res.data.distinctBy { it.id })
                 } catch (e: Exception) { Result.failure(e) }
             } else {
                 // Fallback: cerca solo per numero se non troviamo il set corrispondente al totale
                 try {
-                    Result.success(api.searchCards(query = "number:\"$number\"", page = page).data)
+                    val res = api.searchCards(query = "number:\"$number\"", page = page)
+                    Result.success(res.data.distinctBy { it.id })
                 } catch (e: Exception) { Result.failure(e) }
             }
         }
 
         val apiQuery = when {
-            // Caso solo numero (es. "001")
             trimmed.matches(Regex("""^\d+$""")) -> {
                 val number = trimmed.trimStart('0').ifEmpty { "0" }
                 "number:\"$number\""
             }
-            // Caso 2: Termini comuni in italiano
             isIt && trimmed.equals("energia", ignoreCase = true) -> "supertype:energy"
             isIt && trimmed.equals("allenatore", ignoreCase = true) -> "supertype:trainer"
             isIt && trimmed.equals("aiuto", ignoreCase = true) -> "subtypes:supporter"
             isIt && trimmed.equals("strumento", ignoreCase = true) -> "subtypes:item"
             isIt && trimmed.equals("stadio", ignoreCase = true) -> "subtypes:stadium"
-            // Caso 3: Tipi in italiano
             isIt && trimmed.equals("fuoco", ignoreCase = true) -> "types:fire"
             isIt && trimmed.equals("acqua", ignoreCase = true) -> "types:water"
             isIt && trimmed.equals("erba", ignoreCase = true) -> "types:grass"
@@ -240,44 +237,33 @@ class PokeTcgRepository {
             isIt && trimmed.equals("drago", ignoreCase = true) -> "types:dragon"
             isIt && trimmed.equals("folletto", ignoreCase = true) -> "types:fairy"
             isIt && trimmed.equals("incolore", ignoreCase = true) -> "types:colorless"
-            // Default: Cerca per nome con wildcard
             else -> "name:\"${sanitizeQuery(trimmed)}*\""
         }
 
         return try {
-            Result.success(api.searchCards(query = apiQuery, page = page).data)
+            val res = api.searchCards(query = apiQuery, page = page)
+            Result.success(res.data.distinctBy { it.id })
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    /**
-     * Ricerca tollerante per lo scanner.
-     * Sanitizza il testo OCR, prova prima il nome completo, poi solo la prima parola.
-     */
     suspend fun searchCardsFuzzy(name: String, page: Int = 1): Result<List<TcgCard>> {
         val clean = sanitizeQuery(name)
         if (clean.isBlank()) return Result.success(emptyList())
         return try {
-            // Prima prova: nome completo con wildcard (tra virgolette per gestire spazi)
             val result = api.searchCards(query = "name:\"$clean*\"", page = page, pageSize = 30)
             if (result.data.isNotEmpty()) {
-                return Result.success(result.data)
+                return Result.success(result.data.distinctBy { it.id })
             }
-            // Fallback: solo prima parola con wildcard
             val firstWord = clean.split(" ").firstOrNull()?.trim() ?: clean
             if (firstWord.length >= 3 && firstWord != clean) {
                 val fallback = api.searchCards(query = "name:\"$firstWord*\"", page = page, pageSize = 30)
-                Result.success(fallback.data)
+                Result.success(fallback.data.distinctBy { it.id })
             } else {
                 Result.success(emptyList())
             }
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    /**
-     * Ricerca precisa per lo scanner: combina nome + numero carta.
-     * Il numero (es. "25" da "025/198") è il dato OCR più affidabile.
-     * Cerca con: name + number → solo name → solo number
-     */
     suspend fun searchByNameAndNumber(name: String?, number: String?): Result<List<TcgCard>> {
         val cleanName = name?.let { sanitizeQuery(it) }?.takeIf { it.isNotBlank() }
         val cleanNumber = number?.trim()?.trimStart('0')?.takeIf { it.isNotBlank() }
@@ -285,57 +271,49 @@ class PokeTcgRepository {
         if (cleanName == null && cleanNumber == null) return Result.success(emptyList())
 
         return try {
-            // Strategia 1: nome + numero (match molto preciso)
             if (cleanName != null && cleanNumber != null) {
                 val query = "name:\"$cleanName*\" number:\"$cleanNumber\""
                 val result = api.searchCards(query = query, pageSize = 10)
-                if (result.data.isNotEmpty()) return Result.success(result.data)
+                if (result.data.isNotEmpty()) return Result.success(result.data.distinctBy { it.id })
             }
 
-            // Strategia 2: solo nome con wildcard
             if (cleanName != null && cleanName.length >= 3) {
                 val query = "name:\"$cleanName*\""
                 val result = api.searchCards(query = query, pageSize = 10)
                 if (result.data.isNotEmpty()) {
-                    // Se abbiamo anche il numero, filtra lato client
                     if (cleanNumber != null) {
                         val filtered = result.data.filter { it.number == cleanNumber }
-                        if (filtered.isNotEmpty()) return Result.success(filtered)
+                        if (filtered.isNotEmpty()) return Result.success(filtered.distinctBy { it.id })
                     }
-                    return Result.success(result.data)
+                    return Result.success(result.data.distinctBy { it.id })
                 }
-                // Prova solo prima parola
                 val firstWord = cleanName.split(" ").firstOrNull()?.trim() ?: cleanName
                 if (firstWord.length >= 3 && firstWord != cleanName) {
                     val fallback = api.searchCards(query = "name:\"$firstWord*\"", pageSize = 15)
                     if (fallback.data.isNotEmpty()) {
                         if (cleanNumber != null) {
                             val filtered = fallback.data.filter { it.number == cleanNumber }
-                            if (filtered.isNotEmpty()) return Result.success(filtered)
+                            if (filtered.isNotEmpty()) return Result.success(filtered.distinctBy { it.id })
                         }
-                        return Result.success(fallback.data)
+                        return Result.success(fallback.data.distinctBy { it.id })
                     }
                 }
             }
 
-            // Strategia 3: solo numero (meno preciso, molti risultati)
             if (cleanNumber != null) {
                 val result = api.searchCards(query = "number:\"$cleanNumber\"", pageSize = 20)
-                return Result.success(result.data)
+                return Result.success(result.data.distinctBy { it.id })
             }
 
             Result.success(emptyList())
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    /**
-     * Rimuove caratteri speciali che rompono la query Lucene dell'API PokéTCG.
-     */
     private fun sanitizeQuery(raw: String): String {
         return raw
-            .replace(Regex("[+\\-=&|><!(){}\\[\\]^~?:\\\\/]"), "") // chars speciali Lucene
-            .replace(Regex("[^a-zA-ZÀ-ÿ0-9\\s'-]"), "")            // solo lettere, numeri, spazi, apostrofo, trattino
-            .replace(Regex("\\s+"), " ")                             // spazi multipli
+            .replace(Regex("[+\\-=&|><!(){}\\[\\]^~?:\\\\/]"), "") 
+            .replace(Regex("[^a-zA-ZÀ-ÿ0-9\\s'-]"), "")            
+            .replace(Regex("\\s+"), " ")                             
             .trim()
     }
 

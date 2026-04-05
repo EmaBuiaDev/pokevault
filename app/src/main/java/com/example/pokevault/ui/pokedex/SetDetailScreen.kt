@@ -256,7 +256,7 @@ fun SetDetailScreen(
                         }
                     } else {
                         when (state.viewMode) {
-                            "grid" -> items(sortedCards, key = { it.id }) { card ->
+                            "grid" -> items(sortedCards, key = { "${it.id}_${it.number}" }) { card ->
                                 Box {
                                     TcgCardCompactItem(
                                         card = card,
@@ -290,7 +290,7 @@ fun SetDetailScreen(
                                     }
                                 }
                             }
-                            "list" -> items(sortedCards, key = { it.id }, span = { GridItemSpan(3) }) { card ->
+                            "list" -> items(sortedCards, key = { "${it.id}_${it.number}" }, span = { GridItemSpan(3) }) { card ->
                                 TcgCardListRow(card, card.id in state.ownedCardIds) { selectedCard = card }
                             }
                         }
