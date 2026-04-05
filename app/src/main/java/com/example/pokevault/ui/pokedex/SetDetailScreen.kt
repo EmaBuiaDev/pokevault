@@ -56,6 +56,73 @@ fun formatReleaseDate(date: String): String {
     } catch (_: Exception) { date }
 }
 
+private val ITALIAN_TYPE_MAP = mapOf(
+    "fuoco" to "fire", "acqua" to "water", "erba" to "grass",
+    "elettro" to "lightning", "elettrico" to "lightning", "fulmine" to "lightning",
+    "psico" to "psychic", "psichico" to "psychic",
+    "lotta" to "fighting", "combattimento" to "fighting",
+    "buio" to "darkness", "oscurita" to "darkness", "oscurità" to "darkness",
+    "metallo" to "metal", "acciaio" to "metal",
+    "drago" to "dragon", "folletto" to "fairy", "fata" to "fairy",
+    "incolore" to "colorless", "normale" to "colorless"
+)
+
+private val ITALIAN_CATEGORY_MAP = mapOf(
+    "allenatore" to "trainer", "aiuto" to "supporter", "sostenitore" to "supporter",
+    "stadio" to "stadium", "strumento" to "tool", "oggetto" to "item",
+    "energia" to "energy", "pokemon" to "pokémon"
+)
+
+private val ITALIAN_RARITY_MAP = mapOf(
+    "comune" to "common", "non comune" to "uncommon",
+    "rara" to "rare", "ultra rara" to "ultra rare",
+    "segreta" to "secret", "iper rara" to "hyper rare",
+    "illustrazione" to "illustration", "promo" to "promo",
+    "doppia rara" to "double rare", "olografica" to "holo"
+)
+
+fun matchesItalianSearch(card: TcgCard, query: String): Boolean {
+    val q = query.lowercase().trim()
+    if (q.isEmpty()) return true
+
+    // Name match (English)
+    if (card.name.contains(q, ignoreCase = true)) return true
+
+    // Card number match
+    if (card.number == q || card.number.contains(q)) return true
+
+    // Italian type → English type
+    ITALIAN_TYPE_MAP.forEach { (it, en) ->
+        if (q.contains(it)) {
+            if (card.types?.any { t -> t.equals(en, ignoreCase = true) } == true) return true
+        }
+    }
+
+    // Italian category → supertype/subtypes
+    ITALIAN_CATEGORY_MAP.forEach { (it, en) ->
+        if (q.contains(it)) {
+            if (card.supertype.contains(en, ignoreCase = true)) return true
+            if (card.subtypes?.any { s -> s.contains(en, ignoreCase = true) } == true) return true
+        }
+    }
+
+    // Italian rarity
+    ITALIAN_RARITY_MAP.forEach { (it, en) ->
+        if (q.contains(it)) {
+            if (card.rarity?.contains(en, ignoreCase = true) == true) return true
+        }
+    }
+
+    // Rarity direct match (English)
+    if (card.rarity?.contains(q, ignoreCase = true) == true) return true
+
+    // Supertype/subtypes direct match
+    if (card.supertype.contains(q, ignoreCase = true)) return true
+    if (card.subtypes?.any { it.contains(q, ignoreCase = true) } == true) return true
+
+    return false
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SetDetailScreen(
@@ -95,7 +162,7 @@ fun SetDetailScreen(
     val sortedCards = remember(state.cards, state.ownedCardIds, state.searchQuery, state.showOnlyMissing, selectedRarityFilter) {
         state.cards.filter { card ->
             val matchesRarity = selectedRarityFilter == null || card.rarity == selectedRarityFilter
-            val matchesSearch = state.searchQuery.isEmpty() || card.name.contains(state.searchQuery, ignoreCase = true)
+            val matchesSearch = matchesItalianSearch(card, state.searchQuery)
             val matchesMissing = !state.showOnlyMissing || card.id !in state.ownedCardIds
             matchesRarity && matchesSearch && matchesMissing
         }.sortedBy { 
