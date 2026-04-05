@@ -137,26 +137,41 @@ class PokeTcgRepository {
     }
 
     suspend fun getCardsBySet(setId: String, context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgCard>> {
-        // 1. Cache memoria
-        if (!forceRefresh && memoryCards.containsKey(setId)) return Result.success(memoryCards[setId]!!)
-        // 2. Cache disco
-        if (!forceRefresh && context != null) {
-            loadCardsFromCache(context, setId)?.let {
-                memoryCards[setId] = it; return Result.success(it)
-            }
-        }
-        // 3. API
-        return try {
-            val response = api.getCardsBySet(query = "set.id:$setId")
-            memoryCards[setId] = response.data
-            context?.let { saveCardsToCache(it, setId, response.data) }
-            Result.success(response.data)
-        } catch (e: Exception) {
-            if (context != null) {
-                loadCardsFromCache(context, setId, ignoreExpiry = true)?.let {
-                    memoryCards[setId] = it; return Result.success(it)
+        // 1. Controllo Cache (Memoria o Disco)
+        if (!forceRefresh) {
+            val cached = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId) })
+            
+            // LOGICA DI SICUREZZA: Se abbiamo dati e NON sono esattamente 250, 
+            // assumiamo che il set sia completo. Se sono esattamente 250, sospettiamo il vecchio bug
+            // e procediamo comunque all'API per scaricare il resto.
+            if (cached != null && cached.isNotEmpty()) {
+                val isSuspiciouslyTruncated = cached.size == 250 
+                if (!isSuspiciouslyTruncated) {
+                    memoryCards[setId] = cached
+                    return Result.success(cached)
                 }
             }
+        }
+
+        // 2. API con Paginazione
+        return try {
+            val allCards = mutableListOf<TcgCard>()
+            var page = 1
+            var fetchedCount: Int
+            do {
+                val response = api.getCardsBySet(query = "set.id:$setId", page = page, pageSize = 250)
+                allCards.addAll(response.data)
+                fetchedCount = response.data.size
+                page++
+            } while (fetchedCount == 250)
+
+            memoryCards[setId] = allCards
+            context?.let { saveCardsToCache(it, setId, allCards) }
+            Result.success(allCards)
+        } catch (e: Exception) {
+            // Fallback su cache in caso di errore
+            val fallback = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId, ignoreExpiry = true) })
+            if (fallback != null) return Result.success(fallback)
             Result.failure(e)
         }
     }
