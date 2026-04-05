@@ -91,6 +91,22 @@ class CollectionViewModel : ViewModel() {
         }
     }
 
+    fun deleteMultipleGroups(groupKeys: Set<String>) {
+        viewModelScope.launch {
+            var deletedCount = 0
+            val cardsToDelete = uiState.cards.filter { card ->
+                val key = card.apiCardId.ifBlank { "${card.name}_${card.set}_${card.cardNumber}" }
+                key in groupKeys
+            }
+            cardsToDelete.forEach { card ->
+                repository.deleteCard(card.id).onSuccess { deletedCount++ }
+            }
+            uiState = uiState.copy(
+                successMessage = "$deletedCount carte eliminate"
+            )
+        }
+    }
+
     fun clearMessages() {
         uiState = uiState.copy(errorMessage = null, successMessage = null)
     }
