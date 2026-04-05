@@ -135,13 +135,13 @@ class PokeTcgRepository {
             val json = prefs.getString("$CARDS_PREFIX$setId", null) ?: return null
             val cards: List<TcgCard> = gson.fromJson(json, object : TypeToken<List<TcgCard>>() {}.type)
             val expectedTotal = prefs.getInt("$CARDS_TOTAL_PREFIX$setId", -1)
-            if (expectedTotal < 0) {
-                // Cache legacy senza totalCount: non affidabile, forza ri-fetch
-                Log.d("PokeTcgRepository", "Cache legacy senza totalCount per set $setId (${cards.size} carte), ri-fetch necessario")
+            if (expectedTotal <= 0) {
+                // totalCount assente o non valido: cache non affidabile
+                Log.d("PokeTcgRepo", "Cache non validata per set $setId: totalCount=$expectedTotal, ${cards.size} carte → ri-fetch")
                 return null
             }
-            if (expectedTotal > 0 && cards.size < expectedTotal) {
-                Log.d("PokeTcgRepository", "Cache incompleta per set $setId: ${cards.size}/$expectedTotal, ri-fetch necessario")
+            if (cards.size < expectedTotal) {
+                Log.d("PokeTcgRepo", "Cache incompleta per set $setId: ${cards.size}/$expectedTotal → ri-fetch")
                 return null
             }
             return cards
@@ -156,32 +156,49 @@ class PokeTcgRepository {
         if (!forceRefresh) {
             val cached = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId) })
             if (cached != null && cached.isNotEmpty()) {
+                Log.d("PokeTcgRepo", "[$setId] Cache hit: ${cached.size} carte")
                 memoryCards[setId] = cached
                 return Result.success(cached)
             }
         }
 
-        // 2. API con Paginazione
+        // 2. API con Paginazione completa
         return try {
             val allCards = mutableListOf<TcgCard>()
             var page = 1
             var totalCount = 0
-            do {
+
+            while (true) {
+                Log.d("PokeTcgRepo", "[$setId] Fetching page $page (pageSize=250)...")
                 val response = api.getCardsBySet(query = "set.id:$setId", page = page, pageSize = 250)
+                val fetched = response.data.size
                 allCards.addAll(response.data)
-                if (page == 1 && response.totalCount > 0) totalCount = response.totalCount
-                val hasMore = if (totalCount > 0) allCards.size < totalCount else response.data.size == 250
+
+                if (page == 1) {
+                    totalCount = response.totalCount
+                    Log.d("PokeTcgRepo", "[$setId] API totalCount=$totalCount")
+                }
+                Log.d("PokeTcgRepo", "[$setId] Page $page: fetched=$fetched, accumulated=${allCards.size}/$totalCount")
+
+                if (fetched == 0) break
+                if (totalCount > 0 && allCards.size >= totalCount) break
+                if (totalCount <= 0 && fetched < 250) break
                 page++
-            } while (response.data.isNotEmpty() && hasMore)
+            }
 
             val uniqueCards = allCards.distinctBy { it.id }
+            Log.d("PokeTcgRepo", "[$setId] Pagination done: ${allCards.size} total, ${uniqueCards.size} unique")
 
             memoryCards[setId] = uniqueCards
-            context?.let { saveCardsToCache(it, setId, uniqueCards, totalCount) }
+            context?.let { saveCardsToCache(it, setId, uniqueCards, if (totalCount > 0) totalCount else uniqueCards.size) }
             Result.success(uniqueCards)
         } catch (e: Exception) {
+            Log.e("PokeTcgRepo", "[$setId] Pagination error at API call", e)
             val fallback = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId, ignoreExpiry = true) })
-            if (fallback != null) return Result.success(fallback)
+            if (fallback != null) {
+                Log.d("PokeTcgRepo", "[$setId] Using fallback: ${fallback.size} carte")
+                return Result.success(fallback)
+            }
             Result.failure(e)
         }
     }
