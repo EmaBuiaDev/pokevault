@@ -51,27 +51,7 @@ class FirestoreRepository {
 
     suspend fun addCard(card: PokemonCard): Result<String> {
         return try {
-            // Se esiste gia' una carta con stesso apiCardId e variante, incrementa la quantita'
-            if (card.apiCardId.isNotBlank()) {
-                val existing = cardsCollection
-                    .whereEqualTo("apiCardId", card.apiCardId)
-                    .whereEqualTo("variant", card.variant)
-                    .get().await()
-
-                if (existing.documents.isNotEmpty()) {
-                    val doc = existing.documents.first()
-                    val currentQty = doc.getLong("quantity")?.toInt() ?: 1
-                    doc.reference.update(
-                        mapOf(
-                            "quantity" to (currentQty + card.quantity),
-                            "estimatedValue" to card.estimatedValue
-                        )
-                    ).await()
-                    return Result.success(doc.id)
-                }
-            }
-
-            val data = hashMapOf(
+            val data = hashMapOf<String, Any?>(
                 "name" to card.name,
                 "imageUrl" to card.imageUrl,
                 "set" to card.set,
@@ -91,6 +71,28 @@ class FirestoreRepository {
                 "language" to card.language,
                 "addedAt" to com.google.firebase.Timestamp.now()
             )
+
+            // Se esiste gia' una carta con stesso apiCardId e variante, incrementa la quantita' con transaction
+            if (card.apiCardId.isNotBlank()) {
+                val existing = cardsCollection
+                    .whereEqualTo("apiCardId", card.apiCardId)
+                    .whereEqualTo("variant", card.variant)
+                    .get().await()
+
+                if (existing.documents.isNotEmpty()) {
+                    val docRef = existing.documents.first().reference
+                    firestore.runTransaction { transaction ->
+                        val snapshot = transaction.get(docRef)
+                        val currentQty = snapshot.getLong("quantity")?.toInt() ?: 1
+                        transaction.update(docRef, mapOf(
+                            "quantity" to (currentQty + card.quantity),
+                            "estimatedValue" to card.estimatedValue
+                        ))
+                    }.await()
+                    return Result.success(existing.documents.first().id)
+                }
+            }
+
             val docRef = cardsCollection.add(data).await()
             Result.success(docRef.id)
         } catch (e: Exception) { Result.failure(e) }

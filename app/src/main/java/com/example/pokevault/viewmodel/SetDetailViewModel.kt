@@ -52,8 +52,11 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentSetId: String? = null
     private var translationJob: Job? = null
 
+    init {
+        TranslationService.loadCache(application.applicationContext)
+    }
+
     fun loadSet(setId: String) {
-        TranslationService.loadCache(getApplication<Application>().applicationContext)
         if (currentSetId == setId) return
         currentSetId = setId
 

@@ -81,47 +81,66 @@ private val ITALIAN_RARITY_MAP = mapOf(
     "doppia rara" to "double rare", "olografica" to "holo"
 )
 
-fun matchesItalianSearch(card: TcgCard, query: String, translatedQuery: String = ""): Boolean {
+// Pre-resolved search context to avoid iterating maps per card
+data class ItalianSearchContext(
+    val q: String,
+    val translatedQuery: String,
+    val matchedTypes: Set<String>,
+    val matchedCategories: Set<String>,
+    val matchedRarities: Set<String>
+)
+
+fun buildSearchContext(query: String, translatedQuery: String = ""): ItalianSearchContext {
     val q = query.lowercase().trim()
-    if (q.isEmpty()) return true
+    val types = mutableSetOf<String>()
+    val categories = mutableSetOf<String>()
+    val rarities = mutableSetOf<String>()
 
-    // Name match (English)
-    if (card.name.contains(q, ignoreCase = true)) return true
+    if (q.isNotEmpty()) {
+        ITALIAN_TYPE_MAP.forEach { (it, en) -> if (q.contains(it)) types.add(en.lowercase()) }
+        ITALIAN_CATEGORY_MAP.forEach { (it, en) -> if (q.contains(it)) categories.add(en.lowercase()) }
+        ITALIAN_RARITY_MAP.forEach { (it, en) -> if (q.contains(it)) rarities.add(en.lowercase()) }
+    }
 
-    // Translated query match (from MyMemory API)
-    if (translatedQuery.isNotBlank() && card.name.contains(translatedQuery, ignoreCase = true)) return true
+    return ItalianSearchContext(q, translatedQuery, types, categories, rarities)
+}
+
+fun matchesItalianSearch(card: TcgCard, query: String, translatedQuery: String = ""): Boolean {
+    return matchesSearchContext(card, buildSearchContext(query, translatedQuery))
+}
+
+fun matchesSearchContext(card: TcgCard, ctx: ItalianSearchContext): Boolean {
+    if (ctx.q.isEmpty()) return true
+
+    // Name match (English + translated)
+    if (card.name.contains(ctx.q, ignoreCase = true)) return true
+    if (ctx.translatedQuery.isNotBlank() && card.name.contains(ctx.translatedQuery, ignoreCase = true)) return true
 
     // Card number match
-    if (card.number == q || card.number.contains(q)) return true
+    if (card.number == ctx.q || card.number.contains(ctx.q)) return true
 
-    // Italian type → English type
-    ITALIAN_TYPE_MAP.forEach { (it, en) ->
-        if (q.contains(it)) {
-            if (card.types?.any { t -> t.equals(en, ignoreCase = true) } == true) return true
-        }
+    // Pre-resolved Italian type matches
+    if (ctx.matchedTypes.isNotEmpty()) {
+        if (card.types?.any { t -> t.lowercase() in ctx.matchedTypes } == true) return true
     }
 
-    // Italian category → supertype/subtypes
-    ITALIAN_CATEGORY_MAP.forEach { (it, en) ->
-        if (q.contains(it)) {
-            if (card.supertype.contains(en, ignoreCase = true)) return true
-            if (card.subtypes?.any { s -> s.contains(en, ignoreCase = true) } == true) return true
-        }
+    // Pre-resolved Italian category matches
+    if (ctx.matchedCategories.isNotEmpty()) {
+        val superLower = card.supertype.lowercase()
+        if (ctx.matchedCategories.any { superLower.contains(it) }) return true
+        if (card.subtypes?.any { s -> ctx.matchedCategories.any { s.contains(it, ignoreCase = true) } } == true) return true
     }
 
-    // Italian rarity
-    ITALIAN_RARITY_MAP.forEach { (it, en) ->
-        if (q.contains(it)) {
-            if (card.rarity?.contains(en, ignoreCase = true) == true) return true
-        }
+    // Pre-resolved Italian rarity matches
+    if (ctx.matchedRarities.isNotEmpty()) {
+        val rarityLower = card.rarity?.lowercase()
+        if (rarityLower != null && ctx.matchedRarities.any { rarityLower.contains(it) }) return true
     }
 
-    // Rarity direct match (English)
-    if (card.rarity?.contains(q, ignoreCase = true) == true) return true
-
-    // Supertype/subtypes direct match
-    if (card.supertype.contains(q, ignoreCase = true)) return true
-    if (card.subtypes?.any { it.contains(q, ignoreCase = true) } == true) return true
+    // Direct English matches
+    if (card.rarity?.contains(ctx.q, ignoreCase = true) == true) return true
+    if (card.supertype.contains(ctx.q, ignoreCase = true)) return true
+    if (card.subtypes?.any { it.contains(ctx.q, ignoreCase = true) } == true) return true
 
     return false
 }
@@ -163,9 +182,10 @@ fun SetDetailScreen(
     }
 
     val sortedCards = remember(state.cards, state.ownedCardIds, state.searchQuery, state.translatedQuery, state.showOnlyMissing, selectedRarityFilter) {
+        val searchCtx = buildSearchContext(state.searchQuery, state.translatedQuery)
         state.cards.filter { card ->
             val matchesRarity = selectedRarityFilter == null || card.rarity == selectedRarityFilter
-            val matchesSearch = matchesItalianSearch(card, state.searchQuery, state.translatedQuery)
+            val matchesSearch = matchesSearchContext(card, searchCtx)
             val matchesMissing = !state.showOnlyMissing || card.id !in state.ownedCardIds
             matchesRarity && matchesSearch && matchesMissing
         }.sortedBy {
@@ -237,7 +257,7 @@ fun SetDetailScreen(
                     ),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.pointerInput(sortedCards, state.viewMode) {
+                    modifier = Modifier.pointerInput(sortedCards.size, state.viewMode) {
                         if (state.viewMode == "grid") {
                             val headerCount = 4
                             detectDragGesturesAfterLongPress(

@@ -8,15 +8,17 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URL
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
 
 object TranslationService {
 
-    private val memoryCache = mutableMapOf<String, String>()
-    private var diskCacheLoaded = false
+    private val memoryCache = ConcurrentHashMap<String, String>()
+    @Volatile private var diskCacheLoaded = false
 
     private const val PREFS_NAME = "pokevault_translations"
     private const val CACHE_KEY = "it_en_translations"
 
+    @Synchronized
     fun loadCache(context: Context) {
         if (diskCacheLoaded) return
         try {

@@ -45,6 +45,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     init {
+        TranslationService.loadCache(application.applicationContext)
         loadSets()
     }
 
@@ -116,7 +117,6 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             delay(500)
             uiState = uiState.copy(isSearchingCards = true)
             val context = getApplication<Application>().applicationContext
-            TranslationService.loadCache(context)
 
             // Search with original query + translate in parallel
             val directDeferred = async { repository.searchCards(query) }
