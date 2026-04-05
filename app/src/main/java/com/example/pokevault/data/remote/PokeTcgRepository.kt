@@ -161,7 +161,7 @@ class PokeTcgRepository {
             }
         }
 
-        // 2. API con Paginazione guidata da totalCount
+        // 2. API con Paginazione
         return try {
             val allCards = mutableListOf<TcgCard>()
             var page = 1
@@ -169,9 +169,10 @@ class PokeTcgRepository {
             do {
                 val response = api.getCardsBySet(query = "set.id:$setId", page = page, pageSize = 250)
                 allCards.addAll(response.data)
-                if (page == 1) totalCount = response.totalCount
+                if (page == 1 && response.totalCount > 0) totalCount = response.totalCount
+                val hasMore = if (totalCount > 0) allCards.size < totalCount else response.data.size == 250
                 page++
-            } while (response.data.isNotEmpty() && allCards.size < totalCount)
+            } while (response.data.isNotEmpty() && hasMore)
 
             val uniqueCards = allCards.distinctBy { it.id }
 
