@@ -134,11 +134,17 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun addMultipleCards(cards: List<TcgCard>, variant: String) {
+    fun addMultipleCards(cards: List<TcgCard>, preferredVariant: String) {
         viewModelScope.launch {
             var addedCount = 0
             cards.forEach { tcgCard ->
-                val variantKey = CardOptions.getVariantApiKey(variant)
+                val availableVariants = CardOptions.getVariantsForCard(
+                    tcgCard.tcgplayer?.prices?.keys ?: emptySet(), tcgCard.rarity
+                )
+                val actualVariant = if (preferredVariant in availableVariants) preferredVariant
+                    else availableVariants.firstOrNull() ?: "Holo"
+
+                val variantKey = CardOptions.getVariantApiKey(actualVariant)
                 val price = tcgCard.tcgplayer?.prices?.get(variantKey)?.market
                     ?: tcgCard.cardmarket?.prices?.lowPrice
                     ?: tcgCard.cardmarket?.prices?.averageSellPrice ?: 0.0
@@ -150,7 +156,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                     type = tcgCard.types?.firstOrNull() ?: "Colorless",
                     hp = tcgCard.hp?.toIntOrNull() ?: 0, estimatedValue = price,
                     apiCardId = tcgCard.id, cardNumber = tcgCard.number,
-                    variant = variant, quantity = 1, condition = "Near Mint", language = "🇮🇹 Italiano"
+                    variant = actualVariant, quantity = 1, condition = "Near Mint", language = "🇮🇹 Italiano"
                 )
                 firestoreRepository.addCard(card).onSuccess { addedCount++ }
             }

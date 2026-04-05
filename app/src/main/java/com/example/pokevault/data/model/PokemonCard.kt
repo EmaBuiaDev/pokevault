@@ -69,6 +69,42 @@ object CardOptions {
     )
     val DEFAULT_VARIANTS = listOf("Normal", "Reverse", "Holo")
 
+    private val SINGLE_VARIANT_RARITIES = setOf(
+        "ace spec", "special illustration rare", "special art rare",
+        "illustration rare", "rare art", "illustrazione rara",
+        "shiny ultra", "ultra rara shiny", "ultra rare", "ultra rara", "full art",
+        "hyper rare", "iper rara", "gold",
+        "shiny rare", "rara shiny",
+        "double rare", "doppia rara", "ex", "vmax", "vstar", "rare holo v",
+        "promo", "mega_attack_rare", "mega hyper rare"
+    )
+
+    fun getVariantsForCard(priceKeys: Set<String>, rarity: String?): List<String> {
+        val apiVariants = priceKeys.map { key ->
+            when (key) {
+                "normal" -> "Normal"
+                "holofoil" -> "Holo"
+                "reverseHolofoil" -> "Reverse"
+                "1stEditionHolofoil" -> "1st Edition Holo"
+                "1stEditionNormal" -> "1st Edition"
+                "unlimitedHolofoil" -> "Unlimited Holo"
+                else -> key.replaceFirstChar { it.uppercase() }
+            }
+        }
+        if (apiVariants.isNotEmpty()) return apiVariants
+
+        // Fallback based on rarity
+        val r = (rarity ?: "").lowercase().trim()
+        return when {
+            r in SINGLE_VARIANT_RARITIES -> listOf("Holo")
+            r.contains("rare holo") -> listOf("Holo", "Reverse")
+            r == "rare" || r == "rara" -> listOf("Normal", "Reverse", "Holo")
+            r == "uncommon" || r == "non comune" -> listOf("Normal", "Reverse")
+            r == "common" || r == "comune" -> listOf("Normal", "Reverse")
+            else -> listOf("Holo") // Unknown special rarity → single variant
+        }
+    }
+
     fun getVariantsFromApi(priceKeys: Set<String>): List<String> {
         return priceKeys.map { key ->
             when (key) {

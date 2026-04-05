@@ -338,10 +338,11 @@ fun SetDetailScreen(
                                     onQuickAddClick = {
                                         if (!isSelectionMode) {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            val priceKeys = card.tcgplayer?.prices?.keys ?: emptySet()
-                                            val variants = CardOptions.getVariantsFromApi(priceKeys)
+                                            val variants = CardOptions.getVariantsForCard(
+                                                card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity
+                                            )
                                             if (variants.size <= 1) {
-                                                viewModel.addCardWithDetails(card, variants.firstOrNull() ?: "Normal", 1, "Near Mint", "🇮🇹 Italiano")
+                                                viewModel.addCardWithDetails(card, variants.firstOrNull() ?: "Holo", 1, "Near Mint", "🇮🇹 Italiano")
                                             } else {
                                                 quickAddCard = if (quickAddCard?.id == card.id) null else card
                                             }
@@ -599,8 +600,8 @@ fun TcgCardCompactItem(
     onQuickAddClick: () -> Unit,
     onVariantSelected: (String) -> Unit = {}
 ) {
-    val variantOptions = remember(card.tcgplayer?.prices?.keys) {
-        CardOptions.getVariantsFromApi(card.tcgplayer?.prices?.keys ?: emptySet())
+    val variantOptions = remember(card.tcgplayer?.prices?.keys, card.rarity) {
+        CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity)
     }
 
     Box(modifier = Modifier
