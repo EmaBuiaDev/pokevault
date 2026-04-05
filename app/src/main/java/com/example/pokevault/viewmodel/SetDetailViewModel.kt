@@ -12,6 +12,7 @@ import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.data.remote.TcgSet
+import com.example.pokevault.util.AppLocale
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
@@ -130,6 +131,32 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             firestoreRepository.addCard(card)
                 .onSuccess { uiState = uiState.copy(isAddingCard = null, successMessage = "${tcgCard.name} aggiunta!") }
                 .onFailure { uiState = uiState.copy(isAddingCard = null, errorMessage = "Errore") }
+        }
+    }
+
+    fun addMultipleCards(cards: List<TcgCard>, variant: String) {
+        viewModelScope.launch {
+            var addedCount = 0
+            cards.forEach { tcgCard ->
+                val variantKey = CardOptions.getVariantApiKey(variant)
+                val price = tcgCard.tcgplayer?.prices?.get(variantKey)?.market
+                    ?: tcgCard.cardmarket?.prices?.lowPrice
+                    ?: tcgCard.cardmarket?.prices?.averageSellPrice ?: 0.0
+
+                val card = PokemonCard(
+                    name = tcgCard.name, imageUrl = tcgCard.images.small,
+                    set = tcgCard.set?.name ?: uiState.set?.name ?: "",
+                    rarity = tcgCard.rarity ?: "Unknown",
+                    type = tcgCard.types?.firstOrNull() ?: "Colorless",
+                    hp = tcgCard.hp?.toIntOrNull() ?: 0, estimatedValue = price,
+                    apiCardId = tcgCard.id, cardNumber = tcgCard.number,
+                    variant = variant, quantity = 1, condition = "Near Mint", language = "🇮🇹 Italiano"
+                )
+                firestoreRepository.addCard(card).onSuccess { addedCount++ }
+            }
+            uiState = uiState.copy(
+                successMessage = if (AppLocale.isItalian) "$addedCount carte aggiunte!" else "$addedCount cards added!"
+            )
         }
     }
 

@@ -2,15 +2,20 @@ package com.example.pokevault.ui.pokedex
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,10 +36,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.pokevault.data.model.CardOptions
@@ -63,6 +67,22 @@ fun SetDetailScreen(
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     var quickAddCard by remember { mutableStateOf<TcgCard?>(null) }
     var selectedRarityFilter by remember { mutableStateOf<String?>(null) }
+
+    // Selection mode state
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedCardIds by remember { mutableStateOf(setOf<String>()) }
+    var selectionVariant by remember { mutableStateOf("Normal") }
+    val gridState = rememberLazyGridState()
+
+    BackHandler(enabled = isSelectionMode) {
+        isSelectionMode = false
+        selectedCardIds = emptySet()
+    }
+
+    // Exit quick add popup when entering selection mode
+    LaunchedEffect(isSelectionMode) {
+        if (isSelectionMode) quickAddCard = null
+    }
 
     LaunchedEffect(setId) { viewModel.loadSet(setId) }
 
@@ -137,11 +157,49 @@ fun SetDetailScreen(
                     PokeballLoadingAnimation(message = AppLocale.loading)
                 }
             } else {
+                Box(modifier = Modifier.fillMaxSize()) {
                 LazyVerticalGrid(
+                    state = gridState,
                     columns = GridCells.Fixed(3),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    contentPadding = PaddingValues(
+                        start = 16.dp, end = 16.dp, top = 8.dp,
+                        bottom = if (isSelectionMode) 80.dp else 8.dp
+                    ),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.pointerInput(sortedCards, state.viewMode) {
+                        if (state.viewMode == "grid") {
+                            val headerCount = 4
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { offset ->
+                                    val item = gridState.layoutInfo.visibleItemsInfo.find { info ->
+                                        offset.x.toInt() in info.offset.x until (info.offset.x + info.size.width) &&
+                                        offset.y.toInt() in info.offset.y until (info.offset.y + info.size.height)
+                                    }
+                                    val cardIndex = (item?.index ?: -1) - headerCount
+                                    val card = sortedCards.getOrNull(cardIndex)
+                                    if (card != null) {
+                                        isSelectionMode = true
+                                        selectedCardIds = selectedCardIds + card.id
+                                    }
+                                },
+                                onDrag = { change, _ ->
+                                    if (isSelectionMode) {
+                                        change.consume()
+                                        val item = gridState.layoutInfo.visibleItemsInfo.find { info ->
+                                            change.position.x.toInt() in info.offset.x until (info.offset.x + info.size.width) &&
+                                            change.position.y.toInt() in info.offset.y until (info.offset.y + info.size.height)
+                                        }
+                                        val cardIndex = (item?.index ?: -1) - headerCount
+                                        val card = sortedCards.getOrNull(cardIndex)
+                                        if (card != null && card.id !in selectedCardIds) {
+                                            selectedCardIds = selectedCardIds + card.id
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
                 ) {
                     item(span = { GridItemSpan(3) }) {
                         SetInfoHeader(
@@ -257,38 +315,44 @@ fun SetDetailScreen(
                     } else {
                         when (state.viewMode) {
                             "grid" -> items(sortedCards, key = { "${it.id}_${it.number}" }) { card ->
-                                Box {
-                                    TcgCardCompactItem(
-                                        card = card,
-                                        isOwned = card.id in state.ownedCardIds,
-                                        isAdding = state.isAddingCard == card.id,
-                                        isPopupOpen = quickAddCard?.id == card.id,
-                                        onClick = { selectedCard = card },
-                                        onQuickAddClick = {
+                                TcgCardCompactItem(
+                                    card = card,
+                                    isOwned = card.id in state.ownedCardIds,
+                                    isAdding = state.isAddingCard == card.id,
+                                    isPopupOpen = quickAddCard?.id == card.id,
+                                    isSelected = card.id in selectedCardIds,
+                                    isSelectionMode = isSelectionMode,
+                                    onClick = {
+                                        if (isSelectionMode) {
+                                            selectedCardIds = if (card.id in selectedCardIds) selectedCardIds - card.id else selectedCardIds + card.id
+                                            if (selectedCardIds.isEmpty()) isSelectionMode = false
+                                        } else {
+                                            selectedCard = card
+                                        }
+                                    },
+                                    onLongClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        isSelectionMode = true
+                                        selectedCardIds = selectedCardIds + card.id
+                                    },
+                                    onQuickAddClick = {
+                                        if (!isSelectionMode) {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             val priceKeys = card.tcgplayer?.prices?.keys ?: emptySet()
                                             val variants = CardOptions.getVariantsFromApi(priceKeys)
                                             if (variants.size <= 1) {
-                                                val variantToAdd = variants.firstOrNull() ?: "Normal"
-                                                viewModel.addCardWithDetails(card, variantToAdd, 1, "Near Mint", "🇮🇹 Italiano")
+                                                viewModel.addCardWithDetails(card, variants.firstOrNull() ?: "Normal", 1, "Near Mint", "🇮🇹 Italiano")
                                             } else {
                                                 quickAddCard = if (quickAddCard?.id == card.id) null else card
                                             }
                                         }
-                                    )
-
-                                    if (quickAddCard?.id == card.id) {
-                                        QuickAddPopup(
-                                            card = card,
-                                            onVariantSelected = { variant ->
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                viewModel.addCardWithDetails(card, variant, 1, "Near Mint", "🇮🇹 Italiano")
-                                                quickAddCard = null
-                                            },
-                                            onDismiss = { quickAddCard = null }
-                                        )
+                                    },
+                                    onVariantSelected = { variant ->
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        viewModel.addCardWithDetails(card, variant, 1, "Near Mint", "🇮🇹 Italiano")
+                                        quickAddCard = null
                                     }
-                                }
+                                )
                             }
                             "list" -> items(sortedCards, key = { "${it.id}_${it.number}" }, span = { GridItemSpan(3) }) { card ->
                                 TcgCardListRow(card, card.id in state.ownedCardIds) { selectedCard = card }
@@ -298,57 +362,103 @@ fun SetDetailScreen(
 
                     item(span = { GridItemSpan(3) }) { Spacer(modifier = Modifier.height(40.dp)) }
                 }
+
+                // Selection bottom bar
+                if (isSelectionMode && selectedCardIds.isNotEmpty()) {
+                    SelectionBottomBar(
+                        selectedCount = selectedCardIds.size,
+                        selectedVariant = selectionVariant,
+                        onVariantChange = { selectionVariant = it },
+                        onAddAll = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            val cards = sortedCards.filter { it.id in selectedCardIds }
+                            viewModel.addMultipleCards(cards, selectionVariant)
+                            isSelectionMode = false
+                            selectedCardIds = emptySet()
+                        },
+                        onCancel = {
+                            isSelectionMode = false
+                            selectedCardIds = emptySet()
+                        },
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                }
+                } // close Box
             }
         }
     }
 }
 
 @Composable
-fun QuickAddPopup(card: TcgCard, onVariantSelected: (String) -> Unit, onDismiss: () -> Unit) {
-    val apiPriceKeys = card.tcgplayer?.prices?.keys ?: emptySet()
-    val variantOptions = CardOptions.getVariantsFromApi(apiPriceKeys)
+fun SelectionBottomBar(
+    selectedCount: Int,
+    selectedVariant: String,
+    onVariantChange: (String) -> Unit,
+    onAddAll: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val variants = CardOptions.DEFAULT_VARIANTS
 
-    Popup(
-        alignment = Alignment.TopCenter,
-        offset = androidx.compose.ui.unit.IntOffset(0, -10),
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color.Transparent, DarkSurface.copy(alpha = 0.95f), DarkSurface)
+                )
+            )
+            .padding(top = 16.dp, bottom = 12.dp, start = 16.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        var visible by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) { visible = true }
+        // Cancel
+        IconButton(onClick = onCancel, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Close, contentDescription = null, tint = TextMuted)
+        }
 
-        AnimatedVisibility(
-            visible = visible,
-            enter = scaleIn(initialScale = 0.7f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)) + fadeIn(),
-            exit = scaleOut(targetScale = 0.7f) + fadeOut()
+        // Variant pills
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .widthIn(min = 90.dp, max = 130.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(DarkSurface.copy(alpha = 0.98f))
-                    .border(1.dp, BlueCard.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                    .padding(4.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                variantOptions.forEachIndexed { index, variant ->
-                    Text(
-                        text = variant,
-                        color = TextWhite,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onVariantSelected(variant) }
-                            .padding(horizontal = 8.dp, vertical = 10.dp)
-                    )
-                    if (index < variantOptions.size - 1) {
-                        Divider(color = Color.White.copy(alpha = 0.08f), thickness = 0.5.dp)
-                    }
-                }
+            variants.forEach { variant ->
+                val isActive = variant == selectedVariant
+                Text(
+                    text = when (variant) {
+                        "Normal" -> "Norm"
+                        "Reverse" -> "Rev"
+                        else -> variant
+                    },
+                    color = if (isActive) TextWhite else TextMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (isActive) BlueCard.copy(alpha = 0.7f) else DarkCard)
+                        .border(
+                            1.dp,
+                            if (isActive) BlueCard else Color.Transparent,
+                            RoundedCornerShape(16.dp)
+                        )
+                        .clickable { onVariantChange(variant) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                )
             }
+        }
+
+        // Add all button
+        Button(
+            onClick = onAddAll,
+            colors = ButtonDefaults.buttonColors(containerColor = GreenCard),
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+            modifier = Modifier.height(36.dp)
+        ) {
+            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("$selectedCount", fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
     }
 }
@@ -475,35 +585,67 @@ fun RarityFilterChip(label: String, isSelected: Boolean, color: Color = BlueCard
             .padding(horizontal = 12.dp, vertical = 7.dp))
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TcgCardCompactItem(
-    card: TcgCard, 
-    isOwned: Boolean, 
+    card: TcgCard,
+    isOwned: Boolean,
     isAdding: Boolean = false,
     isPopupOpen: Boolean = false,
-    onClick: () -> Unit, 
-    onQuickAddClick: () -> Unit
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+    onQuickAddClick: () -> Unit,
+    onVariantSelected: (String) -> Unit = {}
 ) {
+    val variantOptions = remember(card.tcgplayer?.prices?.keys) {
+        CardOptions.getVariantsFromApi(card.tcgplayer?.prices?.keys ?: emptySet())
+    }
+
     Box(modifier = Modifier
         .fillMaxWidth()
         .aspectRatio(0.72f)
         .clip(RoundedCornerShape(10.dp))
         .then(
-            if (isOwned) Modifier.border(
-                2.dp,
-                GreenCard.copy(alpha = 0.7f),
-                RoundedCornerShape(10.dp)
-            ) else Modifier
+            when {
+                isSelected -> Modifier.border(2.dp, BlueCard, RoundedCornerShape(10.dp))
+                isOwned -> Modifier.border(2.dp, GreenCard.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                else -> Modifier
+            }
         )
-        .clickable(onClick = onClick)) {
-        
+        .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+    ) {
         AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        
-        if (!isOwned) Box(modifier = Modifier
+
+        if (!isOwned && !isSelected) Box(modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.55f)))
-        
-        if (isOwned) {
+
+        if (isSelected) Box(modifier = Modifier
+            .fillMaxSize()
+            .background(BlueCard.copy(alpha = 0.15f)))
+
+        // Selection checkbox (top-left)
+        if (isSelectionMode) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(4.dp)
+                    .size(20.dp)
+                    .clip(CircleShape)
+                    .background(if (isSelected) BlueCard else Color.Black.copy(alpha = 0.5f))
+                    .border(1.5.dp, if (isSelected) BlueCard else Color.White.copy(alpha = 0.4f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                }
+            }
+        }
+
+        // Owned badge (top-right)
+        if (isOwned && !isSelectionMode) {
             Box(modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(4.dp)
@@ -514,59 +656,87 @@ fun TcgCardCompactItem(
             }
         }
 
+        // Bottom area
         Column(modifier = Modifier
             .align(Alignment.BottomStart)
             .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color.Transparent,
-                        Color.Black.copy(alpha = 0.9f)
-                    )
-                )
-            )
-            .padding(horizontal = 6.dp, vertical = 5.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(card.name, color = TextWhite, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    val price = card.cardmarket?.prices?.lowPrice
-                        ?: card.cardmarket?.prices?.averageSellPrice
-                        ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
-                    if (price != null && price > 0) {
-                        Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when {
-                                isAdding || isPopupOpen -> BlueCard.copy(alpha = 0.9f)
-                                isOwned -> Color.Transparent
-                                else -> DarkSurface.copy(alpha = 0.8f)
-                            }
-                        )
-                        .border(
-                            1.dp,
-                            if (isOwned && !isAdding && !isPopupOpen) Color.White.copy(alpha = 0.1f) else Color.White.copy(
-                                alpha = 0.15f
-                            ),
-                            CircleShape
-                        )
-                        .clickable { onQuickAddClick() },
-                    contentAlignment = Alignment.Center
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
+            .padding(horizontal = 6.dp, vertical = 5.dp)
+        ) {
+            if (isPopupOpen) {
+                // Inline variant pills
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (isAdding) {
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 1.5.dp)
-                    } else {
-                        Icon(
-                            imageVector = if (isPopupOpen) Icons.Default.Close else Icons.Default.Add, 
-                            contentDescription = null, 
-                            tint = if (isOwned && !isPopupOpen) TextMuted.copy(alpha = 0.5f) else Color.White,
-                            modifier = Modifier.size(15.dp)
+                    variantOptions.forEach { variant ->
+                        val label = when (variant) {
+                            "Normal" -> "Norm"
+                            "Reverse" -> "Rev"
+                            "1st Edition Holo" -> "1st H"
+                            "1st Edition" -> "1st"
+                            "Unlimited Holo" -> "Unl H"
+                            else -> variant.take(5)
+                        }
+                        Text(
+                            text = label,
+                            color = TextWhite,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(BlueCard.copy(alpha = 0.7f))
+                                .clickable { onVariantSelected(variant) }
+                                .padding(vertical = 6.dp)
                         )
+                    }
+                    Icon(
+                        Icons.Default.Close, null,
+                        tint = TextMuted,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .clickable { onQuickAddClick() }
+                    )
+                }
+            } else {
+                // Normal name/price + add button
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(card.name, color = TextWhite, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        val price = card.cardmarket?.prices?.lowPrice
+                            ?: card.cardmarket?.prices?.averageSellPrice
+                            ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
+                        if (price != null && price > 0) {
+                            Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (!isSelectionMode) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        isAdding -> BlueCard.copy(alpha = 0.9f)
+                                        isOwned -> Color.Transparent
+                                        else -> DarkSurface.copy(alpha = 0.8f)
+                                    }
+                                )
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                .clickable { onQuickAddClick() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isAdding) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 1.5.dp)
+                            } else {
+                                Icon(Icons.Default.Add, null, tint = if (isOwned) TextMuted.copy(alpha = 0.5f) else Color.White, modifier = Modifier.size(15.dp))
+                            }
+                        }
                     }
                 }
             }
