@@ -135,15 +135,8 @@ class PokeTcgRepository {
             val json = prefs.getString("$CARDS_PREFIX$setId", null) ?: return null
             val cards: List<TcgCard> = gson.fromJson(json, object : TypeToken<List<TcgCard>>() {}.type)
             val expectedTotal = prefs.getInt("$CARDS_TOTAL_PREFIX$setId", -1)
-            if (expectedTotal <= 0) {
-                // totalCount assente o non valido: cache non affidabile
-                Log.d("PokeTcgRepo", "Cache non validata per set $setId: totalCount=$expectedTotal, ${cards.size} carte → ri-fetch")
-                return null
-            }
-            if (cards.size < expectedTotal) {
-                Log.d("PokeTcgRepo", "Cache incompleta per set $setId: ${cards.size}/$expectedTotal → ri-fetch")
-                return null
-            }
+            if (expectedTotal <= 0) return null
+            if (cards.size < expectedTotal) return null
             return cards
         } catch (e: Exception) {
             Log.w("PokeTcgRepository", "Errore lettura cache cards per set $setId", e)
@@ -156,7 +149,6 @@ class PokeTcgRepository {
         if (!forceRefresh) {
             val cached = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId) })
             if (cached != null && cached.isNotEmpty()) {
-                Log.d("PokeTcgRepo", "[$setId] Cache hit: ${cached.size} carte")
                 memoryCards[setId] = cached
                 return Result.success(cached)
             }
@@ -165,18 +157,12 @@ class PokeTcgRepository {
         // 2. API con Paginazione completa
         return try {
             val uniqueCards = fetchAllCards(setId)
-            Log.d("PokeTcgRepo", "[$setId] Final result: ${uniqueCards.size} unique cards")
-
             memoryCards[setId] = uniqueCards
             context?.let { saveCardsToCache(it, setId, uniqueCards, uniqueCards.size) }
             Result.success(uniqueCards)
         } catch (e: Exception) {
-            Log.e("PokeTcgRepo", "[$setId] Pagination error at API call", e)
             val fallback = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId, ignoreExpiry = true) })
-            if (fallback != null) {
-                Log.d("PokeTcgRepo", "[$setId] Using fallback: ${fallback.size} carte")
-                return Result.success(fallback)
-            }
+            if (fallback != null) return Result.success(fallback)
             Result.failure(e)
         }
     }
@@ -191,19 +177,10 @@ class PokeTcgRepository {
         var totalCount = 0
 
         while (true) {
-            Log.d("PokeTcgRepo", "[$setId] Fetching page $page (orderBy=$orderBy)...")
             val response = api.getCardsBySet(query = "set.id:$setId", orderBy = orderBy, page = page, pageSize = 250)
             val fetched = response.data.size
-
-            if (page == 1) {
-                totalCount = response.totalCount
-                Log.d("PokeTcgRepo", "[$setId] API totalCount=$totalCount")
-            }
-
-            for (card in response.data) {
-                cardMap[card.id] = card
-            }
-            Log.d("PokeTcgRepo", "[$setId] Page $page: fetched=$fetched, unique so far=${cardMap.size}/$totalCount")
+            if (page == 1) totalCount = response.totalCount
+            for (card in response.data) { cardMap[card.id] = card }
 
             if (fetched == 0) break
             if (totalCount > 0 && cardMap.size >= totalCount) break
@@ -211,14 +188,10 @@ class PokeTcgRepository {
             page++
         }
 
-        // Se ci sono duplicati e mancano carte, riprova con orderBy diverso
+        // Se la paginazione ha prodotto duplicati, riprova con sort inverso
         if (totalCount > 0 && cardMap.size < totalCount && orderBy == null) {
-            Log.w("PokeTcgRepo", "[$setId] Duplicati rilevati: ${cardMap.size}/$totalCount, retry con orderBy=-number")
             val retryCards = fetchAllCards(setId, orderBy = "-number")
-            for (card in retryCards) {
-                cardMap[card.id] = card
-            }
-            Log.d("PokeTcgRepo", "[$setId] Dopo retry: ${cardMap.size}/$totalCount")
+            for (card in retryCards) { cardMap[card.id] = card }
         }
 
         return cardMap.values.toList()
