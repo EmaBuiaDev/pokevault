@@ -134,7 +134,12 @@ class PokeTcgRepository {
             if (!ignoreExpiry && System.currentTimeMillis() - time > CARDS_CACHE_DURATION) return null
             val json = prefs.getString("$CARDS_PREFIX$setId", null) ?: return null
             val cards: List<TcgCard> = gson.fromJson(json, object : TypeToken<List<TcgCard>>() {}.type)
-            val expectedTotal = prefs.getInt("$CARDS_TOTAL_PREFIX$setId", 0)
+            val expectedTotal = prefs.getInt("$CARDS_TOTAL_PREFIX$setId", -1)
+            if (expectedTotal < 0) {
+                // Cache legacy senza totalCount: non affidabile, forza ri-fetch
+                Log.d("PokeTcgRepository", "Cache legacy senza totalCount per set $setId (${cards.size} carte), ri-fetch necessario")
+                return null
+            }
             if (expectedTotal > 0 && cards.size < expectedTotal) {
                 Log.d("PokeTcgRepository", "Cache incompleta per set $setId: ${cards.size}/$expectedTotal, ri-fetch necessario")
                 return null
