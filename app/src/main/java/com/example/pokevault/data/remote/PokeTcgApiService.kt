@@ -102,7 +102,7 @@ interface PokeTcgApiService {
     @GET("v2/cards")
     suspend fun getCardsBySet(
         @Query("q") query: String,
-        @Query("orderBy") orderBy: String = "number",
+        @Query("orderBy") orderBy: String? = null,
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 250
     ): CardsResponse

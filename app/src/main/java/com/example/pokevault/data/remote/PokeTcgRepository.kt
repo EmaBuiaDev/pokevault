@@ -164,33 +164,11 @@ class PokeTcgRepository {
 
         // 2. API con Paginazione completa
         return try {
-            val allCards = mutableListOf<TcgCard>()
-            var page = 1
-            var totalCount = 0
-
-            while (true) {
-                Log.d("PokeTcgRepo", "[$setId] Fetching page $page (pageSize=250)...")
-                val response = api.getCardsBySet(query = "set.id:$setId", page = page, pageSize = 250)
-                val fetched = response.data.size
-                allCards.addAll(response.data)
-
-                if (page == 1) {
-                    totalCount = response.totalCount
-                    Log.d("PokeTcgRepo", "[$setId] API totalCount=$totalCount")
-                }
-                Log.d("PokeTcgRepo", "[$setId] Page $page: fetched=$fetched, accumulated=${allCards.size}/$totalCount")
-
-                if (fetched == 0) break
-                if (totalCount > 0 && allCards.size >= totalCount) break
-                if (totalCount <= 0 && fetched < 250) break
-                page++
-            }
-
-            val uniqueCards = allCards.distinctBy { it.id }
-            Log.d("PokeTcgRepo", "[$setId] Pagination done: ${allCards.size} total, ${uniqueCards.size} unique")
+            val uniqueCards = fetchAllCards(setId)
+            Log.d("PokeTcgRepo", "[$setId] Final result: ${uniqueCards.size} unique cards")
 
             memoryCards[setId] = uniqueCards
-            context?.let { saveCardsToCache(it, setId, uniqueCards, if (totalCount > 0) totalCount else uniqueCards.size) }
+            context?.let { saveCardsToCache(it, setId, uniqueCards, uniqueCards.size) }
             Result.success(uniqueCards)
         } catch (e: Exception) {
             Log.e("PokeTcgRepo", "[$setId] Pagination error at API call", e)
@@ -206,6 +184,45 @@ class PokeTcgRepository {
     // ══════════════════════════════════════
     // ALTRI METODI
     // ══════════════════════════════════════
+
+    private suspend fun fetchAllCards(setId: String, orderBy: String? = null): List<TcgCard> {
+        val cardMap = linkedMapOf<String, TcgCard>()
+        var page = 1
+        var totalCount = 0
+
+        while (true) {
+            Log.d("PokeTcgRepo", "[$setId] Fetching page $page (orderBy=$orderBy)...")
+            val response = api.getCardsBySet(query = "set.id:$setId", orderBy = orderBy, page = page, pageSize = 250)
+            val fetched = response.data.size
+
+            if (page == 1) {
+                totalCount = response.totalCount
+                Log.d("PokeTcgRepo", "[$setId] API totalCount=$totalCount")
+            }
+
+            for (card in response.data) {
+                cardMap[card.id] = card
+            }
+            Log.d("PokeTcgRepo", "[$setId] Page $page: fetched=$fetched, unique so far=${cardMap.size}/$totalCount")
+
+            if (fetched == 0) break
+            if (totalCount > 0 && cardMap.size >= totalCount) break
+            if (totalCount <= 0 && fetched < 250) break
+            page++
+        }
+
+        // Se ci sono duplicati e mancano carte, riprova con orderBy diverso
+        if (totalCount > 0 && cardMap.size < totalCount && orderBy == null) {
+            Log.w("PokeTcgRepo", "[$setId] Duplicati rilevati: ${cardMap.size}/$totalCount, retry con orderBy=-number")
+            val retryCards = fetchAllCards(setId, orderBy = "-number")
+            for (card in retryCards) {
+                cardMap[card.id] = card
+            }
+            Log.d("PokeTcgRepo", "[$setId] Dopo retry: ${cardMap.size}/$totalCount")
+        }
+
+        return cardMap.values.toList()
+    }
 
     suspend fun getSetInfo(setId: String): Result<TcgSet> {
         return try { Result.success(api.getSet(setId).data) }
