@@ -115,6 +115,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             uiState = uiState.copy(isAddingCard = tcgCard.id)
             val variantKey = CardOptions.getVariantApiKey(variant)
             val price = tcgCard.tcgplayer?.prices?.get(variantKey)?.market
+                ?: tcgCard.cardmarket?.prices?.lowPrice
                 ?: tcgCard.cardmarket?.prices?.averageSellPrice ?: 0.0
 
             val card = PokemonCard(

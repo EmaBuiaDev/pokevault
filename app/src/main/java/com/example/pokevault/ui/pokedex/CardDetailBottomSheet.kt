@@ -58,6 +58,7 @@ fun CardDetailBottomSheet(
     // Prezzo per variante selezionata
     val variantKey = CardOptions.getVariantApiKey(selectedVariant)
     val price = card.tcgplayer?.prices?.get(variantKey)?.market
+        ?: card.cardmarket?.prices?.lowPrice
         ?: card.cardmarket?.prices?.averageSellPrice
 
     Dialog(

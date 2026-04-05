@@ -80,7 +80,15 @@ data class CardMarket(
 
 data class CardMarketPrices(
     val averageSellPrice: Double? = null,
-    val trendPrice: Double? = null
+    val lowPrice: Double? = null,
+    val trendPrice: Double? = null,
+    val lowPriceExPlus: Double? = null,
+    val suggestedPrice: Double? = null,
+    val avg1: Double? = null,
+    val avg7: Double? = null,
+    val avg30: Double? = null,
+    val reverseHoloLow: Double? = null,
+    val reverseHoloTrend: Double? = null
 )
 
 // ── Retrofit Interface ──

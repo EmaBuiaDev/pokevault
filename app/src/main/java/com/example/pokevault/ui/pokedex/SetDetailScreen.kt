@@ -529,7 +529,9 @@ fun TcgCardCompactItem(
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(card.name, color = TextWhite, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    val price = card.cardmarket?.prices?.averageSellPrice ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
+                    val price = card.cardmarket?.prices?.lowPrice
+                        ?: card.cardmarket?.prices?.averageSellPrice
+                        ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
                     if (price != null && price > 0) {
                         Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
@@ -598,7 +600,7 @@ fun TcgCardListRow(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
             }
             Text("#${card.number} · ${AppLocale.translateRarity(card.rarity ?: "")}", color = TextMuted, fontSize = 11.sp)
         }
-        val price = card.cardmarket?.prices?.averageSellPrice ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
+        val price = card.cardmarket?.prices?.lowPrice ?: card.cardmarket?.prices?.averageSellPrice ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
         if (price != null && price > 0) Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 13.sp, fontWeight = FontWeight.Medium)
         Box(modifier = Modifier
             .size(28.dp)
