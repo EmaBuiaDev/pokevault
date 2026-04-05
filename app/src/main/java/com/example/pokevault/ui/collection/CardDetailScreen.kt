@@ -47,6 +47,7 @@ fun CardDetailScreen(
 
     var tempIsGraded by remember { mutableStateOf(false) }
     var tempGrade by remember { mutableStateOf<Float?>(null) }
+    var tempGradeStr by remember { mutableStateOf("") }
     var tempCompany by remember { mutableStateOf("") }
 
     var expandedGrading by remember { mutableStateOf(false) }
@@ -84,12 +85,12 @@ fun CardDetailScreen(
         variants.getOrNull(selectedVariantIndex)?.let {
             tempIsGraded = it.isGraded
             tempGrade = it.grade
-            tempCompany = it.gradingCompany // Inizializza esattamente come salvato
+            tempGradeStr = it.grade?.toString() ?: ""
+            tempCompany = it.gradingCompany
         }
     }
 
     fun confirmVariantChange(card: PokemonCard, newQty: Int, isGraded: Boolean? = null, grade: Float? = null, company: String? = null) {
-        // Validazione se gradata
         if (isGraded == true) {
             if (grade == null) return
             if (company.isNullOrBlank()) return 
@@ -142,16 +143,14 @@ fun CardDetailScreen(
             val currentCard = variants.getOrNull(selectedVariantIndex) ?: variants.first()
             val totalQty = variants.sumOf { editedQuantities[it.id] ?: it.quantity }
             
-            // Unificata la logica di cambio: mostriamo il bottone solo se c'è un cambiamento REALE rispetto al database
             val isGradingChanged = tempIsGraded != currentCard.isGraded || 
                                  tempGrade != currentCard.grade || 
                                  tempCompany != currentCard.gradingCompany
             
-            // Validazione per abilitare il tasto di salvataggio
             val canSaveGrading = if (tempIsGraded) {
                 tempGrade != null && tempCompany.isNotBlank()
             } else {
-                true // Se non è gradata, posso sempre salvare il cambio di stato
+                true 
             }
 
             Column(
@@ -244,7 +243,6 @@ fun CardDetailScreen(
                                 checked = tempIsGraded,
                                 onCheckedChange = { 
                                     tempIsGraded = it
-                                    // Se attivato e vuoto, metti PSA come default
                                     if (it && tempCompany.isBlank()) {
                                         tempCompany = "PSA"
                                     }
@@ -267,11 +265,38 @@ fun CardDetailScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
-                                value = tempGrade?.toString() ?: "",
-                                onValueChange = { tempGrade = it.replace(",", ".").toFloatOrNull() },
+                                value = tempGradeStr,
+                                onValueChange = { input ->
+                                    val sanitized = input.replace(',', '.')
+                                    var dotCount = 0
+                                    val filtered = sanitized.filter { 
+                                        if (it == '.') {
+                                            dotCount++
+                                            dotCount <= 1
+                                        } else {
+                                            it.isDigit()
+                                        }
+                                    }
+                                    
+                                    val numericValue = filtered.toFloatOrNull()
+                                    if (filtered.isEmpty()) {
+                                        tempGradeStr = ""
+                                        tempGrade = null
+                                    } else if (numericValue != null && numericValue <= 10f) {
+                                        tempGradeStr = filtered
+                                        tempGrade = numericValue
+                                    } else if (numericValue != null && numericValue > 10f) {
+                                        // Blocca a 10 se superiore
+                                        tempGradeStr = "10"
+                                        tempGrade = 10f
+                                    }
+                                },
                                 label = { Text("Voto (1-10)", fontSize = 10.sp) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                                ),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = TextWhite, 
                                     unfocusedTextColor = TextWhite,
@@ -280,7 +305,6 @@ fun CardDetailScreen(
                                 )
                             )
                             
-                            // Dropdown per Ente Grading
                             ExposedDropdownMenuBox(
                                 expanded = expandedGrading,
                                 onExpandedChange = { expandedGrading = it },

@@ -44,12 +44,43 @@ class AddCardViewModel : ViewModel() {
     fun updateType(value: String) { uiState = uiState.copy(type = value) }
     fun updateHp(value: String) { uiState = uiState.copy(hp = value.filter { it.isDigit() }) }
     fun updateEstimatedValue(value: String) {
-        uiState = uiState.copy(estimatedValue = value.filter { it.isDigit() || it == '.' })
+        uiState = uiState.copy(estimatedValue = value.filter { it.isDigit() || it == '.' || it == ',' }.replace(',', '.'))
     }
     fun updateQuantity(value: String) { uiState = uiState.copy(quantity = value.filter { it.isDigit() }) }
     fun updateCondition(value: String) { uiState = uiState.copy(condition = value) }
     fun updateIsGraded(value: Boolean) { uiState = uiState.copy(isGraded = value) }
-    fun updateGrade(value: String) { uiState = uiState.copy(grade = value) }
+    
+    fun updateGrade(value: String) {
+        // 1. Converti virgola in punto e tieni solo cifre e un punto
+        val sanitized = value.replace(',', '.')
+        var dotCount = 0
+        val filtered = sanitized.filter { 
+            if (it == '.') {
+                dotCount++
+                dotCount <= 1
+            } else {
+                it.isDigit()
+            }
+        }
+
+        if (filtered.isEmpty()) {
+            uiState = uiState.copy(grade = "")
+            return
+        }
+
+        // 2. Controllo numerico immediato
+        val gradeVal = filtered.toFloatOrNull()
+        if (gradeVal != null) {
+            if (gradeVal > 10f) {
+                // Se è > 10, teniamo il valore precedente o resettiamo a 10
+                uiState = uiState.copy(grade = "10")
+                return
+            }
+        }
+        
+        uiState = uiState.copy(grade = filtered)
+    }
+    
     fun updateGradingCompany(value: String) { uiState = uiState.copy(gradingCompany = value) }
     fun updateNotes(value: String) { uiState = uiState.copy(notes = value) }
     fun updateImageUrl(value: String) { uiState = uiState.copy(imageUrl = value) }
@@ -93,14 +124,11 @@ class AddCardViewModel : ViewModel() {
             return
         }
 
-        // Validazione gradazione
+        // Validazione finale gradazione
         if (uiState.isGraded) {
-            if (uiState.grade.isBlank()) {
-                uiState = uiState.copy(errorMessage = "Inserisci il voto della gradazione")
-                return
-            }
-            if (uiState.grade.toFloatOrNull() == null) {
-                uiState = uiState.copy(errorMessage = "Inserisci un voto valido (es. 10 o 9.5)")
+            val gradeVal = uiState.grade.toFloatOrNull()
+            if (gradeVal == null || gradeVal < 0 || gradeVal > 10) {
+                uiState = uiState.copy(errorMessage = "Il voto deve essere compreso tra 0 e 10")
                 return
             }
             if (uiState.gradingCompany.isBlank()) {
