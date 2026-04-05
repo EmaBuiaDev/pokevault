@@ -48,6 +48,7 @@ class PokeTcgRepository {
         private const val SETS_TIME_KEY = "cached_sets_time"
         private const val CARDS_PREFIX = "cached_cards_"
         private const val CARDS_TIME_PREFIX = "cached_cards_time_"
+        private const val CARDS_TOTAL_PREFIX = "cached_cards_total_"
         private const val CACHE_DURATION = 24 * 60 * 60 * 1000L // 24 ore
         private const val CARDS_CACHE_DURATION = 6 * 60 * 60 * 1000L // 6 ore per carte
     }
@@ -113,13 +114,14 @@ class PokeTcgRepository {
     // CACHE CARTE PER SET
     // ══════════════════════════════════════
 
-    private fun saveCardsToCache(context: Context, setId: String, cards: List<TcgCard>) {
+    private fun saveCardsToCache(context: Context, setId: String, cards: List<TcgCard>, totalCount: Int) {
         try {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit()
                 .putString("$CARDS_PREFIX$setId", gson.toJson(cards))
                 .putLong("$CARDS_TIME_PREFIX$setId", System.currentTimeMillis())
-                .apply()
+                .putInt("$CARDS_TOTAL_PREFIX$setId", totalCount)
+                .commit()
         } catch (e: Exception) {
             Log.w("PokeTcgRepository", "Errore salvataggio cache cards per set $setId", e)
         }
@@ -131,7 +133,13 @@ class PokeTcgRepository {
             val time = prefs.getLong("$CARDS_TIME_PREFIX$setId", 0)
             if (!ignoreExpiry && System.currentTimeMillis() - time > CARDS_CACHE_DURATION) return null
             val json = prefs.getString("$CARDS_PREFIX$setId", null) ?: return null
-            return gson.fromJson(json, object : TypeToken<List<TcgCard>>() {}.type)
+            val cards: List<TcgCard> = gson.fromJson(json, object : TypeToken<List<TcgCard>>() {}.type)
+            val expectedTotal = prefs.getInt("$CARDS_TOTAL_PREFIX$setId", 0)
+            if (expectedTotal > 0 && cards.size < expectedTotal) {
+                Log.d("PokeTcgRepository", "Cache incompleta per set $setId: ${cards.size}/$expectedTotal, ri-fetch necessario")
+                return null
+            }
+            return cards
         } catch (e: Exception) {
             Log.w("PokeTcgRepository", "Errore lettura cache cards per set $setId", e)
             return null
@@ -143,10 +151,8 @@ class PokeTcgRepository {
         if (!forceRefresh) {
             val cached = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId) })
             if (cached != null && cached.isNotEmpty()) {
-                if (cached.size != 250) {
-                    memoryCards[setId] = cached
-                    return Result.success(cached)
-                }
+                memoryCards[setId] = cached
+                return Result.success(cached)
             }
         }
 
@@ -155,17 +161,23 @@ class PokeTcgRepository {
             val allCards = mutableListOf<TcgCard>()
             var page = 1
             var fetchedCount: Int
+            var totalCount = 0
             do {
                 val response = api.getCardsBySet(query = "set.id:$setId", page = page, pageSize = 250)
                 allCards.addAll(response.data)
                 fetchedCount = response.data.size
+                if (page == 1) totalCount = response.totalCount
                 page++
             } while (fetchedCount == 250)
 
             val uniqueCards = allCards.distinctBy { it.id }
 
+            if (totalCount > 0 && uniqueCards.size < totalCount) {
+                Log.w("PokeTcgRepository", "Paginazione incompleta per set $setId: ${uniqueCards.size}/$totalCount")
+            }
+
             memoryCards[setId] = uniqueCards
-            context?.let { saveCardsToCache(it, setId, uniqueCards) }
+            context?.let { saveCardsToCache(it, setId, uniqueCards, totalCount) }
             Result.success(uniqueCards)
         } catch (e: Exception) {
             val fallback = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId, ignoreExpiry = true) })
