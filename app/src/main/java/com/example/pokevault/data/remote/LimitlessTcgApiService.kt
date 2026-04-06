@@ -15,11 +15,17 @@ data class LimitlessTournament(
     val players: Int = 0
 )
 
-data class LimitlessPlayer(
+/**
+ * Rappresenta un giocatore nei risultati di un torneo.
+ * "player" è lo username, "name" è il nome visualizzato.
+ * La decklist può arrivare in formati diversi (mappa per categoria o lista piatta).
+ */
+data class LimitlessStanding(
+    val player: String = "",
     val name: String = "",
     val placing: Int = 0,
     val record: LimitlessRecord? = null,
-    val decklist: List<LimitlessDeckCard>? = null,
+    val decklist: Any? = null, // Può essere Map<String,List> o List - parsing flessibile
     val deck: LimitlessDeckInfo? = null,
     val country: String? = null
 )
@@ -28,14 +34,6 @@ data class LimitlessRecord(
     val wins: Int = 0,
     val losses: Int = 0,
     val ties: Int = 0
-)
-
-data class LimitlessDeckCard(
-    val count: Int = 0,
-    val name: String = "",
-    val set: String = "",
-    val number: String = "",
-    val type: String? = null // pokemon, trainer, energy
 )
 
 data class LimitlessDeckInfo(
@@ -61,8 +59,8 @@ interface LimitlessTcgApiService {
         @Query("page") page: Int = 1
     ): List<LimitlessTournament>
 
-    @GET("tournaments/{id}/players")
-    suspend fun getTournamentPlayers(
+    @GET("tournaments/{id}/standings")
+    suspend fun getTournamentStandings(
         @Path("id") tournamentId: String
-    ): List<LimitlessPlayer>
+    ): List<LimitlessStanding>
 }
