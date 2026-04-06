@@ -9,6 +9,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.Deck
 import com.example.pokevault.data.model.DeckAnalysis
+import com.example.pokevault.data.model.DeckImportParser
+import com.example.pokevault.data.model.MetaDeck
+import com.example.pokevault.data.model.MetaDeckCard
 import com.example.pokevault.data.model.PokemonCard
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -269,5 +272,150 @@ class DeckLabViewModel : ViewModel() {
 
     fun selectCoverCard(url: String) {
         coverImageUrl = url
+    }
+
+    // ══════════════════════════════════════
+    // IMPORT DECK
+    // ══════════════════════════════════════
+
+    data class ImportResult(
+        val matched: Int,
+        val missing: Int,
+        val missingCards: List<String>,
+        val totalRequested: Int
+    )
+
+    var importResult by mutableStateOf<ImportResult?>(null)
+        private set
+
+    /**
+     * Importa da testo (formato PTCG standard).
+     * Matcha le carte con quelle possedute e pre-popola il deck.
+     */
+    fun importFromText(text: String): ImportResult {
+        resetNewDeckState()
+
+        val parsed = DeckImportParser.parse(text)
+        if (parsed.deckName != null) {
+            newDeckName = parsed.deckName
+        }
+
+        return matchAndPopulate(parsed.cards.map { card ->
+            MetaDeckCard(
+                name = card.name,
+                set = card.set,
+                number = card.number,
+                qty = card.qty,
+                type = card.type
+            )
+        })
+    }
+
+    /**
+     * Importa da un MetaDeck (dalla sezione Meta Deck).
+     */
+    fun importFromMetaDeck(metaDeck: MetaDeck): ImportResult {
+        resetNewDeckState()
+        newDeckName = metaDeck.archetype ?: metaDeck.player ?: "Deck Importato"
+
+        return matchAndPopulate(metaDeck.cards)
+    }
+
+    /**
+     * Matcha una lista di carte con le carte possedute e popola il deck.
+     * Usa nome + set + numero per matching preciso, poi fallback su solo nome.
+     */
+    private fun matchAndPopulate(cards: List<MetaDeckCard>): ImportResult {
+        val idsToAdd = mutableListOf<String>()
+        val missingCards = mutableListOf<String>()
+        var totalRequested = 0
+
+        for (card in cards) {
+            totalRequested += card.qty
+
+            // Cerca nelle carte possedute
+            val matched = findOwnedCards(card.name, card.set, card.number)
+
+            if (matched.isEmpty()) {
+                missingCards.add("${card.qty}x ${card.name}")
+                continue
+            }
+
+            // Aggiungi la quantità richiesta (se disponibile)
+            var remaining = card.qty
+            for (ownedCard in matched) {
+                if (remaining <= 0) break
+                val alreadyInDeck = idsToAdd.count { it == ownedCard.id }
+                val available = ownedCard.quantity - alreadyInDeck
+                val toAdd = minOf(remaining, available)
+                repeat(toAdd) { idsToAdd.add(ownedCard.id) }
+                remaining -= toAdd
+            }
+
+            if (remaining > 0) {
+                missingCards.add("${remaining}x ${card.name} (possiedi meno copie)")
+            }
+        }
+
+        selectedCardsIds = idsToAdd.take(60) // Limite 60 carte
+        if (idsToAdd.isNotEmpty()) {
+            val firstCard = ownedCards.find { it.id == idsToAdd.first() }
+            coverImageUrl = firstCard?.imageUrl ?: ""
+        }
+        analyzeDeck()
+
+        val result = ImportResult(
+            matched = idsToAdd.size,
+            missing = missingCards.size,
+            missingCards = missingCards,
+            totalRequested = totalRequested
+        )
+        importResult = result
+        return result
+    }
+
+    /**
+     * Cerca le carte possedute che corrispondono a nome, set e numero.
+     * Prima prova matching esatto, poi fallback su nome.
+     */
+    private fun findOwnedCards(name: String, set: String?, number: String?): List<PokemonCard> {
+        val nameLower = name.lowercase().trim()
+
+        // 1. Match esatto: nome + set + numero
+        if (set != null && number != null) {
+            val exact = ownedCards.filter { card ->
+                card.name.lowercase().trim() == nameLower &&
+                    (card.set.lowercase().contains(set.lowercase()) ||
+                     card.apiCardId.lowercase().contains(set.lowercase())) &&
+                    card.cardNumber == number
+            }
+            if (exact.isNotEmpty()) return exact
+        }
+
+        // 2. Match per nome + numero
+        if (number != null) {
+            val byNameAndNumber = ownedCards.filter { card ->
+                card.name.lowercase().trim() == nameLower &&
+                    card.cardNumber == number
+            }
+            if (byNameAndNumber.isNotEmpty()) return byNameAndNumber
+        }
+
+        // 3. Match per nome esatto
+        val byName = ownedCards.filter { card ->
+            card.name.lowercase().trim() == nameLower
+        }
+        if (byName.isNotEmpty()) return byName
+
+        // 4. Match parziale per nome (contiene)
+        val byPartial = ownedCards.filter { card ->
+            card.name.lowercase().contains(nameLower) ||
+                nameLower.contains(card.name.lowercase())
+        }
+        return byPartial
+    }
+
+    fun clearImportResult() {
+        importResult = null
     }
 }
