@@ -41,20 +41,30 @@ import com.example.pokevault.data.model.Deck
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.viewmodel.DeckLabViewModel
+import com.example.pokevault.viewmodel.MetaDeckViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeckLabScreen(
     onBack: () -> Unit,
     onCardClick: (String) -> Unit = {},
-    viewModel: DeckLabViewModel = viewModel()
+    viewModel: DeckLabViewModel = viewModel(),
+    metaDeckViewModel: MetaDeckViewModel = viewModel()
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSheet by remember { mutableStateOf(false) }
     var selectedDeck by remember { mutableStateOf<Deck?>(null) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val deckLabTabs = listOf("I Miei Deck", "Meta Deck")
 
     if (selectedDeck != null) {
         BackHandler { selectedDeck = null }
+    }
+
+    // Se siamo nella vista dettaglio di un MetaDeck, mostriamola a tutto schermo
+    if (selectedTabIndex == 1 && metaDeckViewModel.selectedDeck != null) {
+        MetaDeckSection(viewModel = metaDeckViewModel)
+        return
     }
 
     Scaffold(
@@ -86,9 +96,36 @@ fun DeckLabScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Crea mini-deck con le carte che possiedi",
+                                text = if (selectedTabIndex == 0) "Crea mini-deck con le carte che possiedi"
+                                       else "Deck del meta competitivo da LimitlessTCG",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextMuted
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Tabs: I Miei Deck | Meta Deck
+                    SecondaryTabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        containerColor = Color.Transparent,
+                        contentColor = BlueCard,
+                        divider = {}
+                    ) {
+                        deckLabTabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTabIndex == index,
+                                onClick = { selectedTabIndex = index },
+                                text = {
+                                    Text(
+                                        text = title,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                selectedContentColor = BlueCard,
+                                unselectedContentColor = TextMuted
                             )
                         }
                     }
@@ -96,11 +133,11 @@ fun DeckLabScreen(
             }
         },
         floatingActionButton = {
-            if (selectedDeck == null) {
+            if (selectedDeck == null && selectedTabIndex == 0) {
                 ExtendedFloatingActionButton(
-                    onClick = { 
+                    onClick = {
                         viewModel.resetNewDeckState()
-                        showSheet = true 
+                        showSheet = true
                     },
                     containerColor = BlueCard,
                     contentColor = TextWhite,
@@ -112,46 +149,58 @@ fun DeckLabScreen(
         }
     ) { padding ->
         Box(modifier = Modifier.padding(if (selectedDeck == null) padding else PaddingValues(0.dp))) {
-            if (selectedDeck != null) {
-                DeckDetailView(
-                    deck = selectedDeck!!,
-                    allOwnedCards = viewModel.ownedCards,
-                    onBack = { selectedDeck = null },
-                    onCardClick = onCardClick,
-                    onEdit = {
-                        viewModel.prepareEdit(selectedDeck!!)
-                        showSheet = true
-                    },
-                    onDelete = {
-                        viewModel.deleteDeck(selectedDeck!!.id)
-                        selectedDeck = null
-                    },
-                    onDuplicate = {
-                        viewModel.duplicateDeck(selectedDeck!!)
-                        selectedDeck = null
+            when {
+                selectedDeck != null -> {
+                    DeckDetailView(
+                        deck = selectedDeck!!,
+                        allOwnedCards = viewModel.ownedCards,
+                        onBack = { selectedDeck = null },
+                        onCardClick = onCardClick,
+                        onEdit = {
+                            viewModel.prepareEdit(selectedDeck!!)
+                            showSheet = true
+                        },
+                        onDelete = {
+                            viewModel.deleteDeck(selectedDeck!!.id)
+                            selectedDeck = null
+                        },
+                        onDuplicate = {
+                            viewModel.duplicateDeck(selectedDeck!!)
+                            selectedDeck = null
+                        }
+                    )
+                }
+
+                selectedTabIndex == 0 -> {
+                    // Tab: I Miei Deck
+                    if (viewModel.decks.isEmpty()) {
+                        EmptyDecksPlaceholder()
+                    } else {
+                        LazyColumn(
+                            contentPadding = PaddingValues(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(viewModel.decks, key = { it.id }) { deck ->
+                                DeckItem(
+                                    deck = deck,
+                                    onClick = { selectedDeck = deck },
+                                    allOwnedCards = viewModel.ownedCards
+                                )
+                            }
+                        }
                     }
-                )
-            } else if (viewModel.decks.isEmpty()) {
-                EmptyDecksPlaceholder()
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(viewModel.decks, key = { it.id }) { deck ->
-                        DeckItem(
-                            deck = deck,
-                            onClick = { selectedDeck = deck },
-                            allOwnedCards = viewModel.ownedCards
-                        )
-                    }
+                }
+
+                selectedTabIndex == 1 -> {
+                    // Tab: Meta Deck
+                    MetaDeckSection(viewModel = metaDeckViewModel)
                 }
             }
         }
 
         if (showSheet) {
             ModalBottomSheet(
-                onDismissRequest = { 
+                onDismissRequest = {
                     showSheet = false
                     viewModel.resetNewDeckState()
                 },
