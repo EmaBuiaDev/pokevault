@@ -30,7 +30,8 @@ import com.example.pokevault.viewmodel.MetaDeckViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MetaDeckSection(
-    viewModel: MetaDeckViewModel
+    viewModel: MetaDeckViewModel,
+    onImportDeck: ((MetaDeck) -> Unit)? = null
 ) {
     val selectedDeck = viewModel.selectedDeck
 
@@ -38,7 +39,10 @@ fun MetaDeckSection(
         BackHandler { viewModel.selectDeck(null) }
         MetaDeckDetailView(
             deck = selectedDeck,
-            onBack = { viewModel.selectDeck(null) }
+            onBack = { viewModel.selectDeck(null) },
+            onImport = if (onImportDeck != null) {
+                { onImportDeck(selectedDeck) }
+            } else null
         )
     } else {
         MetaDeckListView(viewModel = viewModel)
@@ -390,7 +394,8 @@ fun StatMini(label: String, value: String, color: Color) {
 @Composable
 fun MetaDeckDetailView(
     deck: MetaDeck,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onImport: (() -> Unit)? = null
 ) {
     val pokemonCards = deck.cards.filter { it.type == "pokemon" }
     val trainerCards = deck.cards.filter { it.type == "trainer" }
@@ -439,7 +444,26 @@ fun MetaDeckDetailView(
                         )
                     }
 
-                    deck.placement?.let { PlacementBadge(it) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        deck.placement?.let { PlacementBadge(it) }
+
+                        if (onImport != null) {
+                            IconButton(
+                                onClick = onImport,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(PurpleCard.copy(alpha = 0.3f))
+                            ) {
+                                Icon(
+                                    Icons.Default.FileDownload,
+                                    contentDescription = "Importa in DeckLab",
+                                    tint = PurpleCard,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -559,6 +583,23 @@ fun MetaDeckDetailView(
                         cards = energyCards,
                         accentColor = GreenCard
                     )
+                }
+            }
+            // Bottone Importa in fondo alla decklist
+            if (onImport != null) {
+                item {
+                    Button(
+                        onClick = onImport,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PurpleCard)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Importa in DeckLab", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
                 }
             }
             item { Spacer(modifier = Modifier.height(20.dp)) }

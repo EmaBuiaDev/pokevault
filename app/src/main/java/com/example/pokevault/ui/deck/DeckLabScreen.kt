@@ -53,6 +53,7 @@ fun DeckLabScreen(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSheet by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
     var selectedDeck by remember { mutableStateOf<Deck?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val deckLabTabs = listOf("I Miei Deck", "Meta Deck")
@@ -63,7 +64,16 @@ fun DeckLabScreen(
 
     // Se siamo nella vista dettaglio di un MetaDeck, mostriamola a tutto schermo
     if (selectedTabIndex == 1 && metaDeckViewModel.selectedDeck != null) {
-        MetaDeckSection(viewModel = metaDeckViewModel)
+        MetaDeckSection(
+            viewModel = metaDeckViewModel,
+            onImportDeck = { metaDeck ->
+                val result = viewModel.importFromMetaDeck(metaDeck)
+                metaDeckViewModel.selectDeck(null)
+                if (result.matched > 0) {
+                    showSheet = true
+                }
+            }
+        )
         return
     }
 
@@ -134,17 +144,32 @@ fun DeckLabScreen(
         },
         floatingActionButton = {
             if (selectedDeck == null && selectedTabIndex == 0) {
-                ExtendedFloatingActionButton(
-                    onClick = {
-                        viewModel.resetNewDeckState()
-                        showSheet = true
-                    },
-                    containerColor = BlueCard,
-                    contentColor = TextWhite,
-                    shape = RoundedCornerShape(16.dp),
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Crea un nuovo deck") }
-                )
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Bottone Importa
+                    SmallFloatingActionButton(
+                        onClick = { showImportDialog = true },
+                        containerColor = PurpleCard,
+                        contentColor = TextWhite,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = "Importa deck")
+                    }
+                    // Bottone Crea
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            viewModel.resetNewDeckState()
+                            showSheet = true
+                        },
+                        containerColor = BlueCard,
+                        contentColor = TextWhite,
+                        shape = RoundedCornerShape(16.dp),
+                        icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                        text = { Text("Crea un nuovo deck") }
+                    )
+                }
             }
         }
     ) { padding ->
@@ -193,7 +218,16 @@ fun DeckLabScreen(
 
                 selectedTabIndex == 1 -> {
                     // Tab: Meta Deck
-                    MetaDeckSection(viewModel = metaDeckViewModel)
+                    MetaDeckSection(
+                        viewModel = metaDeckViewModel,
+                        onImportDeck = { metaDeck ->
+                            val result = viewModel.importFromMetaDeck(metaDeck)
+                            metaDeckViewModel.selectDeck(null)
+                            if (result.matched > 0) {
+                                showSheet = true
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -219,6 +253,29 @@ fun DeckLabScreen(
                     }
                 )
             }
+        }
+
+        // Dialog Importa da Testo
+        if (showImportDialog) {
+            DeckImportDialog(
+                onDismiss = { showImportDialog = false },
+                onImport = { text ->
+                    val result = viewModel.importFromText(text)
+                    showImportDialog = false
+                    if (result.matched > 0) {
+                        showSheet = true
+                    }
+                }
+            )
+        }
+
+        // Risultato import
+        val importResult = viewModel.importResult
+        if (importResult != null) {
+            ImportResultDialog(
+                result = importResult,
+                onDismiss = { viewModel.clearImportResult() }
+            )
         }
     }
 }
@@ -939,4 +996,168 @@ fun AnalysisInfoItem(label: String, value: String) {
         Text(text = label, color = TextMuted, fontSize = 10.sp)
         Text(text = value, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
+}
+
+// ══════════════════════════════════════
+// IMPORT DIALOGS
+// ══════════════════════════════════════
+
+@Composable
+fun DeckImportDialog(
+    onDismiss: () -> Unit,
+    onImport: (String) -> Unit
+) {
+    var decklistText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.FileDownload, contentDescription = null, tint = PurpleCard, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Importa Deck", color = TextWhite, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    text = "Incolla una decklist in formato PTCG standard:",
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Es: 4 Charizard ex SVI 125",
+                    color = TextMuted.copy(alpha = 0.6f),
+                    fontSize = 11.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                TextField(
+                    value = decklistText,
+                    onValueChange = { decklistText = it },
+                    placeholder = {
+                        Text(
+                            "Pokémon: 12\n4 Charizard ex SVI 125\n2 Charmander SVI 10\n...",
+                            color = TextMuted.copy(alpha = 0.4f),
+                            fontSize = 12.sp
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = DarkCard,
+                        unfocusedContainerColor = DarkCard,
+                        focusedIndicatorColor = PurpleCard,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = PurpleCard,
+                        focusedTextColor = TextWhite,
+                        unfocusedTextColor = TextWhite
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { if (decklistText.isNotBlank()) onImport(decklistText) },
+                enabled = decklistText.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = PurpleCard),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Importa")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Annulla", color = TextMuted)
+            }
+        }
+    )
+}
+
+@Composable
+fun ImportResultDialog(
+    result: DeckLabViewModel.ImportResult,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (result.matched > 0) Icons.Default.CheckCircle else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = if (result.matched > 0) GreenCard else YellowCard,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Risultato Import", color = TextWhite, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    text = "${result.matched} carte trovate su ${result.totalRequested} richieste",
+                    color = TextWhite,
+                    fontSize = 14.sp
+                )
+
+                if (result.missingCards.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Carte mancanti (${result.missing}):",
+                        color = YellowCard,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    result.missingCards.take(10).forEach { card ->
+                        Text(
+                            text = "• $card",
+                            color = TextMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+                    if (result.missingCards.size > 10) {
+                        Text(
+                            text = "... e altre ${result.missingCards.size - 10}",
+                            color = TextMuted.copy(alpha = 0.6f),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                if (result.matched > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Le carte trovate sono state aggiunte al deck. Puoi modificarlo prima di salvare.",
+                        color = GreenCard.copy(alpha = 0.8f),
+                        fontSize = 11.sp
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Nessuna carta corrisponde alla tua collezione. Aggiungi le carte alla collezione prima di importare.",
+                        color = RedCard.copy(alpha = 0.8f),
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("OK")
+            }
+        }
+    )
 }
