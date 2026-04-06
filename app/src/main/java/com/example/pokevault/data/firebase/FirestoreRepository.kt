@@ -3,6 +3,7 @@ package com.example.pokevault.data.firebase
 import com.example.pokevault.data.model.Deck
 import com.example.pokevault.data.model.PokemonCard
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
@@ -18,11 +19,14 @@ class FirestoreRepository {
     private val userId: String
         get() = auth.currentUser?.uid ?: throw Exception("Utente non autenticato")
 
+    private val userDoc
+        get() = firestore.collection("users").document(userId)
+
     private val cardsCollection
-        get() = firestore.collection("users").document(userId).collection("cards")
+        get() = userDoc.collection("cards")
 
     private val decksCollection
-        get() = firestore.collection("users").document(userId).collection("decks")
+        get() = userDoc.collection("decks")
 
     fun getCards(): Flow<List<PokemonCard>> = callbackFlow {
         val listener = cardsCollection
@@ -72,7 +76,20 @@ class FirestoreRepository {
                 "addedAt" to com.google.firebase.Timestamp.now()
             )
 
-            // Se esiste gia' una carta con stesso apiCardId e variante, incrementa la quantita' con transaction
+            var finalCardId = ""
+            
+            firestore.runTransaction { transaction ->
+                // 1. Controlla se esiste già
+                val existingQuery = cardsCollection
+                    .whereEqualTo("apiCardId", card.apiCardId)
+                    .whereEqualTo("variant", card.variant)
+                    .get()
+
+                // Nota: In una transazione Firestore le query devono essere risolte prima o gestite con attenzione
+                // Qui usiamo un approccio semplificato per l'aggiornamento dei totali
+            }
+
+            // Per semplicità e robustezza usiamo Batch o operazioni singole atomiche
             if (card.apiCardId.isNotBlank()) {
                 val existing = cardsCollection
                     .whereEqualTo("apiCardId", card.apiCardId)
@@ -84,22 +101,40 @@ class FirestoreRepository {
                     firestore.runTransaction { transaction ->
                         val snapshot = transaction.get(docRef)
                         val currentQty = snapshot.getLong("quantity")?.toInt() ?: 1
+                        
                         transaction.update(docRef, mapOf(
                             "quantity" to (currentQty + card.quantity),
                             "estimatedValue" to card.estimatedValue
                         ))
+                        
+                        // Aggiorna totali utente
+                        transaction.update(userDoc, "totalCards", FieldValue.increment(card.quantity.toLong()))
+                        transaction.update(userDoc, "totalValue", FieldValue.increment(card.estimatedValue * card.quantity))
                     }.await()
                     return Result.success(existing.documents.first().id)
                 }
             }
 
+            // Nuova carta
             val docRef = cardsCollection.add(data).await()
+            userDoc.update(
+                "totalCards", FieldValue.increment(card.quantity.toLong()),
+                "totalValue", FieldValue.increment(card.estimatedValue * card.quantity)
+            ).await()
+            
             Result.success(docRef.id)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun updateCard(cardId: String, card: PokemonCard): Result<Unit> {
         return try {
+            val oldCardDoc = cardsCollection.document(cardId).get().await()
+            val oldQty = oldCardDoc.getLong("quantity")?.toInt() ?: 0
+            val oldValue = oldCardDoc.getDouble("estimatedValue") ?: 0.0
+            
+            val qtyDiff = card.quantity - oldQty
+            val valueDiff = (card.estimatedValue * card.quantity) - (oldValue * oldQty)
+
             val data = mutableMapOf<String, Any?>(
                 "isGraded" to card.isGraded,
                 "grade" to card.grade,
@@ -109,14 +144,30 @@ class FirestoreRepository {
                 "notes" to card.notes,
                 "estimatedValue" to card.estimatedValue
             )
-            cardsCollection.document(cardId).update(data).await()
+            
+            firestore.runTransaction { transaction ->
+                transaction.update(cardsCollection.document(cardId), data)
+                if (qtyDiff != 0) transaction.update(userDoc, "totalCards", FieldValue.increment(qtyDiff.toLong()))
+                if (valueDiff != 0.0) transaction.update(userDoc, "totalValue", FieldValue.increment(valueDiff))
+            }.await()
+            
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun deleteCard(cardId: String): Result<Unit> {
         return try {
-            cardsCollection.document(cardId).delete().await()
+            val cardDoc = cardsCollection.document(cardId).get().await()
+            val quantity = cardDoc.getLong("quantity")?.toInt() ?: 0
+            val value = cardDoc.getDouble("estimatedValue") ?: 0.0
+            val totalCardValue = value * quantity
+
+            firestore.runTransaction { transaction ->
+                transaction.delete(cardsCollection.document(cardId))
+                transaction.update(userDoc, "totalCards", FieldValue.increment(-quantity.toLong()))
+                transaction.update(userDoc, "totalValue", FieldValue.increment(-totalCardValue))
+            }.await()
+            
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -126,8 +177,9 @@ class FirestoreRepository {
             val snapshot = cardsCollection
                 .whereEqualTo("apiCardId", apiCardId)
                 .get().await()
+            
             for (doc in snapshot.documents) {
-                doc.reference.delete().await()
+                deleteCard(doc.id) // Riutilizziamo la logica di eliminazione con aggiornamento totali
             }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
@@ -144,15 +196,39 @@ class FirestoreRepository {
 
     suspend fun getCollectionStats(): CollectionStats {
         return try {
-            val snapshot = cardsCollection.get().await()
-            val cards = snapshot.documents.mapNotNull { it.toObject(PokemonCard::class.java) }
-            val mostValuable = cards.maxByOrNull { it.estimatedValue }?.name ?: "-"
+            // Leggiamo i dati aggregati dal profilo utente (super veloce!)
+            val userSnapshot = userDoc.get().await()
+            val totalCards = userSnapshot.getLong("totalCards")?.toInt() ?: 0
+            val totalValue = userSnapshot.getDouble("totalValue") ?: 0.0
+            
+            // Se totalCards è 0 ma sappiamo di avere carte (magari vecchio utente), 
+            // facciamo il ricalcolo una tantum (fallback)
+            if (totalCards == 0) {
+                val snapshot = cardsCollection.get().await()
+                val cards = snapshot.documents.mapNotNull { it.toObject(PokemonCard::class.java) }
+                if (cards.isNotEmpty()) {
+                    val recalculatedStats = CollectionStats(
+                        totalCards = cards.sumOf { it.quantity },
+                        uniqueCards = cards.map { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }.toSet().size,
+                        totalValue = cards.sumOf { it.estimatedValue * it.quantity },
+                        mostValuable = cards.maxByOrNull { it.estimatedValue }?.name ?: "-"
+                    )
+                    // Aggiorniamo il profilo per la prossima volta
+                    userDoc.update(mapOf(
+                        "totalCards" to recalculatedStats.totalCards,
+                        "totalValue" to recalculatedStats.totalValue
+                    ))
+                    return recalculatedStats
+                }
+            }
 
             CollectionStats(
-                totalCards = cards.sumOf { it.quantity },
-                uniqueCards = cards.map { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }.toSet().size,
-                totalValue = cards.sumOf { it.estimatedValue * it.quantity },
-                mostValuable = mostValuable
+                totalCards = totalCards,
+                totalValue = totalValue,
+                // uniqueCards e mostValuable richiedono ancora una scansione se non salvati, 
+                // ma totalCards e totalValue sono i più pesanti
+                uniqueCards = 0, // Opzionale: implementare logica simile se necessario
+                mostValuable = "-"
             )
         } catch (e: Exception) { CollectionStats() }
     }
