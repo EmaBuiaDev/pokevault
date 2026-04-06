@@ -46,6 +46,10 @@ android {
         compose = true
         buildConfig = true
     }
+    // Non comprimere modelli TFLite (memory-mapping richiede file non compresso)
+    androidResources {
+        noCompress += "tflite"
+    }
 }
 
 dependencies {
@@ -102,6 +106,11 @@ dependencies {
 
     // ── ML Kit Text Recognition ──
     implementation("com.google.mlkit:text-recognition:16.0.1")
+
+    // ── TensorFlow Lite (PaddleOCR engine) ──
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 
     // ── Accompanist Permissions ──
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")

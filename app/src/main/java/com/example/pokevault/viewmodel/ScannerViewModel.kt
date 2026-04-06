@@ -1,6 +1,7 @@
 package com.example.pokevault.viewmodel
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,6 +12,9 @@ import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
+import com.example.pokevault.ocr.CardOCRResult
+import com.example.pokevault.ocr.OCRManager
+import com.example.pokevault.ocr.CardFieldParser
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -22,7 +26,11 @@ data class ScannerUiState(
     val errorMessage: String? = null,
     val flashEnabled: Boolean = false,
     val detectedName: String = "",
-    val detectedNumber: String = ""
+    val detectedNumber: String = "",
+    /** Ultimo risultato OCR completo (per debug/display) */
+    val lastOCRResult: CardOCRResult? = null,
+    /** Nome dell'engine OCR attivo */
+    val ocrEngineName: String = ""
 )
 
 class ScannerViewModel(application: Application) : AndroidViewModel(application) {
@@ -31,41 +39,114 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private val firestoreRepository = FirestoreRepository()
     private var searchJob: Job? = null
 
-    // Evita di aggiungere la stessa carta più volte nella stessa sessione
+    /** OCR Manager con pipeline completa per carte Pokemon */
+    private val ocrManager = OCRManager(application)
+
+    // Evita di aggiungere la stessa carta piu volte nella stessa sessione
     private val recentlyAddedIds = mutableSetOf<String>()
     private var lastSearchKey = ""
 
     var uiState by mutableStateOf(ScannerUiState())
         private set
 
+    init {
+        // Inizializza OCR pipeline in background
+        viewModelScope.launch {
+            try {
+                ocrManager.initialize()
+                uiState = uiState.copy(ocrEngineName = ocrManager.activeEngineName)
+                Log.i(TAG, "OCR inizializzato: ${ocrManager.activeEngineName}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Errore inizializzazione OCR: ${e.message}")
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        ocrManager.release()
+    }
+
+    // ═══════════════════════════════════════════
+    // OCR DA CAMERA FRAME (testo gia riconosciuto da ML Kit in ScannerScreen)
+    // ═══════════════════════════════════════════
+
     /**
-     * Chiamata dalla camera ad ogni frame con testo OCR.
-     * Estrae numero carta + nome, cerca e aggiunge automaticamente.
+     * Chiamata dalla camera ad ogni frame con testo OCR grezzo.
+     * Usa il CardFieldParser per estrarre i campi strutturati.
      */
     fun onTextDetected(rawText: String) {
         if (rawText.isBlank()) return
 
-        val number = extractCardNumber(rawText)
-        val name = extractCardName(rawText)
+        // Usa la nuova pipeline di parsing Pokemon-specifico
+        val ocrResult = ocrManager.extractCardFields(rawText)
 
-        // Serve almeno un nome di 3+ caratteri o un numero
-        if ((name.isNullOrBlank() || name.length < 3) && number == null) return
+        if (!ocrResult.isSearchable()) return
 
-        val searchKey = "${name ?: ""}_${number ?: ""}"
+        val searchKey = ocrResult.searchKey()
         if (searchKey == lastSearchKey) return
 
         uiState = uiState.copy(
-            detectedName = name ?: "",
-            detectedNumber = number ?: ""
+            detectedName = ocrResult.cardName ?: "",
+            detectedNumber = ocrResult.cardNumber ?: "",
+            lastOCRResult = ocrResult
         )
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             delay(1200) // debounce per stabilizzare OCR
             lastSearchKey = searchKey
-            searchAndAutoAdd(name, number)
+            searchAndAutoAdd(ocrResult.cardName, ocrResult.cardNumber)
         }
     }
+
+    // ═══════════════════════════════════════════
+    // OCR DA BITMAP (analisi completa con preprocessing)
+    // ═══════════════════════════════════════════
+
+    /**
+     * Analizza un'immagine completa di una carta Pokemon.
+     * Esegue la pipeline OCR completa: preprocessing + detection + recognition + parsing.
+     *
+     * Usare questa funzione per:
+     * - Foto scattate dalla galleria
+     * - Foto ad alta risoluzione
+     * - Quando serve la massima accuratezza
+     */
+    fun analyzeCardImage(bitmap: Bitmap) {
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            uiState = uiState.copy(isSearching = true, errorMessage = null)
+
+            try {
+                val result = ocrManager.analyzeCardImage(bitmap)
+                uiState = uiState.copy(
+                    detectedName = result.cardName ?: "",
+                    detectedNumber = result.cardNumber ?: "",
+                    lastOCRResult = result
+                )
+
+                if (result.isSearchable()) {
+                    searchAndAutoAdd(result.cardName, result.cardNumber)
+                } else {
+                    uiState = uiState.copy(
+                        isSearching = false,
+                        errorMessage = "Testo non riconosciuto. Riprova con una foto piu nitida."
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Errore analisi immagine: ${e.message}")
+                uiState = uiState.copy(
+                    isSearching = false,
+                    errorMessage = "Errore OCR: ${e.message}"
+                )
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    // RICERCA E AUTO-ADD
+    // ═══════════════════════════════════════════
 
     private suspend fun searchAndAutoAdd(name: String?, number: String?) {
         uiState = uiState.copy(isSearching = true, errorMessage = null)
@@ -82,7 +163,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
             .onFailure { error ->
-                Log.w("ScannerVM", "Search failed: ${error.message}")
+                Log.w(TAG, "Search failed: ${error.message}")
                 uiState = uiState.copy(
                     isSearching = false,
                     errorMessage = "Errore ricerca: ${error.message}"
@@ -159,7 +240,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         searchJob?.cancel()
         uiState = ScannerUiState(
             flashEnabled = uiState.flashEnabled,
-            addedCount = uiState.addedCount
+            addedCount = uiState.addedCount,
+            ocrEngineName = ocrManager.activeEngineName
         )
     }
 
@@ -167,70 +249,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         uiState = uiState.copy(errorMessage = null)
     }
 
-    /**
-     * Estrae il numero della carta dal testo OCR.
-     * Formato: "025/198", "25/198", "025 / 198", ecc.
-     * Questo è il dato OCR PIÙ AFFIDABILE su una carta Pokémon.
-     */
-    private fun extractCardNumber(rawText: String): String? {
-        // Pattern: 1-3 cifre / 1-3 cifre (con spazi opzionali)
-        val match = Regex("(\\d{1,3})\\s*/\\s*(\\d{1,3})").find(rawText)
-        if (match != null) {
-            val num = match.groupValues[1].trimStart('0')
-            return if (num.isNotBlank()) num else "0"
-        }
-        return null
-    }
-
-    /**
-     * Estrae il nome della carta dal testo OCR.
-     * Il nome è nella parte superiore della carta.
-     */
-    private fun extractCardName(rawText: String): String? {
-        val lines = rawText.lines()
-            .map { it.trim() }
-            .filter { it.length >= 3 }
-
-        val candidates = lines.filter { line ->
-            val lower = line.lowercase()
-            line.any { it.isLetter() } &&
-            !lower.matches(Regex("^\\d+\\s*hp$")) &&
-            !lower.matches(Regex("^hp\\s*\\d+$")) &&
-            !lower.matches(Regex("^\\d+\\s*/\\s*\\d+$")) &&
-            !lower.startsWith("weakness") &&
-            !lower.startsWith("resistance") &&
-            !lower.startsWith("retreat") &&
-            !lower.contains("illustrator") &&
-            !lower.contains("©") &&
-            !lower.contains("®") &&
-            !lower.contains("pokémon") &&
-            !lower.contains("pokemon") &&
-            !lower.contains("damage") &&
-            !lower.contains("attach") &&
-            !lower.contains("opponent") &&
-            !lower.contains("energy") &&
-            !lower.contains("trainer") &&
-            !lower.contains("supporter") &&
-            !lower.contains("coin") &&
-            !lower.contains("discard") &&
-            !lower.contains("shuffle") &&
-            !lower.contains("your ") &&
-            !lower.contains("this ") &&
-            !lower.contains("each ") &&
-            !lower.contains("does ") &&
-            !lower.matches(Regex("^(basic|stage \\d|mega)$"))
-        }
-
-        val name = candidates.firstOrNull() ?: return null
-
-        return name
-            .replace(Regex("\\s+HP\\s*\\d+.*$", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\s+\\d+/\\d+$"), "")
-            .replace(Regex("^(BASIC|Stage\\s*\\d)\\s+", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("[^a-zA-ZÀ-ÿ\\s'-]"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-            .take(40)
-            .takeIf { it.length >= 3 }
+    companion object {
+        private const val TAG = "ScannerViewModel"
     }
 }
