@@ -38,13 +38,7 @@ data class LimitlessRecord(
 
 data class LimitlessDeckInfo(
     val name: String? = null,
-    val icons: List<LimitlessDeckIcon>? = null
-)
-
-data class LimitlessDeckIcon(
-    val name: String? = null,
-    val set: String? = null,
-    val number: String? = null
+    val icons: Any? = null // Può essere List<String> o List<Object> - struttura variabile
 )
 
 // ── Retrofit Interface ──
