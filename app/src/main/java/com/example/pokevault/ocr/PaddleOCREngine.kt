@@ -111,7 +111,7 @@ class PaddleOCREngine(
     private val DET_THRESHOLD = 0.3f
     private val DET_BOX_THRESHOLD = 0.5f
 
-    override suspend fun initialize() = withContext(Dispatchers.IO) {
+    override suspend fun initialize() { withContext(Dispatchers.IO) {
         try {
             // Carica dizionario caratteri
             dictionary = loadDictionary()
@@ -134,7 +134,7 @@ class PaddleOCREngine(
             isInitialized = false
             throw e
         }
-    }
+    } }
 
     override fun release() {
         detInterpreter?.close()

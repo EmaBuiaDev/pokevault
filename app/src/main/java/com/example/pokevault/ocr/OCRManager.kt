@@ -113,7 +113,8 @@ class OCRManager(private val context: Context) {
      *
      * @param preferPaddleOCR Se true, tenta prima PaddleOCR TFLite
      */
-    suspend fun initialize(preferPaddleOCR: Boolean = true) = withContext(Dispatchers.IO) {
+    suspend fun initialize(preferPaddleOCR: Boolean = true) {
+        withContext(Dispatchers.IO) {
         if (isInitialized) return@withContext
 
         if (preferPaddleOCR && hasTFLiteModels()) {
@@ -140,7 +141,7 @@ class OCRManager(private val context: Context) {
             Log.e(TAG, "Nessun engine OCR disponibile: ${e.message}", e)
             throw e
         }
-    }
+    } }
 
     /** Rilascia tutte le risorse */
     fun release() {
