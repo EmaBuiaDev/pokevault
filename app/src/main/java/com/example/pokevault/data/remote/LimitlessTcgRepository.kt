@@ -3,6 +3,8 @@ package com.example.pokevault.data.remote
 import android.util.Log
 import com.example.pokevault.data.model.MetaDeck
 import com.example.pokevault.data.model.MetaDeckCard
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -33,6 +35,7 @@ object LimitlessRetrofitClient {
 class LimitlessTcgRepository {
 
     private val api = LimitlessRetrofitClient.apiService
+    private val gson = Gson()
 
     // Cache in memoria con chiave format
     private val metaDecksCache = mutableMapOf<String, CachedResult>()
@@ -67,11 +70,13 @@ class LimitlessTcgRepository {
             }
 
             // 1. Recupera tornei recenti
+            Log.d(TAG, "Fetching tournaments format=$apiFormat")
             val tournaments = api.getTournaments(
                 game = "PTCG",
                 format = apiFormat,
                 limit = 10
             )
+            Log.d(TAG, "Trovati ${tournaments.size} tornei")
 
             if (tournaments.isEmpty()) {
                 return Result.success(emptyList())
@@ -84,28 +89,36 @@ class LimitlessTcgRepository {
                 if (allMetaDecks.size >= limit) break
 
                 try {
-                    val players = api.getTournamentPlayers(tournament.id)
+                    Log.d(TAG, "Fetching standings per torneo: ${tournament.name} (${tournament.id})")
+                    val standings = api.getTournamentStandings(tournament.id)
+                    Log.d(TAG, "Trovati ${standings.size} giocatori")
 
                     // Prendi solo i top player con decklist
-                    val topPlayers = players
-                        .filter { it.decklist != null && it.decklist.isNotEmpty() }
+                    val topPlayers = standings
+                        .filter { it.decklist != null }
                         .sortedBy { it.placing }
                         .take(8) // Top 8 per torneo
+
+                    Log.d(TAG, "Giocatori con decklist: ${topPlayers.size}")
 
                     for (player in topPlayers) {
                         if (allMetaDecks.size >= limit) break
 
                         val metaDeck = mapToMetaDeck(
-                            player = player,
+                            standing = player,
                             tournament = tournament
                         )
-                        allMetaDecks.add(metaDeck)
+                        if (metaDeck.cards.isNotEmpty()) {
+                            allMetaDecks.add(metaDeck)
+                        }
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Errore caricamento players per torneo ${tournament.id}", e)
+                    Log.w(TAG, "Errore caricamento standings per torneo ${tournament.id}: ${e.message}", e)
                     // Continua con il prossimo torneo
                 }
             }
+
+            Log.d(TAG, "Totale meta decks trovati: ${allMetaDecks.size}")
 
             // Ordina per placement e data
             val sorted = allMetaDecks
@@ -118,7 +131,7 @@ class LimitlessTcgRepository {
 
             Result.success(sorted)
         } catch (e: Exception) {
-            Log.e(TAG, "Errore fetch meta decks", e)
+            Log.e(TAG, "Errore fetch meta decks: ${e.message}", e)
 
             // Fallback su cache scaduta
             metaDecksCache[cacheKey]?.let {
@@ -129,76 +142,210 @@ class LimitlessTcgRepository {
         }
     }
 
+    /**
+     * Parsing flessibile della decklist.
+     * L'API potrebbe restituire la decklist in diversi formati:
+     *
+     * Formato 1 - Mappa per categoria:
+     * {"pokemon": [{"count":4,"name":"...","set":"...","number":"..."}], "trainer": [...], "energy": [...]}
+     *
+     * Formato 2 - Lista piatta:
+     * [{"count":4,"name":"...","set":"...","number":"..."}]
+     *
+     * Formato 3 - Mappa con card IDs:
+     * {"deck": [{"id":"OBF_125","count":4}]}
+     */
+    private fun parseDecklistCards(decklist: Any?): List<MetaDeckCard> {
+        if (decklist == null) return emptyList()
+
+        val cards = mutableListOf<MetaDeckCard>()
+
+        try {
+            val json = gson.toJson(decklist)
+            Log.d(TAG, "Decklist raw JSON (troncato): ${json.take(500)}")
+
+            // Prova Formato 1: Mappa con chiavi "pokemon", "trainer", "energy"
+            try {
+                val mapType = object : TypeToken<Map<String, Any>>() {}.type
+                val map: Map<String, Any> = gson.fromJson(json, mapType)
+
+                val categoryKeys = mapOf(
+                    "pokemon" to "pokemon",
+                    "pokémon" to "pokemon",
+                    "trainer" to "trainer",
+                    "energy" to "energy"
+                )
+
+                for ((key, type) in categoryKeys) {
+                    val categoryData = map[key] ?: continue
+                    val categoryJson = gson.toJson(categoryData)
+                    val categoryCards = parseCardList(categoryJson, type)
+                    cards.addAll(categoryCards)
+                }
+
+                if (cards.isNotEmpty()) {
+                    Log.d(TAG, "Parsed ${cards.size} carte (formato mappa per categoria)")
+                    return cards
+                }
+
+                // Potrebbe essere formato {"deck": [...]}
+                val deckData = map["deck"]
+                if (deckData != null) {
+                    val deckJson = gson.toJson(deckData)
+                    val deckCards = parseCardList(deckJson, null)
+                    if (deckCards.isNotEmpty()) {
+                        Log.d(TAG, "Parsed ${deckCards.size} carte (formato deck array)")
+                        return deckCards
+                    }
+                }
+            } catch (_: Exception) {
+                // Non è una mappa, prova come lista
+            }
+
+            // Prova Formato 2: Lista piatta di carte
+            try {
+                val listCards = parseCardList(json, null)
+                if (listCards.isNotEmpty()) {
+                    Log.d(TAG, "Parsed ${listCards.size} carte (formato lista piatta)")
+                    return listCards
+                }
+            } catch (_: Exception) {
+                // Non è una lista
+            }
+
+        } catch (e: Exception) {
+            Log.w(TAG, "Errore parsing decklist: ${e.message}")
+        }
+
+        return cards
+    }
+
+    /**
+     * Parsa una lista JSON di carte. Gestisce sia il formato con name/set/number
+     * che il formato con solo id (es. "OBF_125").
+     */
+    private fun parseCardList(json: String, forcedType: String?): List<MetaDeckCard> {
+        val cards = mutableListOf<MetaDeckCard>()
+
+        try {
+            val listType = object : TypeToken<List<Map<String, Any>>>() {}.type
+            val rawList: List<Map<String, Any>> = gson.fromJson(json, listType)
+
+            for (item in rawList) {
+                val count = when (val c = item["count"]) {
+                    is Number -> c.toInt()
+                    is String -> c.toIntOrNull() ?: 1
+                    else -> {
+                        // Potrebbe essere "amount" invece di "count"
+                        when (val a = item["amount"]) {
+                            is Number -> a.toInt()
+                            is String -> a.toIntOrNull() ?: 1
+                            else -> 1
+                        }
+                    }
+                }
+
+                val name = (item["name"] as? String) ?: ""
+                val set = (item["set"] as? String) ?: ""
+                val number = (item["number"] as? String) ?: ""
+                val cardId = (item["id"] as? String) ?: ""
+
+                // Se abbiamo un ID ma non un nome, usa l'ID come nome e prova a estrarre set/number
+                val finalName: String
+                val finalSet: String
+                val finalNumber: String
+
+                if (name.isNotEmpty()) {
+                    finalName = name
+                    finalSet = set
+                    finalNumber = number
+                } else if (cardId.isNotEmpty()) {
+                    // Formato ID tipo "OBF_125" → set="OBF", number="125"
+                    val parts = cardId.split("_", limit = 2)
+                    finalSet = parts.getOrElse(0) { "" }
+                    finalNumber = parts.getOrElse(1) { "" }
+                    finalName = cardId // Usa l'ID come nome fallback
+                } else {
+                    continue // Salta carte senza nome né ID
+                }
+
+                val type = forcedType ?: classifyCardByName(finalName)
+
+                cards.add(
+                    MetaDeckCard(
+                        name = finalName,
+                        set = finalSet.ifEmpty { null },
+                        number = finalNumber.ifEmpty { null },
+                        qty = count,
+                        type = type
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Errore parseCardList: ${e.message}")
+        }
+
+        return cards
+    }
+
     private fun mapToMetaDeck(
-        player: LimitlessPlayer,
+        standing: LimitlessStanding,
         tournament: LimitlessTournament
     ): MetaDeck {
-        val cards = player.decklist?.map { card ->
-            MetaDeckCard(
-                name = card.name,
-                set = card.set.ifEmpty { null },
-                number = card.number.ifEmpty { null },
-                qty = card.count,
-                type = classifyCardType(card)
-            )
-        } ?: emptyList()
+        val cards = parseDecklistCards(standing.decklist)
 
         // Calcola winrate dal record
-        val record = player.record
+        val record = standing.record
         val winrate = if (record != null) {
             val totalGames = record.wins + record.losses + record.ties
             if (totalGames > 0) record.wins.toDouble() / totalGames else null
         } else null
 
+        // Il display name è "name", lo username è "player"
+        val displayName = standing.name.ifEmpty { standing.player }
+
         // Determina l'archetipo dal deck info o dalle carte principali
-        val archetype = player.deck?.name
+        val archetype = standing.deck?.name
             ?: inferArchetype(cards)
 
-        val deckId = "${tournament.id}_${player.name}_${player.placing}"
+        val deckId = "${tournament.id}_${standing.player.ifEmpty { standing.name }}_${standing.placing}"
 
         return MetaDeck(
             id = deckId,
             archetype = archetype,
-            player = player.name.ifEmpty { null },
+            player = displayName.ifEmpty { null },
             tournament = tournament.name.ifEmpty { null },
             tournamentId = tournament.id.ifEmpty { null },
             date = tournament.date.ifEmpty { null },
-            placement = if (player.placing > 0) player.placing else null,
+            placement = if (standing.placing > 0) standing.placing else null,
             winrate = winrate,
-            link = if (tournament.id.isNotEmpty())
-                "https://play.limitlesstcg.com/tournament/${tournament.id}/player/${player.name}"
+            link = if (tournament.id.isNotEmpty() && standing.player.isNotEmpty())
+                "https://play.limitlesstcg.com/tournament/${tournament.id}/player/${standing.player}"
             else null,
             cards = cards
         )
     }
 
-    private fun classifyCardType(card: LimitlessDeckCard): String {
-        // Usa il tipo se fornito dall'API
-        card.type?.let {
-            return when (it.lowercase()) {
-                "pokémon", "pokemon" -> "pokemon"
-                "trainer" -> "trainer"
-                "energy", "energia" -> "energy"
-                else -> it.lowercase()
-            }
-        }
-
-        // Fallback: inferisci dal nome della carta
-        val nameLower = card.name.lowercase()
+    private fun classifyCardByName(name: String): String {
+        val nameLower = name.lowercase()
         return when {
             nameLower.contains("energy") || nameLower.contains("energia") -> "energy"
             nameLower.contains("professor") ||
                 nameLower.contains("boss") ||
                 nameLower.contains("judge") ||
                 nameLower.contains("research") ||
+                nameLower.contains("iono") ||
                 nameLower.contains("nest ball") ||
                 nameLower.contains("ultra ball") ||
                 nameLower.contains("rare candy") ||
                 nameLower.contains("switch") ||
                 nameLower.contains("catcher") ||
                 nameLower.contains("pal pad") ||
+                nameLower.contains("battle vip pass") ||
                 nameLower.contains("tool") ||
-                nameLower.contains("stadium") -> "trainer"
+                nameLower.contains("stadium") ||
+                nameLower.contains("supporter") ||
+                nameLower.contains("item") -> "trainer"
             else -> "pokemon"
         }
     }
