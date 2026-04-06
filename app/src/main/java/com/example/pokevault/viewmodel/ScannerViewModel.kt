@@ -42,7 +42,24 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private val ocrManager = OCRManager(application)
 
     private val recentlyAddedIds = mutableSetOf<String>()
-    private var lastSearchKey = ""
+
+    /**
+     * Chiave della ricerca attualmente in corso o completata.
+     * Basata SOLO sul numero carta (dato OCR piu stabile).
+     * Impedisce di rilanciare la stessa ricerca su ogni frame.
+     */
+    private var activeSearchKey = ""
+
+    /**
+     * Contatore di stabilita: quante volte consecutive abbiamo visto
+     * lo stesso numero carta. Dopo STABILITY_THRESHOLD frame stabili,
+     * lanciamo la ricerca immediatamente.
+     */
+    private var stableNumber = ""
+    private var stableTotal = ""
+    private var stableName = ""
+    private var stabilityCount = 0
+    private val STABILITY_THRESHOLD = 3
 
     var uiState by mutableStateOf(ScannerUiState())
         private set
@@ -55,6 +72,15 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 Log.i(TAG, "OCR inizializzato: ${ocrManager.activeEngineName}")
             } catch (e: Exception) {
                 Log.e(TAG, "Errore inizializzazione OCR: ${e.message}")
+            }
+        }
+        // Precarica i set per poter identificare l'espansione dal totale carte
+        viewModelScope.launch {
+            try {
+                repository.getSets(application)
+                Log.d(TAG, "Set precaricati per matching espansione")
+            } catch (e: Exception) {
+                Log.w(TAG, "Errore precaricamento set: ${e.message}")
             }
         }
     }
@@ -70,30 +96,66 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     /**
      * Chiamata dalla camera ad ogni frame con testo OCR grezzo.
-     * Se una carta e gia in attesa di conferma, ignora nuovi frame.
+     *
+     * Logica di stabilita:
+     * - Estrae il numero carta (dato piu stabile dall'OCR)
+     * - Conta i frame consecutivi con lo stesso numero
+     * - Dopo N frame stabili, lancia la ricerca SENZA attendere
+     * - Non cancella ricerche in corso se il numero non cambia
      */
     fun onTextDetected(rawText: String) {
         if (rawText.isBlank()) return
-        // Non analizzare se c'e gia una carta in attesa o appena aggiunta
         if (uiState.pendingCard != null || uiState.lastAddedCard != null) return
 
         val ocrResult = ocrManager.extractCardFields(rawText)
         if (!ocrResult.isSearchable()) return
 
-        val searchKey = ocrResult.searchKey()
-        if (searchKey == lastSearchKey) return
+        val number = ocrResult.cardNumber ?: ""
+        val total = ocrResult.setTotal ?: ""
+        val name = ocrResult.cardName ?: ""
 
-        uiState = uiState.copy(
-            detectedName = ocrResult.cardName ?: "",
-            detectedNumber = ocrResult.cardNumber ?: "",
-            lastOCRResult = ocrResult
-        )
+        // Aggiorna UI con il testo rilevato
+        if (number.isNotBlank() || name.isNotBlank()) {
+            uiState = uiState.copy(
+                detectedName = name,
+                detectedNumber = if (number.isNotBlank() && total.isNotBlank()) "$number/$total" else number,
+                lastOCRResult = ocrResult
+            )
+        }
 
-        searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            delay(800) // debounce ridotto per riconoscimento piu veloce
-            lastSearchKey = searchKey
-            searchCard(ocrResult.cardName, ocrResult.cardNumber)
+        // Chiave di ricerca basata sul numero (piu stabile)
+        val searchKey = number.ifBlank { name }
+        if (searchKey.isBlank()) return
+
+        // Se la ricerca per questa chiave e gia partita o completata, non rilanciarla
+        if (searchKey == activeSearchKey) return
+
+        // Aggiorna contatore di stabilita
+        if (number.isNotBlank() && number == stableNumber) {
+            stabilityCount++
+            // Aggiorna nome e totale col valore piu recente (possono migliorare frame dopo frame)
+            if (name.isNotBlank()) stableName = name
+            if (total.isNotBlank()) stableTotal = total
+        } else {
+            // Numero cambiato: reset stabilita
+            stableNumber = number
+            stableTotal = total
+            stableName = name
+            stabilityCount = 1
+            // Cancella ricerca precedente solo se il numero e davvero cambiato
+            searchJob?.cancel()
+        }
+
+        // Lancio ricerca quando il numero e stabile
+        if (stabilityCount >= STABILITY_THRESHOLD && searchJob?.isActive != true) {
+            activeSearchKey = searchKey
+            searchJob = viewModelScope.launch {
+                searchCard(
+                    name = stableName.takeIf { it.isNotBlank() },
+                    number = stableNumber.takeIf { it.isNotBlank() },
+                    setTotal = stableTotal.takeIf { it.isNotBlank() }
+                )
+            }
         }
     }
 
@@ -114,7 +176,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     lastOCRResult = result
                 )
                 if (result.isSearchable()) {
-                    searchCard(result.cardName, result.cardNumber)
+                    searchCard(result.cardName, result.cardNumber, result.setTotal)
                 } else {
                     uiState = uiState.copy(
                         isSearching = false,
@@ -132,60 +194,124 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ═══════════════════════════════════════════
-    // RICERCA (senza aggiunta automatica)
+    // RICERCA CON SET MATCHING
     // ═══════════════════════════════════════════
 
     /**
-     * Cerca la carta sull'API e la mostra all'utente per conferma.
-     * NON aggiunge automaticamente.
+     * Cerca la carta usando 3 strategie in ordine di precisione:
+     *
+     * 1. numero/totale → identifica il set dal totale stampato, cerca per numero nel set
+     * 2. nome + numero → cerca per nome e numero combinati
+     * 3. nome → cerca solo per nome (fallback)
+     *
+     * Se un nome e disponibile, filtra i risultati per il match migliore.
      */
-    private suspend fun searchCard(name: String?, number: String?) {
+    private suspend fun searchCard(name: String?, number: String?, setTotal: String? = null) {
         uiState = uiState.copy(isSearching = true, errorMessage = null)
 
-        repository.searchByNameAndNumber(name, number)
-            .onSuccess { cards ->
-                val bestMatch = cards.firstOrNull()
-                if (bestMatch != null) {
-                    // Mostra la carta trovata, in attesa di conferma
-                    uiState = uiState.copy(
-                        isSearching = false,
-                        pendingCard = bestMatch,
-                        errorMessage = null
-                    )
-                } else {
-                    uiState = uiState.copy(
-                        isSearching = false,
-                        errorMessage = "Nessuna carta trovata. Riprova."
-                    )
-                    // Reset per permettere nuova scansione
-                    lastSearchKey = ""
-                }
+        try {
+            var cards: List<TcgCard> = emptyList()
+
+            // Strategia 1: numero/totale → usa searchCards che identifica il set
+            if (number != null && setTotal != null) {
+                val fullNumber = "$number/$setTotal"
+                Log.d(TAG, "Ricerca con numero completo: $fullNumber")
+                repository.searchCards(fullNumber)
+                    .onSuccess { results ->
+                        cards = results
+                        // Se abbiamo il nome, filtra per match migliore
+                        if (name != null && results.size > 1) {
+                            val nameFiltered = filterByName(results, name)
+                            if (nameFiltered.isNotEmpty()) cards = nameFiltered
+                        }
+                    }
             }
-            .onFailure { error ->
-                Log.w(TAG, "Search failed: ${error.message}")
+
+            // Strategia 2: nome + numero
+            if (cards.isEmpty() && name != null && number != null) {
+                Log.d(TAG, "Ricerca con nome+numero: $name #$number")
+                repository.searchByNameAndNumber(name, number)
+                    .onSuccess { cards = it }
+            }
+
+            // Strategia 3: solo nome
+            if (cards.isEmpty() && name != null && name.length >= 3) {
+                Log.d(TAG, "Ricerca con solo nome: $name")
+                repository.searchCardsFuzzy(name)
+                    .onSuccess { results ->
+                        // Se abbiamo il numero, filtra
+                        if (number != null) {
+                            val filtered = results.filter { it.number == number }
+                            cards = filtered.ifEmpty { results }
+                        } else {
+                            cards = results
+                        }
+                    }
+            }
+
+            // Strategia 4: solo numero (ultimo fallback)
+            if (cards.isEmpty() && number != null) {
+                Log.d(TAG, "Ricerca con solo numero: $number")
+                repository.searchCards(number)
+                    .onSuccess { cards = it }
+            }
+
+            val bestMatch = cards.firstOrNull()
+            if (bestMatch != null && bestMatch.id !in recentlyAddedIds) {
                 uiState = uiState.copy(
                     isSearching = false,
-                    errorMessage = "Errore ricerca: ${error.message}"
+                    pendingCard = bestMatch,
+                    errorMessage = null
                 )
-                lastSearchKey = ""
+            } else if (bestMatch != null) {
+                // Carta gia scartata/aggiunta in questa sessione
+                uiState = uiState.copy(isSearching = false)
+            } else {
+                uiState = uiState.copy(
+                    isSearching = false,
+                    errorMessage = "Nessuna carta trovata. Riprova."
+                )
+                activeSearchKey = ""
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Search failed: ${e.message}")
+            uiState = uiState.copy(
+                isSearching = false,
+                errorMessage = "Errore ricerca: ${e.message}"
+            )
+            activeSearchKey = ""
+        }
+    }
+
+    /**
+     * Filtra risultati per nome: match esatto o parziale (prima parola).
+     */
+    private fun filterByName(cards: List<TcgCard>, name: String): List<TcgCard> {
+        val cleanName = name.lowercase().trim()
+        val firstName = cleanName.split(" ").firstOrNull() ?: cleanName
+
+        // Match esatto
+        val exact = cards.filter { it.name.equals(name, ignoreCase = true) }
+        if (exact.isNotEmpty()) return exact
+
+        // Match con la prima parola
+        val partial = cards.filter {
+            it.name.lowercase().startsWith(firstName) ||
+            it.name.lowercase().contains(cleanName)
+        }
+        return partial
     }
 
     // ═══════════════════════════════════════════
     // CONFERMA / SCARTA
     // ═══════════════════════════════════════════
 
-    /** L'utente conferma: aggiungi la carta alla collezione */
     fun confirmAdd() {
         val card = uiState.pendingCard ?: return
         uiState = uiState.copy(pendingCard = null, isSearching = true)
-
-        viewModelScope.launch {
-            addToFirestore(card)
-        }
+        viewModelScope.launch { addToFirestore(card) }
     }
 
-    /** L'utente scarta: riprendi la scansione */
     fun dismissCard() {
         val card = uiState.pendingCard
         uiState = uiState.copy(
@@ -194,12 +320,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             detectedNumber = "",
             errorMessage = null
         )
-        // Reset search key per permettere di riscansionare
-        lastSearchKey = ""
-        // Aggiungi all'elenco degli scartati per evitare di riproporre la stessa carta
-        if (card != null) {
-            recentlyAddedIds.add(card.id)
-        }
+        resetStability()
+        if (card != null) recentlyAddedIds.add(card.id)
     }
 
     // ═══════════════════════════════════════════
@@ -235,7 +357,6 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     addedCount = uiState.addedCount + 1,
                     errorMessage = null
                 )
-                // Reset dopo 2.5 secondi per riprendere la scansione
                 viewModelScope.launch {
                     delay(2500)
                     if (uiState.lastAddedCard?.id == tcgCard.id) {
@@ -244,7 +365,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                             detectedName = "",
                             detectedNumber = ""
                         )
-                        lastSearchKey = ""
+                        resetStability()
                     }
                 }
             }
@@ -254,8 +375,20 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     isSearching = false,
                     errorMessage = "Errore salvataggio: ${error.message}"
                 )
-                lastSearchKey = ""
+                resetStability()
             }
+    }
+
+    // ═══════════════════════════════════════════
+    // UTILITY
+    // ═══════════════════════════════════════════
+
+    private fun resetStability() {
+        activeSearchKey = ""
+        stableNumber = ""
+        stableTotal = ""
+        stableName = ""
+        stabilityCount = 0
     }
 
     fun toggleFlash() {
@@ -263,9 +396,9 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun resetScanner() {
-        lastSearchKey = ""
         recentlyAddedIds.clear()
         searchJob?.cancel()
+        resetStability()
         uiState = ScannerUiState(
             flashEnabled = uiState.flashEnabled,
             addedCount = uiState.addedCount,
