@@ -1,40 +1,52 @@
 package com.example.pokevault.ui.scanner
 
 import android.Manifest
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.util.Log
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -50,6 +62,12 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.viewmodel.ScannerViewModel
+
+/**
+ * Proporzioni carta Pokemon standard (63mm × 88mm).
+ * Usato per calcolare la zona di scansione.
+ */
+private const val CARD_ASPECT_RATIO = 63f / 88f // ~0.716
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -69,7 +87,6 @@ fun ScannerScreen(
         return
     }
 
-    // ── Camera full screen con overlay ──
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -78,10 +95,18 @@ fun ScannerScreen(
         // Camera a tutto schermo
         CameraPreview(
             onTextDetected = { viewModel.onTextDetected(it) },
-            flashEnabled = state.flashEnabled
+            flashEnabled = state.flashEnabled,
+            scanEnabled = state.pendingCard == null && state.lastAddedCard == null
         )
 
-        // Top bar trasparente
+        // Overlay zona di scansione (card-shaped)
+        ScanZoneOverlay(
+            isDetecting = state.isSearching,
+            hasResult = state.pendingCard != null || state.lastAddedCard != null,
+            detectedName = state.detectedName
+        )
+
+        // Top bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -101,7 +126,6 @@ fun ScannerScreen(
                 )
             }
 
-            // Contatore carte aggiunte
             if (state.addedCount > 0) {
                 Text(
                     text = "${state.addedCount} aggiunte",
@@ -127,31 +151,26 @@ fun ScannerScreen(
             }
         }
 
-        // Centro: stato rilevamento
-        Column(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .padding(horizontal = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        // Istruzione iniziale (sopra la zona di scansione)
+        if (state.pendingCard == null && state.lastAddedCard == null && !state.isSearching &&
+            state.detectedName.isBlank()
         ) {
-            if (state.lastAddedCard == null && !state.isSearching &&
-                state.detectedName.isBlank() && state.detectedNumber.isBlank()
-            ) {
-                // Istruzione iniziale
-                Text(
-                    "Inquadra una carta Pokémon",
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                )
-            }
+            Text(
+                "Posiziona la carta nella cornice",
+                color = Color.White.copy(alpha = 0.9f),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 56.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            )
         }
 
-        // Bottom: stato + ricerca manuale
+        // Bottom area
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -188,7 +207,7 @@ fun ScannerScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         buildString {
-                            append("Cerco")
+                            append("Riconoscimento")
                             if (state.detectedName.isNotBlank()) append(" \"${state.detectedName}\"")
                             if (state.detectedNumber.isNotBlank()) append(" #${state.detectedNumber}")
                             append("...")
@@ -198,6 +217,21 @@ fun ScannerScreen(
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            // Carta trovata: anteprima con conferma
+            AnimatedVisibility(
+                visible = state.pendingCard != null,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            ) {
+                state.pendingCard?.let { card ->
+                    PendingCardConfirmation(
+                        card = card,
+                        onConfirm = { viewModel.confirmAdd() },
+                        onDismiss = { viewModel.dismissCard() }
+                    )
+                }
             }
 
             // Carta appena aggiunta - conferma visiva
@@ -210,10 +244,7 @@ fun ScannerScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                GreenCard.copy(alpha = 0.95f),
-                                RoundedCornerShape(16.dp)
-                            )
+                            .background(GreenCard.copy(alpha = 0.95f), RoundedCornerShape(16.dp))
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -222,7 +253,7 @@ fun ScannerScreen(
                             contentDescription = card.name,
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
-                                .height(70.dp)
+                                .height(60.dp)
                                 .clip(RoundedCornerShape(8.dp))
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -256,52 +287,200 @@ fun ScannerScreen(
                     }
                 }
             }
+        }
+    }
+}
 
-            // Se non sta rilevando nulla, mostra ricerca manuale
-            if (state.lastAddedCard == null && !state.isSearching) {
-                Spacer(modifier = Modifier.height(8.dp))
-                ManualSearchBar(
-                    onSearch = { viewModel.searchManually(it) }
+// ═══════════════════════════════════════════════
+// Conferma carta rilevata
+// ═══════════════════════════════════════════════
+
+@Composable
+private fun PendingCardConfirmation(
+    card: com.example.pokevault.data.remote.TcgCard,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(DarkSurface.copy(alpha = 0.95f), RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Header
+        Text(
+            "Carta riconosciuta",
+            color = BlueCard,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Card info
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = card.images.small,
+                contentDescription = card.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .height(100.dp)
+                    .clip(RoundedCornerShape(8.dp))
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    card.name,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                if (card.set != null) {
+                    Text(
+                        card.set.name,
+                        color = TextGray,
+                        fontSize = 13.sp
+                    )
+                }
+                Text(
+                    "#${card.number}" + (card.rarity?.let { " · $it" } ?: ""),
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+                if (card.hp != null) {
+                    Text(
+                        "${card.hp} HP",
+                        color = TextMuted,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Bottoni conferma / scarta
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Scarta
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = TextGray
+                )
+            ) {
+                Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Scarta", fontSize = 14.sp)
+            }
+
+            // Aggiungi
+            Button(
+                onClick = onConfirm,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = GreenCard
+                )
+            ) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Aggiungi", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
-@Composable
-private fun ManualSearchBar(onSearch: (String) -> Unit) {
-    var query by remember { mutableStateOf("") }
+// ═══════════════════════════════════════════════
+// Overlay zona di scansione
+// ═══════════════════════════════════════════════
 
-    OutlinedTextField(
-        value = query,
-        onValueChange = { query = it },
-        placeholder = { Text("Cerca manualmente...", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp) },
-        leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.White.copy(alpha = 0.6f)) },
-        trailingIcon = {
-            if (query.isNotBlank()) {
-                IconButton(onClick = { query = "" }) {
-                    Icon(Icons.Default.Close, null, tint = Color.White.copy(alpha = 0.6f))
-                }
+@Composable
+private fun ScanZoneOverlay(
+    isDetecting: Boolean,
+    hasResult: Boolean,
+    detectedName: String
+) {
+    // Colore bordo: blu in scansione, verde se trovata, bianco default
+    val borderColor = when {
+        hasResult -> GreenCard
+        isDetecting -> BlueCard
+        detectedName.isNotBlank() -> StarGold
+        else -> Color.White.copy(alpha = 0.6f)
+    }
+
+    val borderWidth = if (isDetecting || hasResult) 3.dp else 2.dp
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val screenW = constraints.maxWidth.toFloat()
+        val screenH = constraints.maxHeight.toFloat()
+
+        // Zona di scansione: carta centrata, larga 75% dello schermo
+        val zoneW = screenW * 0.75f
+        val zoneH = zoneW / CARD_ASPECT_RATIO
+        val zoneLeft = (screenW - zoneW) / 2f
+        val zoneTop = (screenH - zoneH) / 2f - screenH * 0.05f // leggermente sopra il centro
+
+        val cornerRadiusPx = with(LocalDensity.current) { 12.dp.toPx() }
+        val borderWidthPx = with(LocalDensity.current) { borderWidth.toPx() }
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            // Oscura tutto tranne la zona di scansione
+            val cutoutPath = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        rect = Rect(zoneLeft, zoneTop, zoneLeft + zoneW, zoneTop + zoneH),
+                        cornerRadius = CornerRadius(cornerRadiusPx)
+                    )
+                )
             }
-        },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(
-            onSearch = { if (query.length >= 2) onSearch(query) }
-        ),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            cursorColor = BlueCard,
-            focusedBorderColor = Color.White.copy(alpha = 0.4f),
-            unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
-        ),
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-    )
+
+            clipPath(cutoutPath, clipOp = ClipOp.Difference) {
+                drawRect(Color.Black.copy(alpha = 0.55f))
+            }
+
+            // Bordo della zona di scansione
+            drawRoundRect(
+                color = borderColor,
+                topLeft = Offset(zoneLeft, zoneTop),
+                size = androidx.compose.ui.geometry.Size(zoneW, zoneH),
+                cornerRadius = CornerRadius(cornerRadiusPx),
+                style = Stroke(width = borderWidthPx)
+            )
+
+            // Angoli piu spessi per effetto "mirino"
+            val cornerLen = zoneW * 0.08f
+            val thickStroke = borderWidthPx * 2.5f
+
+            // Top-left
+            drawLine(borderColor, Offset(zoneLeft, zoneTop + cornerRadiusPx), Offset(zoneLeft, zoneTop + cornerLen), thickStroke)
+            drawLine(borderColor, Offset(zoneLeft + cornerRadiusPx, zoneTop), Offset(zoneLeft + cornerLen, zoneTop), thickStroke)
+            // Top-right
+            drawLine(borderColor, Offset(zoneLeft + zoneW, zoneTop + cornerRadiusPx), Offset(zoneLeft + zoneW, zoneTop + cornerLen), thickStroke)
+            drawLine(borderColor, Offset(zoneLeft + zoneW - cornerRadiusPx, zoneTop), Offset(zoneLeft + zoneW - cornerLen, zoneTop), thickStroke)
+            // Bottom-left
+            drawLine(borderColor, Offset(zoneLeft, zoneTop + zoneH - cornerRadiusPx), Offset(zoneLeft, zoneTop + zoneH - cornerLen), thickStroke)
+            drawLine(borderColor, Offset(zoneLeft + cornerRadiusPx, zoneTop + zoneH), Offset(zoneLeft + cornerLen, zoneTop + zoneH), thickStroke)
+            // Bottom-right
+            drawLine(borderColor, Offset(zoneLeft + zoneW, zoneTop + zoneH - cornerRadiusPx), Offset(zoneLeft + zoneW, zoneTop + zoneH - cornerLen), thickStroke)
+            drawLine(borderColor, Offset(zoneLeft + zoneW - cornerRadiusPx, zoneTop + zoneH), Offset(zoneLeft + zoneW - cornerLen, zoneTop + zoneH), thickStroke)
+        }
+    }
 }
+
+// ═══════════════════════════════════════════════
+// Permission Request
+// ═══════════════════════════════════════════════
 
 @Composable
 private fun PermissionRequest(
@@ -320,7 +499,7 @@ private fun PermissionRequest(
     ) {
         Text(
             text = if (shouldShowRationale)
-                "La fotocamera serve per scansionare le carte Pokémon e aggiungerle automaticamente alla collezione."
+                "La fotocamera serve per scansionare le carte Pokémon e aggiungerle alla collezione."
             else
                 "Per usare lo scanner serve il permesso fotocamera.",
             color = TextGray,
@@ -341,15 +520,22 @@ private fun PermissionRequest(
     }
 }
 
+// ═══════════════════════════════════════════════
+// Camera Preview con crop alla scan zone
+// ═══════════════════════════════════════════════
+
 @Suppress("UnsafeOptInUsageError")
 @Composable
 private fun CameraPreview(
     onTextDetected: (String) -> Unit,
-    flashEnabled: Boolean
+    flashEnabled: Boolean,
+    scanEnabled: Boolean
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val recognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
     var cameraRef by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+    // Flag per evitare di processare piu frame contemporaneamente
+    var isProcessing by remember { mutableStateOf(false) }
 
     LaunchedEffect(flashEnabled) {
         cameraRef?.cameraControl?.enableTorch(flashEnabled)
@@ -383,12 +569,22 @@ private fun CameraPreview(
                     .build()
                     .also { analysis ->
                         analysis.setAnalyzer(ContextCompat.getMainExecutor(ctx)) { imageProxy ->
+                            // Non processare se OCR e in pausa (carta gia trovata)
+                            if (!scanEnabled || isProcessing) {
+                                imageProxy.close()
+                                return@setAnalyzer
+                            }
+
                             val mediaImage = imageProxy.image
                             if (mediaImage != null) {
+                                isProcessing = true
+
+                                // Crop al centro dell'immagine (zona della carta)
                                 val image = InputImage.fromMediaImage(
                                     mediaImage,
                                     imageProxy.imageInfo.rotationDegrees
                                 )
+
                                 recognizer.process(image)
                                     .addOnSuccessListener { visionText ->
                                         if (visionText.text.isNotBlank()) {
@@ -396,6 +592,7 @@ private fun CameraPreview(
                                         }
                                     }
                                     .addOnCompleteListener {
+                                        isProcessing = false
                                         imageProxy.close()
                                     }
                             } else {
@@ -414,7 +611,6 @@ private fun CameraPreview(
                     )
                     cameraRef = camera
                     camera.cameraControl.enableTorch(flashEnabled)
-                    // Autofocus continuo
                     camera.cameraControl.cancelFocusAndMetering()
                 } catch (e: Exception) {
                     Log.e("ScannerScreen", "Camera bind failed", e)

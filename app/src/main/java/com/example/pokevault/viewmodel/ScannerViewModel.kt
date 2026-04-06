@@ -14,22 +14,22 @@ import com.example.pokevault.data.remote.PokeTcgRepository
 import com.example.pokevault.data.remote.TcgCard
 import com.example.pokevault.ocr.CardOCRResult
 import com.example.pokevault.ocr.OCRManager
-import com.example.pokevault.ocr.CardFieldParser
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class ScannerUiState(
     val isSearching: Boolean = false,
+    /** Carta trovata in attesa di conferma dall'utente */
+    val pendingCard: TcgCard? = null,
+    /** Carta appena aggiunta (conferma visiva temporanea) */
     val lastAddedCard: TcgCard? = null,
     val addedCount: Int = 0,
     val errorMessage: String? = null,
     val flashEnabled: Boolean = false,
     val detectedName: String = "",
     val detectedNumber: String = "",
-    /** Ultimo risultato OCR completo (per debug/display) */
     val lastOCRResult: CardOCRResult? = null,
-    /** Nome dell'engine OCR attivo */
     val ocrEngineName: String = ""
 )
 
@@ -39,10 +39,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private val firestoreRepository = FirestoreRepository()
     private var searchJob: Job? = null
 
-    /** OCR Manager con pipeline completa per carte Pokemon */
     private val ocrManager = OCRManager(application)
 
-    // Evita di aggiungere la stessa carta piu volte nella stessa sessione
     private val recentlyAddedIds = mutableSetOf<String>()
     private var lastSearchKey = ""
 
@@ -50,7 +48,6 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         private set
 
     init {
-        // Inizializza OCR pipeline in background
         viewModelScope.launch {
             try {
                 ocrManager.initialize()
@@ -68,19 +65,19 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ═══════════════════════════════════════════
-    // OCR DA CAMERA FRAME (testo gia riconosciuto da ML Kit in ScannerScreen)
+    // OCR DA CAMERA FRAME
     // ═══════════════════════════════════════════
 
     /**
      * Chiamata dalla camera ad ogni frame con testo OCR grezzo.
-     * Usa il CardFieldParser per estrarre i campi strutturati.
+     * Se una carta e gia in attesa di conferma, ignora nuovi frame.
      */
     fun onTextDetected(rawText: String) {
         if (rawText.isBlank()) return
+        // Non analizzare se c'e gia una carta in attesa o appena aggiunta
+        if (uiState.pendingCard != null || uiState.lastAddedCard != null) return
 
-        // Usa la nuova pipeline di parsing Pokemon-specifico
         val ocrResult = ocrManager.extractCardFields(rawText)
-
         if (!ocrResult.isSearchable()) return
 
         val searchKey = ocrResult.searchKey()
@@ -94,30 +91,21 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            delay(1200) // debounce per stabilizzare OCR
+            delay(800) // debounce ridotto per riconoscimento piu veloce
             lastSearchKey = searchKey
-            searchAndAutoAdd(ocrResult.cardName, ocrResult.cardNumber)
+            searchCard(ocrResult.cardName, ocrResult.cardNumber)
         }
     }
 
     // ═══════════════════════════════════════════
-    // OCR DA BITMAP (analisi completa con preprocessing)
+    // OCR DA BITMAP
     // ═══════════════════════════════════════════
 
-    /**
-     * Analizza un'immagine completa di una carta Pokemon.
-     * Esegue la pipeline OCR completa: preprocessing + detection + recognition + parsing.
-     *
-     * Usare questa funzione per:
-     * - Foto scattate dalla galleria
-     * - Foto ad alta risoluzione
-     * - Quando serve la massima accuratezza
-     */
     fun analyzeCardImage(bitmap: Bitmap) {
+        if (uiState.pendingCard != null) return
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             uiState = uiState.copy(isSearching = true, errorMessage = null)
-
             try {
                 val result = ocrManager.analyzeCardImage(bitmap)
                 uiState = uiState.copy(
@@ -125,13 +113,12 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     detectedNumber = result.cardNumber ?: "",
                     lastOCRResult = result
                 )
-
                 if (result.isSearchable()) {
-                    searchAndAutoAdd(result.cardName, result.cardNumber)
+                    searchCard(result.cardName, result.cardNumber)
                 } else {
                     uiState = uiState.copy(
                         isSearching = false,
-                        errorMessage = "Testo non riconosciuto. Riprova con una foto piu nitida."
+                        errorMessage = "Testo non riconosciuto. Riprova con una foto più nitida."
                     )
                 }
             } catch (e: Exception) {
@@ -145,21 +132,33 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ═══════════════════════════════════════════
-    // RICERCA E AUTO-ADD
+    // RICERCA (senza aggiunta automatica)
     // ═══════════════════════════════════════════
 
-    private suspend fun searchAndAutoAdd(name: String?, number: String?) {
+    /**
+     * Cerca la carta sull'API e la mostra all'utente per conferma.
+     * NON aggiunge automaticamente.
+     */
+    private suspend fun searchCard(name: String?, number: String?) {
         uiState = uiState.copy(isSearching = true, errorMessage = null)
 
         repository.searchByNameAndNumber(name, number)
             .onSuccess { cards ->
                 val bestMatch = cards.firstOrNull()
-                if (bestMatch != null && bestMatch.id !in recentlyAddedIds) {
-                    // Auto-add alla collezione
-                    recentlyAddedIds.add(bestMatch.id)
-                    addToFirestore(bestMatch)
+                if (bestMatch != null) {
+                    // Mostra la carta trovata, in attesa di conferma
+                    uiState = uiState.copy(
+                        isSearching = false,
+                        pendingCard = bestMatch,
+                        errorMessage = null
+                    )
                 } else {
-                    uiState = uiState.copy(isSearching = false)
+                    uiState = uiState.copy(
+                        isSearching = false,
+                        errorMessage = "Nessuna carta trovata. Riprova."
+                    )
+                    // Reset per permettere nuova scansione
+                    lastSearchKey = ""
                 }
             }
             .onFailure { error ->
@@ -168,8 +167,44 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     isSearching = false,
                     errorMessage = "Errore ricerca: ${error.message}"
                 )
+                lastSearchKey = ""
             }
     }
+
+    // ═══════════════════════════════════════════
+    // CONFERMA / SCARTA
+    // ═══════════════════════════════════════════
+
+    /** L'utente conferma: aggiungi la carta alla collezione */
+    fun confirmAdd() {
+        val card = uiState.pendingCard ?: return
+        uiState = uiState.copy(pendingCard = null, isSearching = true)
+
+        viewModelScope.launch {
+            addToFirestore(card)
+        }
+    }
+
+    /** L'utente scarta: riprendi la scansione */
+    fun dismissCard() {
+        val card = uiState.pendingCard
+        uiState = uiState.copy(
+            pendingCard = null,
+            detectedName = "",
+            detectedNumber = "",
+            errorMessage = null
+        )
+        // Reset search key per permettere di riscansionare
+        lastSearchKey = ""
+        // Aggiungi all'elenco degli scartati per evitare di riproporre la stessa carta
+        if (card != null) {
+            recentlyAddedIds.add(card.id)
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    // SALVATAGGIO FIRESTORE
+    // ═══════════════════════════════════════════
 
     private suspend fun addToFirestore(tcgCard: TcgCard) {
         val price = tcgCard.tcgplayer?.prices?.values?.firstOrNull()?.let { p ->
@@ -193,41 +228,34 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
         firestoreRepository.addCard(pokemonCard)
             .onSuccess {
+                recentlyAddedIds.add(tcgCard.id)
                 uiState = uiState.copy(
                     isSearching = false,
                     lastAddedCard = tcgCard,
                     addedCount = uiState.addedCount + 1,
                     errorMessage = null
                 )
-                // Reset dopo 3 secondi per essere pronti alla prossima carta
+                // Reset dopo 2.5 secondi per riprendere la scansione
                 viewModelScope.launch {
-                    delay(3000)
+                    delay(2500)
                     if (uiState.lastAddedCard?.id == tcgCard.id) {
-                        uiState = uiState.copy(lastAddedCard = null)
-                        lastSearchKey = "" // permetti nuove scansioni
+                        uiState = uiState.copy(
+                            lastAddedCard = null,
+                            detectedName = "",
+                            detectedNumber = ""
+                        )
+                        lastSearchKey = ""
                     }
                 }
             }
             .onFailure { error ->
-                recentlyAddedIds.remove(tcgCard.id) // permetti retry
+                recentlyAddedIds.remove(tcgCard.id)
                 uiState = uiState.copy(
                     isSearching = false,
                     errorMessage = "Errore salvataggio: ${error.message}"
                 )
+                lastSearchKey = ""
             }
-    }
-
-    /**
-     * Ricerca manuale: cerca e auto-aggiunge.
-     */
-    fun searchManually(query: String) {
-        if (query.isBlank()) return
-        searchJob?.cancel()
-        lastSearchKey = "manual_$query"
-        uiState = uiState.copy(detectedName = query)
-        searchJob = viewModelScope.launch {
-            searchAndAutoAdd(query, null)
-        }
     }
 
     fun toggleFlash() {
