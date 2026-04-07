@@ -3,6 +3,7 @@ package com.example.pokevault.ui.home.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,7 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.example.pokevault.data.model.PokemonCard
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.util.AppLocale
@@ -95,14 +96,34 @@ fun PokemonCardItem(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (card.imageUrl.isNotBlank()) {
-            AsyncImage(
+            SubcomposeAsyncImage(
                 model = card.imageUrl,
                 contentDescription = card.name,
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier
                     .width(120.dp)
                     .height(168.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(12.dp)),
+                loading = {
+                    Box(
+                        Modifier.fillMaxSize().background(DarkCard),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = BlueCard,
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                },
+                error = {
+                    Box(
+                        Modifier.fillMaxSize().background(DarkCard),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🎴", fontSize = 40.sp)
+                    }
+                }
             )
         } else {
             // Fallback emoji se non c'è immagine

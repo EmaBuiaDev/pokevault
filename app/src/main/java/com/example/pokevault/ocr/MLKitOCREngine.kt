@@ -2,6 +2,7 @@ package com.example.pokevault.ocr
 
 import android.graphics.Bitmap
 import android.util.Log
+import com.example.pokevault.BuildConfig
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
@@ -36,7 +37,7 @@ class MLKitOCREngine : OCREngine {
     override suspend fun initialize() {
         recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         ready = true
-        Log.i(TAG, "ML Kit Text Recognition inizializzato")
+        if (BuildConfig.DEBUG) Log.i(TAG, "ML Kit Text Recognition inizializzato")
     }
 
     override fun release() {
@@ -95,7 +96,7 @@ class MLKitOCREngine : OCREngine {
                     }
                 }
                 .addOnFailureListener { e ->
-                    Log.w(TAG, "ML Kit recognition fallito: ${e.message}")
+                    if (BuildConfig.DEBUG) Log.w(TAG, "ML Kit recognition fallito: ${e.message}")
                     if (continuation.isActive) {
                         continuation.resume(emptyList())
                     }

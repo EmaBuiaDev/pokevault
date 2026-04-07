@@ -2,6 +2,7 @@ package com.example.pokevault
 
 import android.os.Bundle
 import android.util.Log
+import com.example.pokevault.BuildConfig
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -38,11 +39,11 @@ class MainActivity : ComponentActivity() {
             if (idToken != null) {
                 onGoogleIdToken?.invoke(idToken)
             } else {
-                Log.w("MainActivity", "Google Sign-In: idToken nullo")
+                if (BuildConfig.DEBUG) Log.w("MainActivity", "Google Sign-In: idToken nullo")
                 Toast.makeText(this, "Errore: Google ID Token nullo", Toast.LENGTH_SHORT).show()
             }
         } catch (e: ApiException) {
-            Log.e("MainActivity", "Google Sign-In fallito: codice ${e.statusCode}", e)
+            if (BuildConfig.DEBUG) Log.e("MainActivity", "Google Sign-In fallito: codice ${e.statusCode}", e)
             val errorMsg = when (e.statusCode) {
                 10 -> "Errore 10: Verifica SHA-1 e Web Client ID su Firebase Console."
                 7 -> "Errore di rete. Controlla la connessione."

@@ -1,6 +1,7 @@
 package com.example.pokevault.data.remote
 
 import android.util.Log
+import com.example.pokevault.BuildConfig
 import com.example.pokevault.data.model.MetaDeck
 import com.example.pokevault.data.model.MetaDeckCard
 import com.google.gson.Gson
@@ -70,13 +71,13 @@ class LimitlessTcgRepository {
             }
 
             // 1. Recupera tornei recenti
-            Log.d(TAG, "Fetching tournaments format=$apiFormat")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Fetching tournaments format=$apiFormat")
             val tournaments = api.getTournaments(
                 game = "PTCG",
                 format = apiFormat,
                 limit = 10
             )
-            Log.d(TAG, "Trovati ${tournaments.size} tornei")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Trovati ${tournaments.size} tornei")
 
             if (tournaments.isEmpty()) {
                 return Result.success(emptyList())
@@ -89,9 +90,9 @@ class LimitlessTcgRepository {
                 if (allMetaDecks.size >= limit) break
 
                 try {
-                    Log.d(TAG, "Fetching standings per torneo: ${tournament.name} (${tournament.id})")
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Fetching standings per torneo: ${tournament.name} (${tournament.id})")
                     val standings = api.getTournamentStandings(tournament.id)
-                    Log.d(TAG, "Trovati ${standings.size} giocatori")
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Trovati ${standings.size} giocatori")
 
                     // Prendi solo i top player con decklist
                     val topPlayers = standings
@@ -99,7 +100,7 @@ class LimitlessTcgRepository {
                         .sortedBy { it.placing }
                         .take(8) // Top 8 per torneo
 
-                    Log.d(TAG, "Giocatori con decklist: ${topPlayers.size}")
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Giocatori con decklist: ${topPlayers.size}")
 
                     for (player in topPlayers) {
                         if (allMetaDecks.size >= limit) break
@@ -113,12 +114,12 @@ class LimitlessTcgRepository {
                         }
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Errore caricamento standings per torneo ${tournament.id}: ${e.message}", e)
+                    if (BuildConfig.DEBUG) Log.w(TAG, "Errore caricamento standings per torneo ${tournament.id}: ${e.message}", e)
                     // Continua con il prossimo torneo
                 }
             }
 
-            Log.d(TAG, "Totale meta decks trovati: ${allMetaDecks.size}")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Totale meta decks trovati: ${allMetaDecks.size}")
 
             // Ordina per placement e data
             val sorted = allMetaDecks
@@ -131,7 +132,7 @@ class LimitlessTcgRepository {
 
             Result.success(sorted)
         } catch (e: Exception) {
-            Log.e(TAG, "Errore fetch meta decks: ${e.message}", e)
+            if (BuildConfig.DEBUG) Log.e(TAG, "Errore fetch meta decks: ${e.message}", e)
 
             // Fallback su cache scaduta
             metaDecksCache[cacheKey]?.let {
@@ -162,7 +163,7 @@ class LimitlessTcgRepository {
 
         try {
             val json = gson.toJson(decklist)
-            Log.d(TAG, "Decklist raw JSON (troncato): ${json.take(500)}")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Decklist raw JSON (troncato): ${json.take(500)}")
 
             // Prova Formato 1: Mappa con chiavi "pokemon", "trainer", "energy"
             try {
@@ -184,7 +185,7 @@ class LimitlessTcgRepository {
                 }
 
                 if (cards.isNotEmpty()) {
-                    Log.d(TAG, "Parsed ${cards.size} carte (formato mappa per categoria)")
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Parsed ${cards.size} carte (formato mappa per categoria)")
                     return cards
                 }
 
@@ -194,7 +195,7 @@ class LimitlessTcgRepository {
                     val deckJson = gson.toJson(deckData)
                     val deckCards = parseCardList(deckJson, null)
                     if (deckCards.isNotEmpty()) {
-                        Log.d(TAG, "Parsed ${deckCards.size} carte (formato deck array)")
+                        if (BuildConfig.DEBUG) Log.d(TAG, "Parsed ${deckCards.size} carte (formato deck array)")
                         return deckCards
                     }
                 }
@@ -206,7 +207,7 @@ class LimitlessTcgRepository {
             try {
                 val listCards = parseCardList(json, null)
                 if (listCards.isNotEmpty()) {
-                    Log.d(TAG, "Parsed ${listCards.size} carte (formato lista piatta)")
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Parsed ${listCards.size} carte (formato lista piatta)")
                     return listCards
                 }
             } catch (_: Exception) {
@@ -214,7 +215,7 @@ class LimitlessTcgRepository {
             }
 
         } catch (e: Exception) {
-            Log.w(TAG, "Errore parsing decklist: ${e.message}")
+            if (BuildConfig.DEBUG) Log.w(TAG, "Errore parsing decklist: ${e.message}")
         }
 
         return cards
@@ -282,7 +283,7 @@ class LimitlessTcgRepository {
                 )
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Errore parseCardList: ${e.message}")
+            if (BuildConfig.DEBUG) Log.w(TAG, "Errore parseCardList: ${e.message}")
         }
 
         return cards

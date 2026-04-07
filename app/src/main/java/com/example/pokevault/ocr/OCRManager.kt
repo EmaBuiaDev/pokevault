@@ -3,6 +3,7 @@ package com.example.pokevault.ocr
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
+import com.example.pokevault.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
@@ -123,10 +124,10 @@ class OCRManager(private val context: Context) {
                 paddleEngine.initialize()
                 engine = paddleEngine
                 isInitialized = true
-                Log.i(TAG, "Inizializzato con PaddleOCR TFLite")
+                if (BuildConfig.DEBUG) Log.i(TAG, "Inizializzato con PaddleOCR TFLite")
                 return@withContext
             } catch (e: Exception) {
-                Log.w(TAG, "PaddleOCR non disponibile, fallback a ML Kit: ${e.message}")
+                if (BuildConfig.DEBUG) Log.w(TAG, "PaddleOCR non disponibile, fallback a ML Kit: ${e.message}")
             }
         }
 
@@ -136,9 +137,9 @@ class OCRManager(private val context: Context) {
             mlKitEngine.initialize()
             engine = mlKitEngine
             isInitialized = true
-            Log.i(TAG, "Inizializzato con ML Kit (fallback)")
+            if (BuildConfig.DEBUG) Log.i(TAG, "Inizializzato con ML Kit (fallback)")
         } catch (e: Exception) {
-            Log.e(TAG, "Nessun engine OCR disponibile: ${e.message}", e)
+            if (BuildConfig.DEBUG) Log.e(TAG, "Nessun engine OCR disponibile: ${e.message}", e)
             throw e
         }
     } }
@@ -170,7 +171,7 @@ class OCRManager(private val context: Context) {
      */
     suspend fun analyzeCardImage(bitmap: Bitmap): CardOCRResult = withContext(Dispatchers.Default) {
         if (!isReady()) {
-            Log.w(TAG, "OCR non inizializzato, tentativo di inizializzazione...")
+            if (BuildConfig.DEBUG) Log.w(TAG, "OCR non inizializzato, tentativo di inizializzazione...")
             initialize()
         }
 
@@ -197,12 +198,14 @@ class OCRManager(private val context: Context) {
                 fullResult
             }
 
-            Log.d(TAG, "Analisi completata: ${merged.cardName} #${merged.cardNumber} " +
-                    "(confidence: ${merged.confidence})")
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "Analisi completata: ${merged.cardName} #${merged.cardNumber} " +
+                        "(confidence: ${merged.confidence})")
+            }
 
             merged
         } catch (e: Exception) {
-            Log.e(TAG, "Errore analisi immagine: ${e.message}", e)
+            if (BuildConfig.DEBUG) Log.e(TAG, "Errore analisi immagine: ${e.message}", e)
             CardOCRResult(rawText = "", confidence = 0f)
         }
     }
@@ -264,7 +267,7 @@ class OCRManager(private val context: Context) {
 
             match?.groupValues?.get(1)
         } catch (e: Exception) {
-            Log.w(TAG, "Errore rilevamento set symbol: ${e.message}")
+            if (BuildConfig.DEBUG) Log.w(TAG, "Errore rilevamento set symbol: ${e.message}")
             null
         }
     }
@@ -326,7 +329,7 @@ class OCRManager(private val context: Context) {
 
             return CardFieldParser.parseZonedText(allBlocks)
         } catch (e: Exception) {
-            Log.w(TAG, "Analisi zone fallita: ${e.message}")
+            if (BuildConfig.DEBUG) Log.w(TAG, "Analisi zone fallita: ${e.message}")
             return null
         }
     }

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.pokevault.ui.components.OfflineBanner
 import com.example.pokevault.ui.home.components.*
 import com.example.pokevault.ui.navigation.Routes
 import com.example.pokevault.ui.theme.BlueCard
@@ -115,6 +116,9 @@ fun HomeScreen(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            // Offline banner
+            OfflineBanner()
 
             // Barra di ricerca
             SearchBar(

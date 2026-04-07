@@ -14,6 +14,7 @@ data class GradedCardsUiState(
     val allCards: List<PokemonCard> = emptyList(),
     val filteredCards: List<PokemonCard> = emptyList(),
     val isLoading: Boolean = true,
+    val errorMessage: String? = null,
     val searchQuery: String = "",
     val selectedCompany: String? = null,
     val totalGraded: Int = 0,
@@ -36,7 +37,12 @@ class GradedCardsViewModel : ViewModel() {
     private fun loadGradedCards() {
         viewModelScope.launch {
             repository.getCards()
-                .catch { uiState = uiState.copy(isLoading = false) }
+                .catch { e ->
+                    uiState = uiState.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Errore sconosciuto"
+                    )
+                }
                 .collect { cards ->
                     val graded = cards.filter { it.isGraded }
                     val grades = graded.mapNotNull { it.grade }

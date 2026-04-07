@@ -1,6 +1,7 @@
 package com.example.pokevault.ocr
 
 import android.util.Log
+import com.example.pokevault.BuildConfig
 
 /**
  * Parser specializzato per estrarre campi strutturati dal testo OCR di carte Pokemon.
@@ -61,7 +62,7 @@ object CardFieldParser {
             confidence = estimateConfidence(name, number, hp)
         )
 
-        Log.d(TAG, "Parsed: name=$name, number=$number/$setTotal, hp=$hp, variant=$variant")
+        if (BuildConfig.DEBUG) Log.d(TAG, "Parsed: name=$name, number=$number/$setTotal, hp=$hp, variant=$variant")
         return result
     }
 

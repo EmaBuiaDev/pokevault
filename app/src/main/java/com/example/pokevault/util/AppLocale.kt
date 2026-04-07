@@ -213,6 +213,16 @@ object AppLocale {
     val retry: String get() = if (isItalian) "Riprova" else "Retry"
     val loading: String get() = if (isItalian) "Caricamento..." else "Loading..."
 
+    // Network / Offline
+    val offlineMessage: String get() = if (isItalian) "Sei offline. Alcune funzioni non sono disponibili." else "You are offline. Some features are unavailable."
+    val errorLoadingData: String get() = if (isItalian) "Errore nel caricamento dei dati" else "Error loading data"
+
+    // Empty states
+    val emptyStatsTitle: String get() = if (isItalian) "Nessuna statistica disponibile" else "No statistics available"
+    val emptyStatsSubtitle: String get() = if (isItalian) "Aggiungi carte alla tua collezione per vedere le statistiche" else "Add cards to your collection to see statistics"
+    val emptyCollectionTitle: String get() = if (isItalian) "Nessuna carta trovata" else "No cards found"
+    val emptyCollectionSubtitle: String get() = if (isItalian) "Prova a cambiare i filtri o aggiungi nuove carte" else "Try changing filters or add new cards"
+
     // Pokedex / Sets
     val extensions: String get() = if (isItalian) "Espansioni" else "Expansions"
     val searchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
