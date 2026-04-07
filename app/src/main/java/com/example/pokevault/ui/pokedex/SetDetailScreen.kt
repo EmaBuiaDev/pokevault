@@ -407,7 +407,6 @@ fun SetDetailScreen(
                             }
                         }
                     }
-
                     if (sortedCards.isEmpty()) {
                         item(span = { GridItemSpan(3) }) {
                             Box(modifier = Modifier

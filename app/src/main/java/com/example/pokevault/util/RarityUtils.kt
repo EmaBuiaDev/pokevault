@@ -84,7 +84,7 @@ object RarityUtils {
             r.contains("common") && !r.contains("uncommon") || r == "comune" ->
                 RarityInfo("●", Color(0xFF94A3B8), if (isIt) "Comune" else "Common", 0)
 
-            else -> RarityInfo("●", Color(0xFF94A3B8), if (isIt) "Altro" else "Other", 12)
+            else -> RarityInfo("★★", Color(0xFF7FBF6A), if (isIt) "Altro" else "Other", 12)
         }
     }
 }
