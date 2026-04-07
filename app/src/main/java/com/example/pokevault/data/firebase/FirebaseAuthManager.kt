@@ -107,6 +107,38 @@ class FirebaseAuthManager {
         }
     }
 
+    // ── Eliminazione account e dati ──
+    suspend fun deleteAccount(): Result<Unit> {
+        return try {
+            val user = currentUser ?: throw Exception("Nessun utente autenticato")
+            val uid = user.uid
+
+            // Elimina sotto-collezione cards
+            val cardsSnapshot = firestore.collection("users").document(uid)
+                .collection("cards").get().await()
+            for (doc in cardsSnapshot.documents) {
+                doc.reference.delete().await()
+            }
+
+            // Elimina sotto-collezione decks
+            val decksSnapshot = firestore.collection("users").document(uid)
+                .collection("decks").get().await()
+            for (doc in decksSnapshot.documents) {
+                doc.reference.delete().await()
+            }
+
+            // Elimina documento utente
+            firestore.collection("users").document(uid).delete().await()
+
+            // Elimina account Firebase Auth
+            user.delete().await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ── Logout ──
     fun logout() {
         auth.signOut()

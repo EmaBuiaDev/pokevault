@@ -19,6 +19,7 @@ import com.example.pokevault.ui.graded.GradedCardsScreen
 import com.example.pokevault.ui.scanner.ScannerScreen
 import com.example.pokevault.ui.stats.StatsScreen
 import com.example.pokevault.ui.deck.DeckLabScreen
+import com.example.pokevault.ui.settings.SettingsScreen
 import com.example.pokevault.viewmodel.AuthViewModel
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -36,6 +37,7 @@ object Routes {
     const val SCANNER = "scanner"
     const val DECK_LAB = "deck_lab"
     const val GRADED = "graded"
+    const val SETTINGS = "settings"
 
     fun cardDetail(cardId: String) = "card_detail/$cardId"
     fun editCard(cardId: String) = "edit_card/$cardId"
@@ -187,6 +189,17 @@ fun AppNavigation(
             DeckLabScreen(
                 onBack = { navController.popBackStack() },
                 onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
+            )
+        }
+
+        // ── Impostazioni ──
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                authViewModel = authViewModel,
+                onAccountDeleted = {
+                    navController.navigate(Routes.AUTH) { popUpTo(0) { inclusive = true } }
+                }
             )
         }
     }

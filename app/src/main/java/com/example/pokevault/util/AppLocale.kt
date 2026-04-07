@@ -246,4 +246,86 @@ object AppLocale {
     val loginTab: String get() = if (isItalian) "Accedi" else "Login"
     val registerTab: String get() = if (isItalian) "Unisciti" else "Join"
     val or: String get() = if (isItalian) " oppure " else " or "
+
+    // ══════════════════════════════════════
+    // LEGAL & COMPLIANCE
+    // ══════════════════════════════════════
+
+    // Age Gate
+    val ageGateTitle: String get() = if (isItalian) "Verifica Età" else "Age Verification"
+    val ageGateMessage: String get() = if (isItalian)
+        "Questa app è riservata a utenti di almeno 13 anni.\nConfermi di avere almeno 13 anni?"
+    else
+        "This app is intended for users aged 13 and older.\nDo you confirm you are at least 13 years old?"
+    val ageGateConfirm: String get() = if (isItalian) "Sì, ho almeno 13 anni" else "Yes, I am 13 or older"
+    val ageGateDeny: String get() = if (isItalian) "No, ho meno di 13 anni" else "No, I am under 13"
+    val ageGateDenied: String get() = if (isItalian)
+        "Spiacenti, non puoi utilizzare questa app se hai meno di 13 anni."
+    else
+        "Sorry, you cannot use this app if you are under 13."
+
+    // Disclaimer
+    val disclaimerTitle: String get() = if (isItalian) "Disclaimer" else "Disclaimer"
+    val disclaimerBody: String get() = if (isItalian)
+        "Pokémon, Pokémon TCG e tutti i nomi, le immagini e i marchi correlati sono " +
+        "proprietà di Nintendo, The Pokémon Company e The Pokémon Company International. " +
+        "Questa app non è affiliata, sponsorizzata o approvata da Nintendo, " +
+        "The Pokémon Company o The Pokémon Company International.\n\n" +
+        "Le immagini e i dati delle carte sono forniti tramite API di terze parti (PokéTCG.io) " +
+        "e sono utilizzati esclusivamente a scopo informativo e di gestione della collezione personale.\n\n" +
+        "Tutti gli altri marchi appartengono ai rispettivi proprietari."
+    else
+        "Pokémon, Pokémon TCG, and all related names, images, and trademarks are the property " +
+        "of Nintendo, The Pokémon Company, and The Pokémon Company International. " +
+        "This app is not affiliated with, sponsored by, or endorsed by Nintendo, " +
+        "The Pokémon Company, or The Pokémon Company International.\n\n" +
+        "Card images and data are provided through third-party APIs (PokéTCG.io) " +
+        "and are used solely for informational and personal collection management purposes.\n\n" +
+        "All other trademarks belong to their respective owners."
+    val disclaimerAccept: String get() = if (isItalian) "Ho capito, continua" else "I understand, continue"
+
+    // Privacy Policy
+    val privacyPolicyUrl: String get() = "https://emabuia.github.io/pokevault/privacy-policy"
+    val termsUrl: String get() = "https://emabuia.github.io/pokevault/terms"
+
+    val privacyConsentTitle: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
+    val privacyConsentSummary: String get() = if (isItalian)
+        "Per utilizzare PokéVault, raccogliamo e conserviamo i seguenti dati:\n\n" +
+        "• Email e nome — per l'autenticazione e il profilo\n" +
+        "• Dati della collezione — carte, mazzi, valutazioni\n" +
+        "• Dati della fotocamera — solo per la scansione OCR (elaborati sul dispositivo, non inviati a server esterni)\n\n" +
+        "I tuoi dati sono conservati in modo sicuro su Firebase (Google Cloud). " +
+        "Non vendiamo né condividiamo i tuoi dati personali con terze parti per scopi pubblicitari. " +
+        "Puoi eliminare il tuo account e tutti i dati associati in qualsiasi momento dalle Impostazioni."
+    else
+        "To use PokéVault, we collect and store the following data:\n\n" +
+        "• Email and name — for authentication and profile\n" +
+        "• Collection data — cards, decks, valuations\n" +
+        "• Camera data — only for OCR scanning (processed on-device, not sent to external servers)\n\n" +
+        "Your data is securely stored on Firebase (Google Cloud). " +
+        "We do not sell or share your personal data with third parties for advertising purposes. " +
+        "You can delete your account and all associated data at any time from Settings."
+    val readFullPrivacyPolicy: String get() = if (isItalian) "Leggi l'informativa completa" else "Read full privacy policy"
+    val privacyConsentAccept: String get() = if (isItalian) "Accetto e continuo" else "I accept and continue"
+
+    // Settings
+    val settingsTitle: String get() = if (isItalian) "Impostazioni" else "Settings"
+    val privacyPolicyLabel: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
+    val privacyPolicySubtitle: String get() = if (isItalian) "Come gestiamo i tuoi dati" else "How we handle your data"
+    val termsLabel: String get() = if (isItalian) "Termini di Servizio" else "Terms of Service"
+    val termsSubtitle: String get() = if (isItalian) "Condizioni d'uso dell'app" else "App usage conditions"
+    val dangerZone: String get() = if (isItalian) "Zona Pericolosa" else "Danger Zone"
+    val deleteAccountButton: String get() = if (isItalian) "Elimina Account" else "Delete Account"
+    val deleteAccountTitle: String get() = if (isItalian) "Eliminare l'account?" else "Delete account?"
+    val deleteAccountMessage: String get() = if (isItalian)
+        "Questa azione è irreversibile. Tutti i tuoi dati verranno eliminati definitivamente:\n\n" +
+        "• Profilo utente\n• Collezione di carte\n• Mazzi salvati\n• Carte graduate\n\n" +
+        "Sei sicuro di voler procedere?"
+    else
+        "This action is irreversible. All your data will be permanently deleted:\n\n" +
+        "• User profile\n• Card collection\n• Saved decks\n• Graded cards\n\n" +
+        "Are you sure you want to proceed?"
+    val deleteAccountConfirm: String get() = if (isItalian) "Elimina definitivamente" else "Delete permanently"
+    val deletingAccount: String get() = if (isItalian) "Eliminazione in corso..." else "Deleting account..."
+    val settings: String get() = if (isItalian) "Impostazioni" else "Settings"
 }

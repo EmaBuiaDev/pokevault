@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pokevault.data.firebase.FirebaseAuthManager
+import com.example.pokevault.util.AppLocale
 import kotlinx.coroutines.launch
 
 data class AuthUiState(
@@ -162,6 +163,28 @@ class AuthViewModel : ViewModel() {
     fun logout() {
         authManager.logout()
         uiState = AuthUiState()
+    }
+
+    fun deleteAccount(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            authManager.deleteAccount()
+                .onSuccess {
+                    uiState = AuthUiState()
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    val message = when {
+                        error.message?.contains("requires-recent-login", ignoreCase = true) == true ||
+                        error.message?.contains("re-authenticate", ignoreCase = true) == true ->
+                            if (AppLocale.isItalian)
+                                "Per sicurezza, esegui il logout e accedi di nuovo prima di eliminare l'account."
+                            else
+                                "For security, please log out and log in again before deleting your account."
+                        else -> error.message ?: "Errore sconosciuto"
+                    }
+                    onError(message)
+                }
+        }
     }
 
     fun clearError() {

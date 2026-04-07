@@ -11,6 +11,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.navigation.compose.rememberNavController
+import com.example.pokevault.ui.legal.FirstLaunchLegalFlow
+import com.example.pokevault.ui.legal.hasCompletedLegalChecks
+import com.example.pokevault.ui.legal.markLegalChecksCompleted
 import com.example.pokevault.ui.navigation.AppNavigation
 import com.example.pokevault.ui.theme.PokeVaultTheme
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -70,17 +73,28 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             PokeVaultTheme {
-                val navController = rememberNavController()
-                AppNavigation(
-                    navController = navController,
-                    onLaunchGoogleSignIn = { callback ->
-                        onGoogleIdToken = callback
-                        // Facciamo il logout prima di lanciare il login per forzare la scelta dell'account
-                        googleSignInClient.signOut().addOnCompleteListener {
-                            googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                var legalCompleted by mutableStateOf(hasCompletedLegalChecks(this@MainActivity))
+
+                if (!legalCompleted) {
+                    FirstLaunchLegalFlow(
+                        onCompleted = {
+                            markLegalChecksCompleted(this@MainActivity)
+                            legalCompleted = true
                         }
-                    }
-                )
+                    )
+                } else {
+                    val navController = rememberNavController()
+                    AppNavigation(
+                        navController = navController,
+                        onLaunchGoogleSignIn = { callback ->
+                            onGoogleIdToken = callback
+                            // Facciamo il logout prima di lanciare il login per forzare la scelta dell'account
+                            googleSignInClient.signOut().addOnCompleteListener {
+                                googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                            }
+                        }
+                    )
+                }
             }
         }
     }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -80,6 +81,21 @@ fun HomeScreen(
                         .background(DarkCard)
                         .clickable { AppLocale.toggle(context) }
                         .wrapContentSize(Alignment.Center)
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Bottone impostazioni
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = AppLocale.settings,
+                    tint = TextMuted,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(DarkCard)
+                        .clickable { onNavigate("settings") }
+                        .padding(8.dp)
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
