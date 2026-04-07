@@ -2,6 +2,7 @@ package com.example.pokevault.viewmodel
 
 import android.app.Application
 import androidx.compose.runtime.getValue
+import com.example.pokevault.BuildConfig
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -101,7 +102,11 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private fun observeOwnedCards(setName: String) {
         viewModelScope.launch {
             firestoreRepository.getOwnedCardsBySet(setName)
-                .catch { e -> android.util.Log.w("SetDetailVM", "Errore osservazione carte possedute", e as? Throwable) }
+                .catch { e ->
+                    if (BuildConfig.DEBUG) {
+                        android.util.Log.w("SetDetailVM", "Errore osservazione carte possedute", e as? Throwable)
+                    }
+                }
                 .collectLatest { ownedCards ->
                     val ownedIds = ownedCards
                         .filter { it.apiCardId.isNotBlank() }

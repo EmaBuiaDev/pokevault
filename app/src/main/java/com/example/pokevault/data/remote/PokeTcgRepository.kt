@@ -2,6 +2,7 @@ package com.example.pokevault.data.remote
 
 import android.content.Context
 import android.util.Log
+import com.example.pokevault.BuildConfig
 import com.example.pokevault.util.AppLocale
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -65,7 +66,7 @@ class PokeTcgRepository {
                 .putLong(SETS_TIME_KEY, System.currentTimeMillis())
                 .apply()
         } catch (e: Exception) {
-            Log.w("PokeTcgRepository", "Errore salvataggio cache sets", e)
+            if (BuildConfig.DEBUG) Log.w("PokeTcgRepository", "Errore salvataggio cache sets", e)
         }
     }
 
@@ -77,7 +78,7 @@ class PokeTcgRepository {
             val json = prefs.getString(SETS_CACHE_KEY, null) ?: return null
             return gson.fromJson(json, object : TypeToken<List<TcgSet>>() {}.type)
         } catch (e: Exception) {
-            Log.w("PokeTcgRepository", "Errore lettura cache sets", e)
+            if (BuildConfig.DEBUG) Log.w("PokeTcgRepository", "Errore lettura cache sets", e)
             return null
         }
     }
@@ -123,7 +124,7 @@ class PokeTcgRepository {
                 .putInt("$CARDS_TOTAL_PREFIX$setId", totalCount)
                 .commit()
         } catch (e: Exception) {
-            Log.w("PokeTcgRepository", "Errore salvataggio cache cards per set $setId", e)
+            if (BuildConfig.DEBUG) Log.w("PokeTcgRepository", "Errore salvataggio cache cards per set $setId", e)
         }
     }
 
@@ -139,7 +140,7 @@ class PokeTcgRepository {
             if (cards.size < expectedTotal) return null
             return cards
         } catch (e: Exception) {
-            Log.w("PokeTcgRepository", "Errore lettura cache cards per set $setId", e)
+            if (BuildConfig.DEBUG) Log.w("PokeTcgRepository", "Errore lettura cache cards per set $setId", e)
             return null
         }
     }

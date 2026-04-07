@@ -4,6 +4,7 @@ import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.util.Log
+import com.example.pokevault.BuildConfig
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -613,7 +614,7 @@ private fun CameraPreview(
                     camera.cameraControl.enableTorch(flashEnabled)
                     camera.cameraControl.cancelFocusAndMetering()
                 } catch (e: Exception) {
-                    Log.e("ScannerScreen", "Camera bind failed", e)
+                    if (BuildConfig.DEBUG) Log.e("ScannerScreen", "Camera bind failed", e)
                 }
             }, ContextCompat.getMainExecutor(ctx))
 

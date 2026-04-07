@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.util.Log
+import com.example.pokevault.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.tensorflow.lite.Interpreter
@@ -115,7 +116,7 @@ class PaddleOCREngine(
         try {
             // Carica dizionario caratteri
             dictionary = loadDictionary()
-            Log.d(TAG, "Dizionario caricato: ${dictionary.size} caratteri")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Dizionario caricato: ${dictionary.size} caratteri")
 
             // Configura opzioni TFLite
             val options = createInterpreterOptions()
@@ -128,9 +129,9 @@ class PaddleOCREngine(
             warmup()
 
             isInitialized = true
-            Log.i(TAG, "PaddleOCR inizializzato (GPU: ${useGpu && isGpuAvailable()})")
+            if (BuildConfig.DEBUG) Log.i(TAG, "PaddleOCR inizializzato (GPU: ${useGpu && isGpuAvailable()})")
         } catch (e: Exception) {
-            Log.e(TAG, "Errore inizializzazione PaddleOCR: ${e.message}", e)
+            if (BuildConfig.DEBUG) Log.e(TAG, "Errore inizializzazione PaddleOCR: ${e.message}", e)
             isInitialized = false
             throw e
         }
@@ -149,7 +150,7 @@ class PaddleOCREngine(
     override suspend fun recognizeText(bitmap: Bitmap): List<OCRTextBlock> =
         withContext(Dispatchers.Default) {
             if (!isInitialized) {
-                Log.w(TAG, "PaddleOCR non inizializzato")
+                if (BuildConfig.DEBUG) Log.w(TAG, "PaddleOCR non inizializzato")
                 return@withContext emptyList()
             }
 
@@ -157,10 +158,10 @@ class PaddleOCREngine(
                 // Fase 1: Text Detection - trova le regioni di testo
                 val textRegions = detectTextRegions(bitmap)
                 if (textRegions.isEmpty()) {
-                    Log.d(TAG, "Nessuna regione di testo rilevata")
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Nessuna regione di testo rilevata")
                     return@withContext emptyList()
                 }
-                Log.d(TAG, "Rilevate ${textRegions.size} regioni di testo")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Rilevate ${textRegions.size} regioni di testo")
 
                 // Fase 2: Text Recognition - riconosci ogni regione
                 val results = mutableListOf<OCRTextBlock>()
@@ -184,7 +185,7 @@ class PaddleOCREngine(
                 results.sortBy { it.normalizedY }
                 results
             } catch (e: Exception) {
-                Log.e(TAG, "Errore OCR: ${e.message}", e)
+                if (BuildConfig.DEBUG) Log.e(TAG, "Errore OCR: ${e.message}", e)
                 emptyList()
             }
         }
@@ -460,7 +461,7 @@ class PaddleOCREngine(
             context.assets.open(dictPath).bufferedReader().readLines()
                 .filter { it.isNotBlank() }
         } catch (e: Exception) {
-            Log.w(TAG, "Dizionario non trovato, uso set caratteri predefinito")
+            if (BuildConfig.DEBUG) Log.w(TAG, "Dizionario non trovato, uso set caratteri predefinito")
             // Fallback: set ASCII + caratteri accentati comuni
             defaultDictionary()
         }
@@ -492,9 +493,9 @@ class PaddleOCREngine(
             try {
                 val gpuDelegate = GpuDelegate()
                 options.addDelegate(gpuDelegate)
-                Log.d(TAG, "GPU delegate attivato")
+                if (BuildConfig.DEBUG) Log.d(TAG, "GPU delegate attivato")
             } catch (e: Exception) {
-                Log.w(TAG, "GPU non disponibile, uso CPU: ${e.message}")
+                if (BuildConfig.DEBUG) Log.w(TAG, "GPU non disponibile, uso CPU: ${e.message}")
             }
         }
 
@@ -523,10 +524,10 @@ class PaddleOCREngine(
             canvas.drawText("Test", 10f, 22f, paint)
 
             // Warmup detection (se possibile, con input piccolo)
-            Log.d(TAG, "Warmup completato")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Warmup completato")
             dummyBitmap.recycle()
         } catch (e: Exception) {
-            Log.w(TAG, "Warmup fallito (non critico): ${e.message}")
+            if (BuildConfig.DEBUG) Log.w(TAG, "Warmup fallito (non critico): ${e.message}")
         }
     }
 

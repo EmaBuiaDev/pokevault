@@ -17,6 +17,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.pokevault.ui.components.EmptyStateView
+import com.example.pokevault.ui.components.ErrorStateView
+import com.example.pokevault.ui.components.OfflineBanner
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.SetCompletion
@@ -46,10 +49,19 @@ fun StatsScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
         )
 
+        OfflineBanner()
+
         if (state.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = BlueCard)
             }
+        } else if (state.errorMessage != null) {
+            ErrorStateView(message = state.errorMessage!!)
+        } else if (state.cards.isEmpty()) {
+            EmptyStateView(
+                title = AppLocale.emptyStatsTitle,
+                subtitle = AppLocale.emptyStatsSubtitle
+            )
         } else {
             Column(
                 modifier = Modifier

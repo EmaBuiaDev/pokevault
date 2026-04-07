@@ -3,6 +3,7 @@ package com.example.pokevault.viewmodel
 import android.app.Application
 import android.graphics.Bitmap
 import android.util.Log
+import com.example.pokevault.BuildConfig
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -69,18 +70,18 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             try {
                 ocrManager.initialize()
                 uiState = uiState.copy(ocrEngineName = ocrManager.activeEngineName)
-                Log.i(TAG, "OCR inizializzato: ${ocrManager.activeEngineName}")
+                if (BuildConfig.DEBUG) Log.i(TAG, "OCR inizializzato: ${ocrManager.activeEngineName}")
             } catch (e: Exception) {
-                Log.e(TAG, "Errore inizializzazione OCR: ${e.message}")
+                if (BuildConfig.DEBUG) Log.e(TAG, "Errore inizializzazione OCR: ${e.message}")
             }
         }
         // Precarica i set per poter identificare l'espansione dal totale carte
         viewModelScope.launch {
             try {
                 repository.getSets(application)
-                Log.d(TAG, "Set precaricati per matching espansione")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Set precaricati per matching espansione")
             } catch (e: Exception) {
-                Log.w(TAG, "Errore precaricamento set: ${e.message}")
+                if (BuildConfig.DEBUG) Log.w(TAG, "Errore precaricamento set: ${e.message}")
             }
         }
     }
@@ -184,7 +185,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Errore analisi immagine: ${e.message}")
+                if (BuildConfig.DEBUG) Log.e(TAG, "Errore analisi immagine: ${e.message}")
                 uiState = uiState.copy(
                     isSearching = false,
                     errorMessage = "Errore OCR: ${e.message}"
@@ -215,7 +216,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             // Strategia 1: numero/totale → usa searchCards che identifica il set
             if (number != null && setTotal != null) {
                 val fullNumber = "$number/$setTotal"
-                Log.d(TAG, "Ricerca con numero completo: $fullNumber")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Ricerca con numero completo: $fullNumber")
                 repository.searchCards(fullNumber)
                     .onSuccess { results ->
                         cards = results
@@ -229,14 +230,14 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
             // Strategia 2: nome + numero
             if (cards.isEmpty() && name != null && number != null) {
-                Log.d(TAG, "Ricerca con nome+numero: $name #$number")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Ricerca con nome+numero: $name #$number")
                 repository.searchByNameAndNumber(name, number)
                     .onSuccess { cards = it }
             }
 
             // Strategia 3: solo nome
             if (cards.isEmpty() && name != null && name.length >= 3) {
-                Log.d(TAG, "Ricerca con solo nome: $name")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Ricerca con solo nome: $name")
                 repository.searchCardsFuzzy(name)
                     .onSuccess { results ->
                         // Se abbiamo il numero, filtra
@@ -251,7 +252,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
             // Strategia 4: solo numero (ultimo fallback)
             if (cards.isEmpty() && number != null) {
-                Log.d(TAG, "Ricerca con solo numero: $number")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Ricerca con solo numero: $number")
                 repository.searchCards(number)
                     .onSuccess { cards = it }
             }
@@ -274,7 +275,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 activeSearchKey = ""
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Search failed: ${e.message}")
+            if (BuildConfig.DEBUG) Log.w(TAG, "Search failed: ${e.message}")
             uiState = uiState.copy(
                 isSearching = false,
                 errorMessage = "Errore ricerca: ${e.message}"

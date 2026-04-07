@@ -76,7 +76,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
 
     // ── Compose BOM (gestisce tutte le versioni Compose) ──
-    implementation(platform("androidx.compose:compose-bom:2024.02.02"))
+    implementation(platform("androidx.compose:compose-bom:2024.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -131,4 +131,7 @@ dependencies {
 
     // ── Accompanist Permissions ──
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+
+    // ── Splash Screen ──
+    implementation("androidx.core:core-splashscreen:1.0.1")
 }

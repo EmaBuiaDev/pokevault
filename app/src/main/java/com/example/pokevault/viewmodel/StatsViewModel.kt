@@ -26,6 +26,7 @@ data class StatsUiState(
     val stats: CollectionStats = CollectionStats(),
     val cards: List<PokemonCard> = emptyList(),
     val isLoading: Boolean = true,
+    val errorMessage: String? = null,
     // Distribuzioni calcolate
     val cardsBySet: List<Pair<String, Int>> = emptyList(),
     val setCompletions: List<SetCompletion> = emptyList(),
@@ -50,7 +51,12 @@ class StatsViewModel : ViewModel() {
     private fun loadData() {
         viewModelScope.launch {
             repository.getCards()
-                .catch { uiState = uiState.copy(isLoading = false) }
+                .catch { e ->
+                    uiState = uiState.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Errore sconosciuto"
+                    )
+                }
                 .collect { cards ->
                     val stats = repository.getCollectionStats()
                     val totalCards = cards.sumOf { it.quantity }
