@@ -7,6 +7,35 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:533369901523:android:b731654b9b91e8dc141f26",
+        "android_client_info": {
+          "package_name": "com.emabuia.pokevault"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "533369901523-m2bt2p8644am5a9gmoh48c4lhgnb5v0j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA0mt5g9eZpsCWRdXPlzuoU1oHYWy6fy9s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "533369901523-m2bt2p8644am5a9gmoh48c4lhgnb5v0j.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:533369901523:android:9edea1be4611a646141f26",
         "android_client_info": {
           "package_name": "com.example.pokevault"
