@@ -14,39 +14,10 @@
       },
       "oauth_client": [
         {
-          "client_id": "533369901523-m2bt2p8644am5a9gmoh48c4lhgnb5v0j.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyA0mt5g9eZpsCWRdXPlzuoU1oHYWy6fy9s"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "533369901523-m2bt2p8644am5a9gmoh48c4lhgnb5v0j.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:533369901523:android:9edea1be4611a646141f26",
-        "android_client_info": {
-          "package_name": "com.example.pokevault"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "533369901523-pouku1m5f7lau5daar20n6hb3v62955i.apps.googleusercontent.com",
+          "client_id": "533369901523-mr3rusfuoer91eiucj6e3sochgdeglgu.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.pokevault",
+            "package_name": "com.emabuia.pokevault",
             "certificate_hash": "4d7c3f828b332dca9e08223e0bfb42ceb45c4a43"
           }
         },
