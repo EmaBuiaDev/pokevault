@@ -11,6 +11,14 @@ import com.example.pokevault.data.model.PokemonCard
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 
+enum class SortOrder {
+    NEWEST, PRICE_ASC, PRICE_DESC, NAME_ASC, NUMBER
+}
+
+enum class SupertypeFilter {
+    ALL, POKEMON, TRAINER, ENERGY
+}
+
 data class CollectionUiState(
     val cards: List<PokemonCard> = emptyList(),
     val filteredCards: List<PokemonCard> = emptyList(),
@@ -18,7 +26,10 @@ data class CollectionUiState(
     val isLoading: Boolean = true,
     val isGridView: Boolean = true,
     val searchQuery: String = "",
+    val selectedSet: String? = null,
     val selectedType: String? = null,
+    val supertypeFilter: SupertypeFilter = SupertypeFilter.ALL,
+    val sortOrder: SortOrder = SortOrder.NEWEST,
     val errorMessage: String? = null,
     val successMessage: String? = null
 )
@@ -53,7 +64,7 @@ class CollectionViewModel : ViewModel() {
                     
                     uiState = uiState.copy(
                         cards = cards,
-                        filteredCards = applyFilters(cards, uiState.searchQuery, uiState.selectedType),
+                        filteredCards = applyFilters(cards),
                         stats = newStats,
                         isLoading = false
                     )
@@ -62,16 +73,33 @@ class CollectionViewModel : ViewModel() {
     }
 
     fun updateSearchQuery(query: String) {
-        uiState = uiState.copy(
-            searchQuery = query,
-            filteredCards = applyFilters(uiState.cards, query, uiState.selectedType)
-        )
+        uiState = uiState.copy(searchQuery = query)
+        refreshFilteredCards()
     }
 
-    fun filterByType(setName: String?) {
+    fun filterBySet(setName: String?) {
+        uiState = uiState.copy(selectedSet = setName)
+        refreshFilteredCards()
+    }
+
+    fun filterByType(type: String?) {
+        uiState = uiState.copy(selectedType = type)
+        refreshFilteredCards()
+    }
+
+    fun filterBySupertype(filter: SupertypeFilter) {
+        uiState = uiState.copy(supertypeFilter = filter)
+        refreshFilteredCards()
+    }
+
+    fun updateSortOrder(order: SortOrder) {
+        uiState = uiState.copy(sortOrder = order)
+        refreshFilteredCards()
+    }
+
+    private fun refreshFilteredCards() {
         uiState = uiState.copy(
-            selectedType = setName,
-            filteredCards = applyFilters(uiState.cards, uiState.searchQuery, setName)
+            filteredCards = applyFilters(uiState.cards)
         )
     }
 
@@ -111,18 +139,33 @@ class CollectionViewModel : ViewModel() {
         uiState = uiState.copy(errorMessage = null, successMessage = null)
     }
 
-    private fun applyFilters(
-        cards: List<PokemonCard>,
-        query: String,
-        setFilter: String?
-    ): List<PokemonCard> {
-        return cards.filter { card ->
-            val matchesQuery = query.isBlank() ||
-                card.name.contains(query, ignoreCase = true) ||
-                card.set.contains(query, ignoreCase = true) ||
-                card.rarity.contains(query, ignoreCase = true)
-            val matchesSet = setFilter == null || card.set == setFilter
-            matchesQuery && matchesSet
+    private fun applyFilters(cards: List<PokemonCard>): List<PokemonCard> {
+        val filtered = cards.filter { card ->
+            val matchesQuery = uiState.searchQuery.isBlank() ||
+                card.name.contains(uiState.searchQuery, ignoreCase = true) ||
+                card.set.contains(uiState.searchQuery, ignoreCase = true) ||
+                card.rarity.contains(uiState.searchQuery, ignoreCase = true)
+            
+            val matchesSet = uiState.selectedSet == null || card.set == uiState.selectedSet
+            
+            val matchesType = uiState.selectedType == null || card.type.equals(uiState.selectedType, ignoreCase = true)
+            
+            val matchesSupertype = when (uiState.supertypeFilter) {
+                SupertypeFilter.ALL -> true
+                SupertypeFilter.POKEMON -> card.supertype.contains("Pokémon", ignoreCase = true)
+                SupertypeFilter.TRAINER -> card.supertype.contains("Trainer", ignoreCase = true)
+                SupertypeFilter.ENERGY -> card.supertype.contains("Energy", ignoreCase = true)
+            }
+
+            matchesQuery && matchesSet && matchesType && matchesSupertype
+        }
+
+        return when (uiState.sortOrder) {
+            SortOrder.NEWEST -> filtered.reversed() // Assumendo che l'ordine originale sia cronologico (addedAt)
+            SortOrder.PRICE_ASC -> filtered.sortedBy { it.estimatedValue }
+            SortOrder.PRICE_DESC -> filtered.sortedByDescending { it.estimatedValue }
+            SortOrder.NAME_ASC -> filtered.sortedBy { it.name }
+            SortOrder.NUMBER -> filtered.sortedBy { it.cardNumber.toIntOrNull() ?: Int.MAX_VALUE }
         }
     }
 }
