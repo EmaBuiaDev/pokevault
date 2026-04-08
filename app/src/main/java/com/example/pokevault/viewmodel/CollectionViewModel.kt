@@ -149,7 +149,9 @@ class CollectionViewModel : ViewModel() {
             
             val matchesSet = uiState.selectedSet == null || card.set == uiState.selectedSet
             
-            val matchesType = uiState.selectedType == null || card.type.equals(AppLocale.translateType(uiState.selectedType ?: ""), ignoreCase = true)
+            // Corretto il filtraggio per tipo: traduciamo il tipo della carta prima del confronto
+            val matchesType = uiState.selectedType == null || 
+                AppLocale.translateType(card.type).equals(uiState.selectedType, ignoreCase = true)
             
             val matchesSupertype = when (uiState.supertypeFilter) {
                 SupertypeFilter.ALL -> true
