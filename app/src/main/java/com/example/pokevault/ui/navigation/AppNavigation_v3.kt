@@ -18,6 +18,9 @@ import com.example.pokevault.ui.pokedex.SetsListScreen
 import com.example.pokevault.ui.graded.GradedCardsScreen
 import com.example.pokevault.ui.scanner.ScannerScreen
 import com.example.pokevault.ui.stats.StatsScreen
+import com.example.pokevault.ui.album.AlbumDetailScreen
+import com.example.pokevault.ui.album.AlbumListScreen
+import com.example.pokevault.ui.album.CreateAlbumScreen
 import com.example.pokevault.ui.deck.DeckLabScreen
 import com.example.pokevault.ui.premium.PremiumScreen
 import com.example.pokevault.ui.settings.SettingsScreen
@@ -41,9 +44,13 @@ object Routes {
     const val GRADED = "graded"
     const val SETTINGS = "settings"
     const val PREMIUM = "premium"
+    const val ALBUM_LIST = "album_list"
+    const val CREATE_ALBUM = "create_album"
+    const val ALBUM_DETAIL = "album_detail/{albumId}"
 
     fun cardDetail(cardId: String) = "card_detail/$cardId"
     fun editCard(cardId: String) = "edit_card/$cardId"
+    fun albumDetail(albumId: String) = "album_detail/$albumId"
     fun setDetail(setId: String, setName: String): String {
         val encoded = URLEncoder.encode(setName, "UTF-8")
         return "set_detail/$setId/$encoded"
@@ -191,6 +198,35 @@ fun AppNavigation(
                 onBack = { navController.popBackStack() },
                 onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) },
                 onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }
+            )
+        }
+
+        // ── Album List ──
+        composable(Routes.ALBUM_LIST) {
+            AlbumListScreen(
+                onBack = { navController.popBackStack() },
+                onCreateAlbum = { navController.navigate(Routes.CREATE_ALBUM) },
+                onAlbumClick = { albumId -> navController.navigate(Routes.albumDetail(albumId)) }
+            )
+        }
+
+        // ── Crea/Modifica Album ──
+        composable(Routes.CREATE_ALBUM) {
+            CreateAlbumScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Dettaglio Album ──
+        composable(
+            route = Routes.ALBUM_DETAIL,
+            arguments = listOf(navArgument("albumId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val albumId = backStackEntry.arguments?.getString("albumId") ?: ""
+            AlbumDetailScreen(
+                albumId = albumId,
+                onBack = { navController.popBackStack() },
+                onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
             )
         }
 

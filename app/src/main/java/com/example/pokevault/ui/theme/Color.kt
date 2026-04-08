@@ -23,3 +23,4 @@ val TextMuted = Color(0xFF6B6B8D)
 // Accents
 val StarGold = Color(0xFFFFD700)
 val SearchBarBg = Color(0xFF2A2A4A)
+val OrangeCard = Color(0xFFE87A35)     // Album

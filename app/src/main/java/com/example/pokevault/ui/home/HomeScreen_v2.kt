@@ -137,6 +137,7 @@ fun HomeScreen(
                         "graded" -> Routes.GRADED
                         "pokedex" -> Routes.POKEDEX
                         "deck_lab" -> Routes.DECK_LAB
+                        "album" -> Routes.ALBUM_LIST
                         else -> Routes.HOME
                     }
                     onNavigate(route)

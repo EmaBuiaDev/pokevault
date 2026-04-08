@@ -1,5 +1,6 @@
 package com.example.pokevault.data.firebase
 
+import com.example.pokevault.data.model.Album
 import com.example.pokevault.data.model.Deck
 import com.example.pokevault.data.model.PokemonCard
 import com.google.firebase.auth.FirebaseAuth
@@ -27,6 +28,9 @@ class FirestoreRepository {
 
     private val decksCollection
         get() = userDoc.collection("decks")
+
+    private val albumsCollection
+        get() = userDoc.collection("albums")
 
     fun getCards(): Flow<List<PokemonCard>> = callbackFlow {
         val listener = cardsCollection
@@ -272,6 +276,70 @@ class FirestoreRepository {
     suspend fun deleteDeck(deckId: String): Result<Unit> {
         return try {
             decksCollection.document(deckId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // --- ALBUM METHODS ---
+
+    fun getAlbums(): Flow<List<Album>> = callbackFlow {
+        val listener = albumsCollection
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                val albums = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(Album::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(albums)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun saveAlbum(album: Album): Result<String> {
+        return try {
+            val data = hashMapOf(
+                "name" to album.name,
+                "description" to album.description,
+                "pokemonType" to album.pokemonType,
+                "expansion" to album.expansion,
+                "supertype" to album.supertype,
+                "size" to album.size,
+                "theme" to album.theme,
+                "cardIds" to album.cardIds,
+                "coverImageUrl" to album.coverImageUrl,
+                "createdAt" to (album.createdAt ?: com.google.firebase.Timestamp.now())
+            )
+            val docRef = if (album.id.isEmpty()) {
+                albumsCollection.add(data).await()
+            } else {
+                albumsCollection.document(album.id).set(data).await()
+                albumsCollection.document(album.id)
+            }
+            Result.success(docRef.id)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun deleteAlbum(albumId: String): Result<Unit> {
+        return try {
+            albumsCollection.document(albumId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun addCardToAlbum(albumId: String, cardId: String): Result<Unit> {
+        return try {
+            albumsCollection.document(albumId)
+                .update("cardIds", FieldValue.arrayUnion(cardId))
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun removeCardFromAlbum(albumId: String, cardId: String): Result<Unit> {
+        return try {
+            albumsCollection.document(albumId)
+                .update("cardIds", FieldValue.arrayRemove(cardId))
+                .await()
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
