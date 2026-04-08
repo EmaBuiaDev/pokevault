@@ -15,6 +15,7 @@ import com.example.pokevault.BuildConfig
 import com.example.pokevault.data.firebase.FirebaseAuthManager
 import com.example.pokevault.util.AppLocale
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
@@ -127,66 +128,82 @@ class AuthViewModel : ViewModel() {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true, errorMessage = null)
 
-            try {
-                val credentialManager = CredentialManager.create(context)
-
-                // Recupera il Web Client ID dalle risorse generate da google-services.json
-                val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-                if (resId == 0) {
-                    uiState = uiState.copy(isLoading = false, errorMessage = "Google Sign-In non configurato correttamente.")
-                    return@launch
-                }
-                val webClientId = context.getString(resId)
-
-                val googleIdOption = GetGoogleIdOption.Builder()
-                    .setFilterByAuthorizedAccounts(false)
-                    .setServerClientId(webClientId)
-                    .build()
-
-                val request = GetCredentialRequest.Builder()
-                    .addCredentialOption(googleIdOption)
-                    .build()
-
-                val result = credentialManager.getCredential(context, request)
-                val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(result.credential.data)
-                val idToken = googleIdTokenCredential.idToken
-
-                authManager.loginWithGoogle(idToken)
-                    .onSuccess { user ->
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            isLoggedIn = true,
-                            userName = user.displayName ?: "Allenatore"
-                        )
-                    }
-                    .onFailure { error ->
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            errorMessage = mapErrorMessage(error)
-                        )
-                    }
-            } catch (e: GetCredentialCancellationException) {
-                // L'utente ha annullato, non mostrare errore
-                uiState = uiState.copy(isLoading = false)
-            } catch (e: NoCredentialException) {
-                if (BuildConfig.DEBUG) Log.e("AuthViewModel", "Google Sign-In: nessuna credenziale", e)
-                uiState = uiState.copy(
-                    isLoading = false,
-                    errorMessage = if (AppLocale.isItalian)
-                        "Nessun account Google trovato. Aggiungi un account Google nelle impostazioni del dispositivo."
-                    else
-                        "No Google account found. Add a Google account in your device settings."
-                )
-            } catch (e: Exception) {
-                if (BuildConfig.DEBUG) Log.e("AuthViewModel", "Google Sign-In fallito", e)
-                uiState = uiState.copy(
-                    isLoading = false,
-                    errorMessage = if (AppLocale.isItalian)
-                        "Errore durante il login con Google. Riprova."
-                    else
-                        "Google Sign-In failed. Please try again."
-                )
+            val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+            if (resId == 0) {
+                uiState = uiState.copy(isLoading = false, errorMessage = "Google Sign-In non configurato correttamente.")
+                return@launch
             }
+            val webClientId = context.getString(resId)
+
+            // Prova prima con GetGoogleIdOption (seamless, senza picker)
+            // Se fallisce (NoCredentialException), usa GetSignInWithGoogleOption (mostra sempre il picker)
+            val idToken = tryGetGoogleIdToken(context, webClientId)
+                ?: tryGetSignInWithGoogleToken(context, webClientId)
+                ?: return@launch  // errore già settato in uiState
+
+            authManager.loginWithGoogle(idToken)
+                .onSuccess { user ->
+                    uiState = uiState.copy(
+                        isLoading = false,
+                        isLoggedIn = true,
+                        userName = user.displayName ?: "Allenatore"
+                    )
+                }
+                .onFailure { error ->
+                    uiState = uiState.copy(
+                        isLoading = false,
+                        errorMessage = mapErrorMessage(error)
+                    )
+                }
+        }
+    }
+
+    /** Tenta il login silenzioso via GetGoogleIdOption. Ritorna null se non ci sono credenziali. */
+    private suspend fun tryGetGoogleIdToken(context: Context, webClientId: String): String? {
+        return try {
+            val credentialManager = CredentialManager.create(context)
+            val option = GetGoogleIdOption.Builder()
+                .setFilterByAuthorizedAccounts(false)
+                .setServerClientId(webClientId)
+                .setAutoSelectEnabled(false)
+                .build()
+            val result = credentialManager.getCredential(
+                context, GetCredentialRequest.Builder().addCredentialOption(option).build()
+            )
+            GoogleIdTokenCredential.createFrom(result.credential.data).idToken
+        } catch (e: GetCredentialCancellationException) {
+            uiState = uiState.copy(isLoading = false)
+            null
+        } catch (e: NoCredentialException) {
+            null // Fallback al metodo classico
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.w("AuthViewModel", "GetGoogleIdOption fallito, provo fallback", e)
+            null
+        }
+    }
+
+    /** Fallback: mostra sempre il selettore account Google (funziona anche al primo accesso). */
+    private suspend fun tryGetSignInWithGoogleToken(context: Context, webClientId: String): String? {
+        return try {
+            val credentialManager = CredentialManager.create(context)
+            val option = GetSignInWithGoogleOption.Builder(webClientId).build()
+            val result = credentialManager.getCredential(
+                context, GetCredentialRequest.Builder().addCredentialOption(option).build()
+            )
+            GoogleIdTokenCredential.createFrom(result.credential.data).idToken
+        } catch (e: GetCredentialCancellationException) {
+            uiState = uiState.copy(isLoading = false)
+            null
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.e("AuthViewModel", "Google Sign-In fallback fallito", e)
+            uiState = uiState.copy(
+                isLoading = false,
+                errorMessage = if (AppLocale.isItalian)
+                    "Errore durante il login con Google. Verifica di avere un account Google sul dispositivo."
+                else
+                    "Google Sign-In failed. Make sure you have a Google account on your device."
+            )
+            null
         }
     }
 
