@@ -4,28 +4,28 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    
-    <!-- Sfondo Ultra Scuro Hi-Tech -->
+
+    <!-- Base — Deep Navy -->
     <path
-        android:fillColor="#0B0E14"
+        android:fillColor="#0F1923"
         android:pathData="M0,0h108v108h-108z" />
-    
-    <!-- Gradiente radiale per focus centrale -->
-    <path
-        android:pathData="M0,0h108v108h-108z">
+
+    <!-- Radial glow — subtle depth from center -->
+    <path android:pathData="M0,0h108v108h-108z">
         <gradient
             android:centerX="54"
             android:centerY="54"
-            android:gradientRadius="75"
+            android:gradientRadius="60"
             android:type="radial">
-            <item android:offset="0" android:color="#1A1A2E" />
-            <item android:offset="1" android:color="#0B0E14" />
+            <item android:offset="0" android:color="#1A2744" />
+            <item android:offset="1" android:color="#0F1923" />
         </gradient>
     </path>
 
-    <!-- Griglia Tech Digitale -->
+    <!-- Geometric diamond accent — faint vault-like pattern -->
     <path
-        android:strokeColor="#12FFFFFF"
-        android:strokeWidth="0.4"
-        android:pathData="M0,12 h108 M0,24 h108 M0,36 h108 M0,48 h108 M0,60 h108 M0,72 h108 M0,84 h108 M0,96 h108 M12,0 v108 M24,0 v108 M36,0 v108 M48,0 v108 M60,0 v108 M72,0 v108 M84,0 v108 M96,0 v108" />
+        android:strokeColor="#0AFFFFFF"
+        android:strokeWidth="0.5"
+        android:pathData="M54,14 l40,40 l-40,40 l-40,-40 z M54,28 l26,26 l-26,26 l-26,-26 z" />
+
 </vector>

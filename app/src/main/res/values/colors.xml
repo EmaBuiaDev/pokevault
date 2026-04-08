@@ -7,5 +7,13 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="splash_background">#FF1A1A2E</color>
+    <color name="splash_background">#FF0F1923</color>
+
+    <!-- PokeVault Brand Palette -->
+    <color name="brand_navy">#FF0F1923</color>
+    <color name="brand_indigo_dark">#FF283593</color>
+    <color name="brand_indigo">#FF3F51B5</color>
+    <color name="brand_indigo_light">#FFC5CAE9</color>
+    <color name="brand_surface">#FFE8EAF6</color>
+    <color name="brand_gold">#FFF5B800</color>
 </resources>

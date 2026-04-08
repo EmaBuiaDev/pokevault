@@ -1,51 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- PokeVault Logo — "The Card Vault"
-         Three fanned cards (collection) + gold diamond (value/treasure)
-         100% original design — no Pokemon IP elements -->
+    <!-- Monochrome version for Material You themed icons (API 33+) -->
+    <!-- Uses outlines for cards to maintain visual distinction in single-color tint -->
 
-    <!-- Back card (tilted 15 degrees clockwise) — Deep Indigo -->
+    <!-- Back card outline (tilted 15 degrees) -->
     <group
         android:pivotX="54"
         android:pivotY="54"
         android:rotation="15">
         <path
-            android:fillColor="#283593"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="1.5"
             android:pathData="M43.5,36 h21 a2.5,2.5 0 0,1 2.5,2.5 v31 a2.5,2.5 0 0,1 -2.5,2.5 h-21 a2.5,2.5 0 0,1 -2.5,-2.5 v-31 a2.5,2.5 0 0,1 2.5,-2.5 z" />
     </group>
 
-    <!-- Middle card (tilted -10 degrees) — Medium Indigo -->
+    <!-- Middle card outline (tilted -10 degrees) -->
     <group
         android:pivotX="54"
         android:pivotY="54"
         android:rotation="-10">
         <path
-            android:fillColor="#3F51B5"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="1.5"
             android:pathData="M43.5,36 h21 a2.5,2.5 0 0,1 2.5,2.5 v31 a2.5,2.5 0 0,1 -2.5,2.5 h-21 a2.5,2.5 0 0,1 -2.5,-2.5 v-31 a2.5,2.5 0 0,1 2.5,-2.5 z" />
     </group>
 
-    <!-- Front card body — Light Lavender -->
+    <!-- Front card outline -->
     <path
-        android:fillColor="#C5CAE9"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.5"
         android:pathData="M43.5,36 h21 a2.5,2.5 0 0,1 2.5,2.5 v31 a2.5,2.5 0 0,1 -2.5,2.5 h-21 a2.5,2.5 0 0,1 -2.5,-2.5 v-31 a2.5,2.5 0 0,1 2.5,-2.5 z" />
 
-    <!-- Front card inner field — Near White -->
+    <!-- Diamond — solid fill for focal point -->
     <path
-        android:fillColor="#E8EAF6"
-        android:pathData="M45.5,39 h17 a2,2 0 0,1 2,2 v26 a2,2 0 0,1 -2,2 h-17 a2,2 0 0,1 -2,-2 v-26 a2,2 0 0,1 2,-2 z" />
-
-    <!-- Gold diamond gem — value / treasure symbol -->
-    <path
-        android:fillColor="#F5B800"
+        android:fillColor="#FFFFFFFF"
         android:pathData="M54,47 l6,7 l-6,7 l-6,-7 z" />
-
-    <!-- Diamond light facet — subtle gem reflection -->
-    <path
-        android:fillColor="#30FFFFFF"
-        android:pathData="M54,47 l6,7 l-6,2 z" />
 
 </vector>
