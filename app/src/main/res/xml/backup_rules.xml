@@ -4,7 +4,6 @@
     <exclude domain="sharedpref" path="pokevault_premium.xml" />
     <exclude domain="sharedpref" path="pokevault_prefs.xml" />
     <exclude domain="sharedpref" path="pokevault_legal.xml" />
-    <exclude domain="database" path="com.google.firebase.auth.api.Store" />
 
     <!-- Includi solo le preferenze non sensibili -->
     <include domain="sharedpref" path="." />
