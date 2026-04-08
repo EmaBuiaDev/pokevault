@@ -1,12 +1,21 @@
 package com.example.pokevault.viewmodel
 
+import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pokevault.BuildConfig
 import com.example.pokevault.data.firebase.FirebaseAuthManager
 import com.example.pokevault.util.AppLocale
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
 data class AuthUiState(
@@ -24,8 +33,8 @@ class AuthViewModel : ViewModel() {
         private set
 
     private val validProviders = listOf(
-        "gmail.com", "outlook.com", "hotmail.it", "hotmail.com", 
-        "yahoo.com", "yahoo.it", "icloud.com", "libero.it", "virgilio.it", 
+        "gmail.com", "outlook.com", "hotmail.it", "hotmail.com",
+        "yahoo.com", "yahoo.it", "icloud.com", "libero.it", "virgilio.it",
         "live.it", "fastwebnet.it", "tiscali.it", "alice.it", "tim.it", "poste.it"
     )
 
@@ -42,7 +51,7 @@ class AuthViewModel : ViewModel() {
     private fun isValidEmail(email: String): Boolean {
         val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$".toRegex()
         if (!email.matches(emailRegex)) return false
-        
+
         val domain = email.substringAfterLast("@").lowercase()
         return validProviders.any { domain == it || domain.endsWith(".$it") }
     }
@@ -52,7 +61,7 @@ class AuthViewModel : ViewModel() {
             uiState = uiState.copy(errorMessage = "Compila tutti i campi")
             return
         }
-        
+
         if (!isValidEmail(email)) {
             uiState = uiState.copy(errorMessage = "Inserisci un'email valida (es. Gmail, Outlook, Libero)")
             return
@@ -83,7 +92,7 @@ class AuthViewModel : ViewModel() {
             uiState = uiState.copy(errorMessage = "Compila tutti i campi")
             return
         }
-        
+
         if (!isValidEmail(email)) {
             uiState = uiState.copy(errorMessage = "Provider email non supportato o non valido")
             return
@@ -114,24 +123,68 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    fun loginWithGoogle(idToken: String) {
+    fun loginWithGoogle(context: Context) {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true, errorMessage = null)
 
-            authManager.loginWithGoogle(idToken)
-                .onSuccess { user ->
-                    uiState = uiState.copy(
-                        isLoading = false,
-                        isLoggedIn = true,
-                        userName = user.displayName ?: "Allenatore"
-                    )
+            try {
+                val credentialManager = CredentialManager.create(context)
+
+                // Recupera il Web Client ID dalle risorse generate da google-services.json
+                val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+                val webClientId = if (resId != 0) context.getString(resId) else {
+                    "533369901523-m2bt2p8644am5a9gmoh48c4lhgnb5v0j.apps.googleusercontent.com"
                 }
-                .onFailure { error ->
-                    uiState = uiState.copy(
-                        isLoading = false,
-                        errorMessage = mapErrorMessage(error)
-                    )
-                }
+
+                val googleIdOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(webClientId)
+                    .build()
+
+                val request = GetCredentialRequest.Builder()
+                    .addCredentialOption(googleIdOption)
+                    .build()
+
+                val result = credentialManager.getCredential(context, request)
+                val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(result.credential.data)
+                val idToken = googleIdTokenCredential.idToken
+
+                authManager.loginWithGoogle(idToken)
+                    .onSuccess { user ->
+                        uiState = uiState.copy(
+                            isLoading = false,
+                            isLoggedIn = true,
+                            userName = user.displayName ?: "Allenatore"
+                        )
+                    }
+                    .onFailure { error ->
+                        uiState = uiState.copy(
+                            isLoading = false,
+                            errorMessage = mapErrorMessage(error)
+                        )
+                    }
+            } catch (e: GetCredentialCancellationException) {
+                // L'utente ha annullato, non mostrare errore
+                uiState = uiState.copy(isLoading = false)
+            } catch (e: NoCredentialException) {
+                if (BuildConfig.DEBUG) Log.e("AuthViewModel", "Google Sign-In: nessuna credenziale", e)
+                uiState = uiState.copy(
+                    isLoading = false,
+                    errorMessage = if (AppLocale.isItalian)
+                        "Nessun account Google trovato. Aggiungi un account Google nelle impostazioni del dispositivo."
+                    else
+                        "No Google account found. Add a Google account in your device settings."
+                )
+            } catch (e: Exception) {
+                if (BuildConfig.DEBUG) Log.e("AuthViewModel", "Google Sign-In fallito", e)
+                uiState = uiState.copy(
+                    isLoading = false,
+                    errorMessage = if (AppLocale.isItalian)
+                        "Errore durante il login con Google. Riprova."
+                    else
+                        "Google Sign-In failed. Please try again."
+                )
+            }
         }
     }
 

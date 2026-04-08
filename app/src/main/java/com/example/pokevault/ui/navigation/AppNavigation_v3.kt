@@ -21,6 +21,7 @@ import com.example.pokevault.ui.stats.StatsScreen
 import com.example.pokevault.ui.deck.DeckLabScreen
 import com.example.pokevault.ui.settings.SettingsScreen
 import com.example.pokevault.viewmodel.AuthViewModel
+import androidx.compose.ui.platform.LocalContext
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -50,8 +51,7 @@ object Routes {
 @Composable
 fun AppNavigation(
     navController: NavHostController,
-    authViewModel: AuthViewModel = viewModel(),
-    onLaunchGoogleSignIn: ((onIdToken: (String) -> Unit) -> Unit)? = null
+    authViewModel: AuthViewModel = viewModel()
 ) {
     val startDestination = if (authViewModel.uiState.isLoggedIn) Routes.HOME else Routes.AUTH
 
@@ -61,13 +61,12 @@ fun AppNavigation(
     ) {
         // ── Auth ──
         composable(Routes.AUTH) {
+            val context = LocalContext.current
             AuthScreen(
                 onLogin = { email, password -> authViewModel.login(email, password) },
                 onRegister = { email, password, name -> authViewModel.register(email, password, name) },
                 onGoogleSignIn = {
-                    onLaunchGoogleSignIn?.invoke { idToken ->
-                        authViewModel.loginWithGoogle(idToken)
-                    }
+                    authViewModel.loginWithGoogle(context)
                 },
                 onForgotPassword = { email -> authViewModel.resetPassword(email) },
                 isLoading = authViewModel.uiState.isLoading,

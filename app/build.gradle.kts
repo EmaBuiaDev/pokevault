@@ -102,8 +102,10 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("io.coil-kt:coil-gif:2.6.0")
 
-    // ── Google Sign-In ──
-    implementation("com.google.android.gms:play-services-auth:21.0.0")
+    // ── Google Sign-In (Credential Manager) ──
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     // ── Debug ──
     debugImplementation("androidx.compose.ui:ui-tooling")
