@@ -245,7 +245,7 @@ object AppLocale {
     // Auth
     val welcomeTrainer: String get() = if (isItalian) "Benvenuto, Allenatore!" else "Welcome, Trainer!"
     val legendaryCollection: String get() = if (isItalian) "La tua collezione leggendaria" else "Your legendary collection"
-    val emailPokemonCenter: String get() = if (isItalian) "Email Centro Pokémon" else "Pokémon Center Email"
+    val emailPokemonCenter: String get() = if (isItalian) "Email Allenatore" else "Trainer Email"
     val passwordSecret: String get() = if (isItalian) "Password Segreta" else "Secret Password"
     val nameTrainer: String get() = if (isItalian) "Nome Allenatore" else "Trainer Name"
     val loginButton: String get() = if (isItalian) "INIZIA L'AVVENTURA" else "START ADVENTURE"
