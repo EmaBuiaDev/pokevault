@@ -338,4 +338,76 @@ object AppLocale {
     val deleteAccountConfirm: String get() = if (isItalian) "Elimina definitivamente" else "Delete permanently"
     val deletingAccount: String get() = if (isItalian) "Eliminazione in corso..." else "Deleting account..."
     val settings: String get() = if (isItalian) "Impostazioni" else "Settings"
+
+    // ══════════════════════════════════════
+    // PREMIUM
+    // ══════════════════════════════════════
+
+    val premiumTitle: String get() = if (isItalian) "Sblocca tutto il potenziale" else "Unlock full potential"
+    val premiumSubtitle: String get() = if (isItalian)
+        "Accedi a tutte le funzionalità premium di PokeVault"
+    else
+        "Access all PokeVault premium features"
+    val premiumActiveTitle: String get() = if (isItalian) "Sei Premium!" else "You're Premium!"
+    val premiumActiveSubtitle: String get() = if (isItalian)
+        "Hai accesso a tutte le funzionalità senza limiti."
+    else
+        "You have unlimited access to all features."
+    val premiumFeaturesTitle: String get() = if (isItalian) "Confronto funzionalità" else "Feature comparison"
+    val premiumFeatureDeckFree: String get() = if (isItalian) "1 Deck gratuito" else "1 Free Deck"
+    val premiumFeatureDeckPremium: String get() = if (isItalian) "Deck illimitati" else "Unlimited Decks"
+    val premiumFeatureMetaFree: String get() = if (isItalian)
+        "10 visualizzazioni Meta Deck"
+    else
+        "10 Meta Deck views"
+    val premiumFeatureMetaPremium: String get() = if (isItalian)
+        "Meta Deck illimitati"
+    else
+        "Unlimited Meta Decks"
+    val premiumChoosePlan: String get() = if (isItalian) "Scegli il tuo piano" else "Choose your plan"
+    val premiumMonthly: String get() = if (isItalian) "Mensile" else "Monthly"
+    val premiumAnnual: String get() = if (isItalian) "Annuale" else "Annual"
+    fun premiumPriceMonthly(price: String) = if (isItalian) "$price / mese" else "$price / month"
+    fun premiumPriceAnnual(price: String) = if (isItalian) "$price / anno" else "$price / year"
+    val premiumSaveBadge: String get() = if (isItalian) "RISPARMIA" else "SAVE"
+    val premiumRestore: String get() = if (isItalian) "Ripristina acquisti" else "Restore purchases"
+    val premiumUpgradeButton: String get() = if (isItalian) "Passa a Premium" else "Go Premium"
+    val premiumLegalNote: String get() = if (isItalian)
+        "L'abbonamento si rinnova automaticamente. Puoi annullarlo in qualsiasi momento dal Google Play Store. " +
+        "Il pagamento viene addebitato sul tuo account Google Play."
+    else
+        "Subscription auto-renews. You can cancel anytime from Google Play Store. " +
+        "Payment is charged to your Google Play account."
+    val premiumSettingsLabel: String get() = if (isItalian) "PokeVault Premium" else "PokeVault Premium"
+    val premiumSettingsSubtitleFree: String get() = if (isItalian)
+        "Sblocca deck illimitati e Meta Deck"
+    else
+        "Unlock unlimited decks and Meta Decks"
+    val premiumSettingsSubtitleActive: String get() = if (isItalian)
+        "Abbonamento attivo — tutte le funzionalità sbloccate"
+    else
+        "Active subscription — all features unlocked"
+    val premiumManage: String get() = if (isItalian) "Gestisci abbonamento" else "Manage subscription"
+
+    // Premium gates
+    val premiumDeckLimitTitle: String get() = if (isItalian)
+        "Limite Deck raggiunto"
+    else
+        "Deck limit reached"
+    val premiumDeckLimitMessage: String get() = if (isItalian)
+        "Hai raggiunto il limite di 1 deck gratuito.\n\nPassa a Premium per creare deck illimitati!"
+    else
+        "You've reached the 1 free deck limit.\n\nGo Premium to create unlimited decks!"
+    val premiumMetaDeckLimitTitle: String get() = if (isItalian)
+        "Visualizzazioni Meta Deck esaurite"
+    else
+        "Meta Deck views exhausted"
+    val premiumMetaDeckLimitMessage: String get() = if (isItalian)
+        "Hai utilizzato tutte le 10 visualizzazioni gratuite dei Meta Deck.\n\nPassa a Premium per accesso illimitato!"
+    else
+        "You've used all 10 free Meta Deck views.\n\nGo Premium for unlimited access!"
+    fun premiumMetaDeckViewsRemaining(count: Int) = if (isItalian)
+        "$count visualizzazioni rimanenti"
+    else
+        "$count views remaining"
 }

@@ -37,9 +37,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.pokevault.data.billing.PremiumManager
 import com.example.pokevault.data.model.Deck
 import com.example.pokevault.data.model.PokemonCard
+import com.example.pokevault.ui.premium.PremiumRequiredDialog
 import com.example.pokevault.ui.theme.*
+import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.DeckLabViewModel
 import com.example.pokevault.viewmodel.MetaDeckViewModel
 
@@ -48,12 +51,18 @@ import com.example.pokevault.viewmodel.MetaDeckViewModel
 fun DeckLabScreen(
     onBack: () -> Unit,
     onCardClick: (String) -> Unit = {},
+    onNavigateToPremium: () -> Unit = {},
     viewModel: DeckLabViewModel = viewModel(),
     metaDeckViewModel: MetaDeckViewModel = viewModel()
 ) {
+    val premiumManager = remember { PremiumManager.getInstance() }
+    val isPremium by premiumManager.isPremium.collectAsState()
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSheet by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
+    var showPremiumDeckDialog by remember { mutableStateOf(false) }
+    var showPremiumMetaDeckDialog by remember { mutableStateOf(false) }
     var selectedDeck by remember { mutableStateOf<Deck?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val deckLabTabs = listOf("I Miei Deck", "Meta Deck")
@@ -67,10 +76,15 @@ fun DeckLabScreen(
         MetaDeckSection(
             viewModel = metaDeckViewModel,
             onImportDeck = { metaDeck ->
-                val result = viewModel.importFromMetaDeck(metaDeck)
-                metaDeckViewModel.selectDeck(null)
-                if (result.matched > 0) {
-                    showSheet = true
+                if (premiumManager.canCreateDeck(viewModel.decks.size)) {
+                    val result = viewModel.importFromMetaDeck(metaDeck)
+                    metaDeckViewModel.selectDeck(null)
+                    if (result.matched > 0) {
+                        showSheet = true
+                    }
+                } else {
+                    metaDeckViewModel.selectDeck(null)
+                    showPremiumDeckDialog = true
                 }
             }
         )
@@ -150,7 +164,13 @@ fun DeckLabScreen(
                 ) {
                     // Bottone Importa
                     SmallFloatingActionButton(
-                        onClick = { showImportDialog = true },
+                        onClick = {
+                            if (premiumManager.canCreateDeck(viewModel.decks.size)) {
+                                showImportDialog = true
+                            } else {
+                                showPremiumDeckDialog = true
+                            }
+                        },
                         containerColor = PurpleCard,
                         contentColor = TextWhite,
                         shape = RoundedCornerShape(12.dp)
@@ -160,8 +180,12 @@ fun DeckLabScreen(
                     // Bottone Crea
                     ExtendedFloatingActionButton(
                         onClick = {
-                            viewModel.resetNewDeckState()
-                            showSheet = true
+                            if (premiumManager.canCreateDeck(viewModel.decks.size)) {
+                                viewModel.resetNewDeckState()
+                                showSheet = true
+                            } else {
+                                showPremiumDeckDialog = true
+                            }
                         },
                         containerColor = BlueCard,
                         contentColor = TextWhite,
@@ -190,8 +214,12 @@ fun DeckLabScreen(
                             selectedDeck = null
                         },
                         onDuplicate = {
-                            viewModel.duplicateDeck(selectedDeck!!)
-                            selectedDeck = null
+                            if (premiumManager.canCreateDeck(viewModel.decks.size)) {
+                                viewModel.duplicateDeck(selectedDeck!!)
+                                selectedDeck = null
+                            } else {
+                                showPremiumDeckDialog = true
+                            }
                         }
                     )
                 }
@@ -221,12 +249,18 @@ fun DeckLabScreen(
                     MetaDeckSection(
                         viewModel = metaDeckViewModel,
                         onImportDeck = { metaDeck ->
-                            val result = viewModel.importFromMetaDeck(metaDeck)
-                            metaDeckViewModel.selectDeck(null)
-                            if (result.matched > 0) {
-                                showSheet = true
+                            if (premiumManager.canCreateDeck(viewModel.decks.size)) {
+                                val result = viewModel.importFromMetaDeck(metaDeck)
+                                metaDeckViewModel.selectDeck(null)
+                                if (result.matched > 0) {
+                                    showSheet = true
+                                }
+                            } else {
+                                metaDeckViewModel.selectDeck(null)
+                                showPremiumDeckDialog = true
                             }
-                        }
+                        },
+                        onPremiumRequired = { showPremiumMetaDeckDialog = true }
                     )
                 }
             }
@@ -275,6 +309,31 @@ fun DeckLabScreen(
             ImportResultDialog(
                 result = importResult,
                 onDismiss = { viewModel.clearImportResult() }
+            )
+        }
+
+        // Premium gate dialogs
+        if (showPremiumDeckDialog) {
+            PremiumRequiredDialog(
+                title = AppLocale.premiumDeckLimitTitle,
+                message = AppLocale.premiumDeckLimitMessage,
+                onDismiss = { showPremiumDeckDialog = false },
+                onUpgrade = {
+                    showPremiumDeckDialog = false
+                    onNavigateToPremium()
+                }
+            )
+        }
+
+        if (showPremiumMetaDeckDialog) {
+            PremiumRequiredDialog(
+                title = AppLocale.premiumMetaDeckLimitTitle,
+                message = AppLocale.premiumMetaDeckLimitMessage,
+                onDismiss = { showPremiumMetaDeckDialog = false },
+                onUpgrade = {
+                    showPremiumMetaDeckDialog = false
+                    onNavigateToPremium()
+                }
             )
         }
     }

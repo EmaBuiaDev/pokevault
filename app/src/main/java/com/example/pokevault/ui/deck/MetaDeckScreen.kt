@@ -22,17 +22,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.pokevault.data.billing.PremiumManager
 import com.example.pokevault.data.model.MetaDeck
 import com.example.pokevault.data.model.MetaDeckCard
 import com.example.pokevault.ui.theme.*
+import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.MetaDeckViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MetaDeckSection(
     viewModel: MetaDeckViewModel,
-    onImportDeck: ((MetaDeck) -> Unit)? = null
+    onImportDeck: ((MetaDeck) -> Unit)? = null,
+    onPremiumRequired: () -> Unit = {}
 ) {
+    val premiumManager = remember { PremiumManager.getInstance() }
     val selectedDeck = viewModel.selectedDeck
 
     if (selectedDeck != null) {
@@ -45,12 +49,29 @@ fun MetaDeckSection(
             } else null
         )
     } else {
-        MetaDeckListView(viewModel = viewModel)
+        MetaDeckListView(
+            viewModel = viewModel,
+            onSelectDeck = { deck ->
+                if (premiumManager.canViewMetaDeck()) {
+                    premiumManager.consumeMetaDeckView()
+                    viewModel.selectDeck(deck)
+                } else {
+                    onPremiumRequired()
+                }
+            }
+        )
     }
 }
 
 @Composable
-fun MetaDeckListView(viewModel: MetaDeckViewModel) {
+fun MetaDeckListView(
+    viewModel: MetaDeckViewModel,
+    onSelectDeck: (MetaDeck) -> Unit = { viewModel.selectDeck(it) }
+) {
+    val premiumManager = remember { PremiumManager.getInstance() }
+    val isPremium by premiumManager.isPremium.collectAsState()
+    val viewsRemaining = premiumManager.metaDeckViewsRemaining
+
     Column(modifier = Modifier.fillMaxSize()) {
         // Format selector
         Row(
@@ -185,10 +206,38 @@ fun MetaDeckListView(viewModel: MetaDeckViewModel) {
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    if (!isPremium) {
+                        item {
+                            Surface(
+                                color = StarGold.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Visibility,
+                                        contentDescription = null,
+                                        tint = StarGold,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = AppLocale.premiumMetaDeckViewsRemaining(viewsRemaining),
+                                        color = StarGold,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    }
                     items(viewModel.metaDecks, key = { it.id }) { deck ->
                         MetaDeckItem(
                             deck = deck,
-                            onClick = { viewModel.selectDeck(deck) }
+                            onClick = { onSelectDeck(deck) }
                         )
                     }
                     item { Spacer(modifier = Modifier.height(80.dp)) }

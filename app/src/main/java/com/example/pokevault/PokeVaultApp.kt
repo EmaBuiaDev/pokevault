@@ -2,6 +2,7 @@ package com.example.pokevault
 
 import android.app.Application
 import com.google.firebase.FirebaseApp
+import com.example.pokevault.data.billing.PremiumManager
 import com.example.pokevault.util.AppLocale
 
 class PokeVaultApp : Application() {
@@ -10,5 +11,6 @@ class PokeVaultApp : Application() {
         super.onCreate()
         FirebaseApp.initializeApp(this)
         AppLocale.init(this)
+        PremiumManager.init(this)
     }
 }

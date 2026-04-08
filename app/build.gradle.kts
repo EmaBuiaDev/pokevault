@@ -136,4 +136,7 @@ dependencies {
 
     // ── Splash Screen ──
     implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // ── Google Play Billing ──
+    implementation("com.android.billingclient:billing-ktx:6.2.1")
 }

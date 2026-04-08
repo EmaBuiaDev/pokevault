@@ -19,6 +19,7 @@ import com.example.pokevault.ui.graded.GradedCardsScreen
 import com.example.pokevault.ui.scanner.ScannerScreen
 import com.example.pokevault.ui.stats.StatsScreen
 import com.example.pokevault.ui.deck.DeckLabScreen
+import com.example.pokevault.ui.premium.PremiumScreen
 import com.example.pokevault.ui.settings.SettingsScreen
 import com.example.pokevault.viewmodel.AuthViewModel
 import androidx.compose.ui.platform.LocalContext
@@ -39,6 +40,7 @@ object Routes {
     const val DECK_LAB = "deck_lab"
     const val GRADED = "graded"
     const val SETTINGS = "settings"
+    const val PREMIUM = "premium"
 
     fun cardDetail(cardId: String) = "card_detail/$cardId"
     fun editCard(cardId: String) = "edit_card/$cardId"
@@ -187,7 +189,15 @@ fun AppNavigation(
         composable(Routes.DECK_LAB) {
             DeckLabScreen(
                 onBack = { navController.popBackStack() },
-                onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
+                onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) },
+                onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }
+            )
+        }
+
+        // ── Premium ──
+        composable(Routes.PREMIUM) {
+            PremiumScreen(
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -198,7 +208,8 @@ fun AppNavigation(
                 authViewModel = authViewModel,
                 onAccountDeleted = {
                     navController.navigate(Routes.AUTH) { popUpTo(0) { inclusive = true } }
-                }
+                },
+                onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }
             )
         }
     }

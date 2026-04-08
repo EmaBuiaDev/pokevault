@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.pokevault.data.billing.PremiumManager
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.AuthViewModel
@@ -30,9 +31,12 @@ import com.example.pokevault.viewmodel.AuthViewModel
 fun SettingsScreen(
     onBack: () -> Unit,
     authViewModel: AuthViewModel,
-    onAccountDeleted: () -> Unit
+    onAccountDeleted: () -> Unit,
+    onNavigateToPremium: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val premiumManager = remember { PremiumManager.getInstance() }
+    val isPremium by premiumManager.isPremium.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
     var deleteError by remember { mutableStateOf<String?>(null) }
@@ -89,6 +93,18 @@ fun SettingsScreen(
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppLocale.termsUrl))
                     context.startActivity(intent)
                 }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Premium section
+            SettingsItem(
+                icon = Icons.Default.WorkspacePremium,
+                title = AppLocale.premiumSettingsLabel,
+                subtitle = if (isPremium) AppLocale.premiumSettingsSubtitleActive
+                           else AppLocale.premiumSettingsSubtitleFree,
+                onClick = onNavigateToPremium,
+                accentColor = StarGold
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -191,7 +207,8 @@ private fun SettingsItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    accentColor: androidx.compose.ui.graphics.Color = BlueCard
 ) {
     Row(
         modifier = Modifier
@@ -200,7 +217,7 @@ private fun SettingsItem(
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = BlueCard, modifier = Modifier.size(24.dp))
+        Icon(icon, null, tint = accentColor, modifier = Modifier.size(24.dp))
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(text = title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = TextWhite)
