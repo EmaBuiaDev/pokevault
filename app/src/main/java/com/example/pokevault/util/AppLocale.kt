@@ -295,7 +295,7 @@ object AppLocale {
     val disclaimerAccept: String get() = if (isItalian) "Ho capito, continua" else "I understand, continue"
 
     // Privacy Policy
-    val privacyPolicyUrl: String get() = "https://emabuia.github.io/pokevault/privacy-policy"
+    val privacyPolicyUrl: String get() = ""
     val termsUrl: String get() = "https://emabuia.github.io/pokevault/terms"
 
     val privacyConsentTitle: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
