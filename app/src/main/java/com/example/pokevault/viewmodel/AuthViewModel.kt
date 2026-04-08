@@ -132,9 +132,11 @@ class AuthViewModel : ViewModel() {
 
                 // Recupera il Web Client ID dalle risorse generate da google-services.json
                 val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-                val webClientId = if (resId != 0) context.getString(resId) else {
-                    "533369901523-m2bt2p8644am5a9gmoh48c4lhgnb5v0j.apps.googleusercontent.com"
+                if (resId == 0) {
+                    uiState = uiState.copy(isLoading = false, errorMessage = "Google Sign-In non configurato correttamente.")
+                    return@launch
                 }
+                val webClientId = context.getString(resId)
 
                 val googleIdOption = GetGoogleIdOption.Builder()
                     .setFilterByAuthorizedAccounts(false)

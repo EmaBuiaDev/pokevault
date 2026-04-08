@@ -68,10 +68,14 @@ class PremiumManager private constructor(private val context: Context) {
         connectAndQueryPurchases()
     }
 
+    private var retryCount = 0
+    private val maxRetries = 3
+
     private fun connectAndQueryPurchases() {
         billingClient.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                    retryCount = 0
                     scope.launch {
                         queryProducts()
                         queryExistingPurchases()
@@ -80,9 +84,30 @@ class PremiumManager private constructor(private val context: Context) {
             }
 
             override fun onBillingServiceDisconnected() {
-                // Will reconnect on next operation
+                if (retryCount < maxRetries) {
+                    retryCount++
+                    scope.launch {
+                        delay(retryCount * 2000L)
+                        connectAndQueryPurchases()
+                    }
+                }
             }
         })
+    }
+
+    private fun ensureConnected(onReady: () -> Unit) {
+        if (billingClient.isReady) {
+            onReady()
+        } else {
+            billingClient.startConnection(object : BillingClientStateListener {
+                override fun onBillingSetupFinished(result: BillingResult) {
+                    if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                        onReady()
+                    }
+                }
+                override fun onBillingServiceDisconnected() {}
+            })
+        }
     }
 
     private suspend fun queryProducts() {
@@ -129,17 +154,20 @@ class PremiumManager private constructor(private val context: Context) {
         val offerToken = productDetails.subscriptionOfferDetails
             ?.firstOrNull()?.offerToken ?: return
 
-        val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
-            .setProductDetails(productDetails)
-            .setOfferToken(offerToken)
-            .build()
-
-        val params = BillingFlowParams.newBuilder()
-            .setProductDetailsParamsList(listOf(productDetailsParams))
-            .build()
-
         _purchaseState.value = PurchaseState.Loading
-        billingClient.launchBillingFlow(activity, params)
+
+        ensureConnected {
+            val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
+                .setProductDetails(productDetails)
+                .setOfferToken(offerToken)
+                .build()
+
+            val params = BillingFlowParams.newBuilder()
+                .setProductDetailsParamsList(listOf(productDetailsParams))
+                .build()
+
+            billingClient.launchBillingFlow(activity, params)
+        }
     }
 
     private suspend fun handlePurchasesUpdated(
@@ -158,6 +186,11 @@ class PremiumManager private constructor(private val context: Context) {
             }
             BillingClient.BillingResponseCode.USER_CANCELED -> {
                 _purchaseState.value = PurchaseState.Idle
+            }
+            BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> {
+                // User already has an active subscription
+                scope.launch { queryExistingPurchases() }
+                _purchaseState.value = PurchaseState.Success
             }
             else -> {
                 _purchaseState.value = PurchaseState.Error(
@@ -205,14 +238,12 @@ class PremiumManager private constructor(private val context: Context) {
     }
 
     fun restorePurchases() {
-        scope.launch {
-            _purchaseState.value = PurchaseState.Loading
-            if (!billingClient.isReady) {
-                connectAndQueryPurchases()
-            } else {
+        _purchaseState.value = PurchaseState.Loading
+        ensureConnected {
+            scope.launch {
                 queryExistingPurchases()
+                _purchaseState.value = PurchaseState.Idle
             }
-            _purchaseState.value = PurchaseState.Idle
         }
     }
 

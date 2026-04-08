@@ -53,3 +53,26 @@
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
+
+# ── Coil (Image Loading) ──
+-keep class coil.** { *; }
+-dontwarn coil.**
+
+# ── Google Play Billing ──
+-keep class com.android.billingclient.** { *; }
+-dontwarn com.android.billingclient.**
+-keep class com.android.vending.billing.** { *; }
+
+# ── Credentials / Google ID ──
+-keep class androidx.credentials.** { *; }
+-keep class com.google.android.libraries.identity.googleid.** { *; }
+-dontwarn androidx.credentials.**
+-dontwarn com.google.android.libraries.identity.googleid.**
+
+# ── CameraX ──
+-keep class androidx.camera.** { *; }
+-dontwarn androidx.camera.**
+
+# ── Accompanist ──
+-keep class com.google.accompanist.** { *; }
+-dontwarn com.google.accompanist.**
