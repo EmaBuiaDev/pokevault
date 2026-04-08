@@ -112,6 +112,16 @@ object AppLocale {
         }
     }
 
+    /** Normalizza un tipo (italiano o inglese) alla versione inglese */
+    fun typeToEnglish(type: String): String {
+        if (type.isBlank()) return type
+        val key = type.lowercase().trim()
+        // Se è già inglese
+        if (typeEnToIt.containsKey(key)) return key.replaceFirstChar { it.uppercase() }
+        // Se è italiano, traduci in inglese
+        return typeItToEn[key] ?: type
+    }
+
     // ══════════════════════════════════════
     // TRADUZIONI CONDIZIONI
     // ══════════════════════════════════════

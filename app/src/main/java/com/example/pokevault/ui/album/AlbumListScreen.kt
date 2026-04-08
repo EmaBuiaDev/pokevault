@@ -35,7 +35,7 @@ import com.example.pokevault.viewmodel.AlbumViewModel
 @Composable
 fun AlbumListScreen(
     onBack: () -> Unit,
-    onCreateAlbum: () -> Unit,
+    onCreateAlbum: (String?) -> Unit,
     onAlbumClick: (String) -> Unit,
     viewModel: AlbumViewModel = viewModel()
 ) {
@@ -68,10 +68,7 @@ fun AlbumListScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = {
-                    viewModel.resetForm()
-                    onCreateAlbum()
-                },
+                onClick = { onCreateAlbum(null) },
                 containerColor = OrangeCard,
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -137,10 +134,7 @@ fun AlbumListScreen(
                         },
                         onClick = { onAlbumClick(album.id) },
                         onDelete = { showDeleteDialog = album },
-                        onEdit = {
-                            viewModel.loadAlbumForEdit(album)
-                            onCreateAlbum()
-                        }
+                        onEdit = { onCreateAlbum(album.id) }
                     )
                 }
                 item { Spacer(modifier = Modifier.height(80.dp)) }

@@ -45,11 +45,12 @@ object Routes {
     const val SETTINGS = "settings"
     const val PREMIUM = "premium"
     const val ALBUM_LIST = "album_list"
-    const val CREATE_ALBUM = "create_album"
+    const val CREATE_ALBUM = "create_album?albumId={albumId}"
     const val ALBUM_DETAIL = "album_detail/{albumId}"
 
     fun cardDetail(cardId: String) = "card_detail/$cardId"
     fun editCard(cardId: String) = "edit_card/$cardId"
+    fun createAlbum(albumId: String? = null) = if (albumId != null) "create_album?albumId=$albumId" else "create_album"
     fun albumDetail(albumId: String) = "album_detail/$albumId"
     fun setDetail(setId: String, setName: String): String {
         val encoded = URLEncoder.encode(setName, "UTF-8")
@@ -205,15 +206,24 @@ fun AppNavigation(
         composable(Routes.ALBUM_LIST) {
             AlbumListScreen(
                 onBack = { navController.popBackStack() },
-                onCreateAlbum = { navController.navigate(Routes.CREATE_ALBUM) },
+                onCreateAlbum = { albumId -> navController.navigate(Routes.createAlbum(albumId)) },
                 onAlbumClick = { albumId -> navController.navigate(Routes.albumDetail(albumId)) }
             )
         }
 
         // ── Crea/Modifica Album ──
-        composable(Routes.CREATE_ALBUM) {
+        composable(
+            route = Routes.CREATE_ALBUM,
+            arguments = listOf(navArgument("albumId") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            })
+        ) { backStackEntry ->
+            val albumId = backStackEntry.arguments?.getString("albumId")
             CreateAlbumScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                editAlbumId = albumId
             )
         }
 

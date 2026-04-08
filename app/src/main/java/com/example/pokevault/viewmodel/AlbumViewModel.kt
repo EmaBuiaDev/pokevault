@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.Album
 import com.example.pokevault.data.model.PokemonCard
+import com.example.pokevault.util.AppLocale
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -75,9 +76,11 @@ class AlbumViewModel : ViewModel() {
     }
 
     fun getFilteredCardsForAlbum(album: Album): List<PokemonCard> {
+        val albumTypeEn = AppLocale.typeToEnglish(album.pokemonType)
         return ownedCards.filter { card ->
+            val cardTypeEn = AppLocale.typeToEnglish(card.type)
             val matchesType = album.pokemonType.isBlank() ||
-                    card.type.equals(album.pokemonType, ignoreCase = true)
+                    cardTypeEn.equals(albumTypeEn, ignoreCase = true)
             val matchesExpansion = album.expansion.isBlank() ||
                     card.set.equals(album.expansion, ignoreCase = true)
             val matchesSupertype = album.supertype.isBlank() ||

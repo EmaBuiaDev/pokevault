@@ -30,9 +30,22 @@ import com.example.pokevault.viewmodel.AlbumViewModel
 @Composable
 fun CreateAlbumScreen(
     onBack: () -> Unit,
+    editAlbumId: String? = null,
     viewModel: AlbumViewModel = viewModel()
 ) {
-    val isEditing = viewModel.editingAlbumId != null
+    // Se siamo in modifica, carica i dati dell'album
+    LaunchedEffect(editAlbumId) {
+        if (editAlbumId != null) {
+            val album = viewModel.getAlbumById(editAlbumId)
+            if (album != null) {
+                viewModel.loadAlbumForEdit(album)
+            }
+        } else {
+            viewModel.resetForm()
+        }
+    }
+
+    val isEditing = editAlbumId != null
     val scrollState = rememberScrollState()
 
     val pokemonTypes = listOf("") + AppLocale.getTypes()
