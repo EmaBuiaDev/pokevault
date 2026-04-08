@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.pokevault.data.firebase.CollectionStats
 import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.PokemonCard
+import com.example.pokevault.util.AppLocale
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 
@@ -148,13 +149,13 @@ class CollectionViewModel : ViewModel() {
             
             val matchesSet = uiState.selectedSet == null || card.set == uiState.selectedSet
             
-            val matchesType = uiState.selectedType == null || card.type.equals(uiState.selectedType, ignoreCase = true)
+            val matchesType = uiState.selectedType == null || card.type.equals(AppLocale.translateType(uiState.selectedType ?: ""), ignoreCase = true)
             
             val matchesSupertype = when (uiState.supertypeFilter) {
                 SupertypeFilter.ALL -> true
-                SupertypeFilter.POKEMON -> card.supertype.contains("Pokémon", ignoreCase = true)
-                SupertypeFilter.TRAINER -> card.supertype.contains("Trainer", ignoreCase = true)
-                SupertypeFilter.ENERGY -> card.supertype.contains("Energy", ignoreCase = true)
+                SupertypeFilter.POKEMON -> card.classify() == "Pokémon"
+                SupertypeFilter.TRAINER -> card.classify() == "Trainer"
+                SupertypeFilter.ENERGY -> card.classify() == "Energy"
             }
 
             matchesQuery && matchesSet && matchesType && matchesSupertype
