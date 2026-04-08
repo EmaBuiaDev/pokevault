@@ -264,15 +264,15 @@ object AppLocale {
     // Age Gate
     val ageGateTitle: String get() = if (isItalian) "Verifica Età" else "Age Verification"
     val ageGateMessage: String get() = if (isItalian)
-        "Questa app è riservata a utenti di almeno 13 anni.\nConfermi di avere almeno 13 anni?"
+        "Questa app è adatta a tutte le età (PEGI 3).\nConfermi di voler continuare?"
     else
-        "This app is intended for users aged 13 and older.\nDo you confirm you are at least 13 years old?"
-    val ageGateConfirm: String get() = if (isItalian) "Sì, ho almeno 13 anni" else "Yes, I am 13 or older"
-    val ageGateDeny: String get() = if (isItalian) "No, ho meno di 13 anni" else "No, I am under 13"
+        "This app is suitable for all ages (PEGI 3).\nDo you confirm you want to continue?"
+    val ageGateConfirm: String get() = if (isItalian) "Sì, continua" else "Yes, continue"
+    val ageGateDeny: String get() = if (isItalian) "No, esci" else "No, exit"
     val ageGateDenied: String get() = if (isItalian)
-        "Spiacenti, non puoi utilizzare questa app se hai meno di 13 anni."
+        "Devi accettare per poter utilizzare l'app."
     else
-        "Sorry, you cannot use this app if you are under 13."
+        "You must accept to use the app."
 
     // Disclaimer
     val disclaimerTitle: String get() = if (isItalian) "Disclaimer" else "Disclaimer"
