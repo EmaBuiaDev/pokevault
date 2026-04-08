@@ -12,25 +12,6 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
-/**
- * Sets known to exist but missing from the PokeTCG API.
- * These are merged with API results; API data takes priority if the set is later added.
- */
-private val FALLBACK_SETS = listOf(
-    TcgSet(
-        id = "mep",
-        name = "Mega Evolution Promos",
-        series = "Mega Evolution",
-        printedTotal = 53,
-        total = 53,
-        releaseDate = "2025/09/26",
-        images = SetImages(
-            symbol = "https://images.pokemontcg.io/mep/symbol.png",
-            logo = "https://images.pokemontcg.io/mep/logo.png"
-        )
-    )
-)
-
 object RetrofitClient {
     private const val BASE_URL = "https://api.pokemontcg.io/"
     private val API_KEY = com.example.pokevault.BuildConfig.POKETCG_API_KEY
@@ -95,10 +76,7 @@ class PokeTcgRepository {
             val time = prefs.getLong(SETS_TIME_KEY, 0)
             if (!ignoreExpiry && System.currentTimeMillis() - time > CACHE_DURATION) return null
             val json = prefs.getString(SETS_CACHE_KEY, null) ?: return null
-            val cached: List<TcgSet> = gson.fromJson(json, object : TypeToken<List<TcgSet>>() {}.type)
-            val cachedIds = cached.map { it.id }.toSet()
-            val missing = FALLBACK_SETS.filter { it.id !in cachedIds }
-            return if (missing.isEmpty()) cached else cached + missing
+            return gson.fromJson(json, object : TypeToken<List<TcgSet>>() {}.type)
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) Log.w("PokeTcgRepository", "Errore lettura cache sets", e)
             return null
@@ -119,9 +97,7 @@ class PokeTcgRepository {
                 page++
             } while (response.data.size == 250)
             
-            val apiIds = allSets.map { it.id }.toSet()
-            val missing = FALLBACK_SETS.filter { it.id !in apiIds }
-            val uniqueSets = (allSets + missing).distinctBy { it.id }
+            val uniqueSets = allSets.distinctBy { it.id }
             memorySets = uniqueSets
             context?.let { saveSetsToCache(it, uniqueSets) }
             Result.success(uniqueSets)
