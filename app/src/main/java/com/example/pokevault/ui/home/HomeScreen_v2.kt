@@ -136,7 +136,7 @@ fun HomeScreen(
                         "statistics" -> Routes.STATS
                         "graded" -> Routes.GRADED
                         "pokedex" -> Routes.POKEDEX
-                        "deck_lab" -> Routes.DECK_LAB
+                        "competitive" -> Routes.COMPETITIVE
                         "album" -> Routes.ALBUM_LIST
                         else -> Routes.HOME
                     }

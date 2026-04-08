@@ -2,6 +2,7 @@ package com.example.pokevault.data.firebase
 
 import com.example.pokevault.data.model.Album
 import com.example.pokevault.data.model.Deck
+import com.example.pokevault.data.model.MatchLog
 import com.example.pokevault.data.model.PokemonCard
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -31,6 +32,9 @@ class FirestoreRepository {
 
     private val albumsCollection
         get() = userDoc.collection("albums")
+
+    private val matchLogsCollection
+        get() = userDoc.collection("match_logs")
 
     fun getCards(): Flow<List<PokemonCard>> = callbackFlow {
         val listener = cardsCollection
@@ -340,6 +344,52 @@ class FirestoreRepository {
             albumsCollection.document(albumId)
                 .update("cardIds", FieldValue.arrayRemove(cardId))
                 .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // --- MATCH LOG METHODS ---
+
+    fun getMatchLogs(): Flow<List<MatchLog>> = callbackFlow {
+        val listener = matchLogsCollection
+            .orderBy("date", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                val logs = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(MatchLog::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(logs)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun saveMatchLog(match: MatchLog): Result<String> {
+        return try {
+            val data = hashMapOf(
+                "location" to match.location,
+                "date" to (match.date ?: com.google.firebase.Timestamp.now()),
+                "format" to match.format,
+                "deckName" to match.deckName,
+                "deckList" to match.deckList,
+                "result" to match.result,
+                "opponentName" to match.opponentName,
+                "opponentDeck" to match.opponentDeck,
+                "notes" to match.notes,
+                "createdAt" to (match.createdAt ?: com.google.firebase.Timestamp.now())
+            )
+            val docRef = if (match.id.isEmpty()) {
+                matchLogsCollection.add(data).await()
+            } else {
+                matchLogsCollection.document(match.id).set(data).await()
+                matchLogsCollection.document(match.id)
+            }
+            Result.success(docRef.id)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun deleteMatchLog(matchId: String): Result<Unit> {
+        return try {
+            matchLogsCollection.document(matchId).delete().await()
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }

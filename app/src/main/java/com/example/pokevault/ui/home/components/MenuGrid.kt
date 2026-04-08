@@ -61,11 +61,11 @@ fun MenuGrid(
         )
     )
 
-    val deckLabItem = MenuItemData(
-        title = "Deck Lab",
-        icon = Icons.Default.Layers,
-        gradientColors = listOf(LavenderCard, DarkCard),
-        routeKey = "deck_lab"
+    val competitiveItem = MenuItemData(
+        title = AppLocale.competitiveTitle,
+        icon = Icons.Default.EmojiEvents,
+        gradientColors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.6f)),
+        routeKey = "competitive"
     )
 
     val albumItem = MenuItemData(
@@ -111,9 +111,10 @@ fun MenuGrid(
             )
         }
 
-        DeckLabFeaturedCard(
-            item = deckLabItem,
-            onClick = { onItemClick(deckLabItem.routeKey) }
+        FeaturedCard(
+            item = competitiveItem,
+            subtitle = AppLocale.competitiveSubtitle,
+            onClick = { onItemClick(competitiveItem.routeKey) }
         )
 
         FeaturedCard(
@@ -121,82 +122,6 @@ fun MenuGrid(
             subtitle = AppLocale.albumSubtitle,
             onClick = { onItemClick(albumItem.routeKey) }
         )
-    }
-}
-
-@Composable
-fun DeckLabFeaturedCard(
-    item: MenuItemData,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(80.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.6f))
-                )
-            )
-            .clickable(onClick = onClick)
-    ) {
-        Icon(
-            imageVector = Icons.Default.Style,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.1f),
-            modifier = Modifier
-                .size(100.dp)
-                .align(Alignment.CenterEnd)
-                .offset(x = 20.dp, y = 10.dp)
-        )
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column {
-                Text(
-                    text = item.title,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-                Text(
-                    text = AppLocale.deckLabSubtitle,
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 12.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.7f)
-            )
-        }
     }
 }
 

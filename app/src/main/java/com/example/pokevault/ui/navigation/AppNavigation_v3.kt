@@ -21,6 +21,9 @@ import com.example.pokevault.ui.stats.StatsScreen
 import com.example.pokevault.ui.album.AlbumDetailScreen
 import com.example.pokevault.ui.album.AlbumListScreen
 import com.example.pokevault.ui.album.CreateAlbumScreen
+import com.example.pokevault.ui.competitive.AddMatchScreen
+import com.example.pokevault.ui.competitive.CompetitiveHubScreen
+import com.example.pokevault.ui.competitive.MatchLogScreen
 import com.example.pokevault.ui.deck.DeckLabScreen
 import com.example.pokevault.ui.premium.PremiumScreen
 import com.example.pokevault.ui.settings.SettingsScreen
@@ -40,7 +43,10 @@ object Routes {
     const val SET_DETAIL = "set_detail/{setId}/{setName}"
     const val STATS = "stats"
     const val SCANNER = "scanner"
+    const val COMPETITIVE = "competitive"
     const val DECK_LAB = "deck_lab"
+    const val MATCH_LOG = "match_log"
+    const val ADD_MATCH = "add_match?matchId={matchId}"
     const val GRADED = "graded"
     const val SETTINGS = "settings"
     const val PREMIUM = "premium"
@@ -52,6 +58,7 @@ object Routes {
     fun editCard(cardId: String) = "edit_card/$cardId"
     fun createAlbum(albumId: String? = null) = if (albumId != null) "create_album?albumId=$albumId" else "create_album"
     fun albumDetail(albumId: String) = "album_detail/$albumId"
+    fun addMatch(matchId: String? = null) = if (matchId != null) "add_match?matchId=$matchId" else "add_match"
     fun setDetail(setId: String, setName: String): String {
         val encoded = URLEncoder.encode(setName, "UTF-8")
         return "set_detail/$setId/$encoded"
@@ -193,12 +200,45 @@ fun AppNavigation(
             )
         }
 
+        // ── Competitive Hub ──
+        composable(Routes.COMPETITIVE) {
+            CompetitiveHubScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToDeckLab = { navController.navigate(Routes.DECK_LAB) },
+                onNavigateToMatchLog = { navController.navigate(Routes.MATCH_LOG) }
+            )
+        }
+
         // ── Deck Lab ──
         composable(Routes.DECK_LAB) {
             DeckLabScreen(
                 onBack = { navController.popBackStack() },
                 onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) },
                 onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }
+            )
+        }
+
+        // ── Match Log ──
+        composable(Routes.MATCH_LOG) {
+            MatchLogScreen(
+                onBack = { navController.popBackStack() },
+                onAddMatch = { matchId -> navController.navigate(Routes.addMatch(matchId)) }
+            )
+        }
+
+        // ── Aggiungi/Modifica Partita ──
+        composable(
+            route = Routes.ADD_MATCH,
+            arguments = listOf(navArgument("matchId") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            })
+        ) { backStackEntry ->
+            val matchId = backStackEntry.arguments?.getString("matchId")
+            AddMatchScreen(
+                onBack = { navController.popBackStack() },
+                editMatchId = matchId
             )
         }
 
