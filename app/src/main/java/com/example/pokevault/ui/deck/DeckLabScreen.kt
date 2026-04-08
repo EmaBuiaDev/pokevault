@@ -65,14 +65,14 @@ fun DeckLabScreen(
     var showPremiumMetaDeckDialog by remember { mutableStateOf(false) }
     var selectedDeck by remember { mutableStateOf<Deck?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val deckLabTabs = listOf("I Miei Deck", "Meta Deck")
+    val deckLabTabs = listOf(AppLocale.deckLabMyDecks, AppLocale.deckLabMetaDeck, AppLocale.deckLabWinTournament)
 
     if (selectedDeck != null) {
         BackHandler { selectedDeck = null }
     }
 
-    // Se siamo nella vista dettaglio di un MetaDeck, mostriamola a tutto schermo
-    if (selectedTabIndex == 1 && metaDeckViewModel.selectedDeck != null) {
+    // Se siamo nella vista dettaglio di un Win Tournament deck, mostriamola a tutto schermo
+    if (selectedTabIndex == 2 && metaDeckViewModel.selectedDeck != null) {
         MetaDeckSection(
             viewModel = metaDeckViewModel,
             onImportDeck = { metaDeck ->
@@ -120,8 +120,11 @@ fun DeckLabScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (selectedTabIndex == 0) "Crea mini-deck con le carte che possiedi"
-                                       else "Deck del meta competitivo da LimitlessTCG",
+                                text = when (selectedTabIndex) {
+                                    0 -> AppLocale.deckLabMyDecksSubtitle
+                                    1 -> AppLocale.deckLabMetaDeckSubtitle
+                                    else -> AppLocale.deckLabWinTournamentSubtitle
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextMuted
                             )
@@ -245,7 +248,26 @@ fun DeckLabScreen(
                 }
 
                 selectedTabIndex == 1 -> {
-                    // Tab: Meta Deck
+                    // Tab: Meta Deck (archetipi classifica)
+                    MetaArchetypeSection(
+                        viewModel = metaDeckViewModel,
+                        onImportDeck = { metaDeck ->
+                            if (premiumManager.canCreateDeck(viewModel.decks.size)) {
+                                val result = viewModel.importFromMetaDeck(metaDeck)
+                                metaDeckViewModel.selectDeck(null)
+                                if (result.matched > 0) {
+                                    showSheet = true
+                                }
+                            } else {
+                                metaDeckViewModel.selectDeck(null)
+                                showPremiumDeckDialog = true
+                            }
+                        }
+                    )
+                }
+
+                selectedTabIndex == 2 -> {
+                    // Tab: Win Tournament (ex Meta Deck)
                     MetaDeckSection(
                         viewModel = metaDeckViewModel,
                         onImportDeck = { metaDeck ->

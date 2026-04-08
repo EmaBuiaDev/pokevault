@@ -258,6 +258,22 @@ object AppLocale {
     val competitiveDeckLabTab: String get() = if (isItalian) "Deck Lab" else "Deck Lab"
     val competitiveLogTab: String get() = if (isItalian) "Match Log" else "Match Log"
 
+    // Deck Lab tabs
+    val deckLabMyDecks: String get() = if (isItalian) "I Miei Deck" else "My Decks"
+    val deckLabMetaDeck: String get() = "Meta Deck"
+    val deckLabWinTournament: String get() = if (isItalian) "Win Tournament" else "Win Tournament"
+    val deckLabMyDecksSubtitle: String get() = if (isItalian) "Crea mini-deck con le carte che possiedi" else "Build mini-decks with your owned cards"
+    val deckLabMetaDeckSubtitle: String get() = if (isItalian) "Archetipi e classifica del meta da LimitlessTCG" else "Meta archetypes and standings from LimitlessTCG"
+    val deckLabWinTournamentSubtitle: String get() = if (isItalian) "Deck vincitori dai tornei competitivi" else "Winning decks from competitive tournaments"
+
+    // Meta Archetype
+    val metaShare: String get() = "Meta Share"
+    val metaAvgWinrate: String get() = if (isItalian) "Win Rate medio" else "Avg Win Rate"
+    val metaTopPlacement: String get() = if (isItalian) "Miglior piazzamento" else "Best placement"
+    val metaDecksCount: String get() = if (isItalian) "Deck trovati" else "Decks found"
+    val metaNoArchetypes: String get() = if (isItalian) "Nessun archetipo trovato" else "No archetypes found"
+    val metaImportSample: String get() = if (isItalian) "Importa deck esempio" else "Import sample deck"
+
     // Competitive Log
     val matchLogTitle: String get() = if (isItalian) "Match Log" else "Match Log"
     val addMatch: String get() = if (isItalian) "Registra Partita" else "Log Match"

@@ -2,6 +2,7 @@ package com.example.pokevault.data.remote
 
 import android.util.Log
 import com.example.pokevault.BuildConfig
+import com.example.pokevault.data.model.MetaArchetype
 import com.example.pokevault.data.model.MetaDeck
 import com.example.pokevault.data.model.MetaDeckCard
 import com.google.gson.Gson
@@ -40,9 +41,15 @@ class LimitlessTcgRepository {
 
     // Cache in memoria con chiave format
     private val metaDecksCache = mutableMapOf<String, CachedResult>()
+    private val archetypeCache = mutableMapOf<String, CachedArchetypes>()
 
     private data class CachedResult(
         val decks: List<MetaDeck>,
+        val timestamp: Long
+    )
+
+    private data class CachedArchetypes(
+        val archetypes: List<MetaArchetype>,
         val timestamp: Long
     )
 
@@ -139,6 +146,112 @@ class LimitlessTcgRepository {
                 return Result.success(it.decks)
             }
 
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Aggrega gli archetipi dal meta competitivo.
+     * Recupera tornei + standings, raggruppa per archetipo e calcola meta share.
+     * Simile a limitlesstcg.com/decks.
+     */
+    suspend fun getMetaArchetypes(
+        format: String = "standard"
+    ): Result<List<MetaArchetype>> {
+        val cacheKey = "archetypes_$format"
+        archetypeCache[cacheKey]?.let { cached ->
+            if (System.currentTimeMillis() - cached.timestamp < CACHE_DURATION) {
+                return Result.success(cached.archetypes)
+            }
+        }
+
+        return try {
+            val apiFormat = when (format.lowercase()) {
+                "standard" -> "standard"
+                "expanded" -> "expanded"
+                else -> "standard"
+            }
+
+            val tournaments = api.getTournaments(game = "PTCG", format = apiFormat, limit = 15)
+            if (tournaments.isEmpty()) return Result.success(emptyList())
+
+            // Raccogli tutti gli standings con deck info
+            data class DeckEntry(
+                val archetype: String,
+                val placement: Int,
+                val winrate: Double?,
+                val metaDeck: MetaDeck
+            )
+
+            val allEntries = mutableListOf<DeckEntry>()
+
+            for (tournament in tournaments) {
+                try {
+                    val standings = api.getTournamentStandings(tournament.id)
+                    // Prendi top 32 (o tutti quelli con decklist)
+                    val withDeck = standings
+                        .filter { it.deck?.name != null || it.decklist != null }
+                        .sortedBy { it.placing }
+                        .take(32)
+
+                    for (standing in withDeck) {
+                        val archName = standing.deck?.name
+                            ?: inferArchetype(parseDecklistCards(standing.decklist))
+                        if (archName.isBlank() || archName == "Unknown") continue
+
+                        val record = standing.record
+                        val wr = if (record != null) {
+                            val total = record.wins + record.losses + record.ties
+                            if (total > 0) record.wins.toDouble() / total else null
+                        } else null
+
+                        val metaDeck = mapToMetaDeck(standing, tournament)
+
+                        allEntries.add(DeckEntry(
+                            archetype = archName,
+                            placement = standing.placing,
+                            winrate = wr,
+                            metaDeck = metaDeck
+                        ))
+                    }
+                } catch (e: Exception) {
+                    if (BuildConfig.DEBUG) Log.w(TAG, "Errore standings per archetypes: ${e.message}")
+                }
+            }
+
+            if (allEntries.isEmpty()) return Result.success(emptyList())
+
+            // Raggruppa per archetipo
+            val totalDecks = allEntries.size
+            val grouped = allEntries.groupBy { it.archetype.lowercase().trim() }
+
+            val archetypes = grouped.map { (_, entries) ->
+                val displayName = entries.first().archetype
+                val count = entries.size
+                val metaShare = (count.toDouble() / totalDecks) * 100.0
+                val winrates = entries.mapNotNull { it.winrate }
+                val avgWr = if (winrates.isNotEmpty()) winrates.average() else 0.0
+                val topPlace = entries.minOf { it.placement }
+                val recent = entries.sortedBy { it.placement }.take(5).map { it.placement }
+                // Usa il deck con miglior piazzamento come sample
+                val bestDeck = entries.minByOrNull { it.placement }?.metaDeck
+
+                MetaArchetype(
+                    name = displayName,
+                    count = count,
+                    metaShare = metaShare,
+                    avgWinrate = avgWr,
+                    topPlacement = topPlace,
+                    recentResults = recent,
+                    sampleDeck = bestDeck
+                )
+            }.sortedByDescending { it.metaShare }
+
+            archetypeCache[cacheKey] = CachedArchetypes(archetypes, System.currentTimeMillis())
+            Result.success(archetypes)
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.e(TAG, "Errore fetch archetypes: ${e.message}", e)
+            archetypeCache[cacheKey]?.let { return Result.success(it.archetypes) }
             Result.failure(e)
         }
     }
@@ -371,5 +484,6 @@ class LimitlessTcgRepository {
 
     fun clearCache() {
         metaDecksCache.clear()
+        archetypeCache.clear()
     }
 }
