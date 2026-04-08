@@ -32,6 +32,16 @@ fun MetaArchetypeSection(
     viewModel: MetaDeckViewModel,
     onImportDeck: ((MetaDeck) -> Unit)? = null
 ) {
+    var sortByWinRate by remember { mutableStateOf(false) }
+
+    val sortedArchetypes = remember(viewModel.archetypes, sortByWinRate) {
+        if (sortByWinRate) {
+            viewModel.archetypes.sortedByDescending { it.avgWinrate }
+        } else {
+            viewModel.archetypes // già ordinati per meta share dal repository
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // Format selector
         Row(
@@ -66,6 +76,39 @@ fun MetaArchetypeSection(
                     contentDescription = null,
                     tint = TextMuted,
                     modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        // Sort selector
+        if (viewModel.archetypes.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Sort,
+                    contentDescription = null,
+                    tint = TextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = if (AppLocale.isItalian) "Ordina per:" else "Sort by:",
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+                SortChip(
+                    label = AppLocale.metaShare,
+                    selected = !sortByWinRate,
+                    onClick = { sortByWinRate = false }
+                )
+                SortChip(
+                    label = "Win Rate",
+                    selected = sortByWinRate,
+                    onClick = { sortByWinRate = true }
                 )
             }
         }
@@ -123,7 +166,7 @@ fun MetaArchetypeSection(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    itemsIndexed(viewModel.archetypes) { index, archetype ->
+                    itemsIndexed(sortedArchetypes) { index, archetype ->
                         ArchetypeCard(
                             rank = index + 1,
                             archetype = archetype,
@@ -350,5 +393,26 @@ private fun ArchetypeStat(
                 fontSize = 9.sp
             )
         }
+    }
+}
+
+@Composable
+private fun SortChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = if (selected) BlueCard.copy(alpha = 0.2f) else DarkCard,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Text(
+            text = label,
+            color = if (selected) BlueCard else TextMuted,
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
     }
 }
