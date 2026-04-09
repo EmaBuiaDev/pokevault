@@ -120,12 +120,6 @@ fun HomeScreen(
             // Offline banner
             OfflineBanner()
 
-            // Barra di ricerca
-            SearchBar(
-                query = viewModel.searchQuery,
-                onQueryChange = { viewModel.updateSearchQuery(it) }
-            )
-
             Spacer(modifier = Modifier.height(20.dp))
 
             // Griglia menu
