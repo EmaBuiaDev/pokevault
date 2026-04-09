@@ -493,7 +493,6 @@ fun SetDetailScreen(
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }
-                } // close Box inside else
                 } // close else (have data)
             } // close outer Box
         }
