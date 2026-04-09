@@ -14,6 +14,21 @@
 -keep class com.example.pokevault.data.model.** { *; }
 -keep class com.example.pokevault.data.firebase.CollectionStats { *; }
 
+# ── API response / DTO classes (Gson deserialization) ──
+-keep class com.example.pokevault.data.remote.SetsResponse { *; }
+-keep class com.example.pokevault.data.remote.CardsResponse { *; }
+-keep class com.example.pokevault.data.remote.SingleCardResponse { *; }
+-keep class com.example.pokevault.data.remote.SingleSetResponse { *; }
+-keep class com.example.pokevault.data.remote.TcgSet { *; }
+-keep class com.example.pokevault.data.remote.SetImages { *; }
+-keep class com.example.pokevault.data.remote.TcgCard { *; }
+-keep class com.example.pokevault.data.remote.TcgCardSet { *; }
+-keep class com.example.pokevault.data.remote.CardImages { *; }
+-keep class com.example.pokevault.data.remote.TcgPlayer { *; }
+-keep class com.example.pokevault.data.remote.TcgPriceInfo { *; }
+-keep class com.example.pokevault.data.remote.CardMarket { *; }
+-keep class com.example.pokevault.data.remote.CardMarketPrices { *; }
+
 # ── Retrofit / OkHttp ──
 -keep class retrofit2.** { *; }
 -keepattributes Signature
@@ -29,11 +44,20 @@
 -keep class * implements com.google.gson.TypeAdapterFactory
 -keep class * implements com.google.gson.JsonSerializer
 -keep class * implements com.google.gson.JsonDeserializer
+# Keep generic signatures for Gson TypeToken (fixes ParameterizedType crash)
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
 
 # ── Retrofit API interfaces ──
 -keep,allowobfuscation interface com.example.pokevault.data.remote.PokeTcgApiService
 -keep,allowobfuscation interface com.example.pokevault.data.remote.LimitlessTcgApiService
 -keep,allowobfuscation interface com.example.pokevault.data.remote.TranslationService
+
+# ── LimitlessTCG API response classes ──
+-keep class com.example.pokevault.data.remote.LimitlessTournament { *; }
+-keep class com.example.pokevault.data.remote.LimitlessStanding { *; }
+-keep class com.example.pokevault.data.remote.LimitlessRecord { *; }
+-keep class com.example.pokevault.data.remote.LimitlessDeckInfo { *; }
 
 # ── TensorFlow Lite ──
 -keep class org.tensorflow.** { *; }
