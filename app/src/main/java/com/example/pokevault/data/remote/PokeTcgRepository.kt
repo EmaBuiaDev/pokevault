@@ -39,9 +39,10 @@ class PokeTcgRepository {
     private val api = RetrofitClient.apiService
     private val gson = Gson()
 
-    // Cache memoria
+    // Cache memoria (thread-safe)
+    @Volatile
     private var memorySets: List<TcgSet>? = null
-    private val memoryCards = mutableMapOf<String, List<TcgCard>>()
+    private val memoryCards = java.util.concurrent.ConcurrentHashMap<String, List<TcgCard>>()
 
     companion object {
         private const val PREFS_NAME = "pokevault_cache"

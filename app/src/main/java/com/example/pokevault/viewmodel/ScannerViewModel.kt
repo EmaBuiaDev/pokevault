@@ -358,9 +358,10 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     addedCount = uiState.addedCount + 1,
                     errorMessage = null
                 )
+                val addedCardId = tcgCard.id
                 viewModelScope.launch {
                     delay(2500)
-                    if (uiState.lastAddedCard?.id == tcgCard.id) {
+                    if (uiState.lastAddedCard?.id == addedCardId) {
                         uiState = uiState.copy(
                             lastAddedCard = null,
                             detectedName = "",

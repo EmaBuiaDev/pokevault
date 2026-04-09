@@ -104,7 +104,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             firestoreRepository.getOwnedCardsBySet(setName)
                 .catch { e ->
                     if (BuildConfig.DEBUG) {
-                        android.util.Log.w("SetDetailVM", "Errore osservazione carte possedute", e as? Throwable)
+                        android.util.Log.w("SetDetailVM", "Errore osservazione carte possedute", e)
                     }
                 }
                 .collectLatest { ownedCards ->

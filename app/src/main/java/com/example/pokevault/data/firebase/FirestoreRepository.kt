@@ -84,20 +84,6 @@ class FirestoreRepository {
                 "addedAt" to com.google.firebase.Timestamp.now()
             )
 
-            var finalCardId = ""
-            
-            firestore.runTransaction { transaction ->
-                // 1. Controlla se esiste già
-                val existingQuery = cardsCollection
-                    .whereEqualTo("apiCardId", card.apiCardId)
-                    .whereEqualTo("variant", card.variant)
-                    .get()
-
-                // Nota: In una transazione Firestore le query devono essere risolte prima o gestite con attenzione
-                // Qui usiamo un approccio semplificato per l'aggiornamento dei totali
-            }
-
-            // Per semplicità e robustezza usiamo Batch o operazioni singole atomiche
             if (card.apiCardId.isNotBlank()) {
                 val existing = cardsCollection
                     .whereEqualTo("apiCardId", card.apiCardId)
@@ -230,13 +216,14 @@ class FirestoreRepository {
                 }
             }
 
+            // Per uniqueCards e mostValuable serve una scansione delle carte
+            val snapshot = cardsCollection.get().await()
+            val cards = snapshot.documents.mapNotNull { it.toObject(PokemonCard::class.java) }
             CollectionStats(
                 totalCards = totalCards,
                 totalValue = totalValue,
-                // uniqueCards e mostValuable richiedono ancora una scansione se non salvati, 
-                // ma totalCards e totalValue sono i più pesanti
-                uniqueCards = 0, // Opzionale: implementare logica simile se necessario
-                mostValuable = "-"
+                uniqueCards = cards.map { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }.toSet().size,
+                mostValuable = cards.maxByOrNull { it.estimatedValue }?.name ?: "-"
             )
         } catch (e: Exception) { CollectionStats() }
     }

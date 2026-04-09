@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pokevault.BuildConfig
 import com.example.pokevault.data.firebase.CollectionStats
 import com.example.pokevault.data.firebase.FirestoreRepository
 import com.example.pokevault.data.model.PokemonCard
@@ -35,7 +36,12 @@ class HomeViewModel : ViewModel() {
     private fun loadCards() {
         viewModelScope.launch {
             repository.getCards()
-                .catch { isLoading = false }
+                .catch { error ->
+                    isLoading = false
+                    if (BuildConfig.DEBUG) {
+                        android.util.Log.w("HomeViewModel", "Errore caricamento carte", error)
+                    }
+                }
                 .collect { cards ->
                     collectionCards = cards
                     isLoading = false
