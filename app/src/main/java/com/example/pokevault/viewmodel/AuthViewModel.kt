@@ -139,7 +139,14 @@ class AuthViewModel : ViewModel() {
             // Se fallisce (NoCredentialException), usa GetSignInWithGoogleOption (mostra sempre il picker)
             val idToken = tryGetGoogleIdToken(context, webClientId)
                 ?: tryGetSignInWithGoogleToken(context, webClientId)
-                ?: return@launch  // errore già settato in uiState
+
+            if (idToken == null) {
+                // Assicura che il loading venga disattivato anche se nessun errore è stato impostato
+                if (uiState.isLoading) {
+                    uiState = uiState.copy(isLoading = false)
+                }
+                return@launch
+            }
 
             authManager.loginWithGoogle(idToken)
                 .onSuccess { user ->
@@ -158,14 +165,17 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    /** Tenta il login silenzioso via GetGoogleIdOption. Ritorna null se non ci sono credenziali. */
+    /**
+     * Tenta il login silenzioso via GetGoogleIdOption (solo account già autorizzati).
+     * Ritorna null se non ci sono credenziali precedentemente autorizzate.
+     */
     private suspend fun tryGetGoogleIdToken(context: Context, webClientId: String): String? {
         return try {
             val credentialManager = CredentialManager.create(context)
             val option = GetGoogleIdOption.Builder()
-                .setFilterByAuthorizedAccounts(false)
+                .setFilterByAuthorizedAccounts(true)
                 .setServerClientId(webClientId)
-                .setAutoSelectEnabled(false)
+                .setAutoSelectEnabled(true)
                 .build()
             val result = credentialManager.getCredential(
                 context, GetCredentialRequest.Builder().addCredentialOption(option).build()
@@ -175,9 +185,9 @@ class AuthViewModel : ViewModel() {
             uiState = uiState.copy(isLoading = false)
             null
         } catch (e: NoCredentialException) {
-            null // Fallback al metodo classico
+            null // Nessun account autorizzato: fallback al picker completo
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w("AuthViewModel", "GetGoogleIdOption fallito, provo fallback", e)
+            Log.w("AuthViewModel", "GetGoogleIdOption fallito, provo fallback", e)
             null
         }
     }
@@ -195,13 +205,13 @@ class AuthViewModel : ViewModel() {
             uiState = uiState.copy(isLoading = false)
             null
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.e("AuthViewModel", "Google Sign-In fallback fallito", e)
+            Log.e("AuthViewModel", "Google Sign-In fallito", e)
             uiState = uiState.copy(
                 isLoading = false,
                 errorMessage = if (AppLocale.isItalian)
-                    "Errore durante il login con Google. Verifica di avere un account Google sul dispositivo."
+                    "Errore durante il login con Google: ${e.localizedMessage ?: "errore sconosciuto"}. Verifica di avere un account Google sul dispositivo."
                 else
-                    "Google Sign-In failed. Make sure you have a Google account on your device."
+                    "Google Sign-In failed: ${e.localizedMessage ?: "unknown error"}. Make sure you have a Google account on your device."
             )
             null
         }
