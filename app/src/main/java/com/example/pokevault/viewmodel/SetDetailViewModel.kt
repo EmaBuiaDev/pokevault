@@ -27,6 +27,7 @@ data class SetDetailUiState(
     val cards: List<TcgCard> = emptyList(),
     val ownedCardIds: Set<String> = emptySet(),
     val isLoading: Boolean = true,
+    val isLoadingCards: Boolean = true,
     val isAddingCard: String? = null,
     val viewMode: String = "grid",
     val searchQuery: String = "",
@@ -61,41 +62,35 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         if (currentSetId == setId) return
         currentSetId = setId
 
+        val context = getApplication<Application>().applicationContext
+        uiState = uiState.copy(isLoading = true, isLoadingCards = true)
+
+        // Load set info independently - show it as soon as it arrives
         viewModelScope.launch {
-            uiState = uiState.copy(isLoading = true)
-            val context = getApplication<Application>().applicationContext
-
-            val setInfoDeferred = async { tcgRepository.getSetInfo(setId) }
-            val cardsDeferred = async { tcgRepository.getCardsBySet(setId, context = context) }
-
-            val setInfoResult = setInfoDeferred.await()
-            val cardsResult = cardsDeferred.await()
-
-            var setNameForFirestore = ""
-
-            setInfoResult.onSuccess { setInfo ->
-                uiState = uiState.copy(set = setInfo)
-                setNameForFirestore = setInfo.name
+            tcgRepository.getSetInfo(setId).onSuccess { setInfo ->
+                uiState = uiState.copy(set = setInfo, isLoading = false)
+                observeOwnedCards(setInfo.name)
             }
+        }
 
-            cardsResult.onSuccess { cards ->
-                if (uiState.set == null && cards.isNotEmpty()) {
-                    val fallbackSet = TcgSet(
-                        id = setId,
-                        name = cards.firstOrNull()?.set?.name ?: setId,
-                        series = cards.firstOrNull()?.set?.series ?: ""
-                    )
-                    uiState = uiState.copy(set = fallbackSet)
-                    setNameForFirestore = fallbackSet.name
+        // Load cards independently - show them as soon as they arrive
+        viewModelScope.launch {
+            tcgRepository.getCardsBySet(setId, context = context)
+                .onSuccess { cards ->
+                    if (uiState.set == null && cards.isNotEmpty()) {
+                        val fallbackSet = TcgSet(
+                            id = setId,
+                            name = cards.firstOrNull()?.set?.name ?: setId,
+                            series = cards.firstOrNull()?.set?.series ?: ""
+                        )
+                        uiState = uiState.copy(set = fallbackSet)
+                        observeOwnedCards(fallbackSet.name)
+                    }
+                    uiState = uiState.copy(cards = cards, isLoading = false, isLoadingCards = false)
                 }
-                uiState = uiState.copy(cards = cards, isLoading = false)
-            }.onFailure { error ->
-                uiState = uiState.copy(isLoading = false, errorMessage = "Errore: ${error.message}")
-            }
-
-            if (setNameForFirestore.isNotBlank()) {
-                observeOwnedCards(setNameForFirestore)
-            }
+                .onFailure { error ->
+                    uiState = uiState.copy(isLoading = false, isLoadingCards = false, errorMessage = "Errore: ${error.message}")
+                }
         }
     }
 
