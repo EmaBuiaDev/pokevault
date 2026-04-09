@@ -280,7 +280,7 @@ class LimitlessTcgRepository {
 
             // Prova Formato 1: Mappa con chiavi "pokemon", "trainer", "energy"
             try {
-                val mapType = object : TypeToken<Map<String, Any>>() {}.type
+                val mapType = TypeToken.getParameterized(Map::class.java, String::class.java, Any::class.java).type
                 val map: Map<String, Any> = gson.fromJson(json, mapType)
 
                 val categoryKeys = mapOf(
@@ -342,7 +342,8 @@ class LimitlessTcgRepository {
         val cards = mutableListOf<MetaDeckCard>()
 
         try {
-            val listType = object : TypeToken<List<Map<String, Any>>>() {}.type
+            val innerMapType = TypeToken.getParameterized(Map::class.java, String::class.java, Any::class.java).type
+            val listType = TypeToken.getParameterized(List::class.java, innerMapType).type
             val rawList: List<Map<String, Any>> = gson.fromJson(json, listType)
 
             for (item in rawList) {

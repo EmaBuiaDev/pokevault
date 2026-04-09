@@ -25,8 +25,10 @@ object TranslationService {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val json = prefs.getString(CACHE_KEY, null)
             if (json != null) {
-                val type = object : TypeToken<Map<String, String>>() {}.type
-                val cached: Map<String, String> = Gson().fromJson(json, type)
+                val cached: Map<String, String> = Gson().fromJson(
+                    json,
+                    TypeToken.getParameterized(Map::class.java, String::class.java, String::class.java).type
+                )
                 memoryCache.putAll(cached)
             }
         } catch (_: Exception) {}

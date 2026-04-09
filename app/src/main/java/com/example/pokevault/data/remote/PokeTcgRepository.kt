@@ -5,7 +5,6 @@ import android.util.Log
 import com.example.pokevault.BuildConfig
 import com.example.pokevault.util.AppLocale
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -77,7 +76,7 @@ class PokeTcgRepository {
             val time = prefs.getLong(SETS_TIME_KEY, 0)
             if (!ignoreExpiry && System.currentTimeMillis() - time > CACHE_DURATION) return null
             val json = prefs.getString(SETS_CACHE_KEY, null) ?: return null
-            return gson.fromJson(json, object : TypeToken<List<TcgSet>>() {}.type)
+            return gson.fromJson(json, Array<TcgSet>::class.java).toList()
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) Log.w("PokeTcgRepository", "Errore lettura cache sets", e)
             return null
@@ -135,7 +134,7 @@ class PokeTcgRepository {
             val time = prefs.getLong("$CARDS_TIME_PREFIX$setId", 0)
             if (!ignoreExpiry && System.currentTimeMillis() - time > CARDS_CACHE_DURATION) return null
             val json = prefs.getString("$CARDS_PREFIX$setId", null) ?: return null
-            val cards: List<TcgCard> = gson.fromJson(json, object : TypeToken<List<TcgCard>>() {}.type)
+            val cards: List<TcgCard> = gson.fromJson(json, Array<TcgCard>::class.java).toList()
             val expectedTotal = prefs.getInt("$CARDS_TOTAL_PREFIX$setId", -1)
             if (expectedTotal <= 0) return null
             if (cards.size < expectedTotal) return null
