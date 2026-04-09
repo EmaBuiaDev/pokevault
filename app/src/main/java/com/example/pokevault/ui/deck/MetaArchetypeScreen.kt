@@ -30,7 +30,8 @@ import com.example.pokevault.viewmodel.MetaDeckViewModel
 @Composable
 fun MetaArchetypeSection(
     viewModel: MetaDeckViewModel,
-    onImportDeck: ((MetaDeck) -> Unit)? = null
+    onImportDeck: ((MetaDeck) -> Unit)? = null,
+    onCardClick: ((MetaDeck) -> Unit)? = null
 ) {
     var sortByWinRate by remember { mutableStateOf(false) }
 
@@ -172,6 +173,9 @@ fun MetaArchetypeSection(
                             archetype = archetype,
                             onImport = if (onImportDeck != null && archetype.sampleDeck != null) {
                                 { onImportDeck(archetype.sampleDeck!!) }
+                            } else null,
+                            onClick = if (onCardClick != null && archetype.sampleDeck != null) {
+                                { onCardClick(archetype.sampleDeck!!) }
                             } else null
                         )
                     }
@@ -187,6 +191,7 @@ private fun ArchetypeCard(
     rank: Int,
     archetype: MetaArchetype,
     onImport: (() -> Unit)?,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val rankColor = when (rank) {
@@ -204,7 +209,9 @@ private fun ArchetypeCard(
     }
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = DarkCard)
     ) {

@@ -91,6 +91,28 @@ fun DeckLabScreen(
         return
     }
 
+    // Se siamo nella vista dettaglio di un Meta Deck archetype, mostriamola a tutto schermo
+    if (selectedTabIndex == 1 && metaDeckViewModel.selectedDeck != null) {
+        MetaDeckDetailView(
+            deck = metaDeckViewModel.selectedDeck!!,
+            onBack = { metaDeckViewModel.selectDeck(null) },
+            onImport = {
+                val metaDeck = metaDeckViewModel.selectedDeck!!
+                if (premiumManager.canCreateDeck(viewModel.decks.size)) {
+                    val result = viewModel.importFromMetaDeck(metaDeck)
+                    metaDeckViewModel.selectDeck(null)
+                    if (result.matched > 0) {
+                        showSheet = true
+                    }
+                } else {
+                    metaDeckViewModel.selectDeck(null)
+                    showPremiumDeckDialog = true
+                }
+            }
+        )
+        return
+    }
+
     Scaffold(
         containerColor = DarkBackground,
         topBar = {
@@ -262,6 +284,9 @@ fun DeckLabScreen(
                                 metaDeckViewModel.selectDeck(null)
                                 showPremiumDeckDialog = true
                             }
+                        },
+                        onCardClick = { metaDeck ->
+                            metaDeckViewModel.selectDeck(metaDeck)
                         }
                     )
                 }
