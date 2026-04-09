@@ -452,6 +452,8 @@ object AppLocale {
     else
         "You have unlimited access to all features."
     val premiumFeaturesTitle: String get() = if (isItalian) "Confronto funzionalità" else "Feature comparison"
+    val premiumFeatureAlbumFree: String get() = if (isItalian) "1 Album gratuito" else "1 Free Album"
+    val premiumFeatureAlbumPremium: String get() = if (isItalian) "Album illimitati" else "Unlimited Albums"
     val premiumFeatureDeckFree: String get() = if (isItalian) "1 Deck gratuito" else "1 Free Deck"
     val premiumFeatureDeckPremium: String get() = if (isItalian) "Deck illimitati" else "Unlimited Decks"
     val premiumFeatureMetaFree: String get() = if (isItalian)
@@ -478,9 +480,9 @@ object AppLocale {
         "Payment is charged to your Google Play account."
     val premiumSettingsLabel: String get() = if (isItalian) "PokeVault Premium" else "PokeVault Premium"
     val premiumSettingsSubtitleFree: String get() = if (isItalian)
-        "Sblocca deck illimitati e Meta Deck"
+        "Sblocca album, deck illimitati e Meta Deck"
     else
-        "Unlock unlimited decks and Meta Decks"
+        "Unlock unlimited albums, decks and Meta Decks"
     val premiumSettingsSubtitleActive: String get() = if (isItalian)
         "Abbonamento attivo — tutte le funzionalità sbloccate"
     else
@@ -488,6 +490,14 @@ object AppLocale {
     val premiumManage: String get() = if (isItalian) "Gestisci abbonamento" else "Manage subscription"
 
     // Premium gates
+    val premiumAlbumLimitTitle: String get() = if (isItalian)
+        "Limite Album raggiunto"
+    else
+        "Album limit reached"
+    val premiumAlbumLimitMessage: String get() = if (isItalian)
+        "Hai raggiunto il limite di 1 album gratuito.\n\nPassa a Premium per creare album illimitati!"
+    else
+        "You've reached the 1 free album limit.\n\nGo Premium to create unlimited albums!"
     val premiumDeckLimitTitle: String get() = if (isItalian)
         "Limite Deck raggiunto"
     else

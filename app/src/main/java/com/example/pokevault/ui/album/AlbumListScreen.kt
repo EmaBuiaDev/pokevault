@@ -26,7 +26,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.pokevault.data.billing.PremiumManager
 import com.example.pokevault.data.model.Album
+import com.example.pokevault.ui.premium.PremiumRequiredDialog
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.AlbumViewModel
@@ -37,9 +39,12 @@ fun AlbumListScreen(
     onBack: () -> Unit,
     onCreateAlbum: (String?) -> Unit,
     onAlbumClick: (String) -> Unit,
+    onPremiumRequired: () -> Unit = {},
     viewModel: AlbumViewModel = viewModel()
 ) {
+    val premiumManager = remember { PremiumManager.getInstance() }
     var showDeleteDialog by remember { mutableStateOf<Album?>(null) }
+    var showPremiumDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -68,7 +73,13 @@ fun AlbumListScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { onCreateAlbum(null) },
+                onClick = {
+                    if (premiumManager.canCreateAlbum(viewModel.albums.size)) {
+                        onCreateAlbum(null)
+                    } else {
+                        showPremiumDialog = true
+                    }
+                },
                 containerColor = OrangeCard,
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -165,6 +176,18 @@ fun AlbumListScreen(
                 TextButton(onClick = { showDeleteDialog = null }) {
                     Text(AppLocale.cancel, color = TextGray)
                 }
+            }
+        )
+    }
+
+    if (showPremiumDialog) {
+        PremiumRequiredDialog(
+            title = AppLocale.premiumAlbumLimitTitle,
+            message = AppLocale.premiumAlbumLimitMessage,
+            onDismiss = { showPremiumDialog = false },
+            onUpgrade = {
+                showPremiumDialog = false
+                onPremiumRequired()
             }
         )
     }
