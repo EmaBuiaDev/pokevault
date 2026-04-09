@@ -14,6 +14,7 @@ class PremiumManager private constructor(private val context: Context) {
 
     companion object {
         const val FREE_DECK_LIMIT = 1
+        const val FREE_ALBUM_LIMIT = 1
         const val FREE_META_DECK_VIEWS = 10
         const val PRODUCT_MONTHLY = "pokevault_premium_monthly"
         const val PRODUCT_ANNUAL = "pokevault_premium_annual"
@@ -224,6 +225,10 @@ class PremiumManager private constructor(private val context: Context) {
 
     fun canCreateDeck(currentDeckCount: Int): Boolean {
         return _isPremium.value || currentDeckCount < FREE_DECK_LIMIT
+    }
+
+    fun canCreateAlbum(currentAlbumCount: Int): Boolean {
+        return _isPremium.value || currentAlbumCount < FREE_ALBUM_LIMIT
     }
 
     fun canViewMetaDeck(): Boolean {

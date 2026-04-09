@@ -247,7 +247,8 @@ fun AppNavigation(
             AlbumListScreen(
                 onBack = { navController.popBackStack() },
                 onCreateAlbum = { albumId -> navController.navigate(Routes.createAlbum(albumId)) },
-                onAlbumClick = { albumId -> navController.navigate(Routes.albumDetail(albumId)) }
+                onAlbumClick = { albumId -> navController.navigate(Routes.albumDetail(albumId)) },
+                onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
             )
         }
 

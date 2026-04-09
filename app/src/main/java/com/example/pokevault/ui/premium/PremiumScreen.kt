@@ -160,6 +160,16 @@ fun PremiumScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 FeatureRow(
+                    icon = Icons.Default.PhotoAlbum,
+                    feature = AppLocale.premiumFeatureAlbumFree,
+                    isFree = true
+                )
+                FeatureRow(
+                    icon = Icons.Default.CollectionsBookmark,
+                    feature = AppLocale.premiumFeatureAlbumPremium,
+                    isFree = false
+                )
+                FeatureRow(
                     icon = Icons.Default.Style,
                     feature = AppLocale.premiumFeatureDeckFree,
                     isFree = true
