@@ -54,7 +54,7 @@ fun MenuGrid(
             routeKey = "graded"
         ),
         MenuItemData(
-            title = "Pokédex",
+            title = AppLocale.cardsAndExpansions,
             icon = Icons.Default.CatchingPokemon,
             gradientColors = listOf(YellowCard, RedCard),
             routeKey = "pokedex"
