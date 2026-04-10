@@ -411,32 +411,32 @@ fun VariantRow(
         
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             IconButton(
-                onClick = { if (editedQuantity > 0) onQtyChange(editedQuantity - 1) }, 
-                modifier = Modifier.size(28.dp),
+                onClick = { if (editedQuantity > 0) onQtyChange(editedQuantity - 1) },
+                modifier = Modifier.size(36.dp),
                 enabled = editedQuantity > 0
             ) {
                 Icon(
-                    imageVector = if (editedQuantity <= 1) Icons.Default.Delete else Icons.Default.Remove, 
-                    contentDescription = null, 
-                    tint = if (editedQuantity <= 1) RedCard.copy(alpha = if(editedQuantity > 0) 1f else 0.3f) else TextWhite, 
-                    modifier = Modifier.size(16.dp)
+                    imageVector = if (editedQuantity <= 1) Icons.Default.Delete else Icons.Default.Remove,
+                    contentDescription = null,
+                    tint = if (editedQuantity <= 1) RedCard.copy(alpha = if(editedQuantity > 0) 1f else 0.3f) else TextWhite,
+                    modifier = Modifier.size(18.dp)
                 )
             }
-            
+
             Text(
                 text = "x$editedQuantity",
                 color = if (editedQuantity == 0) RedCard else TextWhite,
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
-                modifier = Modifier.widthIn(min = 20.dp),
+                modifier = Modifier.widthIn(min = 24.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
-            
-            IconButton(onClick = { onQtyChange(editedQuantity + 1) }, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Default.Add, null, tint = BlueCard, modifier = Modifier.size(16.dp))
+
+            IconButton(onClick = { onQtyChange(editedQuantity + 1) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Add, null, tint = BlueCard, modifier = Modifier.size(18.dp))
             }
 
             AnimatedVisibility(
@@ -447,15 +447,15 @@ fun VariantRow(
                 IconButton(
                     onClick = onConfirm,
                     modifier = Modifier
-                        .padding(start = 6.dp)
-                        .size(26.dp)
+                        .padding(start = 12.dp)
+                        .size(32.dp)
                         .background(if (editedQuantity == 0) RedCard else GreenCard, CircleShape)
                 ) {
                     Icon(
                         imageVector = if (editedQuantity == 0) Icons.Default.DeleteForever else Icons.Default.Check,
                         contentDescription = "Conferma",
                         tint = Color.White,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
