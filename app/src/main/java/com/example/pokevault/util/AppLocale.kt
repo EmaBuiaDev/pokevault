@@ -418,6 +418,10 @@ object AppLocale {
     val privacyConsentAccept: String get() = if (isItalian) "Accetto e continuo" else "I accept and continue"
 
     // Settings
+    val languageLabel: String get() = if (isItalian) "Lingua" else "Language"
+    val languageSubtitle: String get() = if (isItalian) "Attuale: Italiano — tocca per cambiare" else "Current: English — tap to change"
+    val logoutLabel: String get() = if (isItalian) "Esci" else "Log out"
+    val logoutSubtitle: String get() = if (isItalian) "Disconnettiti dal tuo account" else "Sign out of your account"
     val settingsTitle: String get() = if (isItalian) "Impostazioni" else "Settings"
     val privacyPolicyLabel: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
     val privacyPolicySubtitle: String get() = if (isItalian) "Come gestiamo i tuoi dati" else "How we handle your data"

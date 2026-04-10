@@ -101,10 +101,6 @@ fun AppNavigation(
         composable(Routes.HOME) {
             HomeScreen(
                 onNavigate = { route -> navController.navigate(route) },
-                onLogout = {
-                    authViewModel.logout()
-                    navController.navigate(Routes.AUTH) { popUpTo(0) { inclusive = true } }
-                },
                 userName = authViewModel.uiState.userName
             )
         }
@@ -294,6 +290,10 @@ fun AppNavigation(
                 onBack = { navController.popBackStack() },
                 authViewModel = authViewModel,
                 onAccountDeleted = {
+                    navController.navigate(Routes.AUTH) { popUpTo(0) { inclusive = true } }
+                },
+                onLogout = {
+                    authViewModel.logout()
                     navController.navigate(Routes.AUTH) { popUpTo(0) { inclusive = true } }
                 },
                 onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }

@@ -32,6 +32,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     authViewModel: AuthViewModel,
     onAccountDeleted: () -> Unit,
+    onLogout: () -> Unit = {},
     onNavigateToPremium: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -73,6 +74,16 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Lingua
+            SettingsItem(
+                icon = Icons.Default.Language,
+                title = AppLocale.languageLabel,
+                subtitle = AppLocale.languageSubtitle,
+                onClick = { AppLocale.toggle(context) }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Privacy Policy link
             SettingsItem(
                 icon = Icons.Default.PrivacyTip,
@@ -105,6 +116,17 @@ fun SettingsScreen(
                            else AppLocale.premiumSettingsSubtitleFree,
                 onClick = onNavigateToPremium,
                 accentColor = StarGold
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Logout
+            SettingsItem(
+                icon = Icons.Default.Logout,
+                title = AppLocale.logoutLabel,
+                subtitle = AppLocale.logoutSubtitle,
+                onClick = onLogout,
+                accentColor = RedCard
             )
 
             Spacer(modifier = Modifier.height(24.dp))

@@ -9,19 +9,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pokevault.ui.components.OfflineBanner
 import com.example.pokevault.ui.home.components.*
@@ -37,7 +32,6 @@ import com.example.pokevault.viewmodel.HomeViewModel
 @Composable
 fun HomeScreen(
     onNavigate: (String) -> Unit = {},
-    onLogout: () -> Unit = {},
     userName: String = "Allenatore",
     viewModel: HomeViewModel = viewModel()
 ) {
@@ -56,32 +50,13 @@ fun HomeScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Riga bottoni in alto a destra
-            val context = LocalContext.current
-            Row(
+            // Bottone impostazioni in alto a destra
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                contentAlignment = Alignment.CenterEnd
             ) {
-                // Toggle lingua IT/EN
-                Text(
-                    text = if (AppLocale.isItalian) "IT" else "EN",
-                    color = TextWhite,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(DarkCard)
-                        .clickable { AppLocale.toggle(context) }
-                        .wrapContentSize(Alignment.Center)
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Bottone impostazioni
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = AppLocale.settings,
@@ -90,22 +65,7 @@ fun HomeScreen(
                         .size(36.dp)
                         .clip(CircleShape)
                         .background(DarkCard)
-                        .clickable { onNavigate("settings") }
-                        .padding(8.dp)
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Bottone logout
-                Icon(
-                    imageVector = Icons.Default.Logout,
-                    contentDescription = "Logout",
-                    tint = TextMuted,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(DarkCard)
-                        .clickable { onLogout() }
+                        .clickable { onNavigate(Routes.SETTINGS) }
                         .padding(8.dp)
                 )
             }
