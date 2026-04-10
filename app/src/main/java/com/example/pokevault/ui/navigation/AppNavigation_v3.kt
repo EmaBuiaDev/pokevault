@@ -22,8 +22,10 @@ import com.example.pokevault.ui.album.AlbumDetailScreen
 import com.example.pokevault.ui.album.AlbumListScreen
 import com.example.pokevault.ui.album.CreateAlbumScreen
 import com.example.pokevault.ui.competitive.AddMatchScreen
+import com.example.pokevault.ui.competitive.AddTournamentScreen
 import com.example.pokevault.ui.competitive.CompetitiveHubScreen
 import com.example.pokevault.ui.competitive.MatchLogScreen
+import com.example.pokevault.ui.competitive.TournamentDetailScreen
 import com.example.pokevault.ui.deck.DeckLabScreen
 import com.example.pokevault.ui.premium.PremiumScreen
 import com.example.pokevault.ui.settings.SettingsScreen
@@ -46,7 +48,9 @@ object Routes {
     const val COMPETITIVE = "competitive"
     const val DECK_LAB = "deck_lab"
     const val MATCH_LOG = "match_log"
-    const val ADD_MATCH = "add_match?matchId={matchId}"
+    const val ADD_TOURNAMENT = "add_tournament?tournamentId={tournamentId}"
+    const val TOURNAMENT_DETAIL = "tournament_detail/{tournamentId}"
+    const val ADD_MATCH = "add_match/{tournamentId}?matchId={matchId}"
     const val GRADED = "graded"
     const val SETTINGS = "settings"
     const val PREMIUM = "premium"
@@ -58,7 +62,9 @@ object Routes {
     fun editCard(cardId: String) = "edit_card/$cardId"
     fun createAlbum(albumId: String? = null) = if (albumId != null) "create_album?albumId=$albumId" else "create_album"
     fun albumDetail(albumId: String) = "album_detail/$albumId"
-    fun addMatch(matchId: String? = null) = if (matchId != null) "add_match?matchId=$matchId" else "add_match"
+    fun addTournament(tournamentId: String? = null) = if (tournamentId != null) "add_tournament?tournamentId=$tournamentId" else "add_tournament"
+    fun tournamentDetail(tournamentId: String) = "tournament_detail/$tournamentId"
+    fun addMatch(tournamentId: String, matchId: String? = null) = if (matchId != null) "add_match/$tournamentId?matchId=$matchId" else "add_match/$tournamentId"
     fun setDetail(setId: String, setName: String): String {
         val encoded = URLEncoder.encode(setName, "UTF-8")
         return "set_detail/$setId/$encoded"
@@ -214,26 +220,62 @@ fun AppNavigation(
             )
         }
 
-        // ── Match Log ──
+        // ── Match Log (Tournament List) ──
         composable(Routes.MATCH_LOG) {
             MatchLogScreen(
                 onBack = { navController.popBackStack() },
-                onAddMatch = { matchId -> navController.navigate(Routes.addMatch(matchId)) }
+                onAddTournament = { tournamentId -> navController.navigate(Routes.addTournament(tournamentId)) },
+                onTournamentClick = { tournamentId -> navController.navigate(Routes.tournamentDetail(tournamentId)) }
+            )
+        }
+
+        // ── Aggiungi/Modifica Torneo ──
+        composable(
+            route = Routes.ADD_TOURNAMENT,
+            arguments = listOf(navArgument("tournamentId") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            })
+        ) { backStackEntry ->
+            val tournamentId = backStackEntry.arguments?.getString("tournamentId")
+            AddTournamentScreen(
+                onBack = { navController.popBackStack() },
+                editTournamentId = tournamentId
+            )
+        }
+
+        // ── Dettaglio Torneo ──
+        composable(
+            route = Routes.TOURNAMENT_DETAIL,
+            arguments = listOf(navArgument("tournamentId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val tournamentId = backStackEntry.arguments?.getString("tournamentId") ?: ""
+            TournamentDetailScreen(
+                tournamentId = tournamentId,
+                onBack = { navController.popBackStack() },
+                onAddMatch = { tId -> navController.navigate(Routes.addMatch(tId)) },
+                onEditMatch = { tId, matchId -> navController.navigate(Routes.addMatch(tId, matchId)) }
             )
         }
 
         // ── Aggiungi/Modifica Partita ──
         composable(
             route = Routes.ADD_MATCH,
-            arguments = listOf(navArgument("matchId") {
-                type = NavType.StringType
-                nullable = true
-                defaultValue = null
-            })
+            arguments = listOf(
+                navArgument("tournamentId") { type = NavType.StringType },
+                navArgument("matchId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
         ) { backStackEntry ->
+            val tournamentId = backStackEntry.arguments?.getString("tournamentId") ?: ""
             val matchId = backStackEntry.arguments?.getString("matchId")
             AddMatchScreen(
                 onBack = { navController.popBackStack() },
+                tournamentId = tournamentId,
                 editMatchId = matchId
             )
         }

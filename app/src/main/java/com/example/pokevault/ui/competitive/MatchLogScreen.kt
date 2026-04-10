@@ -21,7 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.pokevault.data.model.MatchLog
+import com.example.pokevault.data.model.Tournament
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.CompetitiveLogViewModel
@@ -32,10 +32,11 @@ import java.util.Locale
 @Composable
 fun MatchLogScreen(
     onBack: () -> Unit,
-    onAddMatch: (String?) -> Unit,
+    onAddTournament: (String?) -> Unit,
+    onTournamentClick: (String) -> Unit,
     viewModel: CompetitiveLogViewModel = viewModel()
 ) {
-    var showDeleteDialog by remember { mutableStateOf<MatchLog?>(null) }
+    var showDeleteDialog by remember { mutableStateOf<Tournament?>(null) }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -43,18 +44,14 @@ fun MatchLogScreen(
             TopAppBar(
                 title = {
                     Text(
-                        AppLocale.matchLogTitle,
+                        AppLocale.tournamentListTitle,
                         color = TextWhite,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = AppLocale.back,
-                            tint = TextWhite
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
@@ -62,11 +59,11 @@ fun MatchLogScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { onAddMatch(null) },
+                onClick = { onAddTournament(null) },
                 containerColor = OrangeCard,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = AppLocale.addMatch, tint = TextWhite)
+                Icon(Icons.Default.Add, contentDescription = AppLocale.addTournament, tint = TextWhite)
             }
         }
     ) { padding ->
@@ -75,80 +72,72 @@ fun MatchLogScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Stats bar
-            if (viewModel.matchLogs.isNotEmpty()) {
-                StatsBar(viewModel)
+            // Global stats
+            if (viewModel.allMatches.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    StatMini(
+                        label = AppLocale.matchRecordLabel,
+                        value = AppLocale.matchRecord(viewModel.globalWins, viewModel.globalLosses, viewModel.globalTies),
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatMini(
+                        label = AppLocale.matchWinRate,
+                        value = "${viewModel.globalWinRate.toInt()}%",
+                        modifier = Modifier.weight(0.5f)
+                    )
+                }
             }
 
             if (viewModel.isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = OrangeCard)
                 }
-            } else if (viewModel.matchLogs.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
+            } else if (viewModel.tournaments.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.EmojiEvents,
-                            contentDescription = null,
-                            tint = TextMuted,
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            AppLocale.matchLogEmpty,
-                            color = TextWhite,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            AppLocale.matchLogEmptySubtitle,
-                            color = TextMuted,
-                            fontSize = 14.sp
-                        )
+                        Icon(Icons.Default.EmojiEvents, null, tint = TextMuted, modifier = Modifier.size(64.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text(AppLocale.tournamentEmpty, color = TextWhite, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(8.dp))
+                        Text(AppLocale.tournamentEmptySubtitle, color = TextMuted, fontSize = 14.sp)
                     }
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    items(viewModel.matchLogs, key = { it.id }) { match ->
-                        MatchLogCard(
-                            match = match,
-                            onClick = { onAddMatch(match.id) },
-                            onDelete = { showDeleteDialog = match }
+                    items(viewModel.tournaments, key = { it.id }) { tournament ->
+                        TournamentCard(
+                            tournament = tournament,
+                            matchCount = viewModel.allMatches.count { it.tournamentId == tournament.id },
+                            onClick = { onTournamentClick(tournament.id) },
+                            onDelete = { showDeleteDialog = tournament }
                         )
                     }
-                    item { Spacer(modifier = Modifier.height(80.dp)) }
+                    item { Spacer(Modifier.height(80.dp)) }
                 }
             }
         }
     }
 
-    // Delete dialog
-    showDeleteDialog?.let { match ->
+    showDeleteDialog?.let { tournament ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
             containerColor = DarkSurface,
-            title = { Text(AppLocale.matchDeleteTitle, color = TextWhite) },
-            text = { Text(AppLocale.matchDeleteMessage, color = TextGray) },
+            title = { Text(AppLocale.tournamentDeleteTitle, color = TextWhite) },
+            text = { Text(AppLocale.tournamentDeleteMessage, color = TextGray) },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.deleteMatch(match.id)
+                    viewModel.deleteTournament(tournament.id)
                     showDeleteDialog = null
-                }) {
-                    Text(AppLocale.delete, color = RedCard)
-                }
+                }) { Text(AppLocale.delete, color = RedCard) }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = null }) {
@@ -160,120 +149,75 @@ fun MatchLogScreen(
 }
 
 @Composable
-private fun StatsBar(viewModel: CompetitiveLogViewModel) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        StatMini(
-            label = AppLocale.matchRecordLabel,
-            value = AppLocale.matchRecord(viewModel.wins, viewModel.losses, viewModel.ties),
-            modifier = Modifier.weight(1f)
-        )
-        StatMini(
-            label = AppLocale.matchWinRate,
-            value = "${viewModel.winRate.toInt()}%",
-            modifier = Modifier.weight(0.5f)
-        )
-    }
-}
-
-@Composable
-private fun StatMini(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard)
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(label, color = TextMuted, fontSize = 11.sp)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                value,
-                color = TextWhite,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun MatchLogCard(
-    match: MatchLog,
+private fun TournamentCard(
+    tournament: Tournament,
+    matchCount: Int,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val resultColor = when (match.result) {
-        "W" -> GreenCard
-        "L" -> RedCard
-        "T" -> YellowCard
+    val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    val dateStr = tournament.date?.toDate()?.let { dateFormat.format(it) } ?: ""
+
+    val typeColor = when (tournament.type) {
+        "Cup" -> StarGold
+        "Challenge" -> BlueCard
+        "Local" -> GreenCard
         else -> TextMuted
     }
-    val resultLabel = when (match.result) {
-        "W" -> AppLocale.matchWin
-        "L" -> AppLocale.matchLoss
-        "T" -> AppLocale.matchTie
-        else -> ""
-    }
-    val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-    val dateStr = match.date?.toDate()?.let { dateFormat.format(it) } ?: ""
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = DarkCard)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Result badge
+            // Type badge
             Box(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(resultColor.copy(alpha = 0.15f)),
+                    .background(typeColor.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = match.result,
-                    color = resultColor,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 18.sp
+                Icon(
+                    imageVector = when (tournament.type) {
+                        "Cup" -> Icons.Default.EmojiEvents
+                        "Challenge" -> Icons.Default.Star
+                        else -> Icons.Default.Group
+                    },
+                    contentDescription = null,
+                    tint = typeColor,
+                    modifier = Modifier.size(22.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = match.deckName,
-                        color = TextWhite,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    if (match.format.isNotBlank()) {
-                        Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        color = typeColor.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = tournament.type,
+                            color = typeColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                    if (tournament.format.isNotBlank()) {
+                        Spacer(Modifier.width(6.dp))
                         Surface(
                             color = LavenderCard.copy(alpha = 0.2f),
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Text(
-                                text = match.format,
+                                text = tournament.format,
                                 color = LavenderCard,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
@@ -283,59 +227,58 @@ private fun MatchLogCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(Modifier.height(4.dp))
 
-                if (match.opponentName.isNotBlank() || match.opponentDeck.isNotBlank()) {
-                    val vsText = buildString {
-                        append("vs ")
-                        if (match.opponentName.isNotBlank()) append(match.opponentName)
-                        if (match.opponentDeck.isNotBlank()) {
-                            if (match.opponentName.isNotBlank()) append(" (")
-                            append(match.opponentDeck)
-                            if (match.opponentName.isNotBlank()) append(")")
-                        }
-                    }
-                    Text(
-                        text = vsText,
-                        color = TextGray,
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                Text(
+                    text = tournament.deckName.ifBlank { "—" },
+                    color = TextWhite,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(Modifier.height(2.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (dateStr.isNotBlank()) {
-                        Text(text = dateStr, color = TextMuted, fontSize = 11.sp)
+                        Text(dateStr, color = TextMuted, fontSize = 11.sp)
                     }
-                    if (match.location.isNotBlank()) {
-                        if (dateStr.isNotBlank()) {
-                            Text(text = "  •  ", color = TextMuted, fontSize = 11.sp)
-                        }
-                        Text(
-                            text = match.location,
-                            color = TextMuted,
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    if (tournament.location.isNotBlank()) {
+                        if (dateStr.isNotBlank()) Text("  •  ", color = TextMuted, fontSize = 11.sp)
+                        Text(tournament.location, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+
+                Spacer(Modifier.height(2.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        AppLocale.tournamentMatches(matchCount),
+                        color = TextGray,
+                        fontSize = 11.sp
+                    )
+                    if (tournament.participants > 0) {
+                        Text("•", color = TextMuted, fontSize = 11.sp)
+                        Text("${tournament.participants} players", color = TextGray, fontSize = 11.sp)
                     }
                 }
             }
 
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = AppLocale.delete,
-                    tint = TextMuted,
-                    modifier = Modifier.size(18.dp)
-                )
+            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Delete, AppLocale.delete, tint = TextMuted, modifier = Modifier.size(18.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun StatMini(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = DarkCard)) {
+        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, color = TextMuted, fontSize = 11.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(value, color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
     }
 }

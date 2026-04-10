@@ -5,8 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -18,45 +18,36 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.pokevault.data.model.MatchLog
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.CompetitiveLogViewModel
-import com.google.firebase.Timestamp
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddMatchScreen(
     onBack: () -> Unit,
+    tournamentId: String,
     editMatchId: String? = null,
     viewModel: CompetitiveLogViewModel = viewModel()
 ) {
-    // Load match data if editing
-    LaunchedEffect(editMatchId) {
+    LaunchedEffect(tournamentId, editMatchId) {
+        viewModel.loadMatchesForTournament(tournamentId)
         if (editMatchId != null) {
             val match = viewModel.getMatchById(editMatchId)
             if (match != null) {
                 viewModel.loadMatchForEdit(match)
             }
         } else {
-            viewModel.resetForm()
+            viewModel.resetMatchForm()
+            viewModel.matchTournamentId = tournamentId
         }
     }
 
     val isEditing = editMatchId != null
-    val scrollState = rememberScrollState()
-    var showFormatDropdown by remember { mutableStateOf(false) }
-    var showDatePicker by remember { mutableStateOf(false) }
-
-    val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-    val currentDateStr = viewModel.matchDate.toDate().let { dateFormat.format(it) }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -71,11 +62,7 @@ fun AddMatchScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = AppLocale.back,
-                            tint = TextWhite
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
@@ -86,11 +73,11 @@ fun AddMatchScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(scrollState)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(Modifier.height(4.dp))
 
             // ── Risultato ──
             SectionLabel(AppLocale.matchResult)
@@ -98,102 +85,19 @@ fun AddMatchScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                ResultButton(
-                    label = AppLocale.matchWin,
-                    code = "W",
-                    color = GreenCard,
-                    isSelected = viewModel.matchResult == "W",
-                    onClick = { viewModel.matchResult = "W" },
-                    modifier = Modifier.weight(1f)
-                )
-                ResultButton(
-                    label = AppLocale.matchLoss,
-                    code = "L",
-                    color = RedCard,
-                    isSelected = viewModel.matchResult == "L",
-                    onClick = { viewModel.matchResult = "L" },
-                    modifier = Modifier.weight(1f)
-                )
-                ResultButton(
-                    label = AppLocale.matchTie,
-                    code = "T",
-                    color = YellowCard,
-                    isSelected = viewModel.matchResult == "T",
-                    onClick = { viewModel.matchResult = "T" },
-                    modifier = Modifier.weight(1f)
-                )
+                ResultButton("W", AppLocale.matchWin, GreenCard, viewModel.matchResult == "W", { viewModel.matchResult = "W" }, Modifier.weight(1f))
+                ResultButton("L", AppLocale.matchLoss, RedCard, viewModel.matchResult == "L", { viewModel.matchResult = "L" }, Modifier.weight(1f))
+                ResultButton("T", AppLocale.matchTie, YellowCard, viewModel.matchResult == "T", { viewModel.matchResult = "T" }, Modifier.weight(1f))
             }
 
-            // ── Mazzo usato ──
-            SectionLabel(AppLocale.matchDeckUsed)
+            // ── Turno ──
+            SectionLabel(AppLocale.matchRound)
             MatchTextField(
-                value = viewModel.matchDeckName,
-                onValueChange = { viewModel.matchDeckName = it },
-                label = AppLocale.matchDeckName,
-                placeholder = if (AppLocale.isItalian) "Es. Charizard ex" else "E.g. Charizard ex"
-            )
-
-            // ── Formato ──
-            SectionLabel(AppLocale.matchFormat)
-            ExposedDropdownMenuBox(
-                expanded = showFormatDropdown,
-                onExpandedChange = { showFormatDropdown = it }
-            ) {
-                OutlinedTextField(
-                    value = viewModel.matchFormat.ifBlank {
-                        if (AppLocale.isItalian) "Seleziona formato" else "Select format"
-                    },
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showFormatDropdown) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(),
-                    colors = matchTextFieldColors(),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                ExposedDropdownMenu(
-                    expanded = showFormatDropdown,
-                    onDismissRequest = { showFormatDropdown = false },
-                    containerColor = DarkSurface
-                ) {
-                    MatchLog.FORMATS.forEach { format ->
-                        DropdownMenuItem(
-                            text = { Text(format, color = TextWhite) },
-                            onClick = {
-                                viewModel.matchFormat = format
-                                showFormatDropdown = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            // ── Data ──
-            SectionLabel(AppLocale.matchDate)
-            OutlinedTextField(
-                value = currentDateStr,
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = {
-                    IconButton(onClick = { showDatePicker = true }) {
-                        Icon(Icons.Default.CalendarToday, contentDescription = null, tint = OrangeCard)
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showDatePicker = true },
-                colors = matchTextFieldColors(),
-                shape = RoundedCornerShape(12.dp)
-            )
-
-            // ── Luogo ──
-            SectionLabel(AppLocale.matchLocation)
-            MatchTextField(
-                value = viewModel.matchLocation,
-                onValueChange = { viewModel.matchLocation = it },
-                label = AppLocale.matchLocation,
-                placeholder = AppLocale.matchLocationPlaceholder
+                value = viewModel.matchRound,
+                onValueChange = { viewModel.matchRound = it },
+                label = AppLocale.matchRound,
+                placeholder = AppLocale.matchRoundPlaceholder,
+                keyboardType = KeyboardType.Number
             )
 
             // ── Avversario ──
@@ -211,14 +115,6 @@ fun AddMatchScreen(
                 placeholder = if (AppLocale.isItalian) "Es. Lugia VSTAR" else "E.g. Lugia VSTAR"
             )
 
-            // ── Lista mazzo (opzionale) ──
-            MatchTextField(
-                value = viewModel.matchDeckList,
-                onValueChange = { viewModel.matchDeckList = it },
-                label = AppLocale.matchDeckList,
-                maxLines = 4
-            )
-
             // ── Note ──
             SectionLabel(AppLocale.matchNotes)
             MatchTextField(
@@ -229,17 +125,13 @@ fun AddMatchScreen(
                 maxLines = 4
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
 
-            // ── Save button ──
+            // ── Save ──
             Button(
                 onClick = { viewModel.saveMatch(onSuccess = onBack) },
-                enabled = viewModel.matchDeckName.isNotBlank() &&
-                        viewModel.matchResult.isNotBlank() &&
-                        !viewModel.isSaving,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
+                enabled = viewModel.matchResult.isNotBlank() && !viewModel.isSaving,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = OrangeCard,
@@ -247,78 +139,23 @@ fun AddMatchScreen(
                 )
             ) {
                 if (viewModel.isSaving) {
-                    CircularProgressIndicator(
-                        color = Color.White,
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 } else {
-                    Icon(Icons.Default.Save, contentDescription = null, tint = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = AppLocale.save,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
+                    Icon(Icons.Default.Save, null, tint = Color.White)
+                    Spacer(Modifier.width(8.dp))
+                    Text(AppLocale.save, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-        }
-    }
-
-    // Date picker dialog
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = viewModel.matchDate.toDate().time
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        viewModel.matchDate = Timestamp(Date(millis))
-                    }
-                    showDatePicker = false
-                }) {
-                    Text(AppLocale.save, color = OrangeCard)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text(AppLocale.cancel, color = TextGray)
-                }
-            },
-            colors = DatePickerDefaults.colors(containerColor = DarkSurface)
-        ) {
-            DatePicker(
-                state = datePickerState,
-                colors = DatePickerDefaults.colors(
-                    containerColor = DarkSurface,
-                    titleContentColor = TextWhite,
-                    headlineContentColor = TextWhite,
-                    weekdayContentColor = TextMuted,
-                    subheadContentColor = TextGray,
-                    yearContentColor = TextWhite,
-                    currentYearContentColor = OrangeCard,
-                    selectedYearContentColor = Color.White,
-                    selectedYearContainerColor = OrangeCard,
-                    dayContentColor = TextWhite,
-                    selectedDayContentColor = Color.White,
-                    selectedDayContainerColor = OrangeCard,
-                    todayContentColor = OrangeCard,
-                    todayDateBorderColor = OrangeCard
-                )
-            )
+            Spacer(Modifier.height(20.dp))
         }
     }
 }
 
 @Composable
 private fun ResultButton(
-    label: String,
     code: String,
+    label: String,
     color: Color,
     isSelected: Boolean,
     onClick: () -> Unit,
@@ -338,29 +175,15 @@ private fun ResultButton(
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = code,
-                color = if (isSelected) color else TextGray,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 18.sp
-            )
-            Text(
-                text = label,
-                color = if (isSelected) color else TextMuted,
-                fontSize = 10.sp
-            )
+            Text(code, color = if (isSelected) color else TextGray, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+            Text(label, color = if (isSelected) color else TextMuted, fontSize = 10.sp)
         }
     }
 }
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        color = TextGray,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.SemiBold
-    )
+    Text(text, color = TextGray, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
@@ -369,6 +192,7 @@ private fun MatchTextField(
     onValueChange: (String) -> Unit,
     label: String,
     placeholder: String = "",
+    keyboardType: KeyboardType = KeyboardType.Text,
     maxLines: Int = 1
 ) {
     OutlinedTextField(
@@ -377,6 +201,7 @@ private fun MatchTextField(
         label = { Text(label) },
         placeholder = if (placeholder.isNotBlank()) {{ Text(placeholder) }} else null,
         maxLines = maxLines,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         modifier = Modifier.fillMaxWidth(),
         colors = matchTextFieldColors(),
         shape = RoundedCornerShape(12.dp)

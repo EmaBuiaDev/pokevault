@@ -4,6 +4,7 @@ import com.example.pokevault.data.model.Album
 import com.example.pokevault.data.model.Deck
 import com.example.pokevault.data.model.MatchLog
 import com.example.pokevault.data.model.PokemonCard
+import com.example.pokevault.data.model.Tournament
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -35,6 +36,9 @@ class FirestoreRepository {
 
     private val matchLogsCollection
         get() = userDoc.collection("match_logs")
+
+    private val tournamentsCollection
+        get() = userDoc.collection("tournaments")
 
     fun getCards(): Flow<List<PokemonCard>> = callbackFlow {
         val listener = cardsCollection
@@ -353,11 +357,8 @@ class FirestoreRepository {
     suspend fun saveMatchLog(match: MatchLog): Result<String> {
         return try {
             val data = hashMapOf(
-                "location" to match.location,
-                "date" to (match.date ?: com.google.firebase.Timestamp.now()),
-                "format" to match.format,
-                "deckName" to match.deckName,
-                "deckList" to match.deckList,
+                "tournamentId" to match.tournamentId,
+                "round" to match.round,
                 "result" to match.result,
                 "opponentName" to match.opponentName,
                 "opponentDeck" to match.opponentDeck,
@@ -377,6 +378,71 @@ class FirestoreRepository {
     suspend fun deleteMatchLog(matchId: String): Result<Unit> {
         return try {
             matchLogsCollection.document(matchId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // --- TOURNAMENT METHODS ---
+
+    fun getTournaments(): Flow<List<Tournament>> = callbackFlow {
+        val listener = tournamentsCollection
+            .orderBy("date", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                val tournaments = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(Tournament::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(tournaments)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    fun getMatchesForTournament(tournamentId: String): Flow<List<MatchLog>> = callbackFlow {
+        val listener = matchLogsCollection
+            .whereEqualTo("tournamentId", tournamentId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                val logs = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(MatchLog::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(logs.sortedBy { it.round })
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun saveTournament(tournament: Tournament): Result<String> {
+        return try {
+            val data = hashMapOf(
+                "location" to tournament.location,
+                "date" to (tournament.date ?: com.google.firebase.Timestamp.now()),
+                "participants" to tournament.participants,
+                "registrationFee" to tournament.registrationFee,
+                "type" to tournament.type,
+                "format" to tournament.format,
+                "deckName" to tournament.deckName,
+                "deckId" to tournament.deckId,
+                "createdAt" to (tournament.createdAt ?: com.google.firebase.Timestamp.now())
+            )
+            val docRef = if (tournament.id.isEmpty()) {
+                tournamentsCollection.add(data).await()
+            } else {
+                tournamentsCollection.document(tournament.id).set(data).await()
+                tournamentsCollection.document(tournament.id)
+            }
+            Result.success(docRef.id)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun deleteTournament(tournamentId: String): Result<Unit> {
+        return try {
+            // Elimina anche tutte le partite del torneo
+            val matches = matchLogsCollection
+                .whereEqualTo("tournamentId", tournamentId)
+                .get().await()
+            for (doc in matches.documents) {
+                doc.reference.delete().await()
+            }
+            tournamentsCollection.document(tournamentId).delete().await()
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }

@@ -4,11 +4,8 @@ import com.google.firebase.Timestamp
 
 data class MatchLog(
     val id: String = "",
-    val location: String = "",          // Negozio, città, evento
-    val date: Timestamp? = null,        // Quando ha giocato
-    val format: String = "",            // Standard, Expanded, GLC, ecc.
-    val deckName: String = "",          // Mazzo usato
-    val deckList: String = "",          // Lista mazzo (opzionale)
+    val tournamentId: String = "",      // Riferimento al torneo
+    val round: Int = 0,                 // Numero turno
     val result: String = "",            // W, L, T (Win, Loss, Tie)
     val opponentName: String = "",      // Nome avversario
     val opponentDeck: String = "",      // Mazzo avversario
@@ -16,7 +13,6 @@ data class MatchLog(
     val createdAt: Timestamp? = null
 ) {
     companion object {
-        val FORMATS = listOf("Standard", "Expanded", "GLC", "Unlimited", "Theme", "Other")
-        val RESULTS = listOf("W", "L", "T")  // Win, Loss, Tie
+        val RESULTS = listOf("W", "L", "T")
     }
 }
