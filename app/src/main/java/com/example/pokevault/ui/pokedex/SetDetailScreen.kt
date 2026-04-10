@@ -232,8 +232,8 @@ fun SetDetailScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(state.set?.name ?: setName, fontWeight = FontWeight.Bold, color = TextWhite, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (!state.isLoading && state.set != null) {
+                        Text(state.set?.name ?: "", fontWeight = FontWeight.Bold, color = TextWhite, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (state.set != null) {
                             Text("${if (AppLocale.isItalian) "Data di uscita" else "Release date"}: ${formatReleaseDate(state.set.releaseDate)}", color = TextMuted, fontSize = 12.sp)
                         }
                     }
@@ -242,12 +242,13 @@ fun SetDetailScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
             )
 
-            if (state.isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    PokeballLoadingAnimation(message = AppLocale.loading)
-                }
-            } else {
-                Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (state.isLoading && state.set == null) {
+                    // Full loading only when we have no data at all
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        PokeballLoadingAnimation(message = AppLocale.loading)
+                    }
+                } else {
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Fixed(3),
@@ -407,7 +408,12 @@ fun SetDetailScreen(
                             }
                         }
                     }
-                    if (sortedCards.isEmpty()) {
+                    if (state.isLoadingCards) {
+                        // Shimmer placeholder while cards load
+                        items(12) {
+                            ShimmerCardPlaceholder()
+                        }
+                    } else if (sortedCards.isEmpty()) {
                         item(span = { GridItemSpan(3) }) {
                             Box(modifier = Modifier
                                 .fillMaxWidth()
@@ -487,10 +493,31 @@ fun SetDetailScreen(
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }
-                } // close Box
-            }
+                } // close else (have data)
+            } // close outer Box
         }
     }
+}
+
+@Composable
+fun ShimmerCardPlaceholder(modifier: Modifier = Modifier) {
+    val shimmer = rememberInfiniteTransition(label = "shimmer")
+    val alpha by shimmer.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 0.4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmerAlpha"
+    )
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .aspectRatio(0.72f)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White.copy(alpha = alpha))
+    )
 }
 
 @Composable

@@ -234,6 +234,7 @@ object AppLocale {
     val emptyCollectionSubtitle: String get() = if (isItalian) "Prova a cambiare i filtri o aggiungi nuove carte" else "Try changing filters or add new cards"
 
     // Pokedex / Sets
+    val cardsAndExpansions: String get() = if (isItalian) "Carte e Espansioni" else "Cards & Expansions"
     val extensions: String get() = if (isItalian) "Espansioni" else "Expansions"
     val searchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
     val searchInSets: String get() = if (isItalian) "Cerca tra tutte le espansioni..." else "Search across all expansions..."
