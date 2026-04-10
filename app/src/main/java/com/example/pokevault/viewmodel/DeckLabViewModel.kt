@@ -13,11 +13,14 @@ import com.example.pokevault.data.model.DeckImportParser
 import com.example.pokevault.data.model.MetaDeck
 import com.example.pokevault.data.model.MetaDeckCard
 import com.example.pokevault.data.model.PokemonCard
+import com.example.pokevault.data.remote.PokeTcgRepository
+import com.example.pokevault.data.remote.TcgCard
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class DeckLabViewModel : ViewModel() {
     private val repository = FirestoreRepository()
+    private val pokeTcgRepository = PokeTcgRepository()
 
     var decks by mutableStateOf<List<Deck>>(emptyList())
         private set
@@ -433,8 +436,8 @@ class DeckLabViewModel : ViewModel() {
 
     /**
      * Aggiunge le carte mancanti alla collezione e poi al deck corrente.
-     * Ogni MetaDeckCard viene creata come PokemonCard nella collezione,
-     * poi il suo ID viene aggiunto a selectedCardsIds.
+     * Cerca ogni carta sulla Pokemon TCG API per ottenere immagine, HP, tipo, ecc.
+     * Se la ricerca API fallisce, crea la carta con dati minimi.
      */
     fun addMissingCardsToCollection(missingCards: List<MetaDeckCard>, onComplete: () -> Unit = {}) {
         if (missingCards.isEmpty()) return
@@ -444,22 +447,7 @@ class DeckLabViewModel : ViewModel() {
             val newIds = mutableListOf<String>()
 
             for (card in missingCards) {
-                val supertype = when (card.type.lowercase()) {
-                    "pokemon" -> "Pokémon"
-                    "trainer" -> "Trainer"
-                    "energy" -> "Energy"
-                    else -> "Pokémon"
-                }
-
-                val pokemonCard = PokemonCard(
-                    name = card.name,
-                    set = card.set ?: "",
-                    cardNumber = card.number ?: "",
-                    quantity = card.qty,
-                    supertype = supertype,
-                    condition = "Near Mint",
-                    variant = "Normal"
-                )
+                val pokemonCard = lookupAndCreateCard(card)
 
                 val result = repository.addCard(pokemonCard)
                 result.onSuccess { docId ->
@@ -477,5 +465,93 @@ class DeckLabViewModel : ViewModel() {
             importResult = null
             onComplete()
         }
+    }
+
+    /**
+     * Cerca una carta sulla Pokemon TCG API per nome/numero/set e
+     * restituisce un PokemonCard completo. Fallback su dati minimi se non trovata.
+     */
+    private suspend fun lookupAndCreateCard(card: MetaDeckCard): PokemonCard {
+        // Prova ricerca precisa per nome + numero
+        val tcgCard = searchTcgCard(card.name, card.set, card.number)
+
+        return if (tcgCard != null) {
+            val price = tcgCard.tcgplayer?.prices?.get("normal")?.market
+                ?: tcgCard.cardmarket?.prices?.lowPrice
+                ?: tcgCard.cardmarket?.prices?.averageSellPrice ?: 0.0
+
+            PokemonCard(
+                name = tcgCard.name,
+                imageUrl = tcgCard.images.small,
+                set = tcgCard.set?.name ?: card.set ?: "",
+                rarity = tcgCard.rarity ?: "Unknown",
+                type = tcgCard.types?.firstOrNull() ?: "Colorless",
+                hp = tcgCard.hp?.toIntOrNull() ?: 0,
+                supertype = tcgCard.supertype.ifBlank {
+                    when (card.type.lowercase()) {
+                        "pokemon" -> "Pokémon"; "trainer" -> "Trainer"; "energy" -> "Energy"; else -> "Pokémon"
+                    }
+                },
+                subtypes = tcgCard.subtypes ?: emptyList(),
+                apiCardId = tcgCard.id,
+                cardNumber = tcgCard.number,
+                estimatedValue = price,
+                quantity = card.qty,
+                condition = "Near Mint",
+                variant = "Normal"
+            )
+        } else {
+            // Fallback: dati minimi dal MetaDeckCard
+            val supertype = when (card.type.lowercase()) {
+                "pokemon" -> "Pokémon"; "trainer" -> "Trainer"; "energy" -> "Energy"; else -> "Pokémon"
+            }
+            PokemonCard(
+                name = card.name,
+                set = card.set ?: "",
+                cardNumber = card.number ?: "",
+                quantity = card.qty,
+                supertype = supertype,
+                hp = if (supertype == "Pokémon") 100 else 0,
+                condition = "Near Mint",
+                variant = "Normal"
+            )
+        }
+    }
+
+    /**
+     * Cerca una carta sulla Pokemon TCG API con strategia a fallback:
+     * 1. Nome + set + numero (più preciso)
+     * 2. Nome + numero
+     * 3. Solo nome (primo risultato)
+     */
+    private suspend fun searchTcgCard(name: String, set: String?, number: String?): TcgCard? {
+        try {
+            // 1. Cerca per nome + numero (searchByNameAndNumber ha già fallback interni)
+            val result = pokeTcgRepository.searchByNameAndNumber(name, number)
+            result.onSuccess { cards ->
+                if (cards.isNotEmpty()) {
+                    // Se abbiamo il set, preferiamo la carta dallo stesso set
+                    if (set != null) {
+                        val setLower = set.lowercase()
+                        val fromSet = cards.find { card ->
+                            card.set?.id?.lowercase()?.contains(setLower) == true ||
+                                card.id.lowercase().startsWith(setLower)
+                        }
+                        if (fromSet != null) return fromSet
+                    }
+                    return cards.first()
+                }
+            }
+
+            // 2. Fallback: ricerca fuzzy per nome
+            val fallback = pokeTcgRepository.searchCardsFuzzy(name)
+            fallback.onSuccess { cards ->
+                if (cards.isNotEmpty()) return cards.first()
+            }
+        } catch (_: Exception) {
+            // API non disponibile, procedi con fallback
+        }
+
+        return null
     }
 }
