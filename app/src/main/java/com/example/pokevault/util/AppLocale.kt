@@ -267,6 +267,28 @@ object AppLocale {
     val deckLabMetaDeckSubtitle: String get() = if (isItalian) "Archetipi e classifica del meta da LimitlessTCG" else "Meta archetypes and standings from LimitlessTCG"
     val deckLabWinTournamentSubtitle: String get() = if (isItalian) "Deck vincitori dai tornei competitivi" else "Winning decks from competitive tournaments"
 
+    // Deck Import - Missing Cards
+    val importResultTitle: String get() = if (isItalian) "Risultato Import" else "Import Result"
+    val importCardsFound: String get() = if (isItalian) "carte trovate su" else "cards found out of"
+    val importMissingTitle: String get() = if (isItalian) "Carte mancanti" else "Missing cards"
+    val importAddMissingTitle: String get() = if (isItalian) "Aggiungere carte mancanti?" else "Add missing cards?"
+    val importAddMissingMessage: String get() = if (isItalian)
+        "Alcune carte del deck non sono nella tua collezione. Vuoi aggiungerle automaticamente per completare il deck?"
+    else
+        "Some cards in this deck are not in your collection. Do you want to add them automatically to complete the deck?"
+    val importAddMissingConfirm: String get() = if (isItalian) "Sì, aggiungi alla collezione" else "Yes, add to collection"
+    val importAddMissingSkip: String get() = if (isItalian) "No, continua senza" else "No, continue without"
+    val importMatchedMessage: String get() = if (isItalian)
+        "Le carte trovate sono state aggiunte al deck. Puoi modificarlo prima di salvare."
+    else
+        "Matched cards have been added to the deck. You can edit it before saving."
+    val importNoMatchMessage: String get() = if (isItalian)
+        "Nessuna carta corrisponde alla tua collezione."
+    else
+        "No cards match your collection."
+    val importAddingCards: String get() = if (isItalian) "Aggiunta carte in corso..." else "Adding cards..."
+    val importAndMore: String get() = if (isItalian) "e altre" else "and more"
+
     // Meta Archetype
     val metaShare: String get() = "Meta Share"
     val metaAvgWinrate: String get() = if (isItalian) "Win Rate medio" else "Avg Win Rate"

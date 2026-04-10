@@ -282,6 +282,7 @@ class DeckLabViewModel : ViewModel() {
         val matched: Int,
         val missing: Int,
         val missingCards: List<String>,
+        val missingMetaDeckCards: List<MetaDeckCard> = emptyList(),
         val totalRequested: Int
     )
 
@@ -328,6 +329,7 @@ class DeckLabViewModel : ViewModel() {
     private fun matchAndPopulate(cards: List<MetaDeckCard>): ImportResult {
         val idsToAdd = mutableListOf<String>()
         val missingCards = mutableListOf<String>()
+        val missingMetaDeckCards = mutableListOf<MetaDeckCard>()
         var totalRequested = 0
 
         for (card in cards) {
@@ -338,6 +340,7 @@ class DeckLabViewModel : ViewModel() {
 
             if (matched.isEmpty()) {
                 missingCards.add("${card.qty}x ${card.name}")
+                missingMetaDeckCards.add(card)
                 continue
             }
 
@@ -354,6 +357,7 @@ class DeckLabViewModel : ViewModel() {
 
             if (remaining > 0) {
                 missingCards.add("${remaining}x ${card.name} (possiedi meno copie)")
+                missingMetaDeckCards.add(card.copy(qty = remaining))
             }
         }
 
@@ -368,6 +372,7 @@ class DeckLabViewModel : ViewModel() {
             matched = idsToAdd.size,
             missing = missingCards.size,
             missingCards = missingCards,
+            missingMetaDeckCards = missingMetaDeckCards,
             totalRequested = totalRequested
         )
         importResult = result
@@ -417,5 +422,60 @@ class DeckLabViewModel : ViewModel() {
 
     fun clearImportResult() {
         importResult = null
+    }
+
+    // ══════════════════════════════════════
+    // ADD MISSING CARDS TO COLLECTION
+    // ══════════════════════════════════════
+
+    var isAddingMissingCards by mutableStateOf(false)
+        private set
+
+    /**
+     * Aggiunge le carte mancanti alla collezione e poi al deck corrente.
+     * Ogni MetaDeckCard viene creata come PokemonCard nella collezione,
+     * poi il suo ID viene aggiunto a selectedCardsIds.
+     */
+    fun addMissingCardsToCollection(missingCards: List<MetaDeckCard>, onComplete: () -> Unit = {}) {
+        if (missingCards.isEmpty()) return
+        isAddingMissingCards = true
+
+        viewModelScope.launch {
+            val newIds = mutableListOf<String>()
+
+            for (card in missingCards) {
+                val supertype = when (card.type.lowercase()) {
+                    "pokemon" -> "Pokémon"
+                    "trainer" -> "Trainer"
+                    "energy" -> "Energy"
+                    else -> "Pokémon"
+                }
+
+                val pokemonCard = PokemonCard(
+                    name = card.name,
+                    set = card.set ?: "",
+                    cardNumber = card.number ?: "",
+                    quantity = card.qty,
+                    supertype = supertype,
+                    condition = "Near Mint",
+                    variant = "Normal"
+                )
+
+                val result = repository.addCard(pokemonCard)
+                result.onSuccess { docId ->
+                    repeat(card.qty) { newIds.add(docId) }
+                }
+            }
+
+            // Aggiungi al deck corrente
+            if (newIds.isNotEmpty()) {
+                selectedCardsIds = (selectedCardsIds + newIds).take(60)
+                analyzeDeck()
+            }
+
+            isAddingMissingCards = false
+            importResult = null
+            onComplete()
+        }
     }
 }

@@ -79,9 +79,10 @@ fun DeckLabScreen(
                 if (premiumManager.canCreateDeck(viewModel.decks.size)) {
                     val result = viewModel.importFromMetaDeck(metaDeck)
                     metaDeckViewModel.selectDeck(null)
-                    if (result.matched > 0) {
+                    if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
                         showSheet = true
                     }
+                    // If missing cards exist, ImportResultDialog handles the flow
                 } else {
                     metaDeckViewModel.selectDeck(null)
                     showPremiumDeckDialog = true
@@ -101,7 +102,7 @@ fun DeckLabScreen(
                 if (premiumManager.canCreateDeck(viewModel.decks.size)) {
                     val result = viewModel.importFromMetaDeck(metaDeck)
                     metaDeckViewModel.selectDeck(null)
-                    if (result.matched > 0) {
+                    if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
                         showSheet = true
                     }
                 } else {
@@ -277,7 +278,7 @@ fun DeckLabScreen(
                             if (premiumManager.canCreateDeck(viewModel.decks.size)) {
                                 val result = viewModel.importFromMetaDeck(metaDeck)
                                 metaDeckViewModel.selectDeck(null)
-                                if (result.matched > 0) {
+                                if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
                                     showSheet = true
                                 }
                             } else {
@@ -299,7 +300,7 @@ fun DeckLabScreen(
                             if (premiumManager.canCreateDeck(viewModel.decks.size)) {
                                 val result = viewModel.importFromMetaDeck(metaDeck)
                                 metaDeckViewModel.selectDeck(null)
-                                if (result.matched > 0) {
+                                if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
                                     showSheet = true
                                 }
                             } else {
@@ -343,9 +344,10 @@ fun DeckLabScreen(
                 onImport = { text ->
                     val result = viewModel.importFromText(text)
                     showImportDialog = false
-                    if (result.matched > 0) {
+                    if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
                         showSheet = true
                     }
+                    // If missing cards exist, ImportResultDialog handles the flow
                 }
             )
         }
@@ -355,7 +357,18 @@ fun DeckLabScreen(
         if (importResult != null) {
             ImportResultDialog(
                 result = importResult,
-                onDismiss = { viewModel.clearImportResult() }
+                isAddingMissingCards = viewModel.isAddingMissingCards,
+                onDismiss = {
+                    viewModel.clearImportResult()
+                    if (viewModel.selectedCardsIds.isNotEmpty()) {
+                        showSheet = true
+                    }
+                },
+                onAddMissingCards = {
+                    viewModel.addMissingCardsToCollection(importResult.missingMetaDeckCards) {
+                        showSheet = true
+                    }
+                }
             )
         }
 
@@ -1189,27 +1202,33 @@ fun DeckImportDialog(
 @Composable
 fun ImportResultDialog(
     result: DeckLabViewModel.ImportResult,
-    onDismiss: () -> Unit
+    isAddingMissingCards: Boolean = false,
+    onDismiss: () -> Unit,
+    onAddMissingCards: () -> Unit = {}
 ) {
+    val hasMissingCards = result.missingMetaDeckCards.isNotEmpty()
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isAddingMissingCards) onDismiss() },
         containerColor = DarkSurface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    if (result.matched > 0) Icons.Default.CheckCircle else Icons.Default.Warning,
+                    if (result.matched > 0 && !hasMissingCards) Icons.Default.CheckCircle
+                    else if (hasMissingCards) Icons.Default.Warning
+                    else Icons.Default.Warning,
                     contentDescription = null,
-                    tint = if (result.matched > 0) GreenCard else YellowCard,
+                    tint = if (result.matched > 0 && !hasMissingCards) GreenCard else YellowCard,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Risultato Import", color = TextWhite, fontWeight = FontWeight.Bold)
+                Text(AppLocale.importResultTitle, color = TextWhite, fontWeight = FontWeight.Bold)
             }
         },
         text = {
             Column {
                 Text(
-                    text = "${result.matched} carte trovate su ${result.totalRequested} richieste",
+                    text = "${result.matched} ${AppLocale.importCardsFound} ${result.totalRequested}",
                     color = TextWhite,
                     fontSize = 14.sp
                 )
@@ -1217,7 +1236,7 @@ fun ImportResultDialog(
                 if (result.missingCards.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Carte mancanti (${result.missing}):",
+                        text = "${AppLocale.importMissingTitle} (${result.missing}):",
                         color = YellowCard,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -1232,37 +1251,101 @@ fun ImportResultDialog(
                     }
                     if (result.missingCards.size > 10) {
                         Text(
-                            text = "... e altre ${result.missingCards.size - 10}",
+                            text = "... ${AppLocale.importAndMore} ${result.missingCards.size - 10}",
                             color = TextMuted.copy(alpha = 0.6f),
                             fontSize = 11.sp
                         )
                     }
                 }
 
-                if (result.matched > 0) {
+                if (hasMissingCards) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        color = OrangeCard.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(
+                                Icons.Default.AddCircle,
+                                contentDescription = null,
+                                tint = OrangeCard,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = AppLocale.importAddMissingMessage,
+                                color = TextWhite,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                } else if (result.matched > 0) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Le carte trovate sono state aggiunte al deck. Puoi modificarlo prima di salvare.",
+                        text = AppLocale.importMatchedMessage,
                         color = GreenCard.copy(alpha = 0.8f),
                         fontSize = 11.sp
                     )
                 } else {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Nessuna carta corrisponde alla tua collezione. Aggiungi le carte alla collezione prima di importare.",
+                        text = AppLocale.importNoMatchMessage,
                         color = RedCard.copy(alpha = 0.8f),
                         fontSize = 11.sp
                     )
                 }
+
+                if (isAddingMissingCards) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            color = OrangeCard,
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = AppLocale.importAddingCards,
+                            color = TextMuted,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("OK")
+            if (hasMissingCards && !isAddingMissingCards) {
+                Button(
+                    onClick = onAddMissingCards,
+                    colors = ButtonDefaults.buttonColors(containerColor = OrangeCard),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(AppLocale.importAddMissingConfirm, fontSize = 13.sp)
+                }
+            } else if (!isAddingMissingCards) {
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("OK")
+                }
+            }
+        },
+        dismissButton = {
+            if (hasMissingCards && !isAddingMissingCards) {
+                TextButton(onClick = onDismiss) {
+                    Text(AppLocale.importAddMissingSkip, color = TextMuted)
+                }
             }
         }
     )
