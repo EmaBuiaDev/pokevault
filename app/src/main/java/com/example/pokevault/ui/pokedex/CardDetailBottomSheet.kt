@@ -92,7 +92,7 @@ fun CardDetailBottomSheet(
 
                 Column(
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(20.dp)
                 ) {
@@ -143,10 +143,11 @@ fun CardDetailBottomSheet(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // ── Info pills ──
+                    // ── Info pills + Azione ──
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         InfoPill(icon = "✦", text = card.rarity ?: "Sconosciuto", color = rarityInfo.color)
                         if (price != null && price > 0) {
@@ -154,6 +155,44 @@ fun CardDetailBottomSheet(
                         }
                         if (card.hp != null) {
                             InfoPill(icon = "❤️", text = "${card.hp} HP", color = RedCard)
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        // Bottone aggiungi inline
+                        if (!isOwned || showAddForm) {
+                            Surface(
+                                onClick = {
+                                    if (!isLoading) {
+                                        onAddCard(selectedVariant, quantity, selectedCondition, selectedLanguage)
+                                        onDismiss()
+                                    }
+                                },
+                                shape = RoundedCornerShape(20.dp),
+                                color = BlueCard
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (isLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(14.dp),
+                                            color = Color.White,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                    }
+                                    Text(
+                                        text = "Aggiungi",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -222,16 +261,16 @@ fun CardDetailBottomSheet(
                         }
                     }
 
-                    // ── Form aggiunta ──
+                    // ── Form personalizzazione (opzionale) ──
                     if (!isOwned || showAddForm) {
                         Text(
-                            text = if (isOwned) "Aggiungi un'altra copia" else "Aggiungi alla collezione",
-                            color = TextWhite,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 17.sp
+                            text = if (isOwned) "Personalizza copia" else "Personalizza",
+                            color = TextMuted,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp
                         )
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         // ── Riga 1: Quantità + Condizione ──
                         Row(
@@ -366,54 +405,6 @@ fun CardDetailBottomSheet(
                     Spacer(modifier = Modifier.height(32.dp))
                 }
 
-                // ── Bottoni fissi in basso ──
-                if (!isOwned || showAddForm) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(DarkBackground)
-                            .padding(horizontal = 20.dp, vertical = 12.dp)
-                            .navigationBarsPadding(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Annulla
-                        OutlinedButton(
-                            onClick = {
-                                if (isOwned) showAddForm = false
-                                else onDismiss()
-                            },
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f))
-                        ) {
-                            Text("Annulla", color = TextGray, fontWeight = FontWeight.Medium)
-                        }
-
-                        // Aggiungi
-                        Button(
-                            onClick = {
-                                onAddCard(selectedVariant, quantity, selectedCondition, selectedLanguage)
-                                onDismiss()
-                            },
-                            enabled = !isLoading,
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Aggiungi", fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
-                }
             }
         }
     }
