@@ -19,6 +19,7 @@ import coil.compose.AsyncImage
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.pokevault.ui.theme.TextGray
 import com.example.pokevault.util.AppLocale
 import kotlin.random.Random
@@ -61,12 +62,12 @@ fun WelcomeHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 24.dp),
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(70.dp)
+                .size(56.dp)
                 .graphicsLayer {
                     translationY = offsetY
                 },
@@ -83,18 +84,20 @@ fun WelcomeHeader(
             )
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         Column {
             Text(
                 text = AppLocale.helloUser(userName),
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = AppLocale.homeSubtitle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = TextGray.copy(alpha = 0.9f),
                 letterSpacing = 0.2.sp
             )

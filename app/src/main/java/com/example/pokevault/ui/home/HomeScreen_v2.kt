@@ -56,21 +56,16 @@ fun HomeScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Header con bottone logout
+            // Riga bottoni in alto a destra
+            val context = LocalContext.current
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                WelcomeHeader(
-                    userName = userName,
-                    modifier = Modifier.weight(1f)
-                )
-
                 // Toggle lingua IT/EN
-                val context = LocalContext.current
                 Text(
                     text = if (AppLocale.isItalian) "IT" else "EN",
                     color = TextWhite,
@@ -115,12 +110,18 @@ fun HomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            // Welcome header con nome utente (larghezza piena)
+            WelcomeHeader(
+                userName = userName,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+            )
 
             // Offline banner
             OfflineBanner()
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Griglia menu
             MenuGrid(
