@@ -50,7 +50,7 @@ fun CardDetailBottomSheet(
     // State form
     var selectedVariant by remember { mutableStateOf(availableVariants.firstOrNull() ?: "Normal") }
     var quantity by remember { mutableIntStateOf(1) }
-    var selectedCondition by remember { mutableStateOf("Mint") }
+    var selectedCondition by remember { mutableStateOf("Near Mint") }
     var selectedLanguage by remember { mutableStateOf("🇮🇹 Italiano") }
     var showAddForm by remember { mutableStateOf(!isOwned) }
 
@@ -92,7 +92,7 @@ fun CardDetailBottomSheet(
 
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .weight(1f)
                         .verticalScroll(rememberScrollState())
                         .padding(20.dp)
                 ) {
@@ -316,53 +316,7 @@ fun CardDetailBottomSheet(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        // ── Bottoni ──
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // Annulla
-                            OutlinedButton(
-                                onClick = {
-                                    if (isOwned) showAddForm = false
-                                    else onDismiss()
-                                },
-                                modifier = Modifier.weight(1f).height(48.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f))
-                            ) {
-                                Text("Annulla", color = TextGray, fontWeight = FontWeight.Medium)
-                            }
-
-                            // Aggiungi
-                            Button(
-                                onClick = {
-                                    onAddCard(selectedVariant, quantity, selectedCondition, selectedLanguage)
-                                    onDismiss()
-                                },
-                                enabled = !isLoading,
-                                modifier = Modifier.weight(1f).height(48.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
-                            ) {
-                                if (isLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Aggiungi", fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-                        }
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
 
                     // ── Dettagli carta ──
                     Text("Dettagli", color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
@@ -410,6 +364,55 @@ fun CardDetailBottomSheet(
                     }
 
                     Spacer(modifier = Modifier.height(32.dp))
+                }
+
+                // ── Bottoni fissi in basso ──
+                if (!isOwned || showAddForm) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(DarkBackground)
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                            .navigationBarsPadding(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Annulla
+                        OutlinedButton(
+                            onClick = {
+                                if (isOwned) showAddForm = false
+                                else onDismiss()
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f))
+                        ) {
+                            Text("Annulla", color = TextGray, fontWeight = FontWeight.Medium)
+                        }
+
+                        // Aggiungi
+                        Button(
+                            onClick = {
+                                onAddCard(selectedVariant, quantity, selectedCondition, selectedLanguage)
+                                onDismiss()
+                            },
+                            enabled = !isLoading,
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Aggiungi", fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
                 }
             }
         }
