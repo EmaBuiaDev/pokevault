@@ -171,7 +171,7 @@ fun CollectionScreen(
                         // Pulsante Filtri
                         Surface(
                             onClick = { showFilters = true },
-                            color = if (state.selectedSet != null || state.selectedType != null || state.supertypeFilter != SupertypeFilter.ALL || state.sortOrder != SortOrder.NEWEST) BlueCard else DarkCard,
+                            color = if (state.selectedSet != null || state.selectedType != null || state.selectedRarity != null || state.supertypeFilter != SupertypeFilter.ALL || state.sortOrder != SortOrder.NEWEST) BlueCard else DarkCard,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.size(48.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
@@ -184,7 +184,7 @@ fun CollectionScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                                 // Pallino notifica se filtri attivi
-                                if (state.selectedSet != null || state.selectedType != null || state.supertypeFilter != SupertypeFilter.ALL) {
+                                if (state.selectedSet != null || state.selectedType != null || state.selectedRarity != null || state.supertypeFilter != SupertypeFilter.ALL) {
                                     Box(
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
@@ -390,6 +390,7 @@ fun FilterBottomSheet(
                     viewModel.filterBySupertype(SupertypeFilter.ALL)
                     viewModel.filterBySet(null)
                     viewModel.filterByType(null)
+                    viewModel.filterByRarity(null)
                     viewModel.updateSortOrder(SortOrder.NEWEST)
                 }) {
                     Text("Reset", color = BlueCard)
@@ -462,8 +463,41 @@ fun FilterBottomSheet(
                 }
             }
 
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // ── RARITÀ ──
+            val rarityCounts = remember(state.cards) {
+                state.cards.filter { it.rarity.isNotBlank() }
+                    .groupBy { it.rarity }
+                    .mapValues { it.value.sumOf { c -> c.quantity } }
+                    .toList()
+                    .sortedByDescending { it.second }
+            }
+            if (rarityCounts.isNotEmpty()) {
+                FilterSectionTitle(AppLocale.rarity)
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item {
+                        FilterChip(
+                            label = AppLocale.all,
+                            isSelected = state.selectedRarity == null,
+                            onClick = { viewModel.filterByRarity(null) }
+                        )
+                    }
+                    items(rarityCounts) { (rarity, count) ->
+                        FilterChip(
+                            label = "${AppLocale.translateRarity(rarity)} ($count)",
+                            isSelected = state.selectedRarity == rarity,
+                            onClick = { viewModel.filterByRarity(rarity) }
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             Button(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),

@@ -29,6 +29,7 @@ data class CollectionUiState(
     val searchQuery: String = "",
     val selectedSet: String? = null,
     val selectedType: String? = null,
+    val selectedRarity: String? = null,
     val supertypeFilter: SupertypeFilter = SupertypeFilter.ALL,
     val sortOrder: SortOrder = SortOrder.NEWEST,
     val errorMessage: String? = null,
@@ -93,6 +94,11 @@ class CollectionViewModel : ViewModel() {
         refreshFilteredCards()
     }
 
+    fun filterByRarity(rarity: String?) {
+        uiState = uiState.copy(selectedRarity = rarity)
+        refreshFilteredCards()
+    }
+
     fun updateSortOrder(order: SortOrder) {
         uiState = uiState.copy(sortOrder = order)
         refreshFilteredCards()
@@ -153,6 +159,9 @@ class CollectionViewModel : ViewModel() {
             val matchesType = uiState.selectedType == null || 
                 AppLocale.translateType(card.type).equals(uiState.selectedType, ignoreCase = true)
             
+            val matchesRarity = uiState.selectedRarity == null ||
+                card.rarity.equals(uiState.selectedRarity, ignoreCase = true)
+
             val matchesSupertype = when (uiState.supertypeFilter) {
                 SupertypeFilter.ALL -> true
                 SupertypeFilter.POKEMON -> card.classify() == "Pokémon"
@@ -160,7 +169,7 @@ class CollectionViewModel : ViewModel() {
                 SupertypeFilter.ENERGY -> card.classify() == "Energy"
             }
 
-            matchesQuery && matchesSet && matchesType && matchesSupertype
+            matchesQuery && matchesSet && matchesType && matchesRarity && matchesSupertype
         }
 
         return when (uiState.sortOrder) {
