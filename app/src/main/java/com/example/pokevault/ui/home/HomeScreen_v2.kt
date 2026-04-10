@@ -1,21 +1,17 @@
 package com.example.pokevault.ui.home
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pokevault.ui.components.OfflineBanner
@@ -23,10 +19,7 @@ import com.example.pokevault.ui.home.components.*
 import com.example.pokevault.ui.navigation.Routes
 import com.example.pokevault.ui.theme.BlueCard
 import com.example.pokevault.ui.theme.DarkBackground
-import com.example.pokevault.ui.theme.DarkCard
-import com.example.pokevault.ui.theme.TextMuted
 import com.example.pokevault.ui.theme.TextWhite
-import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.HomeViewModel
 
 @Composable
@@ -50,29 +43,10 @@ fun HomeScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Bottone impostazioni in alto a destra
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = AppLocale.settings,
-                    tint = TextMuted,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(DarkCard)
-                        .clickable { onNavigate(Routes.SETTINGS) }
-                        .padding(8.dp)
-                )
-            }
-
-            // Welcome header con nome utente (larghezza piena)
+            // Header: sprite + nome + impostazioni su una riga
             WelcomeHeader(
                 userName = userName,
+                onSettingsClick = { onNavigate(Routes.SETTINGS) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)

@@ -2,16 +2,24 @@ package com.example.pokevault.ui.home.components
 
 import android.os.Build.VERSION.SDK_INT
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.ImageLoader
@@ -19,14 +27,16 @@ import coil.compose.AsyncImage
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
-import androidx.compose.ui.text.style.TextOverflow
+import com.example.pokevault.ui.theme.DarkCard
 import com.example.pokevault.ui.theme.TextGray
+import com.example.pokevault.ui.theme.TextMuted
 import com.example.pokevault.util.AppLocale
 import kotlin.random.Random
 
 @Composable
 fun WelcomeHeader(
     userName: String = "Allenatore",
+    onSettingsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val pokemonIds = remember { listOf(25, 1, 4, 7, 133, 150, 151, 384, 448, 94, 158, 258, 393, 6, 9, 3) }
@@ -86,7 +96,7 @@ fun WelcomeHeader(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = AppLocale.helloUser(userName),
                 style = MaterialTheme.typography.titleLarge,
@@ -102,5 +112,19 @@ fun WelcomeHeader(
                 letterSpacing = 0.2.sp
             )
         }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Icon(
+            imageVector = Icons.Default.Settings,
+            contentDescription = AppLocale.settings,
+            tint = TextMuted,
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(DarkCard)
+                .clickable(onClick = onSettingsClick)
+                .padding(8.dp)
+        )
     }
 }
