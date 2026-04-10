@@ -180,6 +180,16 @@ fun PremiumScreen(
                     isFree = false
                 )
                 FeatureRow(
+                    icon = Icons.Default.EmojiEvents,
+                    feature = AppLocale.premiumFeatureTournamentFree,
+                    isFree = true
+                )
+                FeatureRow(
+                    icon = Icons.Default.MilitaryTech,
+                    feature = AppLocale.premiumFeatureTournamentPremium,
+                    isFree = false
+                )
+                FeatureRow(
                     icon = Icons.Default.Visibility,
                     feature = AppLocale.premiumFeatureMetaFree,
                     isFree = true
@@ -212,7 +222,7 @@ fun PremiumScreen(
                     val monthlyProduct = premiumManager.getMonthlyProduct()
                     val monthlyPrice = monthlyProduct?.subscriptionOfferDetails
                         ?.firstOrNull()?.pricingPhases?.pricingPhaseList
-                        ?.firstOrNull()?.formattedPrice ?: "1,00 €"
+                        ?.firstOrNull()?.formattedPrice ?: "2,00 €"
 
                     PlanCard(
                         title = AppLocale.premiumMonthly,
@@ -229,7 +239,7 @@ fun PremiumScreen(
                     val annualProduct = premiumManager.getAnnualProduct()
                     val annualPrice = annualProduct?.subscriptionOfferDetails
                         ?.firstOrNull()?.pricingPhases?.pricingPhaseList
-                        ?.firstOrNull()?.formattedPrice ?: "10,00 €"
+                        ?.firstOrNull()?.formattedPrice ?: "20,00 €"
 
                     PlanCard(
                         title = AppLocale.premiumAnnual,

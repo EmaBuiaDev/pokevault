@@ -21,7 +21,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.pokevault.data.billing.PremiumManager
 import com.example.pokevault.data.model.Tournament
+import com.example.pokevault.ui.premium.PremiumRequiredDialog
 import com.example.pokevault.ui.theme.*
 import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.CompetitiveLogViewModel
@@ -34,9 +36,13 @@ fun MatchLogScreen(
     onBack: () -> Unit,
     onAddTournament: (String?) -> Unit,
     onTournamentClick: (String) -> Unit,
+    onNavigateToPremium: () -> Unit = {},
     viewModel: CompetitiveLogViewModel = viewModel()
 ) {
+    val premiumManager = remember { PremiumManager.getInstance() }
+    val isPremium by premiumManager.isPremium.collectAsState()
     var showDeleteDialog by remember { mutableStateOf<Tournament?>(null) }
+    var showPremiumDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -59,7 +65,13 @@ fun MatchLogScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { onAddTournament(null) },
+                onClick = {
+                    if (premiumManager.canCreateTournament(viewModel.tournaments.size)) {
+                        onAddTournament(null)
+                    } else {
+                        showPremiumDialog = true
+                    }
+                },
                 containerColor = OrangeCard,
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -143,6 +155,18 @@ fun MatchLogScreen(
                 TextButton(onClick = { showDeleteDialog = null }) {
                     Text(AppLocale.cancel, color = TextGray)
                 }
+            }
+        )
+    }
+
+    if (showPremiumDialog) {
+        PremiumRequiredDialog(
+            title = AppLocale.premiumTournamentLimitTitle,
+            message = AppLocale.premiumTournamentLimitMessage,
+            onDismiss = { showPremiumDialog = false },
+            onUpgrade = {
+                showPremiumDialog = false
+                onNavigateToPremium()
             }
         )
     }

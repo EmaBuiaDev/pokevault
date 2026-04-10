@@ -225,7 +225,8 @@ fun AppNavigation(
             MatchLogScreen(
                 onBack = { navController.popBackStack() },
                 onAddTournament = { tournamentId -> navController.navigate(Routes.addTournament(tournamentId)) },
-                onTournamentClick = { tournamentId -> navController.navigate(Routes.tournamentDetail(tournamentId)) }
+                onTournamentClick = { tournamentId -> navController.navigate(Routes.tournamentDetail(tournamentId)) },
+                onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }
             )
         }
 

@@ -543,6 +543,18 @@ object AppLocale {
         "Hai raggiunto il limite di 1 album gratuito.\n\nPassa a Premium per creare album illimitati!"
     else
         "You've reached the 1 free album limit.\n\nGo Premium to create unlimited albums!"
+    val premiumTournamentLimitTitle: String get() = if (isItalian)
+        "Limite Torneo raggiunto"
+    else
+        "Tournament limit reached"
+    val premiumTournamentLimitMessage: String get() = if (isItalian)
+        "Hai raggiunto il limite di 1 torneo gratuito.\n\nPassa a Premium per registrare tornei illimitati!"
+    else
+        "You've reached the 1 free tournament limit.\n\nGo Premium to register unlimited tournaments!"
+
+    val premiumFeatureTournamentFree: String get() = if (isItalian) "1 Torneo gratuito" else "1 Free Tournament"
+    val premiumFeatureTournamentPremium: String get() = if (isItalian) "Tornei illimitati" else "Unlimited Tournaments"
+
     val premiumDeckLimitTitle: String get() = if (isItalian)
         "Limite Deck raggiunto"
     else
