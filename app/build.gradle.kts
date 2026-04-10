@@ -20,8 +20,8 @@ android {
         applicationId = "com.emabuia.pokevault"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.1.6"
+        versionCode = 8
+        versionName = "2.0.0"
 
         buildConfigField("String", "POKETCG_API_KEY", "\"${localProperties.getProperty("POKETCG_API_KEY", "")}\"")
     }
