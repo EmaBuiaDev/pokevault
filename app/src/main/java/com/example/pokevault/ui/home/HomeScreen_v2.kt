@@ -20,6 +20,7 @@ import com.example.pokevault.ui.navigation.Routes
 import com.example.pokevault.ui.theme.BlueCard
 import com.example.pokevault.ui.theme.DarkBackground
 import com.example.pokevault.ui.theme.TextWhite
+import com.example.pokevault.util.AppLocale
 import com.example.pokevault.viewmodel.HomeViewModel
 
 @Composable
