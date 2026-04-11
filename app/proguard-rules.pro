@@ -1,4 +1,4 @@
-# ── PokéVault ProGuard Rules ──
+# ── CardsVaultTCG ProGuard Rules ──
 
 # Keep line numbers for crash reporting
 -keepattributes SourceFile,LineNumberTable

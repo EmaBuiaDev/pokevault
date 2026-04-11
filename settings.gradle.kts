@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "pokevault"
+rootProject.name = "cardsvaulttcg"
 include(":app")
  

@@ -5,7 +5,7 @@ import com.google.firebase.FirebaseApp
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.util.AppLocale
 
-class PokeVaultApp : Application() {
+class CardsVaultTCGApp : Application() {
 
     override fun onCreate() {
         super.onCreate()

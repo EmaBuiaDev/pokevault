@@ -9,19 +9,19 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
-        android:name=".PokeVaultApp"
+        android:name=".CardsVaultTCGApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="PokeVault"
+        android:label="CardsVaultTCG"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Pokevault"
+        android:theme="@style/Theme.CardsVaultTCG"
         tools:targetApi="35">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.Pokevault.Splash">
+            android:theme="@style/Theme.CardsVaultTCG.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

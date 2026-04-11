@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Pokevault" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.CardsVaultTCG" parent="android:Theme.Material.Light.NoActionBar" />
 
     <!-- Splash screen theme -->
-    <style name="Theme.Pokevault.Splash" parent="Theme.Pokevault">
+    <style name="Theme.CardsVaultTCG.Splash" parent="Theme.CardsVaultTCG">
         <item name="android:windowBackground">@color/splash_background</item>
     </style>
 </resources>

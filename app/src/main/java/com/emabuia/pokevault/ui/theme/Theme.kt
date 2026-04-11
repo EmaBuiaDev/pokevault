@@ -24,7 +24,7 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun PokeVaultTheme(
+fun CardsVaultTCGTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = DarkColorScheme

@@ -488,9 +488,9 @@ object AppLocale {
 
     val premiumTitle: String get() = if (isItalian) "Sblocca tutto il potenziale" else "Unlock full potential"
     val premiumSubtitle: String get() = if (isItalian)
-        "Accedi a tutte le funzionalità premium di PokeVault"
+        "Accedi a tutte le funzionalità premium di CardsVaultTCG"
     else
-        "Access all PokeVault premium features"
+        "Access all CardsVaultTCG premium features"
     val premiumActiveTitle: String get() = if (isItalian) "Sei Premium!" else "You're Premium!"
     val premiumActiveSubtitle: String get() = if (isItalian)
         "Hai accesso a tutte le funzionalità senza limiti."
@@ -523,7 +523,7 @@ object AppLocale {
     else
         "Subscription auto-renews. You can cancel anytime from Google Play Store. " +
         "Payment is charged to your Google Play account."
-    val premiumSettingsLabel: String get() = if (isItalian) "PokeVault Premium" else "PokeVault Premium"
+    val premiumSettingsLabel: String get() = if (isItalian) "CardsVaultTCG Premium" else "CardsVaultTCG Premium"
     val premiumSettingsSubtitleFree: String get() = if (isItalian)
         "Sblocca album, deck illimitati e Meta Deck"
     else

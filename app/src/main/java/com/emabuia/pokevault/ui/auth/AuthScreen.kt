@@ -105,7 +105,7 @@ fun AuthScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "PokeVault",
+                text = "CardsVaultTCG",
                 fontSize = 36.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = TextWhite,

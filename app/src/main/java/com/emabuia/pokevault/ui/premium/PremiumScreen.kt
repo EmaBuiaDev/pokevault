@@ -69,7 +69,7 @@ fun PremiumScreen(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "PokeVault Premium",
+                    text = "CardsVaultTCG Premium",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextWhite
