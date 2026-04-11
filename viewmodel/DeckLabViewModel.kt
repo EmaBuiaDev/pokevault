@@ -1,14 +1,14 @@
-package com.example.pokevault.viewmodel
+package com.emabuia.pokevault.viewmodel
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.pokevault.data.firebase.FirestoreRepository
-import com.example.pokevault.data.model.Deck
-import com.example.pokevault.data.model.DeckAnalysis
-import com.example.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.firebase.FirestoreRepository
+import com.emabuia.pokevault.data.model.Deck
+import com.emabuia.pokevault.data.model.DeckAnalysis
+import com.emabuia.pokevault.data.model.PokemonCard
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 

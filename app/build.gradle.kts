@@ -13,7 +13,7 @@ val localProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.example.pokevault"
+    namespace = "com.emabuia.pokevault"
     compileSdk = 35
 
     defaultConfig {

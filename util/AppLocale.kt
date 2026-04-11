@@ -1,4 +1,4 @@
-package com.example.pokevault.util
+package com.emabuia.pokevault.util
 
 import android.content.Context
 import androidx.compose.runtime.getValue

@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.theme.*
@@ -52,7 +54,7 @@ fun formatDate(date: String): String {
 // ── Animazione Pokéball ──
 @Composable
 fun PokeballLoadingAnimation(
-    message: String = AppLocale.loading,
+    message: String = "Caricamento...",
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pokeball")
@@ -150,7 +152,30 @@ fun SetsListScreen(
 ) {
     val state = viewModel.uiState
     var isSearchingCards by remember { mutableStateOf(false) }
+    var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
+    val haptic = LocalHapticFeedback.current
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.successMessage, state.errorMessage) {
+        val msg = state.successMessage ?: state.errorMessage
+        if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
+    }
+
+    if (selectedCard != null) {
+        CardDetailBottomSheet(
+            card = selectedCard!!,
+            isOwned = false,
+            isLoading = state.isAddingCard == selectedCard!!.id,
+            onAddCard = { v, q, c, l ->
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.addCardWithDetails(selectedCard!!, v, q, c, l)
+            },
+            onRemoveCard = {},
+            onDismiss = { selectedCard = null }
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -167,7 +192,7 @@ fun SetsListScreen(
             actions = {
                 if (!state.isLoading) {
                     IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(Icons.Default.Refresh, "Refresh", tint = TextMuted)
+                        Icon(Icons.Default.Refresh, "Aggiorna", tint = TextMuted)
                     }
                 }
             },
@@ -205,7 +230,7 @@ fun SetsListScreen(
                     Icon(Icons.Default.Search, AppLocale.search, tint = TextMuted, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Box(modifier = Modifier.weight(1f)) {
-                        val placeholder = if (isSearchingCards) AppLocale.searchInSets else AppLocale.searchSetPlaceholder
+                        val placeholder = if (isSearchingCards) AppLocale.searchCardPlaceholder else AppLocale.searchSetPlaceholder
                         val query = if (isSearchingCards) state.cardSearchQuery else state.searchQuery
                         if (query.isEmpty()) Text(placeholder, color = TextMuted, fontSize = 14.sp)
                         BasicTextField(
@@ -232,7 +257,7 @@ fun SetsListScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isSearchingCards) {
-            CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery) { setId -> onSetClick(setId) }
+            CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery, onCardClick = { card -> selectedCard = card }) { setId -> onSetClick(setId) }
         } else {
             // ── Filtri serie migliorati ──
             LazyRow(
@@ -300,6 +325,11 @@ fun SetsListScreen(
                 }
             }
         }
+    }
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier.align(Alignment.BottomCenter)
+    )
     }
 }
 
@@ -419,7 +449,7 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
 
 // ── Card search results ──
 @Composable
-fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, onCardSetClick: (String) -> Unit) {
+fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, onCardClick: (TcgCard) -> Unit = {}, onCardSetClick: (String) -> Unit) {
     if (query.length < 2) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -467,9 +497,12 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
                         Icon(Icons.Default.ChevronRight, null, tint = TextMuted, modifier = Modifier.size(20.dp))
                     }
                 }
-                items(setCards.sortedBy { it.number.toIntOrNull() ?: 999 }, key = { it.id }) { card ->
+                // FIX DEFINITIVO: La chiave deve essere unica in tutta la LazyVerticalGrid.
+                // Se una carta appare in più set raggruppati, "it.id" non basta perché si ripete.
+                // Usiamo "id_setName" per garantire l'univocità assoluta.
+                items(setCards.sortedBy { it.number.toIntOrNull() ?: 999 }, key = { "${it.id}_$setName" }) { card ->
                     Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp))
-                        .clickable { card.set?.id?.let { onCardSetClick(it) } }) {
+                        .clickable { onCardClick(card) }) {
                         AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     }
                 }
@@ -477,3 +510,5 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
         }
     }
 }
+
+// SeriesChip non più necessario, sostituito da SeriesFilterChip

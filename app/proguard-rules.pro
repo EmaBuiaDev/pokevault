@@ -11,13 +11,13 @@
 -dontwarn com.google.android.gms.**
 
 # ── Firestore model classes ──
--keep class com.example.pokevault.data.model.** { *; }
--keep class com.example.pokevault.data.firebase.CollectionStats { *; }
+-keep class com.emabuia.pokevault.data.model.** { *; }
+-keep class com.emabuia.pokevault.data.firebase.CollectionStats { *; }
 
 # ── ALL API/network classes: Retrofit interfaces + Gson DTOs + Limitless ──
 # Single wildcard rule prevents R8 from stripping generic signatures,
 # renaming fields, or removing classes used by Gson/Retrofit via reflection.
--keep class com.example.pokevault.data.remote.** { *; }
+-keep class com.emabuia.pokevault.data.remote.** { *; }
 
 # ── Retrofit / OkHttp ──
 -keep class retrofit2.** { *; }
