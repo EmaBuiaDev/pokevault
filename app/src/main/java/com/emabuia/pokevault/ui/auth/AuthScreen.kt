@@ -18,6 +18,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -65,7 +69,7 @@ fun AuthScreen(
             .fillMaxSize()
             .background(mainGradient)
     ) {
-        // Pokéball decorativa
+        // Decorazione sfondo
         Box(
             modifier = Modifier
                 .size(300.dp)
@@ -73,7 +77,7 @@ fun AuthScreen(
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
-                        listOf(RedCard.copy(alpha = 0.15f), Color.Transparent)
+                        listOf(PurpleCard.copy(alpha = 0.12f), Color.Transparent)
                     )
                 )
         )
@@ -95,7 +99,7 @@ fun AuthScreen(
                     if (isLoading) rotationZ = rotation
                 }
             ) {
-                PokeballLogo()
+                VaultLogo()
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -282,34 +286,69 @@ fun AuthScreen(
 }
 
 @Composable
-fun PokeballLogo() {
+fun VaultLogo() {
     Box(
         modifier = Modifier
             .size(100.dp)
             .clip(CircleShape)
-            .background(TextWhite)
-            .border(4.dp, Color(0xFF2D2D2D), CircleShape),
+            .background(
+                Brush.linearGradient(listOf(BlueCard, PurpleCard))
+            )
+            .border(3.dp, StarGold.copy(alpha = 0.5f), CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth().background(RedCard))
-            Box(modifier = Modifier.height(6.dp).fillMaxWidth().background(Color(0xFF2D2D2D)))
-            Box(modifier = Modifier.weight(1f).fillMaxWidth().background(TextWhite))
-        }
         Box(
             modifier = Modifier
-                .size(28.dp)
+                .size(86.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF2D2D2D)),
+                .background(DarkBackground),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(14.dp)
-                    .clip(CircleShape)
-                    .background(TextWhite)
-                    .border(2.dp, Color(0xFFBCBCBC), CircleShape)
-            )
+            Canvas(modifier = Modifier.size(52.dp)) {
+                val cardW = size.width * 0.45f
+                val cardH = size.height * 0.65f
+                val cx = size.width / 2
+                val cy = size.height / 2
+
+                // Carta posteriore (inclinata a sinistra)
+                rotate(degrees = -15f, pivot = Offset(cx, cy)) {
+                    drawRoundRect(
+                        color = BlueCard.copy(alpha = 0.6f),
+                        topLeft = Offset(cx - cardW / 2, cy - cardH / 2),
+                        size = Size(cardW, cardH),
+                        cornerRadius = CornerRadius(4f)
+                    )
+                }
+
+                // Carta centrale
+                drawRoundRect(
+                    color = PurpleCard.copy(alpha = 0.7f),
+                    topLeft = Offset(cx - cardW / 2, cy - cardH / 2),
+                    size = Size(cardW, cardH),
+                    cornerRadius = CornerRadius(4f)
+                )
+
+                // Carta frontale (inclinata a destra)
+                rotate(degrees = 15f, pivot = Offset(cx, cy)) {
+                    drawRoundRect(
+                        brush = Brush.linearGradient(
+                            colors = listOf(StarGold, OrangeCard)
+                        ),
+                        topLeft = Offset(cx - cardW / 2, cy - cardH / 2),
+                        size = Size(cardW, cardH),
+                        cornerRadius = CornerRadius(4f)
+                    )
+                }
+
+                // Riflesso luce sulla carta frontale
+                rotate(degrees = 15f, pivot = Offset(cx, cy)) {
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.6f),
+                        radius = 3f,
+                        center = Offset(cx - cardW * 0.1f, cy - cardH * 0.25f)
+                    )
+                }
+            }
         }
     }
 }
