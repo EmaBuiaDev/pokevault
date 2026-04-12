@@ -181,13 +181,17 @@ fun SetDetailScreen(
         if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
     }
 
-    val sortedCards = remember(state.cards, state.ownedCardIds, state.searchQuery, state.translatedQuery, state.showOnlyMissing, selectedRarityFilter) {
+    val sortedCards = remember(state.cards, state.ownedCardIds, state.searchQuery, state.translatedQuery, state.showOnlyMissing, state.showOnlyOwned, state.selectedType, state.selectedSupertype, selectedRarityFilter) {
         val searchCtx = buildSearchContext(state.searchQuery, state.translatedQuery)
         state.cards.filter { card ->
             val matchesRarity = selectedRarityFilter == null || card.rarity == selectedRarityFilter
             val matchesSearch = matchesSearchContext(card, searchCtx)
             val matchesMissing = !state.showOnlyMissing || card.id !in state.ownedCardIds
-            matchesRarity && matchesSearch && matchesMissing
+            val matchesOwned = !state.showOnlyOwned || card.id in state.ownedCardIds
+            val matchesType = state.selectedType == null || card.types?.contains(state.selectedType) == true
+            val matchesSupertype = state.selectedSupertype == null || card.supertype == state.selectedSupertype
+            
+            matchesRarity && matchesSearch && matchesMissing && matchesOwned && matchesType && matchesSupertype
         }.sortedBy {
             it.number.replace(Regex("[^0-9]"), "").toIntOrNull() ?: Int.MAX_VALUE
         }
@@ -260,7 +264,7 @@ fun SetDetailScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.pointerInput(sortedCards.size, state.viewMode) {
                         if (state.viewMode == "grid") {
-                            val headerCount = 4
+                            val headerCount = 5 // Adjusted for new filter row
                             detectDragGesturesAfterLongPress(
                                 onDragStart = { offset ->
                                     val item = gridState.layoutInfo.visibleItemsInfo.find { info ->
@@ -355,24 +359,64 @@ fun SetDetailScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(if (state.showOnlyMissing) BlueCard.copy(alpha = 0.2f) else DarkCard)
-                                    .border(
-                                        1.dp,
-                                        if (state.showOnlyMissing) BlueCard else Color.Transparent,
-                                        RoundedCornerShape(12.dp)
-                                    )
+                                    .background(if (state.showOnlyMissing) RedCard.copy(alpha = 0.2f) else DarkCard)
+                                    .border(1.dp, if (state.showOnlyMissing) RedCard else Color.Transparent, RoundedCornerShape(12.dp))
                                     .clickable { viewModel.toggleShowOnlyMissing() }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                                    .padding(horizontal = 10.dp, vertical = 8.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = if (state.showOnlyMissing) Icons.Default.FilterAlt else Icons.Default.FilterAltOff,
-                                        contentDescription = null,
-                                        tint = if (state.showOnlyMissing) BlueCard else TextMuted,
-                                        modifier = Modifier.size(16.dp)
+                                Icon(
+                                    imageVector = Icons.Default.FilterAltOff,
+                                    contentDescription = null,
+                                    tint = if (state.showOnlyMissing) RedCard else TextMuted,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (state.showOnlyOwned) GreenCard.copy(alpha = 0.2f) else DarkCard)
+                                    .border(1.dp, if (state.showOnlyOwned) GreenCard else Color.Transparent, RoundedCornerShape(12.dp))
+                                    .clickable { viewModel.toggleShowOnlyOwned() }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = if (state.showOnlyOwned) GreenCard else TextMuted,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    item(span = { GridItemSpan(3) }) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Supertypes (Card type: Pokemon, Trainer, etc)
+                            state.availableSupertypes.forEach { supertype ->
+                                item {
+                                    FilterChip(
+                                        label = AppLocale.translateSupertype(supertype),
+                                        isSelected = state.selectedSupertype == supertype,
+                                        onClick = { viewModel.selectSupertype(if (state.selectedSupertype == supertype) null else supertype) }
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(if (AppLocale.isItalian) "Mancanti" else "Missing", color = if (state.showOnlyMissing) BlueCard else TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                            
+                            item { VerticalDivider(modifier = Modifier.height(20.dp).padding(horizontal = 4.dp), color = TextMuted.copy(alpha = 0.3f)) }
+                            
+                            // Types (Fire, Water, etc)
+                            state.availableTypes.forEach { type ->
+                                item {
+                                    FilterChip(
+                                        label = AppLocale.translateType(type),
+                                        isSelected = state.selectedType == type,
+                                        onClick = { viewModel.selectType(if (state.selectedType == type) null else type) }
+                                    )
                                 }
                             }
                         }
@@ -497,6 +541,22 @@ fun SetDetailScreen(
             } // close outer Box
         }
     }
+}
+
+@Composable
+fun FilterChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = if (isSelected) TextWhite else TextMuted,
+        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+        fontSize = 12.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isSelected) BlueCard.copy(alpha = 0.5f) else DarkCard)
+            .border(1.dp, if (isSelected) BlueCard else Color.Transparent, RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    )
 }
 
 @Composable

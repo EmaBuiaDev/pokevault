@@ -26,6 +26,7 @@ data class CollectionUiState(
     val stats: CollectionStats = CollectionStats(),
     val isLoading: Boolean = true,
     val isGridView: Boolean = true,
+    val gridColumns: Int = 3,
     val searchQuery: String = "",
     val selectedSet: String? = null,
     val selectedType: String? = null,
@@ -112,6 +113,16 @@ class CollectionViewModel : ViewModel() {
 
     fun toggleViewMode() {
         uiState = uiState.copy(isGridView = !uiState.isGridView)
+    }
+
+    fun toggleGridColumns() {
+        val nextColumns = when (uiState.gridColumns) {
+            2 -> 3
+            3 -> 4
+            4 -> 6
+            else -> 2
+        }
+        uiState = uiState.copy(gridColumns = nextColumns)
     }
 
     fun deleteCard(cardId: String) {

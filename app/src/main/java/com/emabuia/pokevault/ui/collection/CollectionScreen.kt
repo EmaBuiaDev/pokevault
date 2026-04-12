@@ -129,6 +129,20 @@ fun CollectionScreen(
                             )
                         }
                     } else {
+                        if (state.isGridView) {
+                            IconButton(onClick = { viewModel.toggleGridColumns() }) {
+                                Icon(
+                                    imageVector = when(state.gridColumns) {
+                                        2 -> Icons.Default.ViewModule
+                                        3 -> Icons.Default.GridView
+                                        4 -> Icons.Default.Apps
+                                        else -> Icons.Default.ViewComfy
+                                    },
+                                    contentDescription = "Cambia densità griglia",
+                                    tint = TextWhite
+                                )
+                            }
+                        }
                         IconButton(onClick = { viewModel.toggleViewMode() }) {
                             Icon(
                                 imageVector = if (state.isGridView) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
@@ -216,11 +230,11 @@ fun CollectionScreen(
                                 start = 16.dp, end = 16.dp, top = 0.dp,
                                 bottom = if (isSelectionMode) 80.dp else 16.dp
                             ),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalArrangement = Arrangement.spacedBy(if (state.gridColumns > 4) 6.dp else 12.dp)
                         ) {
                             if (state.isGridView) {
-                                items(groupedCards.chunked(3)) { row ->
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                items(groupedCards.chunked(state.gridColumns)) { row ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(if (state.gridColumns > 4) 6.dp else 10.dp)) {
                                         row.forEach { (groupKey, group) ->
                                             val representative = group.first()
                                             val totalQty = group.sumOf { it.quantity }
@@ -228,6 +242,7 @@ fun CollectionScreen(
                                                 card = representative.copy(quantity = totalQty),
                                                 isSelected = groupKey in selectedGroupKeys,
                                                 isSelectionMode = isSelectionMode,
+                                                gridColumns = state.gridColumns,
                                                 onClick = {
                                                     if (isSelectionMode) {
                                                         selectedGroupKeys = if (groupKey in selectedGroupKeys)
@@ -245,7 +260,7 @@ fun CollectionScreen(
                                                 modifier = Modifier.weight(1f)
                                             )
                                         }
-                                        repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
+                                        repeat(state.gridColumns - row.size) { Spacer(modifier = Modifier.weight(1f)) }
                                     }
                                 }
                             } else {
@@ -546,6 +561,7 @@ fun CollectionCardGridItem(
     card: PokemonCard,
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
+    gridColumns: Int = 3,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -553,12 +569,12 @@ fun CollectionCardGridItem(
     Box(
         modifier = modifier
             .aspectRatio(0.72f)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(if (gridColumns > 4) 4.dp else 10.dp))
             .background(DarkCard)
             .then(
                 when {
-                    isSelected -> Modifier.border(2.dp, BlueCard, RoundedCornerShape(10.dp))
-                    else -> Modifier.border(1.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                    isSelected -> Modifier.border(if (gridColumns > 4) 1.dp else 2.dp, BlueCard, RoundedCornerShape(if (gridColumns > 4) 4.dp else 10.dp))
+                    else -> Modifier.border(if (gridColumns > 4) 0.5.dp else 1.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(if (gridColumns > 4) 4.dp else 10.dp))
                 }
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
@@ -572,7 +588,7 @@ fun CollectionCardGridItem(
             )
         } else {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(getTypeEmojiForCollection(card.type), fontSize = 32.sp)
+                Text(getTypeEmojiForCollection(card.type), fontSize = if (gridColumns > 4) 16.sp else 32.sp)
             }
         }
 
@@ -585,26 +601,29 @@ fun CollectionCardGridItem(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(4.dp)
-                    .size(20.dp)
+                    .padding(if (gridColumns > 4) 2.dp else 4.dp)
+                    .size(if (gridColumns > 4) 12.dp else 20.dp)
                     .clip(CircleShape)
                     .background(if (isSelected) BlueCard else Color.Black.copy(alpha = 0.5f))
-                    .border(1.5.dp, if (isSelected) BlueCard else Color.White.copy(alpha = 0.4f), CircleShape),
+                    .border(if (gridColumns > 4) 1.dp else 1.5.dp, if (isSelected) BlueCard else Color.White.copy(alpha = 0.4f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (isSelected) {
-                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(if (gridColumns > 4) 8.dp else 13.dp))
                 }
             }
         }
 
         // Quantity badge (top-right)
         Box(
-            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(22.dp)
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(if (gridColumns > 4) 2.dp else 4.dp)
+                .size(if (gridColumns > 4) 14.dp else 22.dp)
                 .clip(CircleShape).background(BlueCard),
             contentAlignment = Alignment.Center
         ) {
-            Text("x${card.quantity}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text("x${card.quantity}", color = Color.White, fontSize = if (gridColumns > 4) 7.sp else 10.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

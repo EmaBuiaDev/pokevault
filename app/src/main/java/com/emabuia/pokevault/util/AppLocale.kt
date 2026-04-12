@@ -112,6 +112,22 @@ object AppLocale {
         }
     }
 
+    private val supertypeEnToIt = mapOf(
+        "pokémon" to "Pokémon",
+        "trainer" to "Allenatore",
+        "energy" to "Energia"
+    )
+
+    fun translateSupertype(supertype: String): String {
+        if (supertype.isBlank()) return supertype
+        val key = supertype.lowercase().trim()
+        return if (current == Language.IT) {
+            supertypeEnToIt[key] ?: supertype
+        } else {
+            supertype
+        }
+    }
+
     /** Normalizza un tipo (italiano o inglese) alla versione inglese */
     fun typeToEnglish(type: String): String {
         if (type.isBlank()) return type

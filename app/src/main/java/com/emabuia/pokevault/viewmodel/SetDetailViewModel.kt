@@ -33,6 +33,9 @@ data class SetDetailUiState(
     val searchQuery: String = "",
     val translatedQuery: String = "",
     val showOnlyMissing: Boolean = false,
+    val showOnlyOwned: Boolean = false,
+    val selectedType: String? = null,
+    val selectedSupertype: String? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null
 ) {
@@ -41,6 +44,9 @@ data class SetDetailUiState(
     val displayTotal: Int get() = if (cards.isNotEmpty()) cards.size else (set?.total ?: 0)
     val completionPercent: Int get() =
         if (displayTotal > 0) (ownedCount * 100 / displayTotal) else 0
+
+    val availableTypes: List<String> get() = cards.flatMap { it.types ?: emptyList() }.distinct().sorted()
+    val availableSupertypes: List<String> get() = cards.map { it.supertype }.distinct().sorted()
 }
 
 class SetDetailViewModel(application: Application) : AndroidViewModel(application) {
@@ -132,7 +138,25 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun toggleShowOnlyMissing() {
-        uiState = uiState.copy(showOnlyMissing = !uiState.showOnlyMissing)
+        uiState = uiState.copy(
+            showOnlyMissing = !uiState.showOnlyMissing,
+            showOnlyOwned = false
+        )
+    }
+
+    fun toggleShowOnlyOwned() {
+        uiState = uiState.copy(
+            showOnlyOwned = !uiState.showOnlyOwned,
+            showOnlyMissing = false
+        )
+    }
+
+    fun selectType(type: String?) {
+        uiState = uiState.copy(selectedType = type)
+    }
+
+    fun selectSupertype(supertype: String?) {
+        uiState = uiState.copy(selectedSupertype = supertype)
     }
 
     fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {
