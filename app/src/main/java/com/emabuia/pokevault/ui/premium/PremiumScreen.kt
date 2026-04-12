@@ -220,9 +220,8 @@ fun PremiumScreen(
 
                     // Monthly plan
                     val monthlyProduct = premiumManager.getMonthlyProduct()
-                    val monthlyPrice = monthlyProduct?.subscriptionOfferDetails
-                        ?.firstOrNull()?.pricingPhases?.pricingPhaseList
-                        ?.firstOrNull()?.formattedPrice ?: "2,00 €"
+                    val monthlyPrice = premiumManager.getBasePlanFormattedPrice(monthlyProduct)
+                        ?: "2,00 €"
 
                     PlanCard(
                         title = AppLocale.premiumMonthly,
@@ -237,9 +236,8 @@ fun PremiumScreen(
 
                     // Annual plan
                     val annualProduct = premiumManager.getAnnualProduct()
-                    val annualPrice = annualProduct?.subscriptionOfferDetails
-                        ?.firstOrNull()?.pricingPhases?.pricingPhaseList
-                        ?.firstOrNull()?.formattedPrice ?: "20,00 €"
+                    val annualPrice = premiumManager.getBasePlanFormattedPrice(annualProduct)
+                        ?: "20,00 €"
 
                     PlanCard(
                         title = AppLocale.premiumAnnual,

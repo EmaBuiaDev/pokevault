@@ -267,6 +267,48 @@ class PremiumManager private constructor(private val context: Context) {
     fun getAnnualProduct(): ProductDetails? =
         _products.value.find { it.productId == PRODUCT_ANNUAL }
 
+    /**
+     * Restituisce il prezzo formattato del base plan di un prodotto subscription,
+     * ignorando eventuali intro offer, free trial o accelerazioni di periodo
+     * di fatturazione (che su alcune configurazioni del Play Console fanno
+     * comparire suffissi tipo "/min" dentro [PricingPhase.formattedPrice]).
+     *
+     * Se possibile ricostruiamo il prezzo a mano da [priceAmountMicros] +
+     * [priceCurrencyCode] in modo da eliminare qualunque suffisso di periodo
+     * che Google dovesse includere nella stringa formattata.
+     */
+    fun getBasePlanFormattedPrice(product: ProductDetails?): String? {
+        val offers = product?.subscriptionOfferDetails ?: return null
+        // Il base plan non ha offerId (o è vuoto): le offerte promozionali
+        // come free trial/intro hanno un offerId valorizzato.
+        val baseOffer = offers.firstOrNull { it.offerId.isNullOrEmpty() }
+            ?: offers.firstOrNull()
+            ?: return null
+
+        val phases = baseOffer.pricingPhases.pricingPhaseList
+        // L'ultima phase del base plan è quella ricorrente regolare
+        // (le prime sono eventuali intro/trial scontati).
+        val regularPhase = phases.lastOrNull() ?: return null
+
+        // Prova a ricostruire il prezzo dai valori grezzi, così non
+        // dipendiamo da cosa Google mette in formattedPrice.
+        val micros = regularPhase.priceAmountMicros
+        val currency = regularPhase.priceCurrencyCode
+        if (micros > 0 && currency.isNotBlank()) {
+            return try {
+                val amount = micros / 1_000_000.0
+                val nf = java.text.NumberFormat.getCurrencyInstance(
+                    java.util.Locale.getDefault()
+                )
+                nf.currency = java.util.Currency.getInstance(currency)
+                nf.format(amount)
+            } catch (_: Exception) {
+                regularPhase.formattedPrice
+            }
+        }
+        return regularPhase.formattedPrice
+    }
+
     sealed class PurchaseState {
         data object Idle : PurchaseState()
         data object Loading : PurchaseState()
