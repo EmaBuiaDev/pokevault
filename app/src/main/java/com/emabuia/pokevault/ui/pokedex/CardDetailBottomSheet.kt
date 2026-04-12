@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -149,17 +150,29 @@ fun CardDetailBottomSheet(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        InfoPill(icon = "✦", text = card.rarity ?: "Sconosciuto", color = rarityInfo.color)
-                        if (price != null && price > 0) {
-                            InfoPill(icon = "💰", text = "${"%.2f".format(price)} €", color = GreenCard)
-                        }
-                        if (card.hp != null) {
-                            InfoPill(icon = "❤️", text = "${card.hp} HP", color = RedCard)
+                        // Le pill prendono lo spazio rimanente e scrollano
+                        // orizzontalmente se non ci stanno: in questo modo il
+                        // bottone "Aggiungi" non viene mai compresso e il suo
+                        // testo resta leggibile su una sola riga.
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            InfoPill(icon = "✦", text = card.rarity ?: "Sconosciuto", color = rarityInfo.color)
+                            if (price != null && price > 0) {
+                                InfoPill(icon = "💰", text = "${"%.2f".format(price)} €", color = GreenCard)
+                            }
+                            if (card.hp != null) {
+                                InfoPill(icon = "❤️", text = "${card.hp} HP", color = RedCard)
+                            }
                         }
 
-                        Spacer(modifier = Modifier.weight(1f))
-
-                        // Bottone aggiungi inline
+                        // Bottone aggiungi inline - larghezza intrinseca,
+                        // misurato prima del contenitore pesato quindi non si
+                        // restringe mai.
                         if (!isOwned || showAddForm) {
                             Surface(
                                 onClick = {
@@ -189,7 +202,9 @@ fun CardDetailBottomSheet(
                                         text = "Aggiungi",
                                         color = Color.White,
                                         fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 }
                             }
