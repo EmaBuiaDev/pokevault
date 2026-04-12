@@ -9,6 +9,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.QuerySnapshot
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -65,6 +67,17 @@ class FirestoreRepository {
         awaitClose { listener.remove() }
     }
 
+    /**
+     * Aggiunge una carta in modo local-first:
+     * - la verifica di esistenza (per incrementare la quantità di una carta già
+     *   posseduta) colpisce la cache locale, quindi è istantanea
+     * - la scrittura usa direttamente set()/update() senza runTransaction, così
+     *   finisce subito nella cache locale e gli snapshot listener emettono
+     *   l'aggiornamento all'istante (con hasPendingWrites=true)
+     * - l'aggiornamento dei totali utente è fire-and-forget: la UI ricalcola
+     *   comunque i totali lato client da [CollectionViewModel]
+     * La sincronizzazione con il server Firestore avviene in background.
+     */
     suspend fun addCard(card: PokemonCard): Result<String> {
         return try {
             val data = hashMapOf<String, Any?>(
@@ -88,48 +101,63 @@ class FirestoreRepository {
                 "addedAt" to com.google.firebase.Timestamp.now()
             )
 
-            if (card.apiCardId.isNotBlank()) {
-                val existing = cardsCollection
-                    .whereEqualTo("apiCardId", card.apiCardId)
-                    .whereEqualTo("variant", card.variant)
-                    .get().await()
+            val docId: String = if (card.apiCardId.isNotBlank()) {
+                val existing: QuerySnapshot? = try {
+                    cardsCollection
+                        .whereEqualTo("apiCardId", card.apiCardId)
+                        .whereEqualTo("variant", card.variant)
+                        .get(Source.CACHE).await()
+                } catch (_: Exception) {
+                    null // cache miss: trattiamo come carta nuova
+                }
 
-                if (existing.documents.isNotEmpty()) {
-                    val docRef = existing.documents.first().reference
-                    firestore.runTransaction { transaction ->
-                        val snapshot = transaction.get(docRef)
-                        val currentQty = snapshot.getLong("quantity")?.toInt() ?: 1
-                        
-                        transaction.update(docRef, mapOf(
+                if (existing != null && existing.documents.isNotEmpty()) {
+                    val doc = existing.documents.first()
+                    val docRef = doc.reference
+                    val currentQty = doc.getLong("quantity")?.toInt() ?: 1
+                    // Fire-and-forget: la scrittura colpisce la cache locale
+                    // all'istante; lo snapshot listener emette subito l'update.
+                    docRef.update(
+                        mapOf(
                             "quantity" to (currentQty + card.quantity),
                             "estimatedValue" to card.estimatedValue
-                        ))
-                        
-                        // Aggiorna totali utente
-                        transaction.update(userDoc, "totalCards", FieldValue.increment(card.quantity.toLong()))
-                        transaction.update(userDoc, "totalValue", FieldValue.increment(card.estimatedValue * card.quantity))
-                    }.await()
-                    return Result.success(existing.documents.first().id)
+                        )
+                    )
+                    doc.id
+                } else {
+                    // Usiamo un DocumentReference generato localmente così
+                    // otteniamo subito l'ID senza aspettare la rete.
+                    val newDocRef = cardsCollection.document()
+                    newDocRef.set(data)
+                    newDocRef.id
                 }
+            } else {
+                val newDocRef = cardsCollection.document()
+                newDocRef.set(data)
+                newDocRef.id
             }
 
-            // Nuova carta
-            val docRef = cardsCollection.add(data).await()
+            // Aggiornamento dei totali utente fire-and-forget (i totali vengono
+            // comunque ricalcolati client-side dalla lista delle carte).
             userDoc.update(
                 "totalCards", FieldValue.increment(card.quantity.toLong()),
                 "totalValue", FieldValue.increment(card.estimatedValue * card.quantity)
-            ).await()
-            
-            Result.success(docRef.id)
+            )
+
+            Result.success(docId)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun updateCard(cardId: String, card: PokemonCard): Result<Unit> {
         return try {
-            val oldCardDoc = cardsCollection.document(cardId).get().await()
-            val oldQty = oldCardDoc.getLong("quantity")?.toInt() ?: 0
-            val oldValue = oldCardDoc.getDouble("estimatedValue") ?: 0.0
-            
+            // Lettura dalla cache locale: istantanea.
+            val oldCardDoc = try {
+                cardsCollection.document(cardId).get(Source.CACHE).await()
+            } catch (_: Exception) { null }
+
+            val oldQty = oldCardDoc?.getLong("quantity")?.toInt() ?: 0
+            val oldValue = oldCardDoc?.getDouble("estimatedValue") ?: 0.0
+
             val qtyDiff = card.quantity - oldQty
             val valueDiff = (card.estimatedValue * card.quantity) - (oldValue * oldQty)
 
@@ -142,42 +170,66 @@ class FirestoreRepository {
                 "notes" to card.notes,
                 "estimatedValue" to card.estimatedValue
             )
-            
-            firestore.runTransaction { transaction ->
-                transaction.update(cardsCollection.document(cardId), data)
-                if (qtyDiff != 0) transaction.update(userDoc, "totalCards", FieldValue.increment(qtyDiff.toLong()))
-                if (valueDiff != 0.0) transaction.update(userDoc, "totalValue", FieldValue.increment(valueDiff))
-            }.await()
-            
+
+            // Write diretto: finisce immediatamente nella cache locale, lo
+            // snapshot listener emette l'aggiornamento all'istante.
+            cardsCollection.document(cardId).update(data)
+
+            // Totali fire-and-forget.
+            if (qtyDiff != 0) {
+                userDoc.update("totalCards", FieldValue.increment(qtyDiff.toLong()))
+            }
+            if (valueDiff != 0.0) {
+                userDoc.update("totalValue", FieldValue.increment(valueDiff))
+            }
+
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun deleteCard(cardId: String): Result<Unit> {
         return try {
-            val cardDoc = cardsCollection.document(cardId).get().await()
-            val quantity = cardDoc.getLong("quantity")?.toInt() ?: 0
-            val value = cardDoc.getDouble("estimatedValue") ?: 0.0
+            // Leggiamo quantità e valore dalla cache locale (istantaneo) per
+            // decrementare i totali utente; se la cache non ha nulla passiamo
+            // comunque all'eliminazione.
+            val cardDoc = try {
+                cardsCollection.document(cardId).get(Source.CACHE).await()
+            } catch (_: Exception) { null }
+
+            val quantity = cardDoc?.getLong("quantity")?.toInt() ?: 0
+            val value = cardDoc?.getDouble("estimatedValue") ?: 0.0
             val totalCardValue = value * quantity
 
-            firestore.runTransaction { transaction ->
-                transaction.delete(cardsCollection.document(cardId))
-                transaction.update(userDoc, "totalCards", FieldValue.increment(-quantity.toLong()))
-                transaction.update(userDoc, "totalValue", FieldValue.increment(-totalCardValue))
-            }.await()
-            
+            // Delete diretto: la carta sparisce subito dalla cache locale e
+            // lo snapshot listener aggiorna la UI all'istante.
+            cardsCollection.document(cardId).delete()
+
+            // Totali fire-and-forget.
+            if (quantity != 0) {
+                userDoc.update("totalCards", FieldValue.increment(-quantity.toLong()))
+            }
+            if (totalCardValue != 0.0) {
+                userDoc.update("totalValue", FieldValue.increment(-totalCardValue))
+            }
+
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun deleteCardByApiId(apiCardId: String): Result<Unit> {
         return try {
-            val snapshot = cardsCollection
-                .whereEqualTo("apiCardId", apiCardId)
-                .get().await()
-            
-            for (doc in snapshot.documents) {
-                deleteCard(doc.id) // Riutilizziamo la logica di eliminazione con aggiornamento totali
+            // Query locale: le carte da cancellare sono già in cache perché
+            // le abbiamo appena caricate dallo snapshot listener.
+            val snapshot = try {
+                cardsCollection
+                    .whereEqualTo("apiCardId", apiCardId)
+                    .get(Source.CACHE).await()
+            } catch (_: Exception) { null }
+
+            if (snapshot != null) {
+                for (doc in snapshot.documents) {
+                    deleteCard(doc.id)
+                }
             }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
