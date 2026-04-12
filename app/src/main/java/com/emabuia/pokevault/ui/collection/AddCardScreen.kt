@@ -10,6 +10,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -64,7 +65,7 @@ fun AddCardScreen(
             },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro", tint = TextWhite)
                 }
             },
             actions = {
@@ -260,10 +261,10 @@ fun FormField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
+    modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Text,
     singleLine: Boolean = true,
-    minHeight: androidx.compose.ui.unit.Dp = 0.dp,
-    modifier: Modifier = Modifier
+    minHeight: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     Column(modifier = modifier) {
         Text(
@@ -329,7 +330,7 @@ fun FormDropdown(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(DarkCard)
-                    .menuAnchor()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                     .clickable { expanded = true }
                     .padding(horizontal = 14.dp, vertical = 14.dp)
             ) {
