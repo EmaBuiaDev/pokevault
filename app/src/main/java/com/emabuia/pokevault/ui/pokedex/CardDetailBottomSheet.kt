@@ -165,9 +165,6 @@ fun CardDetailBottomSheet(
                             if (price != null && price > 0) {
                                 InfoPill(icon = "💰", text = "${"%.2f".format(price)} €", color = GreenCard)
                             }
-                            if (card.hp != null) {
-                                InfoPill(icon = "❤️", text = "${card.hp} HP", color = RedCard)
-                            }
                         }
 
                         // Bottone aggiungi inline - larghezza intrinseca,
