@@ -40,6 +40,27 @@ class MetaDeckViewModel : ViewModel() {
     var selectedDeck by mutableStateOf<MetaDeck?>(null)
         private set
 
+    // Timestamp (in ms) dell'ultima sincronizzazione con l'API Limitless.
+    // Viene aggiornato in automatico quando una load() termina con successo.
+    // Se c'è già una voce valida in cache condivisa, parte da quel valore,
+    // così la UI mostra l'età reale dei dati anche subito dopo la navigazione.
+    var lastUpdated by mutableStateOf<Long?>(
+        LimitlessTcgRepository.lastCacheTimestamp("standard")
+    )
+        private set
+
+    // Rate limit: impedisce refresh troppo ravvicinati (60 s) che
+    // spammerebbero inutilmente l'API Limitless.
+    private var lastManualRefreshAt: Long = 0L
+    private val refreshCooldownMs = 60_000L
+
+    val refreshCooldownSeconds: Long
+        get() {
+            val elapsed = System.currentTimeMillis() - lastManualRefreshAt
+            val remaining = refreshCooldownMs - elapsed
+            return (remaining / 1000L).coerceAtLeast(0L)
+        }
+
     init {
         loadMetaDecks()
         loadArchetypes()
@@ -55,6 +76,8 @@ class MetaDeckViewModel : ViewModel() {
                 .onSuccess { decks ->
                     metaDecks = decks
                     isLoading = false
+                    lastUpdated = LimitlessTcgRepository.lastCacheTimestamp(format)
+                        ?: System.currentTimeMillis()
                 }
                 .onFailure { e ->
                     errorMessage = e.localizedMessage ?: "Errore nel caricamento dei meta deck"
@@ -72,6 +95,8 @@ class MetaDeckViewModel : ViewModel() {
                 .onSuccess { list ->
                     archetypes = list
                     isLoadingArchetypes = false
+                    lastUpdated = LimitlessTcgRepository.lastCacheTimestamp(format)
+                        ?: System.currentTimeMillis()
                 }
                 .onFailure { e ->
                     archetypeError = e.localizedMessage ?: "Errore nel caricamento"
@@ -85,6 +110,7 @@ class MetaDeckViewModel : ViewModel() {
             selectedFormat = format
             loadMetaDecks(format = format)
             loadArchetypes(format = format)
+            lastUpdated = LimitlessTcgRepository.lastCacheTimestamp(format)
         }
     }
 
@@ -92,10 +118,21 @@ class MetaDeckViewModel : ViewModel() {
         selectedDeck = deck
     }
 
-    fun refresh() {
+    /**
+     * Forza un refresh dei meta deck ignorando la cache.
+     * Ritorna `false` se siamo ancora dentro il cooldown (ed in quel caso
+     * non fa niente), `true` se il refresh è stato avviato.
+     */
+    fun refresh(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastManualRefreshAt < refreshCooldownMs) {
+            return false
+        }
+        lastManualRefreshAt = now
         repository.clearCache()
         loadMetaDecks()
         loadArchetypes()
+        return true
     }
 
     fun clearError() {

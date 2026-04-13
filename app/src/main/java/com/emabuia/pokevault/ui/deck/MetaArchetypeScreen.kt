@@ -26,6 +26,7 @@ import com.emabuia.pokevault.data.model.MetaDeck
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
+import kotlinx.coroutines.delay
 
 @Composable
 fun MetaArchetypeSection(
@@ -43,7 +44,31 @@ fun MetaArchetypeSection(
         }
     }
 
+    var tick by remember { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            tick++
+        }
+    }
+    var rateLimitedMessage by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(rateLimitedMessage) {
+        if (rateLimitedMessage != null) {
+            delay(3_000)
+            rateLimitedMessage = null
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
+        // Info banner
+        MetaInfoBanner(
+            title = AppLocale.metaArchetypeInfoTitle,
+            body = AppLocale.metaArchetypeInfoBody,
+            lastUpdated = viewModel.lastUpdated,
+            rateLimitMessage = rateLimitedMessage,
+            tick = tick
+        )
+
         // Format selector
         Row(
             modifier = Modifier
@@ -66,7 +91,16 @@ fun MetaArchetypeSection(
             Spacer(modifier = Modifier.weight(1f))
 
             IconButton(
-                onClick = { viewModel.refresh() },
+                onClick = {
+                    val started = viewModel.refresh()
+                    if (!started) {
+                        rateLimitedMessage = AppLocale.metaRefreshCooldown(
+                            viewModel.refreshCooldownSeconds
+                        )
+                    } else {
+                        rateLimitedMessage = null
+                    }
+                },
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)

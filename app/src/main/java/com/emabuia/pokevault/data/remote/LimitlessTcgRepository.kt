@@ -7,6 +7,10 @@ import com.emabuia.pokevault.data.model.MetaDeck
 import com.emabuia.pokevault.data.model.MetaDeckCard
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -39,10 +43,6 @@ class LimitlessTcgRepository {
     private val api = LimitlessRetrofitClient.apiService
     private val gson = Gson()
 
-    // Cache in memoria con chiave format
-    private val metaDecksCache = mutableMapOf<String, CachedResult>()
-    private val archetypeCache = mutableMapOf<String, CachedArchetypes>()
-
     private data class CachedResult(
         val decks: List<MetaDeck>,
         val timestamp: Long
@@ -56,6 +56,25 @@ class LimitlessTcgRepository {
     companion object {
         private const val TAG = "LimitlessTcgRepo"
         private const val CACHE_DURATION = 30 * 60 * 1000L // 30 minuti
+
+        // Cache in memoria condivisa a livello di processo: sopravvive alla
+        // navigazione tra le schermate, così tornando su DeckLab non rifacciamo
+        // decine di richieste. Viene invalidata solo dopo CACHE_DURATION
+        // oppure esplicitamente via [clearCache] o [refresh].
+        private val metaDecksCache = mutableMapOf<String, CachedResult>()
+        private val archetypeCache = mutableMapOf<String, CachedArchetypes>()
+
+        /**
+         * Restituisce il timestamp più recente di una voce valida in cache
+         * per il formato richiesto, o null se non c'è niente.
+         */
+        fun lastCacheTimestamp(format: String): Long? {
+            val candidates = listOfNotNull(
+                metaDecksCache.entries.firstOrNull { it.key.startsWith("${format}_") }?.value?.timestamp,
+                archetypeCache["archetypes_$format"]?.timestamp
+            )
+            return candidates.maxOrNull()
+        }
     }
 
     suspend fun getMetaDecks(
@@ -90,40 +109,31 @@ class LimitlessTcgRepository {
                 return Result.success(emptyList())
             }
 
-            val allMetaDecks = mutableListOf<MetaDeck>()
+            // 2. Per ogni torneo, recupera i top player con decklist IN
+            //    PARALLELO. Prima era un for sequenziale che aspettava ogni
+            //    torneo uno alla volta: per 10 tornei questo significa
+            //    sommare tutte le latenze di rete. Con coroutineScope+async
+            //    le chiamate partono insieme e il tempo totale è ~il massimo
+            //    della singola chiamata.
+            val allMetaDecks = coroutineScope {
+                tournaments.map { tournament ->
+                    async(Dispatchers.IO) {
+                        try {
+                            if (BuildConfig.DEBUG) Log.d(TAG, "Fetching standings per torneo: ${tournament.name} (${tournament.id})")
+                            val standings = api.getTournamentStandings(tournament.id)
 
-            // 2. Per ogni torneo, recupera i top player con decklist
-            for (tournament in tournaments) {
-                if (allMetaDecks.size >= limit) break
-
-                try {
-                    if (BuildConfig.DEBUG) Log.d(TAG, "Fetching standings per torneo: ${tournament.name} (${tournament.id})")
-                    val standings = api.getTournamentStandings(tournament.id)
-                    if (BuildConfig.DEBUG) Log.d(TAG, "Trovati ${standings.size} giocatori")
-
-                    // Prendi solo i top player con decklist
-                    val topPlayers = standings
-                        .filter { it.decklist != null }
-                        .sortedBy { it.placing }
-                        .take(8) // Top 8 per torneo
-
-                    if (BuildConfig.DEBUG) Log.d(TAG, "Giocatori con decklist: ${topPlayers.size}")
-
-                    for (player in topPlayers) {
-                        if (allMetaDecks.size >= limit) break
-
-                        val metaDeck = mapToMetaDeck(
-                            standing = player,
-                            tournament = tournament
-                        )
-                        if (metaDeck.cards.isNotEmpty()) {
-                            allMetaDecks.add(metaDeck)
+                            standings
+                                .filter { it.decklist != null }
+                                .sortedBy { it.placing }
+                                .take(8) // Top 8 per torneo
+                                .map { mapToMetaDeck(it, tournament) }
+                                .filter { it.cards.isNotEmpty() }
+                        } catch (e: Exception) {
+                            if (BuildConfig.DEBUG) Log.w(TAG, "Errore caricamento standings per torneo ${tournament.id}: ${e.message}", e)
+                            emptyList()
                         }
                     }
-                } catch (e: Exception) {
-                    if (BuildConfig.DEBUG) Log.w(TAG, "Errore caricamento standings per torneo ${tournament.id}: ${e.message}", e)
-                    // Continua con il prossimo torneo
-                }
+                }.awaitAll().flatten()
             }
 
             if (BuildConfig.DEBUG) Log.d(TAG, "Totale meta decks trovati: ${allMetaDecks.size}")
@@ -183,40 +193,45 @@ class LimitlessTcgRepository {
                 val metaDeck: MetaDeck
             )
 
-            val allEntries = mutableListOf<DeckEntry>()
+            // Fetch in parallelo: per 15 tornei sequenziali avremmo sommato
+            // 15x la latenza di rete; con coroutineScope+async partono insieme.
+            val allEntries = coroutineScope {
+                tournaments.map { tournament ->
+                    async(Dispatchers.IO) {
+                        try {
+                            val standings = api.getTournamentStandings(tournament.id)
+                            // Prendi top 32 (o tutti quelli con decklist)
+                            val withDeck = standings
+                                .filter { it.deck?.name != null || it.decklist != null }
+                                .sortedBy { it.placing }
+                                .take(32)
 
-            for (tournament in tournaments) {
-                try {
-                    val standings = api.getTournamentStandings(tournament.id)
-                    // Prendi top 32 (o tutti quelli con decklist)
-                    val withDeck = standings
-                        .filter { it.deck?.name != null || it.decklist != null }
-                        .sortedBy { it.placing }
-                        .take(32)
+                            withDeck.mapNotNull { standing ->
+                                val archName = standing.deck?.name
+                                    ?: inferArchetype(parseDecklistCards(standing.decklist))
+                                if (archName.isBlank() || archName == "Unknown") return@mapNotNull null
 
-                    for (standing in withDeck) {
-                        val archName = standing.deck?.name
-                            ?: inferArchetype(parseDecklistCards(standing.decklist))
-                        if (archName.isBlank() || archName == "Unknown") continue
+                                val record = standing.record
+                                val wr = if (record != null) {
+                                    val total = record.wins + record.losses + record.ties
+                                    if (total > 0) record.wins.toDouble() / total else null
+                                } else null
 
-                        val record = standing.record
-                        val wr = if (record != null) {
-                            val total = record.wins + record.losses + record.ties
-                            if (total > 0) record.wins.toDouble() / total else null
-                        } else null
+                                val metaDeck = mapToMetaDeck(standing, tournament)
 
-                        val metaDeck = mapToMetaDeck(standing, tournament)
-
-                        allEntries.add(DeckEntry(
-                            archetype = archName,
-                            placement = standing.placing,
-                            winrate = wr,
-                            metaDeck = metaDeck
-                        ))
+                                DeckEntry(
+                                    archetype = archName,
+                                    placement = standing.placing,
+                                    winrate = wr,
+                                    metaDeck = metaDeck
+                                )
+                            }
+                        } catch (e: Exception) {
+                            if (BuildConfig.DEBUG) Log.w(TAG, "Errore standings per archetypes: ${e.message}")
+                            emptyList()
+                        }
                     }
-                } catch (e: Exception) {
-                    if (BuildConfig.DEBUG) Log.w(TAG, "Errore standings per archetypes: ${e.message}")
-                }
+                }.awaitAll().flatten()
             }
 
             if (allEntries.isEmpty()) return Result.success(emptyList())
