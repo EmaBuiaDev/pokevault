@@ -313,6 +313,29 @@ object AppLocale {
     val metaNoArchetypes: String get() = if (isItalian) "Nessun archetipo trovato" else "No archetypes found"
     val metaImportSample: String get() = if (isItalian) "Importa deck esempio" else "Import sample deck"
 
+    // Meta info banner & refresh
+    val metaArchetypeInfoTitle: String get() =
+        if (isItalian) "Classifica degli archetipi" else "Archetype rankings"
+    val metaArchetypeInfoBody: String get() = if (isItalian)
+        "Aggregato dagli ultimi 15 tornei competitivi su LimitlessTCG (top 32 di ogni torneo). Gli archetipi sono ordinati per meta share: la % di copie del deck nel pool competitivo."
+    else
+        "Aggregated from the last 15 competitive tournaments on LimitlessTCG (top 32 per event). Archetypes are ranked by meta share: the % of copies in the competitive pool."
+    val metaWinnersInfoTitle: String get() =
+        if (isItalian) "Vincitori dei tornei" else "Tournament winners"
+    val metaWinnersInfoBody: String get() = if (isItalian)
+        "Top 8 piazzamenti degli ultimi 10 tornei competitivi su LimitlessTCG, ordinati per piazzamento e data del torneo."
+    else
+        "Top 8 finishes from the last 10 competitive tournaments on LimitlessTCG, sorted by placement and event date."
+    val metaLastUpdatedNow: String get() = if (isItalian) "Aggiornato ora" else "Updated now"
+    fun metaLastUpdatedMinutes(minutes: Long): String =
+        if (isItalian) "Aggiornato $minutes min fa" else "Updated $minutes min ago"
+    fun metaLastUpdatedHours(hours: Long): String =
+        if (isItalian) "Aggiornato ${hours}h fa" else "Updated ${hours}h ago"
+    fun metaRefreshCooldown(seconds: Long): String = if (isItalian)
+        "Riprova tra ${seconds}s" else "Try again in ${seconds}s"
+    val metaRefreshRateLimited: String get() = if (isItalian)
+        "Attendi prima di aggiornare di nuovo" else "Wait before refreshing again"
+
     // Tournaments
     val tournamentListTitle: String get() = if (isItalian) "Tornei" else "Tournaments"
     val addTournament: String get() = if (isItalian) "Registra Torneo" else "Register Tournament"

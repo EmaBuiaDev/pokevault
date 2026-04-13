@@ -15,12 +15,34 @@ import com.emabuia.pokevault.data.model.MetaDeckCard
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
 import com.emabuia.pokevault.data.remote.TcgCard
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class DeckLabViewModel : ViewModel() {
     private val repository = FirestoreRepository()
     private val pokeTcgRepository = PokeTcgRepository()
+
+    companion object {
+        // Cache di processo per i risultati della ricerca Pokemon TCG API.
+        // Sopravvive alla navigazione tra schermate: se l'utente reimporta
+        // lo stesso archetipo, evitiamo di rifare le stesse query.
+        // La chiave combina nome+set+numero per distinguere varianti.
+        // Usa ConcurrentHashMap perché viene acceduta da più coroutine in
+        // parallelo su Dispatchers.IO durante l'import massivo.
+        // ConcurrentHashMap non accetta valori null, quindi incapsuliamo
+        // il risultato in un Optional-like container.
+        private val tcgLookupCache =
+            java.util.concurrent.ConcurrentHashMap<String, CachedLookup>()
+
+        private data class CachedLookup(val card: TcgCard?)
+
+        private fun lookupKey(name: String, set: String?, number: String?): String =
+            "${name.lowercase().trim()}|${set?.lowercase()?.trim() ?: ""}|${number?.trim() ?: ""}"
+    }
 
     var decks by mutableStateOf<List<Deck>>(emptyList())
         private set
@@ -444,11 +466,23 @@ class DeckLabViewModel : ViewModel() {
         isAddingMissingCards = true
 
         viewModelScope.launch {
+            // Prima cosa, lookup di TUTTE le carte mancanti in parallelo sulla
+            // Pokemon TCG API. Prima era sequenziale: per 20 carte mancanti si
+            // sommavano 20 latenze di rete. Con async+awaitAll le chiamate
+            // partono insieme e l'import diventa ~N volte più veloce.
+            val built = coroutineScope {
+                missingCards.map { card ->
+                    async(Dispatchers.IO) {
+                        card to lookupAndCreateCard(card)
+                    }
+                }.awaitAll()
+            }
+
+            // Poi le scritture su Firestore sono ~istantanee grazie alla cache
+            // locale persistente, quindi possiamo farle in sequenza per
+            // mantenere un ordine stabile nel deck.
             val newIds = mutableListOf<String>()
-
-            for (card in missingCards) {
-                val pokemonCard = lookupAndCreateCard(card)
-
+            for ((card, pokemonCard) in built) {
                 val result = repository.addCard(pokemonCard)
                 result.onSuccess { docId ->
                     repeat(card.qty) { newIds.add(docId) }
@@ -525,33 +559,43 @@ class DeckLabViewModel : ViewModel() {
      * 3. Solo nome (primo risultato)
      */
     private suspend fun searchTcgCard(name: String, set: String?, number: String?): TcgCard? {
-        try {
+        // Cache hit: ritorna immediatamente (anche null cached, per evitare
+        // di ripetere lookup che sappiamo essere falliti).
+        val key = lookupKey(name, set, number)
+        tcgLookupCache[key]?.let { return it.card }
+
+        val found: TcgCard? = try {
             // 1. Cerca per nome + numero (searchByNameAndNumber ha già fallback interni)
             val result = pokeTcgRepository.searchByNameAndNumber(name, number)
+            var hit: TcgCard? = null
             result.onSuccess { cards ->
                 if (cards.isNotEmpty()) {
                     // Se abbiamo il set, preferiamo la carta dallo stesso set
-                    if (set != null) {
+                    hit = if (set != null) {
                         val setLower = set.lowercase()
-                        val fromSet = cards.find { card ->
+                        cards.find { card ->
                             card.set?.id?.lowercase()?.contains(setLower) == true ||
                                 card.id.lowercase().startsWith(setLower)
-                        }
-                        if (fromSet != null) return fromSet
+                        } ?: cards.first()
+                    } else {
+                        cards.first()
                     }
-                    return cards.first()
                 }
             }
 
-            // 2. Fallback: ricerca fuzzy per nome
-            val fallback = pokeTcgRepository.searchCardsFuzzy(name)
-            fallback.onSuccess { cards ->
-                if (cards.isNotEmpty()) return cards.first()
+            if (hit == null) {
+                // 2. Fallback: ricerca fuzzy per nome
+                val fallback = pokeTcgRepository.searchCardsFuzzy(name)
+                fallback.onSuccess { cards ->
+                    if (cards.isNotEmpty()) hit = cards.first()
+                }
             }
+            hit
         } catch (_: Exception) {
-            // API non disponibile, procedi con fallback
+            null
         }
 
-        return null
+        tcgLookupCache[key] = CachedLookup(found)
+        return found
     }
 }

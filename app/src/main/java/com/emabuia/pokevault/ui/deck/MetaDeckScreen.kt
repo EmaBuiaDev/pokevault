@@ -28,6 +28,7 @@ import com.emabuia.pokevault.data.model.MetaDeckCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,7 +73,26 @@ fun MetaDeckListView(
     val isPremium by premiumManager.isPremium.collectAsState()
     val viewsRemaining = premiumManager.metaDeckViewsRemaining
 
+    // Tick ogni 30s così l'indicatore "aggiornato Xm fa" si aggiorna da solo.
+    var tick by remember { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            tick++
+        }
+    }
+    var rateLimitedMessage by remember { mutableStateOf<String?>(null) }
+
     Column(modifier = Modifier.fillMaxSize()) {
+        // Info banner: spiega da dove arrivano i dati e come sono ordinati.
+        MetaInfoBanner(
+            title = AppLocale.metaWinnersInfoTitle,
+            body = AppLocale.metaWinnersInfoBody,
+            lastUpdated = viewModel.lastUpdated,
+            rateLimitMessage = rateLimitedMessage,
+            tick = tick
+        )
+
         // Format selector
         Row(
             modifier = Modifier
@@ -95,7 +115,16 @@ fun MetaDeckListView(
             Spacer(modifier = Modifier.weight(1f))
 
             IconButton(
-                onClick = { viewModel.refresh() },
+                onClick = {
+                    val started = viewModel.refresh()
+                    if (!started) {
+                        rateLimitedMessage = AppLocale.metaRefreshCooldown(
+                            viewModel.refreshCooldownSeconds
+                        )
+                    } else {
+                        rateLimitedMessage = null
+                    }
+                },
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
@@ -107,6 +136,14 @@ fun MetaDeckListView(
                     tint = TextMuted,
                     modifier = Modifier.size(16.dp)
                 )
+            }
+        }
+
+        // Nascondi il messaggio di rate limit dopo qualche secondo.
+        LaunchedEffect(rateLimitedMessage) {
+            if (rateLimitedMessage != null) {
+                delay(3_000)
+                rateLimitedMessage = null
             }
         }
 
@@ -241,6 +278,105 @@ fun MetaDeckListView(
                         )
                     }
                     item { Spacer(modifier = Modifier.height(80.dp)) }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Banner informativo per le sezioni Meta / Win Tournament.
+ * Spiega da dove arrivano i dati + mostra "aggiornato Xm fa".
+ * Il parametro `tick` serve solo a forzare la ricomposizione periodica.
+ */
+@Composable
+fun MetaInfoBanner(
+    title: String,
+    body: String,
+    lastUpdated: Long?,
+    rateLimitMessage: String?,
+    tick: Long = 0L
+) {
+    val updatedLabel = remember(lastUpdated, tick) {
+        if (lastUpdated == null) null
+        else {
+            val diffMs = System.currentTimeMillis() - lastUpdated
+            val minutes = diffMs / 60_000L
+            when {
+                minutes < 1L -> AppLocale.metaLastUpdatedNow
+                minutes < 60L -> AppLocale.metaLastUpdatedMinutes(minutes)
+                else -> AppLocale.metaLastUpdatedHours(minutes / 60L)
+            }
+        }
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        color = BlueCard.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(
+                Icons.Default.Info,
+                contentDescription = null,
+                tint = BlueCard,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    color = TextWhite,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = body,
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp
+                )
+                if (updatedLabel != null || rateLimitMessage != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (updatedLabel != null) {
+                            Icon(
+                                Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = TextMuted,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = updatedLabel,
+                                color = TextMuted,
+                                fontSize = 10.sp
+                            )
+                        }
+                        if (rateLimitMessage != null) {
+                            if (updatedLabel != null) {
+                                Spacer(modifier = Modifier.width(10.dp))
+                            }
+                            Icon(
+                                Icons.Default.HourglassEmpty,
+                                contentDescription = null,
+                                tint = YellowCard,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = rateLimitMessage,
+                                color = YellowCard,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
                 }
             }
         }
