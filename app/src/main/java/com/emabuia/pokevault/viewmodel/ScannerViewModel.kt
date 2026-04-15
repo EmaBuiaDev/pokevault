@@ -13,6 +13,7 @@ import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ocr.CardOCRResult
+import com.emabuia.pokevault.ocr.CardSupertype
 import com.emabuia.pokevault.ocr.OCRManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -58,6 +59,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private var stableNumber = ""
     private var stableTotal = ""
     private var stableName = ""
+    private var stableSupertype: CardSupertype = CardSupertype.POKEMON
     private var stabilityCount = 0
 
     var uiState by mutableStateOf(ScannerUiState())
@@ -135,11 +137,14 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             // Aggiorna nome e totale col valore piu recente (possono migliorare frame dopo frame)
             if (name.isNotBlank()) stableName = name
             if (total.isNotBlank()) stableTotal = total
+            // Supertype non-Pokemon ha priorita (TRAINER/ENERGY sono segnali forti e affidabili)
+            if (ocrResult.supertype != CardSupertype.POKEMON) stableSupertype = ocrResult.supertype
         } else {
             // Numero cambiato: reset stabilita
             stableNumber = number
             stableTotal = total
             stableName = name
+            stableSupertype = ocrResult.supertype
             stabilityCount = 1
             // Cancella ricerca precedente solo se il numero e davvero cambiato
             searchJob?.cancel()
@@ -152,7 +157,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 searchCard(
                     name = stableName.takeIf { it.isNotBlank() },
                     number = stableNumber.takeIf { it.isNotBlank() },
-                    setTotal = stableTotal.takeIf { it.isNotBlank() }
+                    setTotal = stableTotal.takeIf { it.isNotBlank() },
+                    supertype = stableSupertype
                 )
             }
         }
@@ -175,7 +181,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     lastOCRResult = result
                 )
                 if (result.isSearchable()) {
-                    searchCard(result.cardName, result.cardNumber, result.setTotal)
+                    searchCard(result.cardName, result.cardNumber, result.setTotal, result.supertype)
                 } else {
                     uiState = uiState.copy(
                         isSearching = false,
@@ -205,7 +211,12 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
      *
      * Se un nome e disponibile, filtra i risultati per il match migliore.
      */
-    private suspend fun searchCard(name: String?, number: String?, setTotal: String? = null) {
+    private suspend fun searchCard(
+        name: String?,
+        number: String?,
+        setTotal: String? = null,
+        supertype: CardSupertype = CardSupertype.POKEMON
+    ) {
         uiState = uiState.copy(isSearching = true, errorMessage = null)
 
         try {
@@ -253,6 +264,23 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 Timber.d("Ricerca con solo numero: $number")
                 repository.searchCards(number)
                     .onSuccess { cards = it }
+            }
+
+            // Filtro supertype: se l'OCR ha rilevato TRAINER o ENERGY con certezza,
+            // escludiamo i Pokémon dall'elenco risultati (stesso numero, categoria diversa)
+            if (supertype != CardSupertype.POKEMON && cards.size > 1) {
+                val apiType = when (supertype) {
+                    CardSupertype.TRAINER -> "trainer"
+                    CardSupertype.ENERGY  -> "energy"
+                    else                  -> null
+                }
+                if (apiType != null) {
+                    val filtered = cards.filter { it.supertype.equals(apiType, ignoreCase = true) }
+                    if (filtered.isNotEmpty()) {
+                        Timber.d("Filtro supertype '$apiType': ${cards.size} → ${filtered.size} carte")
+                        cards = filtered
+                    }
+                }
             }
 
             val bestMatch = cards.firstOrNull()
@@ -388,6 +416,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         stableNumber = ""
         stableTotal = ""
         stableName = ""
+        stableSupertype = CardSupertype.POKEMON
         stabilityCount = 0
     }
 

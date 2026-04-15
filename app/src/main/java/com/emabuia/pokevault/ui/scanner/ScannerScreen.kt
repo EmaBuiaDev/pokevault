@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -422,60 +421,61 @@ private fun ScanZoneOverlay(
 
     val borderWidth = if (isDetecting || hasResult) 3.dp else 2.dp
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val screenW = constraints.maxWidth.toFloat()
-        val screenH = constraints.maxHeight.toFloat()
+    // Canvas usa size.width/height che sono sempre le dimensioni reali renderizzate,
+    // evitando il problema di BoxWithConstraints che riceve constraint non bounded
+    // durante le recomposition causate da AnimatedVisibility (crop area "enorme").
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val screenW = size.width
+        val screenH = size.height
 
         // Zona di scansione: carta centrata, larga 75% dello schermo
         val zoneW = screenW * 0.75f
         val zoneH = zoneW / CARD_ASPECT_RATIO
         val zoneLeft = (screenW - zoneW) / 2f
-        val zoneTop = (screenH - zoneH) / 2f - screenH * 0.05f // leggermente sopra il centro
+        val zoneTop = (screenH - zoneH) / 2f - screenH * 0.05f
 
-        val cornerRadiusPx = with(LocalDensity.current) { 12.dp.toPx() }
-        val borderWidthPx = with(LocalDensity.current) { borderWidth.toPx() }
+        val cornerRadiusPx = 12.dp.toPx()
+        val borderWidthPx = borderWidth.toPx()
 
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            // Oscura tutto tranne la zona di scansione
-            val cutoutPath = Path().apply {
-                addRoundRect(
-                    RoundRect(
-                        rect = Rect(zoneLeft, zoneTop, zoneLeft + zoneW, zoneTop + zoneH),
-                        cornerRadius = CornerRadius(cornerRadiusPx)
-                    )
+        // Oscura tutto tranne la zona di scansione
+        val cutoutPath = Path().apply {
+            addRoundRect(
+                RoundRect(
+                    rect = Rect(zoneLeft, zoneTop, zoneLeft + zoneW, zoneTop + zoneH),
+                    cornerRadius = CornerRadius(cornerRadiusPx)
                 )
-            }
-
-            clipPath(cutoutPath, clipOp = ClipOp.Difference) {
-                drawRect(Color.Black.copy(alpha = 0.55f))
-            }
-
-            // Bordo della zona di scansione
-            drawRoundRect(
-                color = borderColor,
-                topLeft = Offset(zoneLeft, zoneTop),
-                size = androidx.compose.ui.geometry.Size(zoneW, zoneH),
-                cornerRadius = CornerRadius(cornerRadiusPx),
-                style = Stroke(width = borderWidthPx)
             )
-
-            // Angoli piu spessi per effetto "mirino"
-            val cornerLen = zoneW * 0.08f
-            val thickStroke = borderWidthPx * 2.5f
-
-            // Top-left
-            drawLine(borderColor, Offset(zoneLeft, zoneTop + cornerRadiusPx), Offset(zoneLeft, zoneTop + cornerLen), thickStroke)
-            drawLine(borderColor, Offset(zoneLeft + cornerRadiusPx, zoneTop), Offset(zoneLeft + cornerLen, zoneTop), thickStroke)
-            // Top-right
-            drawLine(borderColor, Offset(zoneLeft + zoneW, zoneTop + cornerRadiusPx), Offset(zoneLeft + zoneW, zoneTop + cornerLen), thickStroke)
-            drawLine(borderColor, Offset(zoneLeft + zoneW - cornerRadiusPx, zoneTop), Offset(zoneLeft + zoneW - cornerLen, zoneTop), thickStroke)
-            // Bottom-left
-            drawLine(borderColor, Offset(zoneLeft, zoneTop + zoneH - cornerRadiusPx), Offset(zoneLeft, zoneTop + zoneH - cornerLen), thickStroke)
-            drawLine(borderColor, Offset(zoneLeft + cornerRadiusPx, zoneTop + zoneH), Offset(zoneLeft + cornerLen, zoneTop + zoneH), thickStroke)
-            // Bottom-right
-            drawLine(borderColor, Offset(zoneLeft + zoneW, zoneTop + zoneH - cornerRadiusPx), Offset(zoneLeft + zoneW, zoneTop + zoneH - cornerLen), thickStroke)
-            drawLine(borderColor, Offset(zoneLeft + zoneW - cornerRadiusPx, zoneTop + zoneH), Offset(zoneLeft + zoneW - cornerLen, zoneTop + zoneH), thickStroke)
         }
+
+        clipPath(cutoutPath, clipOp = ClipOp.Difference) {
+            drawRect(Color.Black.copy(alpha = 0.55f))
+        }
+
+        // Bordo della zona di scansione
+        drawRoundRect(
+            color = borderColor,
+            topLeft = Offset(zoneLeft, zoneTop),
+            size = androidx.compose.ui.geometry.Size(zoneW, zoneH),
+            cornerRadius = CornerRadius(cornerRadiusPx),
+            style = Stroke(width = borderWidthPx)
+        )
+
+        // Angoli piu spessi per effetto "mirino"
+        val cornerLen = zoneW * 0.08f
+        val thickStroke = borderWidthPx * 2.5f
+
+        // Top-left
+        drawLine(borderColor, Offset(zoneLeft, zoneTop + cornerRadiusPx), Offset(zoneLeft, zoneTop + cornerLen), thickStroke)
+        drawLine(borderColor, Offset(zoneLeft + cornerRadiusPx, zoneTop), Offset(zoneLeft + cornerLen, zoneTop), thickStroke)
+        // Top-right
+        drawLine(borderColor, Offset(zoneLeft + zoneW, zoneTop + cornerRadiusPx), Offset(zoneLeft + zoneW, zoneTop + cornerLen), thickStroke)
+        drawLine(borderColor, Offset(zoneLeft + zoneW - cornerRadiusPx, zoneTop), Offset(zoneLeft + zoneW - cornerLen, zoneTop), thickStroke)
+        // Bottom-left
+        drawLine(borderColor, Offset(zoneLeft, zoneTop + zoneH - cornerRadiusPx), Offset(zoneLeft, zoneTop + zoneH - cornerLen), thickStroke)
+        drawLine(borderColor, Offset(zoneLeft + cornerRadiusPx, zoneTop + zoneH), Offset(zoneLeft + cornerLen, zoneTop + zoneH), thickStroke)
+        // Bottom-right
+        drawLine(borderColor, Offset(zoneLeft + zoneW, zoneTop + zoneH - cornerRadiusPx), Offset(zoneLeft + zoneW, zoneTop + zoneH - cornerLen), thickStroke)
+        drawLine(borderColor, Offset(zoneLeft + zoneW - cornerRadiusPx, zoneTop + zoneH), Offset(zoneLeft + zoneW - cornerLen, zoneTop + zoneH), thickStroke)
     }
 }
 
