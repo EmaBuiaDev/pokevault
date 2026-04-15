@@ -140,6 +140,9 @@ dependencies {
     // ── Google Play Billing ──
     implementation("com.android.billingclient:billing-ktx:6.2.1")
 
+    // ── Logging ──
+    implementation("com.jakewharton.timber:timber:5.0.1")
+
     // ── Test Dependencies ──
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

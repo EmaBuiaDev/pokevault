@@ -2,9 +2,8 @@ package com.emabuia.pokevault.viewmodel
 
 import android.app.Application
 import android.graphics.Bitmap
-import android.util.Log
-import com.emabuia.pokevault.BuildConfig
 import androidx.compose.runtime.getValue
+import timber.log.Timber
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -60,7 +59,6 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private var stableTotal = ""
     private var stableName = ""
     private var stabilityCount = 0
-    private val STABILITY_THRESHOLD = 3
 
     var uiState by mutableStateOf(ScannerUiState())
         private set
@@ -70,18 +68,18 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             try {
                 ocrManager.initialize()
                 uiState = uiState.copy(ocrEngineName = ocrManager.activeEngineName)
-                if (BuildConfig.DEBUG) Log.i(TAG, "OCR inizializzato: ${ocrManager.activeEngineName}")
+                Timber.i("OCR inizializzato: ${ocrManager.activeEngineName}")
             } catch (e: Exception) {
-                if (BuildConfig.DEBUG) Log.e(TAG, "Errore inizializzazione OCR: ${e.message}")
+                Timber.e(e, "Errore inizializzazione OCR: ${e.message}")
             }
         }
         // Precarica i set per poter identificare l'espansione dal totale carte
         viewModelScope.launch {
             try {
                 repository.getSets(application)
-                if (BuildConfig.DEBUG) Log.d(TAG, "Set precaricati per matching espansione")
+                Timber.d("Set precaricati per matching espansione")
             } catch (e: Exception) {
-                if (BuildConfig.DEBUG) Log.w(TAG, "Errore precaricamento set: ${e.message}")
+                Timber.w("Errore precaricamento set: ${e.message}")
             }
         }
     }
@@ -185,7 +183,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
             } catch (e: Exception) {
-                if (BuildConfig.DEBUG) Log.e(TAG, "Errore analisi immagine: ${e.message}")
+                Timber.e(e, "Errore analisi immagine: ${e.message}")
                 uiState = uiState.copy(
                     isSearching = false,
                     errorMessage = "Errore OCR: ${e.message}"
@@ -216,7 +214,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             // Strategia 1: numero/totale → usa searchCards che identifica il set
             if (number != null && setTotal != null) {
                 val fullNumber = "$number/$setTotal"
-                if (BuildConfig.DEBUG) Log.d(TAG, "Ricerca con numero completo: $fullNumber")
+                Timber.d("Ricerca con numero completo: $fullNumber")
                 repository.searchCards(fullNumber)
                     .onSuccess { results ->
                         cards = results
@@ -230,14 +228,14 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
             // Strategia 2: nome + numero
             if (cards.isEmpty() && name != null && number != null) {
-                if (BuildConfig.DEBUG) Log.d(TAG, "Ricerca con nome+numero: $name #$number")
+                Timber.d("Ricerca con nome+numero: $name #$number")
                 repository.searchByNameAndNumber(name, number)
                     .onSuccess { cards = it }
             }
 
             // Strategia 3: solo nome
             if (cards.isEmpty() && name != null && name.length >= 3) {
-                if (BuildConfig.DEBUG) Log.d(TAG, "Ricerca con solo nome: $name")
+                Timber.d("Ricerca con solo nome: $name")
                 repository.searchCardsFuzzy(name)
                     .onSuccess { results ->
                         // Se abbiamo il numero, filtra
@@ -252,7 +250,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
             // Strategia 4: solo numero (ultimo fallback)
             if (cards.isEmpty() && number != null) {
-                if (BuildConfig.DEBUG) Log.d(TAG, "Ricerca con solo numero: $number")
+                Timber.d("Ricerca con solo numero: $number")
                 repository.searchCards(number)
                     .onSuccess { cards = it }
             }
@@ -275,7 +273,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 activeSearchKey = ""
             }
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Search failed: ${e.message}")
+            Timber.w("Search failed: ${e.message}")
             uiState = uiState.copy(
                 isSearching = false,
                 errorMessage = "Errore ricerca: ${e.message}"
@@ -414,5 +412,6 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     companion object {
         private const val TAG = "ScannerViewModel"
+        private const val STABILITY_THRESHOLD = 3
     }
 }

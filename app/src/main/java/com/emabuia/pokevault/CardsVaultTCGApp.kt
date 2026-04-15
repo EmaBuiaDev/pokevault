@@ -1,17 +1,20 @@
 package com.emabuia.pokevault
 
 import android.app.Application
+import com.emabuia.pokevault.BuildConfig
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.util.AppLocale
+import timber.log.Timber
 
 class CardsVaultTCGApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         FirebaseApp.initializeApp(this)
 
         // Abilita la cache locale persistente di Firestore: in questo modo tutte

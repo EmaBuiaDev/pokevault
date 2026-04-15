@@ -2,11 +2,10 @@ package com.emabuia.pokevault.ocr
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.util.Log
-import com.emabuia.pokevault.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 /**
  * Manager principale della pipeline OCR per carte Pokemon.
@@ -124,10 +123,10 @@ class OCRManager(private val context: Context) {
                 paddleEngine.initialize()
                 engine = paddleEngine
                 isInitialized = true
-                if (BuildConfig.DEBUG) Log.i(TAG, "Inizializzato con PaddleOCR TFLite")
+                Timber.i("Inizializzato con PaddleOCR TFLite")
                 return@withContext
             } catch (e: Exception) {
-                if (BuildConfig.DEBUG) Log.w(TAG, "PaddleOCR non disponibile, fallback a ML Kit: ${e.message}")
+                Timber.w("PaddleOCR non disponibile, fallback a ML Kit: ${e.message}")
             }
         }
 
@@ -137,9 +136,9 @@ class OCRManager(private val context: Context) {
             mlKitEngine.initialize()
             engine = mlKitEngine
             isInitialized = true
-            if (BuildConfig.DEBUG) Log.i(TAG, "Inizializzato con ML Kit (fallback)")
+            Timber.i("Inizializzato con ML Kit (fallback)")
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.e(TAG, "Nessun engine OCR disponibile: ${e.message}", e)
+            Timber.e(e, "Nessun engine OCR disponibile: ${e.message}")
             throw e
         }
     } }
@@ -171,7 +170,7 @@ class OCRManager(private val context: Context) {
      */
     suspend fun analyzeCardImage(bitmap: Bitmap): CardOCRResult = withContext(Dispatchers.Default) {
         if (!isReady()) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "OCR non inizializzato, tentativo di inizializzazione...")
+            Timber.w("OCR non inizializzato, tentativo di inizializzazione...")
             initialize()
         }
 
@@ -198,14 +197,11 @@ class OCRManager(private val context: Context) {
                 fullResult
             }
 
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "Analisi completata: ${merged.cardName} #${merged.cardNumber} " +
-                        "(confidence: ${merged.confidence})")
-            }
+            Timber.d("Analisi completata: ${merged.cardName} #${merged.cardNumber} (confidence: ${merged.confidence})")
 
             merged
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.e(TAG, "Errore analisi immagine: ${e.message}", e)
+            Timber.e(e, "Errore analisi immagine: ${e.message}")
             CardOCRResult(rawText = "", confidence = 0f)
         }
     }
@@ -255,8 +251,12 @@ class OCRManager(private val context: Context) {
             )
 
             val footerBitmap = ImagePreprocessor.preprocessZone(bitmap, footerRegion)
-            val blocks = ocr.recognizeText(footerBitmap)
-            footerBitmap.recycle()
+            val blocks: List<OCRTextBlock>
+            try {
+                blocks = ocr.recognizeText(footerBitmap)
+            } finally {
+                footerBitmap.recycle()
+            }
 
             val footerText = blocks.joinToString(" ") { it.text }
 
@@ -267,7 +267,7 @@ class OCRManager(private val context: Context) {
 
             match?.groupValues?.get(1)
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Errore rilevamento set symbol: ${e.message}")
+            Timber.w("Errore rilevamento set symbol: ${e.message}")
             null
         }
     }
@@ -302,11 +302,15 @@ class OCRManager(private val context: Context) {
             val topBitmap = ImagePreprocessor.preprocessZone(resized, topRegion)
             val footerBitmap = ImagePreprocessor.preprocessZone(resized, footerRegion)
 
-            val topBlocks = ocr.recognizeText(topBitmap)
-            val footerBlocks = ocr.recognizeText(footerBitmap)
-
-            topBitmap.recycle()
-            footerBitmap.recycle()
+            val topBlocks: List<OCRTextBlock>
+            val footerBlocks: List<OCRTextBlock>
+            try {
+                topBlocks = ocr.recognizeText(topBitmap)
+                footerBlocks = ocr.recognizeText(footerBitmap)
+            } finally {
+                topBitmap.recycle()
+                footerBitmap.recycle()
+            }
 
             // Combina blocchi con posizioni corrette
             val allBlocks = mutableListOf<OCRTextBlock>()
@@ -329,7 +333,7 @@ class OCRManager(private val context: Context) {
 
             return CardFieldParser.parseZonedText(allBlocks)
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Analisi zone fallita: ${e.message}")
+            Timber.w("Analisi zone fallita: ${e.message}")
             return null
         }
     }

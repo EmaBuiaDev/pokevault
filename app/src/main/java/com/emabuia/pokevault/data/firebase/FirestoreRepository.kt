@@ -43,20 +43,24 @@ class FirestoreRepository {
         get() = userDoc.collection("tournaments")
 
     fun getCards(): Flow<List<PokemonCard>> = callbackFlow {
-        val listener = cardsCollection
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) { close(error); return@addSnapshotListener }
-                val cards = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(PokemonCard::class.java)?.copy(id = doc.id)
-                } ?: emptyList()
-                trySend(cards)
-            }
+        val col = try { cardsCollection } catch (e: Exception) {
+            trySend(emptyList()); close(); return@callbackFlow
+        }
+        val listener = col.addSnapshotListener { snapshot, error ->
+            if (error != null) { close(error); return@addSnapshotListener }
+            val cards = snapshot?.documents?.mapNotNull { doc ->
+                doc.toObject(PokemonCard::class.java)?.copy(id = doc.id)
+            } ?: emptyList()
+            trySend(cards)
+        }
         awaitClose { listener.remove() }
     }
 
     fun getOwnedCardsBySet(setName: String): Flow<List<PokemonCard>> = callbackFlow {
-        val listener = cardsCollection
-            .whereEqualTo("set", setName)
+        val col = try { cardsCollection } catch (e: Exception) {
+            trySend(emptyList()); close(); return@callbackFlow
+        }
+        val listener = col.whereEqualTo("set", setName)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val cards = snapshot?.documents?.mapNotNull { doc ->
@@ -246,39 +250,30 @@ class FirestoreRepository {
 
     suspend fun getCollectionStats(): CollectionStats {
         return try {
-            // Leggiamo i dati aggregati dal profilo utente (super veloce!)
+            // Leggiamo il profilo utente e tutte le carte in parallelo (un solo round-trip extra)
             val userSnapshot = userDoc.get().await()
-            val totalCards = userSnapshot.getLong("totalCards")?.toInt() ?: 0
-            val totalValue = userSnapshot.getDouble("totalValue") ?: 0.0
-            
-            // Se totalCards è 0 ma sappiamo di avere carte (magari vecchio utente), 
-            // facciamo il ricalcolo una tantum (fallback)
-            if (totalCards == 0) {
-                val snapshot = cardsCollection.get().await()
-                val cards = snapshot.documents.mapNotNull { it.toObject(PokemonCard::class.java) }
-                if (cards.isNotEmpty()) {
-                    val recalculatedStats = CollectionStats(
-                        totalCards = cards.sumOf { it.quantity },
-                        uniqueCards = cards.map { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }.toSet().size,
-                        totalValue = cards.sumOf { it.estimatedValue * it.quantity },
-                        mostValuable = cards.maxByOrNull { it.estimatedValue }?.name ?: "-"
-                    )
-                    // Aggiorniamo il profilo per la prossima volta
-                    userDoc.update(mapOf(
-                        "totalCards" to recalculatedStats.totalCards,
-                        "totalValue" to recalculatedStats.totalValue
-                    ))
-                    return recalculatedStats
-                }
+            val cachedTotal = userSnapshot.getLong("totalCards")?.toInt() ?: 0
+            val cachedValue = userSnapshot.getDouble("totalValue") ?: 0.0
+
+            val cards = cardsCollection.get().await()
+                .documents.mapNotNull { it.toObject(PokemonCard::class.java) }
+
+            val uniqueKey: (PokemonCard) -> String = { c ->
+                c.apiCardId.ifBlank { "${c.name}_${c.set}_${c.cardNumber}" }
             }
 
-            // Per uniqueCards e mostValuable serve una scansione delle carte
-            val snapshot = cardsCollection.get().await()
-            val cards = snapshot.documents.mapNotNull { it.toObject(PokemonCard::class.java) }
+            val totalCards = if (cachedTotal > 0) cachedTotal else cards.sumOf { it.quantity }
+            val totalValue = if (cachedTotal > 0) cachedValue else cards.sumOf { it.estimatedValue * it.quantity }
+
+            // Aggiorna il profilo se i totali aggregati mancavano (vecchio utente / primo accesso)
+            if (cachedTotal == 0 && cards.isNotEmpty()) {
+                userDoc.update(mapOf("totalCards" to totalCards, "totalValue" to totalValue))
+            }
+
             CollectionStats(
                 totalCards = totalCards,
                 totalValue = totalValue,
-                uniqueCards = cards.map { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }.toSet().size,
+                uniqueCards = cards.map(uniqueKey).toSet().size,
                 mostValuable = cards.maxByOrNull { it.estimatedValue }?.name ?: "-"
             )
         } catch (e: Exception) { CollectionStats() }
@@ -287,8 +282,10 @@ class FirestoreRepository {
     // --- DECK METHODS ---
 
     fun getDecks(): Flow<List<Deck>> = callbackFlow {
-        val listener = decksCollection
-            .orderBy("createdAt", Query.Direction.DESCENDING)
+        val col = try { decksCollection } catch (e: Exception) {
+            trySend(emptyList()); close(); return@callbackFlow
+        }
+        val listener = col.orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val decks = snapshot?.documents?.mapNotNull { doc ->
@@ -330,8 +327,10 @@ class FirestoreRepository {
     // --- ALBUM METHODS ---
 
     fun getAlbums(): Flow<List<Album>> = callbackFlow {
-        val listener = albumsCollection
-            .orderBy("createdAt", Query.Direction.DESCENDING)
+        val col = try { albumsCollection } catch (e: Exception) {
+            trySend(emptyList()); close(); return@callbackFlow
+        }
+        val listener = col.orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val albums = snapshot?.documents?.mapNotNull { doc ->
@@ -394,8 +393,10 @@ class FirestoreRepository {
     // --- MATCH LOG METHODS ---
 
     fun getMatchLogs(): Flow<List<MatchLog>> = callbackFlow {
-        val listener = matchLogsCollection
-            .orderBy("date", Query.Direction.DESCENDING)
+        val col = try { matchLogsCollection } catch (e: Exception) {
+            trySend(emptyList()); close(); return@callbackFlow
+        }
+        val listener = col.orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val logs = snapshot?.documents?.mapNotNull { doc ->
@@ -437,8 +438,10 @@ class FirestoreRepository {
     // --- TOURNAMENT METHODS ---
 
     fun getTournaments(): Flow<List<Tournament>> = callbackFlow {
-        val listener = tournamentsCollection
-            .orderBy("date", Query.Direction.DESCENDING)
+        val col = try { tournamentsCollection } catch (e: Exception) {
+            trySend(emptyList()); close(); return@callbackFlow
+        }
+        val listener = col.orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val tournaments = snapshot?.documents?.mapNotNull { doc ->
@@ -450,8 +453,10 @@ class FirestoreRepository {
     }
 
     fun getMatchesForTournament(tournamentId: String): Flow<List<MatchLog>> = callbackFlow {
-        val listener = matchLogsCollection
-            .whereEqualTo("tournamentId", tournamentId)
+        val col = try { matchLogsCollection } catch (e: Exception) {
+            trySend(emptyList()); close(); return@callbackFlow
+        }
+        val listener = col.whereEqualTo("tournamentId", tournamentId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val logs = snapshot?.documents?.mapNotNull { doc ->

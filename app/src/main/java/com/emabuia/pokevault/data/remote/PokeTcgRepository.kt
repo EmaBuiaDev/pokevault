@@ -1,9 +1,9 @@
 package com.emabuia.pokevault.data.remote
 
 import android.content.Context
-import android.util.Log
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.util.AppLocale
+import timber.log.Timber
 import com.google.gson.Gson
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -52,6 +52,11 @@ class PokeTcgRepository {
         private const val CARDS_TOTAL_PREFIX = "cached_cards_total_"
         private const val CACHE_DURATION = 24 * 60 * 60 * 1000L // 24 ore
         private const val CARDS_CACHE_DURATION = 6 * 60 * 60 * 1000L // 6 ore per carte
+
+        // Pattern compilati una sola volta per evitare recompilation ad ogni ricerca
+        private val SANITIZE_SPECIAL = Regex("[+\\-=&|><!(){}\\[\\]^~?:\\\\/]")
+        private val SANITIZE_NON_WORD = Regex("[^a-zA-ZÀ-ÿ0-9\\s'-]")
+        private val SANITIZE_MULTI_SPACE = Regex("\\s+")
     }
 
     // ══════════════════════════════════════
@@ -66,7 +71,7 @@ class PokeTcgRepository {
                 .putLong(SETS_TIME_KEY, System.currentTimeMillis())
                 .apply()
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w("PokeTcgRepository", "Errore salvataggio cache sets", e)
+            Timber.w(e, "Errore salvataggio cache sets")
         }
     }
 
@@ -78,7 +83,7 @@ class PokeTcgRepository {
             val json = prefs.getString(SETS_CACHE_KEY, null) ?: return null
             return gson.fromJson(json, Array<TcgSet>::class.java).toList()
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w("PokeTcgRepository", "Errore lettura cache sets", e)
+            Timber.w(e, "Errore lettura cache sets")
             return null
         }
     }
@@ -124,7 +129,7 @@ class PokeTcgRepository {
                 .putInt("$CARDS_TOTAL_PREFIX$setId", totalCount)
                 .commit()
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w("PokeTcgRepository", "Errore salvataggio cache cards per set $setId", e)
+            Timber.w(e, "Errore salvataggio cache cards per set $setId")
         }
     }
 
@@ -140,7 +145,7 @@ class PokeTcgRepository {
             if (cards.size < expectedTotal) return null
             return cards
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w("PokeTcgRepository", "Errore lettura cache cards per set $setId", e)
+            Timber.w(e, "Errore lettura cache cards per set $setId")
             return null
         }
     }
@@ -331,9 +336,9 @@ class PokeTcgRepository {
 
     private fun sanitizeQuery(raw: String): String {
         return raw
-            .replace(Regex("[+\\-=&|><!(){}\\[\\]^~?:\\\\/]"), "") 
-            .replace(Regex("[^a-zA-ZÀ-ÿ0-9\\s'-]"), "")            
-            .replace(Regex("\\s+"), " ")                             
+            .replace(SANITIZE_SPECIAL, "")
+            .replace(SANITIZE_NON_WORD, "")
+            .replace(SANITIZE_MULTI_SPACE, " ")
             .trim()
     }
 
