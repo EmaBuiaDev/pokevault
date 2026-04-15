@@ -220,8 +220,8 @@ class PokeTcgRepository {
         
         if (match != null) {
             val number = match.groupValues[1].trimStart('0').ifEmpty { "0" }
-            val total = match.groupValues[2]
-            
+            val total = match.groupValues[2].trimStart('0').ifEmpty { "0" }
+
             // Cerchiamo i set che hanno quel totale stampato
             val candidateSets = memorySets?.filter { it.printedTotal.toString() == total } ?: emptyList()
             

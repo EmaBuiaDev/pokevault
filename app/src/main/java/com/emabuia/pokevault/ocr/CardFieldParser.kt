@@ -149,10 +149,11 @@ object CardFieldParser {
         return if (num.isNotBlank()) num else "0"
     }
 
-    /** Estrae il totale del set (es. "198" da "025/198") */
+    /** Estrae il totale del set (es. "198" da "025/198"), senza zero iniziali */
     fun extractSetTotal(text: String): String? {
         val match = CARD_NUMBER_PATTERN.find(text) ?: return null
-        return match.groupValues[2]
+        val total = match.groupValues[2].trimStart('0')
+        return if (total.isNotBlank()) total else "0"
     }
 
     // ═══════════════════════════════════════════
