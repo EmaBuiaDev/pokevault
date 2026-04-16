@@ -19,7 +19,7 @@ android {
     defaultConfig {
         applicationId = "com.emabuia.pokevault"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 11
         versionName = "2.0.3"
 
@@ -66,6 +66,12 @@ android {
     // Non comprimere modelli TFLite (memory-mapping richiede file non compresso)
     androidResources {
         noCompress += "tflite"
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
 }
 
