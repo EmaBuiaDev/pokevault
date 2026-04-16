@@ -42,7 +42,7 @@ fun GradedCardsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .statusBarsPadding()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         TopAppBar(
             title = { Text("Carte Graduate", fontWeight = FontWeight.SemiBold, color = TextWhite) },

@@ -231,7 +231,6 @@ fun SetDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .statusBarsPadding()
         ) {
             TopAppBar(
                 title = {

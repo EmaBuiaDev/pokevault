@@ -46,7 +46,7 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .statusBarsPadding()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         Column(
             modifier = Modifier

@@ -52,7 +52,7 @@ fun AddCardScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .statusBarsPadding()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         // ── Top Bar ──
         TopAppBar(

@@ -180,7 +180,7 @@ fun SetsListScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .statusBarsPadding()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         TopAppBar(
             title = { Text("Pokédex", fontWeight = FontWeight.Bold, color = TextWhite) },

@@ -122,7 +122,7 @@ fun DeckLabScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 16.dp)
-                        .statusBarsPadding()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
@@ -559,7 +559,7 @@ fun DeckDetailView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -795,7 +795,7 @@ fun NewDeckBottomSheetContent(
             .fillMaxWidth()
             .fillMaxHeight(0.92f)
             .padding(horizontal = 20.dp)
-            .navigationBarsPadding()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
     ) {
         Box(
             modifier = Modifier

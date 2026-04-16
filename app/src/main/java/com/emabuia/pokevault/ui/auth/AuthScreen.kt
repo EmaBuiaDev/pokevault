@@ -87,7 +87,8 @@ fun AuthScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .systemBarsPadding() 
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .imePadding()
                 .verticalScroll(scrollState)
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally

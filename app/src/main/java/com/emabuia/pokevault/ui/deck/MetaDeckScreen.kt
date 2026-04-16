@@ -605,7 +605,7 @@ fun MetaDeckDetailView(
                         )
                     )
                 )
-                .statusBarsPadding()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                 .padding(16.dp)
         ) {
             Column {
