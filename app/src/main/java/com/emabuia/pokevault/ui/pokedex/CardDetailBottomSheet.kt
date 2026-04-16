@@ -441,7 +441,7 @@ fun OptionSelector(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(DarkCard)
-                .menuAnchor()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                 .clickable { expanded = true }
                 .padding(horizontal = 12.dp, vertical = 13.dp)
         ) {

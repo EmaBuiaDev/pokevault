@@ -316,7 +316,7 @@ fun CardDetailScreen(
                                     readOnly = true,
                                     label = { Text("Ente", fontSize = 10.sp) },
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedGrading) },
-                                    modifier = Modifier.menuAnchor(),
+                                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedTextColor = TextWhite, 
                                         unfocusedTextColor = TextWhite,

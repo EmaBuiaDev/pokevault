@@ -14,12 +14,12 @@ val localProperties = Properties().apply {
 
 android {
     namespace = "com.emabuia.pokevault"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.emabuia.pokevault"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 11
         versionName = "2.0.3"
 
@@ -71,10 +71,10 @@ android {
 
 dependencies {
     // ── Core Android ──
-    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-ktx:1.18.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
 
     // ── Compose BOM (gestisce tutte le versioni Compose) ──
     implementation(platform("androidx.compose:compose-bom:2024.09.00"))
@@ -136,7 +136,7 @@ dependencies {
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 
     // ── Splash Screen ──
-    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.core:core-splashscreen:1.2.0")
 
     // ── Google Play Billing ──
     implementation("com.android.billingclient:billing-ktx:6.2.1")

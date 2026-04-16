@@ -8,7 +8,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -48,7 +48,7 @@ fun GradedCardsScreen(
             title = { Text("Carte Graduate", fontWeight = FontWeight.SemiBold, color = TextWhite) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, "Indietro", tint = TextWhite)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro", tint = TextWhite)
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)

@@ -151,7 +151,7 @@ fun CreateAlbumScreen(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showTypeDropdown) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = OrangeCard,
                         unfocusedBorderColor = TextMuted,
@@ -198,7 +198,7 @@ fun CreateAlbumScreen(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showExpansionDropdown) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = OrangeCard,
                         unfocusedBorderColor = TextMuted,
@@ -245,7 +245,7 @@ fun CreateAlbumScreen(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showCategoryDropdown) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = OrangeCard,
                         unfocusedBorderColor = TextMuted,
