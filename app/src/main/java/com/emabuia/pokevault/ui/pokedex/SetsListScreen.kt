@@ -172,7 +172,9 @@ fun SetsListScreen(
                 viewModel.addCardWithDetails(selectedCard!!, v, q, c, l)
             },
             onRemoveCard = {},
-            onDismiss = { selectedCard = null }
+            onDismiss = { selectedCard = null },
+            cardList = state.searchedCards,
+            onCardChange = { selectedCard = it }
         )
     }
 

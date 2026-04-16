@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,7 +41,9 @@ fun CardDetailBottomSheet(
     isLoading: Boolean,
     onAddCard: (variant: String, quantity: Int, condition: String, language: String) -> Unit,
     onRemoveCard: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    cardList: List<TcgCard> = emptyList(),
+    onCardChange: (TcgCard) -> Unit = {}
 ) {
     val rarityInfo = getRarityInfo(card.rarity)
 
@@ -54,6 +58,8 @@ fun CardDetailBottomSheet(
     var selectedCondition by remember { mutableStateOf("Near Mint") }
     var selectedLanguage by remember { mutableStateOf("🇮🇹 Italiano") }
     var showAddForm by remember { mutableStateOf(!isOwned) }
+
+    val currentCardIndex = remember(card.id, cardList) { cardList.indexOfFirst { it.id == card.id } }
 
     // Prezzo per variante selezionata
     val variantKey = CardOptions.getVariantApiKey(selectedVariant)
@@ -131,7 +137,35 @@ fun CardDetailBottomSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(0.72f)
-                            .clip(RoundedCornerShape(16.dp)),
+                            .clip(RoundedCornerShape(16.dp))
+                            .let { baseModifier ->
+                                if (currentCardIndex >= 0 && cardList.size > 1) {
+                                    baseModifier.pointerInput(card.id, cardList) {
+                                        var totalDragX = 0f
+                                        detectHorizontalDragGestures(
+                                            onHorizontalDrag = { change, dragAmount ->
+                                                change.consume()
+                                                totalDragX += dragAmount
+                                            },
+                                            onDragEnd = {
+                                                val swipeThreshold = 80f
+                                                when {
+                                                    totalDragX <= -swipeThreshold && currentCardIndex < cardList.lastIndex -> {
+                                                        onCardChange(cardList[currentCardIndex + 1])
+                                                    }
+                                                    totalDragX >= swipeThreshold && currentCardIndex > 0 -> {
+                                                        onCardChange(cardList[currentCardIndex - 1])
+                                                    }
+                                                }
+                                                totalDragX = 0f
+                                            },
+                                            onDragCancel = { totalDragX = 0f }
+                                        )
+                                    }
+                                } else {
+                                    baseModifier
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         AsyncImage(

@@ -220,7 +220,9 @@ fun SetDetailScreen(
                 viewModel.addCardWithDetails(selectedCard!!, v, q, c, l) 
             },
             onRemoveCard = { viewModel.removeCard(selectedCard!!); selectedCard = null },
-            onDismiss = { selectedCard = null }
+            onDismiss = { selectedCard = null },
+            cardList = sortedCards,
+            onCardChange = { selectedCard = it }
         )
     }
 
