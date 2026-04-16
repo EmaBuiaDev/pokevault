@@ -5,6 +5,7 @@ import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.MatchLog
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.Tournament
+import com.emabuia.pokevault.data.model.Wishlist
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -35,6 +36,9 @@ class FirestoreRepository {
 
     private val albumsCollection
         get() = userDoc.collection("albums")
+
+    private val wishlistsCollection
+        get() = userDoc.collection("wishlists")
 
     private val matchLogsCollection
         get() = userDoc.collection("match_logs")
@@ -386,6 +390,80 @@ class FirestoreRepository {
             albumsCollection.document(albumId)
                 .update("cardIds", FieldValue.arrayRemove(cardId))
                 .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // --- WISHLIST METHODS ---
+
+    fun getWishlists(): Flow<List<Wishlist>> = callbackFlow {
+        val col = try { wishlistsCollection } catch (e: Exception) {
+            trySend(emptyList()); close(); return@callbackFlow
+        }
+        val listener = col.orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                val wishlists = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(Wishlist::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(wishlists)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun saveWishlist(wishlist: Wishlist): Result<String> {
+        return try {
+            val data = hashMapOf(
+                "name" to wishlist.name,
+                "iconKey" to wishlist.iconKey,
+                "cardIds" to wishlist.cardIds,
+                "createdAt" to (wishlist.createdAt ?: com.google.firebase.Timestamp.now())
+            )
+            val docRef = if (wishlist.id.isEmpty()) {
+                wishlistsCollection.add(data).await()
+            } else {
+                wishlistsCollection.document(wishlist.id).set(data).await()
+                wishlistsCollection.document(wishlist.id)
+            }
+            Result.success(docRef.id)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun deleteWishlist(wishlistId: String): Result<Unit> {
+        return try {
+            wishlistsCollection.document(wishlistId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun addCardToWishlist(wishlistId: String, cardId: String): Result<Unit> {
+        return try {
+            wishlistsCollection.document(wishlistId)
+                .update("cardIds", FieldValue.arrayUnion(cardId))
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun removeCardFromWishlist(wishlistId: String, cardId: String): Result<Unit> {
+        return try {
+            wishlistsCollection.document(wishlistId)
+                .update("cardIds", FieldValue.arrayRemove(cardId))
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun removeCardFromAllWishlists(cardId: String): Result<Unit> {
+        return try {
+            val snapshot = wishlistsCollection
+                .whereArrayContains("cardIds", cardId)
+                .get()
+                .await()
+
+            for (doc in snapshot.documents) {
+                doc.reference.update("cardIds", FieldValue.arrayRemove(cardId)).await()
+            }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }

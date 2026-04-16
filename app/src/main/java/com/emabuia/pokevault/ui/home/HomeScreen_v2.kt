@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -19,6 +20,7 @@ import com.emabuia.pokevault.ui.home.components.*
 import com.emabuia.pokevault.ui.navigation.Routes
 import com.emabuia.pokevault.ui.theme.BlueCard
 import com.emabuia.pokevault.ui.theme.DarkBackground
+import com.emabuia.pokevault.ui.theme.PurpleCard
 import com.emabuia.pokevault.ui.theme.TextWhite
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.HomeViewModel
@@ -83,21 +85,41 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(80.dp))
         }
 
-        // FAB Scanner
-        FloatingActionButton(
-            onClick = { onNavigate(Routes.SCANNER) },
-            containerColor = BlueCard,
-            shape = RoundedCornerShape(16.dp),
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
         ) {
-            Icon(
-                Icons.Default.CameraAlt,
-                contentDescription = AppLocale.scanCard,
-                tint = TextWhite
-            )
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FloatingActionButton(
+                    onClick = { onNavigate(Routes.WISHLIST_LIST) },
+                    containerColor = PurpleCard,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.size(50.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Favorite,
+                        contentDescription = AppLocale.wishlistTitle,
+                        tint = TextWhite
+                    )
+                }
+
+                FloatingActionButton(
+                    onClick = { onNavigate(Routes.SCANNER) },
+                    containerColor = BlueCard,
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(
+                        Icons.Default.CameraAlt,
+                        contentDescription = AppLocale.scanCard,
+                        tint = TextWhite
+                    )
+                }
+            }
         }
     }
 }

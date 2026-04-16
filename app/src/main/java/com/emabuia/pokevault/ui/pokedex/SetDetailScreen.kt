@@ -43,12 +43,16 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.emabuia.pokevault.data.model.CardOptions
+import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.ui.wishlist.CreateWishlistDialog
 import com.emabuia.pokevault.viewmodel.SetDetailViewModel
+import com.emabuia.pokevault.viewmodel.WishlistViewModel
 import com.emabuia.pokevault.util.RarityUtils
 import com.emabuia.pokevault.util.RarityInfo
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.data.billing.PremiumManager
 
 fun formatReleaseDate(date: String): String {
     return try {
@@ -150,13 +154,18 @@ fun matchesSearchContext(card: TcgCard, ctx: ItalianSearchContext): Boolean {
 @Composable
 fun SetDetailScreen(
     setId: String, setName: String, onBack: () -> Unit,
-    viewModel: SetDetailViewModel = viewModel()
+    viewModel: SetDetailViewModel = viewModel(),
+    wishlistViewModel: WishlistViewModel = viewModel()
 ) {
     val state = viewModel.uiState
     val haptic = LocalHapticFeedback.current
+    val premiumManager = remember { PremiumManager.getInstance() }
+    val isPremium by premiumManager.isPremium.collectAsState()
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     var quickAddCard by remember { mutableStateOf<TcgCard?>(null) }
     var selectedRarityFilter by remember { mutableStateOf<String?>(null) }
+    var pickerCard by remember { mutableStateOf<TcgCard?>(null) }
+    var createDialogCard by remember { mutableStateOf<TcgCard?>(null) }
 
     // Selection mode state
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -180,6 +189,13 @@ fun SetDetailScreen(
     LaunchedEffect(state.successMessage, state.errorMessage) {
         val msg = state.successMessage ?: state.errorMessage
         if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
+    }
+    LaunchedEffect(wishlistViewModel.successMessage, wishlistViewModel.errorMessage) {
+        val msg = wishlistViewModel.successMessage ?: wishlistViewModel.errorMessage
+        if (msg != null) {
+            snackbarHostState.showSnackbar(msg)
+            wishlistViewModel.clearMessages()
+        }
     }
 
     val sortedCards = remember(state.cards, state.ownedCardIds, state.searchQuery, state.translatedQuery, state.showOnlyMissing, state.showOnlyOwned, state.selectedType, state.selectedSupertype, selectedRarityFilter) {
@@ -223,6 +239,44 @@ fun SetDetailScreen(
             onDismiss = { selectedCard = null },
             cardList = sortedCards,
             onCardChange = { selectedCard = it }
+        )
+    }
+
+    if (pickerCard != null) {
+        WishlistPickerDialog(
+            wishlists = wishlistViewModel.wishlists,
+            canCreateNew = premiumManager.canCreateWishlist(wishlistViewModel.wishlists.size),
+            onDismiss = { pickerCard = null },
+            onCreateNew = {
+                createDialogCard = pickerCard
+                pickerCard = null
+            },
+            onConfirmWishlist = { wishlistId ->
+                val card = pickerCard
+                if (card != null) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    wishlistViewModel.addCardToWishlist(wishlistId, card.id)
+                }
+                pickerCard = null
+            }
+        )
+    }
+
+    if (createDialogCard != null) {
+        CreateWishlistDialog(
+            onDismiss = { createDialogCard = null },
+            onConfirm = { name, iconKey ->
+                val card = createDialogCard
+                if (card != null) {
+                    wishlistViewModel.createWishlistAndAddCard(name, iconKey, card.id) { success ->
+                        if (success) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            createDialogCard = null
+                        }
+                    }
+                }
+            },
+            isSaving = wishlistViewModel.isSaving
         )
     }
 
@@ -473,6 +527,7 @@ fun SetDetailScreen(
                                 TcgCardCompactItem(
                                     card = card,
                                     isOwned = card.id in state.ownedCardIds,
+                                    isWishlisted = wishlistViewModel.isCardWishlisted(card.id),
                                     isAdding = state.isAddingCard == card.id,
                                     isPopupOpen = quickAddCard?.id == card.id,
                                     isSelected = card.id in selectedCardIds,
@@ -503,6 +558,25 @@ fun SetDetailScreen(
                                             }
                                         }
                                     },
+                                    onWishlistClick = {
+                                        if (isSelectionMode) return@TcgCardCompactItem
+
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        if (wishlistViewModel.isCardWishlisted(card.id)) {
+                                            wishlistViewModel.removeCardFromAllWishlists(card.id)
+                                            return@TcgCardCompactItem
+                                        }
+
+                                        val wishlists = wishlistViewModel.wishlists
+                                        when {
+                                            wishlists.isEmpty() -> createDialogCard = card
+                                            wishlists.size == 1 && !isPremium -> wishlistViewModel.addCardToWishlist(
+                                                wishlists.first().id,
+                                                card.id
+                                            )
+                                            else -> pickerCard = card
+                                        }
+                                    },
                                     onVariantSelected = { variant ->
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         viewModel.addCardWithDetails(card, variant, 1, "Near Mint", "🇮🇹 Italiano")
@@ -511,7 +585,27 @@ fun SetDetailScreen(
                                 )
                             }
                             "list" -> items(sortedCards, key = { "${it.id}_${it.number}" }, span = { GridItemSpan(3) }) { card ->
-                                TcgCardListRow(card, card.id in state.ownedCardIds) { selectedCard = card }
+                                TcgCardListRow(
+                                    card = card,
+                                    isOwned = card.id in state.ownedCardIds,
+                                    isWishlisted = wishlistViewModel.isCardWishlisted(card.id),
+                                    onClick = { selectedCard = card },
+                                    onWishlistClick = {
+                                        if (wishlistViewModel.isCardWishlisted(card.id)) {
+                                            wishlistViewModel.removeCardFromAllWishlists(card.id)
+                                        } else {
+                                            val wishlists = wishlistViewModel.wishlists
+                                            when {
+                                                wishlists.isEmpty() -> createDialogCard = card
+                                                wishlists.size == 1 && !isPremium -> wishlistViewModel.addCardToWishlist(
+                                                    wishlists.first().id,
+                                                    card.id
+                                                )
+                                                else -> pickerCard = card
+                                            }
+                                        }
+                                    }
+                                )
                             }
                         }
                     }
@@ -783,6 +877,7 @@ fun RarityFilterChip(label: String, isSelected: Boolean, color: Color = BlueCard
 fun TcgCardCompactItem(
     card: TcgCard,
     isOwned: Boolean,
+    isWishlisted: Boolean,
     isAdding: Boolean = false,
     isPopupOpen: Boolean = false,
     isSelected: Boolean = false,
@@ -790,6 +885,7 @@ fun TcgCardCompactItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     onQuickAddClick: () -> Unit,
+    onWishlistClick: () -> Unit,
     onVariantSelected: (String) -> Unit = {}
 ) {
     val variantOptions = remember(card.tcgplayer?.prices?.keys, card.rarity) {
@@ -909,25 +1005,54 @@ fun TcgCardCompactItem(
                     }
 
                     if (!isSelectionMode) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when {
-                                        isAdding -> BlueCard.copy(alpha = 0.9f)
-                                        isOwned -> Color.Transparent
-                                        else -> DarkSurface.copy(alpha = 0.8f)
-                                    }
+                        val heartColor by animateColorAsState(
+                            targetValue = if (isWishlisted) RedCard else Color.White.copy(alpha = 0.92f),
+                            label = "wishlistHeartColor"
+                        )
+                        val heartScale by animateFloatAsState(
+                            targetValue = if (isWishlisted) 1.08f else 1f,
+                            animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                            label = "wishlistHeartScale"
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(DarkSurface.copy(alpha = 0.78f))
+                                    .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                    .clickable { onWishlistClick() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isWishlisted) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    contentDescription = AppLocale.wishlistTitle,
+                                    tint = heartColor,
+                                    modifier = Modifier.size((14.dp * heartScale))
                                 )
-                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-                                .clickable { onQuickAddClick() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isAdding) {
-                                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 1.5.dp)
-                            } else {
-                                Icon(Icons.Default.Add, null, tint = if (isOwned) TextMuted.copy(alpha = 0.5f) else Color.White, modifier = Modifier.size(15.dp))
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when {
+                                            isAdding -> BlueCard.copy(alpha = 0.9f)
+                                            isOwned -> Color.Transparent
+                                            else -> DarkSurface.copy(alpha = 0.8f)
+                                        }
+                                    )
+                                    .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                    .clickable { onQuickAddClick() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isAdding) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 1.5.dp)
+                                } else {
+                                    Icon(Icons.Default.Add, null, tint = if (isOwned) TextMuted.copy(alpha = 0.5f) else Color.White, modifier = Modifier.size(15.dp))
+                                }
                             }
                         }
                     }
@@ -938,7 +1063,13 @@ fun TcgCardCompactItem(
 }
 
 @Composable
-fun TcgCardListRow(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
+fun TcgCardListRow(
+    card: TcgCard,
+    isOwned: Boolean,
+    isWishlisted: Boolean,
+    onClick: () -> Unit,
+    onWishlistClick: () -> Unit
+) {
     val rarityInfo = RarityUtils.getRarityInfo(card.rarity)
     Row(modifier = Modifier
         .fillMaxWidth()
@@ -965,6 +1096,15 @@ fun TcgCardListRow(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
         }
         val price = card.cardmarket?.prices?.lowPrice ?: card.cardmarket?.prices?.averageSellPrice ?: card.tcgplayer?.prices?.values?.firstOrNull()?.market
         if (price != null && price > 0) Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Icon(
+            imageVector = if (isWishlisted) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+            contentDescription = AppLocale.wishlistTitle,
+            tint = if (isWishlisted) RedCard else TextMuted,
+            modifier = Modifier
+                .size(20.dp)
+                .clickable { onWishlistClick() }
+        )
+        Spacer(modifier = Modifier.width(6.dp))
         Box(modifier = Modifier
             .size(28.dp)
             .clip(CircleShape)
@@ -979,4 +1119,86 @@ fun TcgCardListRow(card: TcgCard, isOwned: Boolean, onClick: () -> Unit) {
             if (isOwned) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
         }
     }
+}
+
+@Composable
+private fun WishlistPickerDialog(
+    wishlists: List<Wishlist>,
+    canCreateNew: Boolean,
+    onDismiss: () -> Unit,
+    onCreateNew: () -> Unit,
+    onConfirmWishlist: (String) -> Unit
+) {
+    var selectedWishlistId by remember(wishlists) { mutableStateOf(wishlists.firstOrNull()?.id.orEmpty()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkSurface,
+        title = {
+            Text(
+                text = AppLocale.wishlistAddToList,
+                color = TextWhite,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(AppLocale.wishlistChooseList, color = TextMuted, fontSize = 13.sp)
+
+                wishlists.forEach { wishlist ->
+                    val selected = selectedWishlistId == wishlist.id
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) BlueCard.copy(alpha = 0.22f) else DarkCard)
+                            .border(
+                                1.dp,
+                                if (selected) BlueCard else TextMuted.copy(alpha = 0.2f),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable { selectedWishlistId = wishlist.id }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (selected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                            contentDescription = null,
+                            tint = if (selected) BlueCard else TextMuted,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = wishlist.name,
+                            color = TextWhite,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { if (selectedWishlistId.isNotBlank()) onConfirmWishlist(selectedWishlistId) },
+                enabled = selectedWishlistId.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+            ) {
+                Text(AppLocale.addCard, color = TextWhite)
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (canCreateNew) {
+                    TextButton(onClick = onCreateNew) {
+                        Text(AppLocale.wishlistCreateNewList, color = PurpleCard)
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(AppLocale.cancel, color = TextMuted)
+                }
+            }
+        }
+    )
 }

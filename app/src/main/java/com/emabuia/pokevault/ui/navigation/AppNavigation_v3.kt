@@ -29,6 +29,8 @@ import com.emabuia.pokevault.ui.competitive.TournamentDetailScreen
 import com.emabuia.pokevault.ui.deck.DeckLabScreen
 import com.emabuia.pokevault.ui.premium.PremiumScreen
 import com.emabuia.pokevault.ui.settings.SettingsScreen
+import com.emabuia.pokevault.ui.wishlist.WishlistDetailScreen
+import com.emabuia.pokevault.ui.wishlist.WishlistListScreen
 import com.emabuia.pokevault.viewmodel.AuthViewModel
 import androidx.compose.ui.platform.LocalContext
 import java.net.URLDecoder
@@ -54,6 +56,8 @@ object Routes {
     const val GRADED = "graded"
     const val SETTINGS = "settings"
     const val PREMIUM = "premium"
+    const val WISHLIST_LIST = "wishlist_list"
+    const val WISHLIST_DETAIL = "wishlist_detail/{wishlistId}"
     const val ALBUM_LIST = "album_list"
     const val CREATE_ALBUM = "create_album?albumId={albumId}"
     const val ALBUM_DETAIL = "album_detail/{albumId}"
@@ -65,6 +69,7 @@ object Routes {
     fun addTournament(tournamentId: String? = null) = if (tournamentId != null) "add_tournament?tournamentId=$tournamentId" else "add_tournament"
     fun tournamentDetail(tournamentId: String) = "tournament_detail/$tournamentId"
     fun addMatch(tournamentId: String, matchId: String? = null) = if (matchId != null) "add_match/$tournamentId?matchId=$matchId" else "add_match/$tournamentId"
+    fun wishlistDetail(wishlistId: String) = "wishlist_detail/$wishlistId"
     fun setDetail(setId: String, setName: String): String {
         val encoded = URLEncoder.encode(setName, "UTF-8")
         return "set_detail/$setId/$encoded"
@@ -190,6 +195,28 @@ fun AppNavigation(
         // ── Scanner ──
         composable(Routes.SCANNER) {
             ScannerScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Wishlist ──
+        composable(Routes.WISHLIST_LIST) {
+            WishlistListScreen(
+                onBack = { navController.popBackStack() },
+                onPremiumRequired = { navController.navigate(Routes.PREMIUM) },
+                onWishlistClick = { wishlistId ->
+                    navController.navigate(Routes.wishlistDetail(wishlistId))
+                }
+            )
+        }
+
+        composable(
+            route = Routes.WISHLIST_DETAIL,
+            arguments = listOf(navArgument("wishlistId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val wishlistId = backStackEntry.arguments?.getString("wishlistId") ?: ""
+            WishlistDetailScreen(
+                wishlistId = wishlistId,
                 onBack = { navController.popBackStack() }
             )
         }

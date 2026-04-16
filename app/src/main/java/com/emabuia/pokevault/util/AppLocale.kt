@@ -420,6 +420,25 @@ object AppLocale {
     val albumCardAdded: String get() = if (isItalian) "Carta aggiunta all'album" else "Card added to album"
     val albumCardRemoved: String get() = if (isItalian) "Carta rimossa dall'album" else "Card removed from album"
 
+    // Wishlist
+    val wishlistTitle: String get() = if (isItalian) "Wishlist" else "Wishlist"
+    val wishlistCreate: String get() = if (isItalian) "Crea Wishlist" else "Create Wishlist"
+    val wishlistName: String get() = if (isItalian) "Nome lista" else "List name"
+    val wishlistNamePlaceholder: String get() = if (isItalian) "Es. Chase cards Kanto" else "E.g. Kanto chase cards"
+    val wishlistChooseIcon: String get() = if (isItalian) "Scegli un'icona" else "Choose an icon"
+    val wishlistAddToList: String get() = if (isItalian) "Aggiungi alla wishlist" else "Add to wishlist"
+    val wishlistChooseList: String get() = if (isItalian) "Scegli una lista" else "Choose a list"
+    val wishlistCreateNewList: String get() = if (isItalian) "Nuova lista" else "New list"
+    val wishlistEmpty: String get() = if (isItalian) "Nessuna wishlist" else "No wishlists yet"
+    val wishlistEmptySubtitle: String get() = if (isItalian) "Crea la tua prima lista dei desideri" else "Create your first wishlist"
+    val wishlistDeleteTitle: String get() = if (isItalian) "Eliminare wishlist?" else "Delete wishlist?"
+    val wishlistDeleteMessage: String get() = if (isItalian) "Questa azione è irreversibile." else "This action is irreversible."
+    val wishlistNotFound: String get() = if (isItalian) "Wishlist non trovata" else "Wishlist not found"
+    val wishlistCardsEmpty: String get() = if (isItalian) "Nessuna carta in questa wishlist" else "No cards in this wishlist"
+    val wishlistCardsEmptySubtitle: String get() = if (isItalian) "Aggiungi carte dal Pokédex con il cuore" else "Add cards from Pokédex using the heart"
+    val wishlistRemoveCardTitle: String get() = if (isItalian) "Rimuovere carta dalla wishlist?" else "Remove card from wishlist?"
+    fun wishlistCardsCount(count: Int) = if (isItalian) "$count carte" else "$count cards"
+
     // Auth
     val welcomeTrainer: String get() = if (isItalian) "Benvenuto, Allenatore!" else "Welcome, Trainer!"
     val legendaryCollection: String get() = if (isItalian) "La tua collezione leggendaria" else "Your legendary collection"
@@ -582,6 +601,14 @@ object AppLocale {
         "Hai raggiunto il limite di 1 album gratuito.\n\nPassa a Premium per creare album illimitati!"
     else
         "You've reached the 1 free album limit.\n\nGo Premium to create unlimited albums!"
+    val premiumWishlistLimitTitle: String get() = if (isItalian)
+        "Limite Wishlist raggiunto"
+    else
+        "Wishlist limit reached"
+    val premiumWishlistLimitMessage: String get() = if (isItalian)
+        "Hai raggiunto il limite di 1 wishlist gratuita.\n\nPassa a Premium per creare wishlist illimitate!"
+    else
+        "You've reached the 1 free wishlist limit.\n\nGo Premium to create unlimited wishlists!"
     val premiumTournamentLimitTitle: String get() = if (isItalian)
         "Limite Torneo raggiunto"
     else
