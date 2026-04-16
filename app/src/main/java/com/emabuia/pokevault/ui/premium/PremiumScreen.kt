@@ -200,6 +200,21 @@ fun PremiumScreen(
                     feature = AppLocale.premiumFeatureMetaPremium,
                     isFree = false
                 )
+                FeatureRow(
+                    icon = Icons.Default.Favorite,
+                    feature = AppLocale.premiumFeatureWishlistPremium,
+                    isFree = false
+                )
+                FeatureRow(
+                    icon = Icons.Default.Share,
+                    feature = AppLocale.premiumFeatureExportPremium,
+                    isFree = false
+                )
+                FeatureRow(
+                    icon = Icons.Default.CatchingPokemon,
+                    feature = AppLocale.premiumFeatureHomeSpritePremium,
+                    isFree = false
+                )
             }
 
             if (!isPremium) {

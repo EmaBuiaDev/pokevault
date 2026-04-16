@@ -521,6 +521,25 @@ object AppLocale {
     val logoutLabel: String get() = if (isItalian) "Esci" else "Log out"
     val logoutSubtitle: String get() = if (isItalian) "Disconnettiti dal tuo account" else "Sign out of your account"
     val settingsTitle: String get() = if (isItalian) "Impostazioni" else "Settings"
+    val creatorSectionTitle: String get() = if (isItalian) "Chi c'è dietro l'app?" else "Who's behind the app?"
+    val creatorSectionBody: String get() = if (isItalian)
+        "👋 Ciao! Sono Emanuele, il creatore di questa App\n" +
+        "Se stai leggendo questo messaggio, significa che hai curiosato nelle impostazioni... e ne sono felice!\n\n" +
+        "Devi sapere una cosa: dietro a questa app non c'è una grande azienda, ci sono solo io. L'ho pensata, disegnata e programmata interamente da zero. Ci ho messo tanta passione, innumerevoli ore di lavoro nel tempo libero e una quantità imbarazzante di caffè. ☕\n\n" +
+        "Il mio obiettivo è renderla sempre migliore, ma essere uno sviluppatore indipendente è una bella sfida. I server costano, i bug (ahimè) si nascondono sempre, e le nuove idee richiedono tempo.\n\n" +
+        "Se questa app ti è utile, ti fa sorridere o ti semplifica un po' la giornata, ecco come puoi darmi una mano a portarla avanti:\n\n" +
+        "👑 Passa alla versione Premium: Un piccolo abbonamento per te, un supporto vitale per me! Oltre a sbloccare tutte le funzionalità esclusive, mi darai una mano concreta a coprire i costi di gestione e mi permetterai di dedicare sempre più tempo per aggiungere nuove fantastiche novità.\n\n" +
+        "⭐️ Lascia una recensione a 5 stelle: Non costa nulla, ma per un dev indipendente come me vale oro. Aiuta l'app a crescere e a farsi conoscere negli store!\n\n" +
+        "📢 Parlane in giro: Consigliala ai tuoi amici, parenti o sui social. Il passaparola è la pubblicità più bella del mondo.\n\n" +
+        "Qualsiasi cosa tu decida di fare, anche solo continuare a usare l'app nella sua versione base, grazie di cuore. È grazie a persone come te che questo progetto ha senso di esistere.\n\n" +
+        "Per qualsiasi informazione, proposta Buona navigazione!\n\n" +
+        "Emanuele 👨🏻‍💻"
+    else
+        "👋 Hi! I'm Emanuele, the creator of this app.\n\n" +
+        "There is no big company behind it, just me. I designed and built it from scratch with passion, lots of spare-time hours and a lot of coffee. ☕\n\n" +
+        "If the app is useful for you, going Premium, leaving a 5-star review, or sharing it with friends helps a lot.\n\n" +
+        "Thank you for using it!\n\n" +
+        "Emanuele 👨🏻‍💻"
     val privacyPolicyLabel: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
     val privacyPolicySubtitle: String get() = if (isItalian) "Come gestiamo i tuoi dati" else "How we handle your data"
     val termsLabel: String get() = if (isItalian) "Termini di Servizio" else "Terms of Service"
@@ -583,13 +602,20 @@ object AppLocale {
         "Payment is charged to your Google Play account."
     val premiumSettingsLabel: String get() = if (isItalian) "CardsVaultTCG Premium" else "CardsVaultTCG Premium"
     val premiumSettingsSubtitleFree: String get() = if (isItalian)
-        "Sblocca album, deck illimitati e Meta Deck"
+        "Sblocca Wishlist illimitate, Export decklist e Home Sprite a scelta"
     else
-        "Unlock unlimited albums, decks and Meta Decks"
+        "Unlock unlimited wishlists, decklist export and custom Home Sprite"
     val premiumSettingsSubtitleActive: String get() = if (isItalian)
-        "Abbonamento attivo — tutte le funzionalità sbloccate"
+        "Abbonamento attivo — Export, Home Sprite a scelta e Wishlist illimitate"
     else
-        "Active subscription — all features unlocked"
+        "Active subscription — Export, custom Home Sprite and unlimited wishlists"
+    val premiumSettingsExtraTitle: String get() = if (isItalian) "Con Premium sblocchi:" else "With Premium you unlock:"
+    val premiumSettingsExtraExport: String get() = if (isItalian) "• Export decklist PTCG standard" else "• Standard PTCG decklist export"
+    val premiumSettingsExtraHomeSprite: String get() = if (isItalian) "• Home Sprite fisso a scelta" else "• Fixed Home Sprite selection"
+    val premiumSettingsExtraWishlist: String get() = if (isItalian) "• Wishlist illimitate" else "• Unlimited wishlists"
+    val premiumFeatureWishlistPremium: String get() = if (isItalian) "Wishlist illimitate" else "Unlimited wishlists"
+    val premiumFeatureExportPremium: String get() = if (isItalian) "Export decklist PTCG standard" else "Standard PTCG decklist export"
+    val premiumFeatureHomeSpritePremium: String get() = if (isItalian) "Home Sprite fisso a scelta" else "Fixed Home Sprite selection"
     val premiumManage: String get() = if (isItalian) "Gestisci abbonamento" else "Manage subscription"
 
     // Premium gates

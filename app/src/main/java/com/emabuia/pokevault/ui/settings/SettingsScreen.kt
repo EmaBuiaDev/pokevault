@@ -2,6 +2,8 @@ package com.emabuia.pokevault.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +56,7 @@ fun SettingsScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showHomeSpriteDialog by remember { mutableStateOf(false) }
     var showPremiumHomeSpriteDialog by remember { mutableStateOf(false) }
+    var showCreatorSection by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
     var deleteError by remember { mutableStateOf<String?>(null) }
 
@@ -147,6 +151,113 @@ fun SettingsScreen(
                 },
                 accentColor = if (isPremium) BlueCard else TextMuted
             )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                DarkCard.copy(alpha = 0.95f),
+                                DarkSurface.copy(alpha = 0.92f)
+                            )
+                        )
+                    )
+                    .border(
+                        BorderStroke(1.dp, StarGold.copy(alpha = 0.22f)),
+                        RoundedCornerShape(16.dp)
+                    )
+                    .clickable { showCreatorSection = !showCreatorSection }
+                    .animateContentSize()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(StarGold.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "👨🏻‍💻",
+                            fontSize = 18.sp
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = AppLocale.creatorSectionTitle,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite
+                        )
+                        Text(
+                            text = "Indie dev note",
+                            fontSize = 11.sp,
+                            color = StarGold
+                        )
+                    }
+
+                    Icon(
+                        imageVector = if (showCreatorSection) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = StarGold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Surface(
+                    color = StarGold.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, StarGold.copy(alpha = 0.18f))
+                ) {
+                    Text(
+                        text = "Grazie per essere arrivato fin qui.",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextWhite,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                    )
+                }
+
+                if (showCreatorSection) {
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = AppLocale.creatorSectionBody,
+                        fontSize = 12.sp,
+                        color = TextMuted,
+                        lineHeight = 19.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Made with care in Italy",
+                        fontSize = 11.sp,
+                        color = TextGray,
+                        letterSpacing = 0.3.sp
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Tocca per leggere il messaggio completo",
+                        fontSize = 11.sp,
+                        color = TextGray
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
