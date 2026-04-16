@@ -651,6 +651,21 @@ object AppLocale {
     val deckExportShare: String get() = if (isItalian) "Condividi" else "Share"
     val deckExportCopied: String get() = if (isItalian) "Decklist copiata" else "Decklist copied"
     val deckExportShareChooser: String get() = if (isItalian) "Condividi decklist" else "Share decklist"
+    val homeSpriteSettingsTitle: String get() = if (isItalian) "Sprite Home" else "Home Sprite"
+    val homeSpriteSettingsSubtitle: String get() = if (isItalian)
+        "Scegli il Pokemon mostrato in Home"
+    else
+        "Choose the Pokemon shown on Home"
+    val homeSpriteDialogTitle: String get() = if (isItalian) "Seleziona Sprite Home" else "Select Home Sprite"
+    val homeSpriteRandom: String get() = if (isItalian) "Casuale" else "Random"
+    val premiumHomeSpriteTitle: String get() = if (isItalian)
+        "Sprite Home Premium"
+    else
+        "Premium Home Sprite"
+    val premiumHomeSpriteMessage: String get() = if (isItalian)
+        "La scelta fissa dello sprite Home e disponibile solo con Premium.\n\nPassa a Premium per personalizzare il Pokemon della Home."
+    else
+        "Fixed Home sprite selection is available with Premium only.\n\nGo Premium to customize the Home Pokemon."
     fun premiumMetaDeckViewsRemaining(count: Int) = if (isItalian)
         "$count visualizzazioni rimanenti"
     else

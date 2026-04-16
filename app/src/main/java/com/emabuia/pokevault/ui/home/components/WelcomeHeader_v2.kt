@@ -36,13 +36,15 @@ import kotlin.random.Random
 @Composable
 fun WelcomeHeader(
     userName: String = "Allenatore",
+    selectedPokemonId: Int? = null,
     onSettingsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val pokemonIds = remember { listOf(25, 1, 4, 7, 133, 150, 151, 384, 448, 94, 158, 258, 393, 6, 9, 3) }
     val randomPokemonId = remember { pokemonIds[Random.nextInt(pokemonIds.size)] }
+    val displayedPokemonId = selectedPokemonId?.takeIf { it in pokemonIds } ?: randomPokemonId
     
-    val pokemonImageUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/$randomPokemonId.gif"
+    val pokemonImageUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/$displayedPokemonId.gif"
 
     val infiniteTransition = rememberInfiniteTransition(label = "bobbing")
     val offsetY by infiniteTransition.animateFloat(

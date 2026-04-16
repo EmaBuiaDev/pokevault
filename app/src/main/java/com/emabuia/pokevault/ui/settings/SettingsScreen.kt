@@ -3,9 +3,14 @@ package com.emabuia.pokevault.ui.settings
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -17,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -24,7 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.AuthViewModel
@@ -40,7 +48,11 @@ fun SettingsScreen(
     val context = LocalContext.current
     val premiumManager = remember { PremiumManager.getInstance() }
     val isPremium by premiumManager.isPremium.collectAsState()
+    val selectedHomeSpriteId by premiumManager.selectedHomeSpriteId.collectAsState()
+    val homeSpriteIds = remember { premiumManager.homeSpriteIds }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showHomeSpriteDialog by remember { mutableStateOf(false) }
+    var showPremiumHomeSpriteDialog by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
     var deleteError by remember { mutableStateOf<String?>(null) }
 
@@ -118,6 +130,22 @@ fun SettingsScreen(
                            else AppLocale.premiumSettingsSubtitleFree,
                 onClick = onNavigateToPremium,
                 accentColor = StarGold
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsItem(
+                icon = Icons.Default.CatchingPokemon,
+                title = AppLocale.homeSpriteSettingsTitle,
+                subtitle = AppLocale.homeSpriteSettingsSubtitle,
+                onClick = {
+                    if (premiumManager.canChooseHomeSprite()) {
+                        showHomeSpriteDialog = true
+                    } else {
+                        showPremiumHomeSpriteDialog = true
+                    }
+                },
+                accentColor = if (isPremium) BlueCard else TextMuted
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -224,6 +252,107 @@ fun SettingsScreen(
             onDismiss = { showDeleteDialog = false }
         )
     }
+
+    if (showHomeSpriteDialog) {
+        HomeSpritePickerDialog(
+            spriteIds = homeSpriteIds,
+            selectedSpriteId = selectedHomeSpriteId,
+            onSelectSprite = { spriteId -> premiumManager.setSelectedHomeSpriteId(spriteId) },
+            onDismiss = { showHomeSpriteDialog = false }
+        )
+    }
+
+    if (showPremiumHomeSpriteDialog) {
+        PremiumRequiredDialog(
+            title = AppLocale.premiumHomeSpriteTitle,
+            message = AppLocale.premiumHomeSpriteMessage,
+            onDismiss = { showPremiumHomeSpriteDialog = false },
+            onUpgrade = {
+                showPremiumHomeSpriteDialog = false
+                onNavigateToPremium()
+            }
+        )
+    }
+}
+
+@Composable
+private fun HomeSpritePickerDialog(
+    spriteIds: List<Int>,
+    selectedSpriteId: Int,
+    onSelectSprite: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkSurface,
+        title = {
+            Text(
+                text = AppLocale.homeSpriteDialogTitle,
+                color = TextWhite,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = {
+                        onSelectSprite(0)
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedSpriteId == 0) BlueCard else DarkCard
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(AppLocale.homeSpriteRandom)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp)
+                ) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(4),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(spriteIds) { spriteId ->
+                            val spriteUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/$spriteId.png"
+                            Box(
+                                modifier = Modifier
+                                    .size(60.dp)
+                                    .clip(CircleShape)
+                                    .background(DarkCard)
+                                    .border(
+                                        width = if (selectedSpriteId == spriteId) 2.dp else 1.dp,
+                                        color = if (selectedSpriteId == spriteId) BlueCard else Color.White.copy(alpha = 0.12f),
+                                        shape = CircleShape
+                                    )
+                                    .clickable {
+                                        onSelectSprite(spriteId)
+                                        onDismiss()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AsyncImage(
+                                    model = spriteUrl,
+                                    contentDescription = "Sprite $spriteId",
+                                    modifier = Modifier.size(48.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(AppLocale.cancel, color = TextMuted)
+            }
+        }
+    )
 }
 
 @Composable

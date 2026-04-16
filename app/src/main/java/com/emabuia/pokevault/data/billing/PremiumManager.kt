@@ -24,6 +24,9 @@ class PremiumManager private constructor(private val context: Context) {
         private const val PREFS_NAME = "pokevault_premium"
         private const val KEY_IS_PREMIUM = "is_premium"
         private const val KEY_META_DECK_VIEWS = "meta_deck_views"
+        private const val KEY_HOME_SPRITE_ID = "home_sprite_id"
+
+        private val HOME_SPRITE_IDS = listOf(25, 1, 4, 7, 133, 150, 151, 384, 448, 94, 158, 258, 393, 6, 9, 3)
 
         @Volatile
         private var INSTANCE: PremiumManager? = null
@@ -49,6 +52,11 @@ class PremiumManager private constructor(private val context: Context) {
     val isPremium: StateFlow<Boolean> = _isPremium.asStateFlow()
 
     private val _metaDeckViewsUsed = MutableStateFlow(prefs.getInt(KEY_META_DECK_VIEWS, 0))
+    private val _selectedHomeSpriteId = MutableStateFlow(prefs.getInt(KEY_HOME_SPRITE_ID, 0))
+    val selectedHomeSpriteId: StateFlow<Int> = _selectedHomeSpriteId.asStateFlow()
+
+    val homeSpriteIds: List<Int>
+        get() = HOME_SPRITE_IDS
 
     val metaDeckViewsRemaining: Int
         get() = if (_isPremium.value) Int.MAX_VALUE
@@ -247,6 +255,18 @@ class PremiumManager private constructor(private val context: Context) {
 
     fun canExportDecklist(): Boolean {
         return _isPremium.value
+    }
+
+    fun canChooseHomeSprite(): Boolean {
+        return _isPremium.value
+    }
+
+    fun setSelectedHomeSpriteId(spriteId: Int) {
+        if (!_isPremium.value) return
+
+        val validSpriteId = if (spriteId == 0 || HOME_SPRITE_IDS.contains(spriteId)) spriteId else return
+        _selectedHomeSpriteId.value = validSpriteId
+        prefs.edit().putInt(KEY_HOME_SPRITE_ID, validSpriteId).apply()
     }
 
     fun consumeMetaDeckView() {

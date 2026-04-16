@@ -11,10 +11,14 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.ui.components.OfflineBanner
 import com.emabuia.pokevault.ui.home.components.*
 import com.emabuia.pokevault.ui.navigation.Routes
@@ -31,6 +35,9 @@ fun HomeScreen(
     userName: String = "Allenatore",
     viewModel: HomeViewModel = viewModel()
 ) {
+    val premiumManager = remember { PremiumManager.getInstance() }
+    val isPremium by premiumManager.isPremium.collectAsState()
+    val selectedHomeSpriteId by premiumManager.selectedHomeSpriteId.collectAsState()
     val scrollState = rememberScrollState()
 
     Box(
@@ -49,6 +56,7 @@ fun HomeScreen(
             // Header: sprite + nome + impostazioni su una riga
             WelcomeHeader(
                 userName = userName,
+                selectedPokemonId = if (isPremium && selectedHomeSpriteId != 0) selectedHomeSpriteId else null,
                 onSettingsClick = { onNavigate(Routes.SETTINGS) },
                 modifier = Modifier
                     .fillMaxWidth()
