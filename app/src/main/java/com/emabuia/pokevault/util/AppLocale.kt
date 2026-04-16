@@ -637,6 +637,20 @@ object AppLocale {
         "Hai utilizzato tutte le 10 visualizzazioni gratuite dei Meta Deck.\n\nPassa a Premium per accesso illimitato!"
     else
         "You've used all 10 free Meta Deck views.\n\nGo Premium for unlimited access!"
+    val premiumDeckExportTitle: String get() = if (isItalian)
+        "Export Decklist Premium"
+    else
+        "Premium Decklist Export"
+    val premiumDeckExportMessage: String get() = if (isItalian)
+        "L'export in formato decklist PTCG standard e disponibile solo con Premium.\n\nPassa a Premium per esportare e condividere i tuoi deck."
+    else
+        "Export in standard PTCG decklist format is available with Premium only.\n\nGo Premium to export and share your decks."
+
+    val deckExportTitle: String get() = if (isItalian) "Export Decklist" else "Export Decklist"
+    val deckExportCopy: String get() = if (isItalian) "Copia" else "Copy"
+    val deckExportShare: String get() = if (isItalian) "Condividi" else "Share"
+    val deckExportCopied: String get() = if (isItalian) "Decklist copiata" else "Decklist copied"
+    val deckExportShareChooser: String get() = if (isItalian) "Condividi decklist" else "Share decklist"
     fun premiumMetaDeckViewsRemaining(count: Int) = if (isItalian)
         "$count visualizzazioni rimanenti"
     else

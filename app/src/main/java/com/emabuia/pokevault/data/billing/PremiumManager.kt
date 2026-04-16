@@ -245,6 +245,10 @@ class PremiumManager private constructor(private val context: Context) {
         return _isPremium.value || _metaDeckViewsUsed.value < FREE_META_DECK_VIEWS
     }
 
+    fun canExportDecklist(): Boolean {
+        return _isPremium.value
+    }
+
     fun consumeMetaDeckView() {
         if (_isPremium.value) return
         val newCount = _metaDeckViewsUsed.value + 1

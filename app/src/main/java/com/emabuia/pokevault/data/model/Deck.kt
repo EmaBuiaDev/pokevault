@@ -11,8 +11,16 @@ data class Deck(
     val averageHp: Double = 0.0,
     val totalCards: Int = 0,
     val recommendedEnergy: List<String> = emptyList(),
-    val coverImageUrl: String = ""
-)
+    val coverImageUrl: String = "",
+    val coverImageUrls: List<String> = emptyList()
+) {
+    fun displayCoverImageUrls(): List<String> {
+        return (coverImageUrls + coverImageUrl)
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(2)
+    }
+}
 
 data class DeckAnalysis(
     val typesCount: Map<String, Int> = emptyMap(),

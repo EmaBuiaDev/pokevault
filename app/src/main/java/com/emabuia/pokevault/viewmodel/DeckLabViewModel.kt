@@ -61,6 +61,7 @@ class DeckLabViewModel : ViewModel() {
     var newDeckName by mutableStateOf("")
     var selectedCardsIds by mutableStateOf<List<String>>(emptyList())
     var coverImageUrl by mutableStateOf("")
+    var coverImageUrls by mutableStateOf<List<String>>(emptyList())
     var currentAnalysis by mutableStateOf(DeckAnalysis())
     var validationError by mutableStateOf<String?>(null)
         private set
@@ -173,7 +174,10 @@ class DeckLabViewModel : ViewModel() {
 
         if (availableId != null) {
             selectedCardsIds = selectedCardsIds + availableId
-            if (coverImageUrl.isEmpty()) coverImageUrl = card.imageUrl
+            if (coverImageUrls.isEmpty()) {
+                coverImageUrls = listOf(card.imageUrl)
+            }
+            syncCoverImagesWithSelectedCards()
             validationError = null
             analyzeDeck()
         }
@@ -187,10 +191,7 @@ class DeckLabViewModel : ViewModel() {
         
         if (idToRemove != null) {
             selectedCardsIds = selectedCardsIds - idToRemove
-            if (coverImageUrl == card.imageUrl && !selectedCardsIds.any { id -> ownedCards.find { it.id == id }?.imageUrl == card.imageUrl }) {
-                 val nextCardId = selectedCardsIds.firstOrNull()
-                 coverImageUrl = ownedCards.find { it.id == nextCardId }?.imageUrl ?: ""
-            }
+            syncCoverImagesWithSelectedCards()
             validationError = null
             analyzeDeck()
         }
@@ -229,7 +230,8 @@ class DeckLabViewModel : ViewModel() {
         editingDeckId = deck.id
         newDeckName = deck.name
         selectedCardsIds = deck.cards
-        coverImageUrl = deck.coverImageUrl
+        coverImageUrls = deck.displayCoverImageUrls()
+        coverImageUrl = coverImageUrls.firstOrNull().orEmpty()
         analyzeDeck()
     }
 
@@ -254,7 +256,8 @@ class DeckLabViewModel : ViewModel() {
             averageHp = currentAnalysis.averageHp,
             totalCards = selectedCardsIds.size,
             recommendedEnergy = currentAnalysis.recommendedEnergy,
-            coverImageUrl = coverImageUrl
+            coverImageUrl = coverImageUrls.firstOrNull().orEmpty(),
+            coverImageUrls = coverImageUrls.take(2)
         )
 
         viewModelScope.launch {
@@ -280,6 +283,7 @@ class DeckLabViewModel : ViewModel() {
         newDeckName = ""
         selectedCardsIds = emptyList()
         coverImageUrl = ""
+        coverImageUrls = emptyList()
         currentAnalysis = DeckAnalysis()
         validationError = null
     }
@@ -295,8 +299,35 @@ class DeckLabViewModel : ViewModel() {
         validationError = null
     }
 
-    fun selectCoverCard(url: String) {
-        coverImageUrl = url
+    fun toggleCoverCard(url: String) {
+        if (url.isBlank()) return
+
+        coverImageUrls = if (coverImageUrls.contains(url)) {
+            coverImageUrls - url
+        } else {
+            (coverImageUrls + url).distinct().take(2)
+        }
+
+        syncCoverImagesWithSelectedCards()
+    }
+
+    private fun syncCoverImagesWithSelectedCards() {
+        val availableUrls = selectedCardsIds
+            .mapNotNull { id -> ownedCards.find { it.id == id }?.imageUrl }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        if (availableUrls.isEmpty()) {
+            coverImageUrls = emptyList()
+            coverImageUrl = ""
+            return
+        }
+
+        val keptSelected = coverImageUrls.filter { it in availableUrls }
+        coverImageUrls = (keptSelected + availableUrls)
+            .distinct()
+            .take(2)
+        coverImageUrl = coverImageUrls.firstOrNull().orEmpty()
     }
 
     // ══════════════════════════════════════
@@ -388,8 +419,12 @@ class DeckLabViewModel : ViewModel() {
 
         selectedCardsIds = idsToAdd.take(60) // Limite 60 carte
         if (idsToAdd.isNotEmpty()) {
-            val firstCard = ownedCards.find { it.id == idsToAdd.first() }
-            coverImageUrl = firstCard?.imageUrl ?: ""
+            val importedUrls = selectedCardsIds
+                .mapNotNull { id -> ownedCards.find { it.id == id }?.imageUrl }
+                .filter { it.isNotBlank() }
+                .distinct()
+            coverImageUrls = importedUrls.take(2)
+            coverImageUrl = coverImageUrls.firstOrNull().orEmpty()
         }
         analyzeDeck()
 
@@ -447,6 +482,76 @@ class DeckLabViewModel : ViewModel() {
 
     fun clearImportResult() {
         importResult = null
+    }
+
+    fun buildPtcgDecklist(deck: Deck): String {
+        val idToCard = ownedCards.associateBy { it.id }
+        val grouped = linkedMapOf<String, Pair<PokemonCard, Int>>()
+
+        for (cardId in deck.cards) {
+            val card = idToCard[cardId] ?: continue
+            val key = getCardKey(card)
+            val existing = grouped[key]
+            grouped[key] = if (existing == null) card to 1 else card to (existing.second + 1)
+        }
+
+        fun setCodeOrNull(card: PokemonCard): String? {
+            val fromSet = card.set.uppercase().replace(Regex("[^A-Z0-9]"), "")
+            val fromApi = card.apiCardId.substringBefore("-").uppercase().replace(Regex("[^A-Z0-9]"), "")
+
+            val regex = Regex("^[A-Z]{2,5}\\d*$")
+            return when {
+                regex.matches(fromSet) -> fromSet
+                regex.matches(fromApi) -> fromApi
+                else -> null
+            }
+        }
+
+        fun toDeckLine(card: PokemonCard, qty: Int): String {
+            val setCode = setCodeOrNull(card)
+            val number = card.cardNumber.trim()
+            return if (!setCode.isNullOrBlank() && number.isNotBlank()) {
+                "$qty ${card.name} $setCode $number"
+            } else {
+                "$qty ${card.name}"
+            }
+        }
+
+        val pokemon = mutableListOf<String>()
+        val trainer = mutableListOf<String>()
+        val energy = mutableListOf<String>()
+
+        grouped.values.forEach { (card, qty) ->
+            when (classifyCard(card)) {
+                "Pokémon" -> pokemon += toDeckLine(card, qty)
+                "Trainer" -> trainer += toDeckLine(card, qty)
+                "Energy" -> energy += toDeckLine(card, qty)
+                else -> pokemon += toDeckLine(card, qty)
+            }
+        }
+
+        val builder = StringBuilder()
+        builder.appendLine(deck.name.ifBlank { "Deck" })
+        builder.appendLine()
+
+        if (pokemon.isNotEmpty()) {
+            builder.appendLine("Pokémon: ${pokemon.sumOf { line -> line.substringBefore(' ').toIntOrNull() ?: 0 }}")
+            pokemon.forEach { builder.appendLine(it) }
+            builder.appendLine()
+        }
+
+        if (trainer.isNotEmpty()) {
+            builder.appendLine("Trainer: ${trainer.sumOf { line -> line.substringBefore(' ').toIntOrNull() ?: 0 }}")
+            trainer.forEach { builder.appendLine(it) }
+            builder.appendLine()
+        }
+
+        if (energy.isNotEmpty()) {
+            builder.appendLine("Energy: ${energy.sumOf { line -> line.substringBefore(' ').toIntOrNull() ?: 0 }}")
+            energy.forEach { builder.appendLine(it) }
+        }
+
+        return builder.toString().trimEnd()
     }
 
     // ══════════════════════════════════════

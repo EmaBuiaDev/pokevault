@@ -309,6 +309,8 @@ class FirestoreRepository {
                 "averageHp" to deck.averageHp,
                 "totalCards" to deck.totalCards,
                 "recommendedEnergy" to deck.recommendedEnergy,
+                "coverImageUrl" to deck.coverImageUrl,
+                "coverImageUrls" to deck.displayCoverImageUrls(),
                 "createdAt" to com.google.firebase.Timestamp.now()
             )
             val docRef = if (deck.id.isEmpty()) {

@@ -1,5 +1,8 @@
 package com.emabuia.pokevault.ui.deck
 
+import android.content.ClipData
+import android.content.Intent
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -63,6 +66,10 @@ fun DeckLabScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var showPremiumDeckDialog by remember { mutableStateOf(false) }
     var showPremiumMetaDeckDialog by remember { mutableStateOf(false) }
+    var showPremiumDeckExportDialog by remember { mutableStateOf(false) }
+    var showDeckExportDialog by remember { mutableStateOf(false) }
+    var decklistExportText by remember { mutableStateOf("") }
+    var decklistExportName by remember { mutableStateOf("") }
     var selectedDeck by remember { mutableStateOf<Deck?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val deckLabTabs = listOf(AppLocale.deckLabMyDecks, AppLocale.deckLabMetaDeck, AppLocale.deckLabWinTournament)
@@ -246,6 +253,16 @@ fun DeckLabScreen(
                             } else {
                                 showPremiumDeckDialog = true
                             }
+                        },
+                        onExport = {
+                            val deckToExport = selectedDeck ?: return@DeckDetailView
+                            if (premiumManager.canExportDecklist()) {
+                                decklistExportText = viewModel.buildPtcgDecklist(deckToExport)
+                                decklistExportName = deckToExport.name.ifBlank { "Deck" }
+                                showDeckExportDialog = true
+                            } else {
+                                showPremiumDeckExportDialog = true
+                            }
                         }
                     )
                 }
@@ -396,6 +413,26 @@ fun DeckLabScreen(
                 }
             )
         }
+
+        if (showPremiumDeckExportDialog) {
+            PremiumRequiredDialog(
+                title = AppLocale.premiumDeckExportTitle,
+                message = AppLocale.premiumDeckExportMessage,
+                onDismiss = { showPremiumDeckExportDialog = false },
+                onUpgrade = {
+                    showPremiumDeckExportDialog = false
+                    onNavigateToPremium()
+                }
+            )
+        }
+
+        if (showDeckExportDialog) {
+            DeckExportDialog(
+                deckName = decklistExportName,
+                decklistText = decklistExportText,
+                onDismiss = { showDeckExportDialog = false }
+            )
+        }
     }
 }
 
@@ -405,6 +442,7 @@ fun DeckItem(
     onClick: () -> Unit,
     allOwnedCards: List<PokemonCard>
 ) {
+    val coverUrls = remember(deck) { deck.displayCoverImageUrls() }
     val cardCounts = remember(deck.cards) { deck.cards.groupingBy { it }.eachCount() }
     val uniqueDeckCards = remember(deck.cards, allOwnedCards) {
         allOwnedCards.filter { it.id in cardCounts.keys }
@@ -433,10 +471,10 @@ fun DeckItem(
                 .fillMaxWidth()
                 .height(140.dp)
         ) {
-            if (deck.coverImageUrl.isNotEmpty()) {
+            if (coverUrls.isNotEmpty()) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(deck.coverImageUrl)
+                        .data(coverUrls.first())
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
@@ -479,6 +517,27 @@ fun DeckItem(
                     .align(Alignment.BottomStart)
                     .padding(16.dp)
             ) {
+                if (coverUrls.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        coverUrls.forEach { coverUrl ->
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(coverUrl)
+                                    .size(120, 168)
+                                    .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .size(30.dp, 42.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.45f)), RoundedCornerShape(4.dp))
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = deck.name,
                     color = Color.White,
@@ -506,7 +565,8 @@ fun DeckDetailView(
     onCardClick: (String) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onDuplicate: () -> Unit
+    onDuplicate: () -> Unit,
+    onExport: () -> Unit
 ) {
     fun getCardKey(card: PokemonCard): String =
         card.apiCardId.ifEmpty { "${card.name}-${card.set}-${card.cardNumber}-${card.variant}" }
@@ -589,6 +649,12 @@ fun DeckDetailView(
                         modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
                     ) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = RedCard, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(
+                        onClick = onExport,
+                        modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, tint = StarGold, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -698,6 +764,86 @@ fun DeckDetailView(
             item { Spacer(modifier = Modifier.height(20.dp)) }
         }
     }
+}
+
+@Composable
+fun DeckExportDialog(
+    deckName: String,
+    decklistText: String,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkSurface,
+        title = {
+            Text(
+                text = AppLocale.deckExportTitle,
+                color = TextWhite,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = decklistText,
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 180.dp, max = 360.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = BlueCard,
+                        unfocusedBorderColor = TextMuted.copy(alpha = 0.4f),
+                        focusedTextColor = TextWhite,
+                        unfocusedTextColor = TextWhite,
+                        focusedContainerColor = DarkCard,
+                        unfocusedContainerColor = DarkCard
+                    )
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("PTCG Decklist", decklistText))
+                            Toast.makeText(context, AppLocale.deckExportCopied, Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextWhite)
+                    ) {
+                        Text(AppLocale.deckExportCopy)
+                    }
+
+                    Button(
+                        onClick = {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "$deckName - PTCG Decklist")
+                                putExtra(Intent.EXTRA_TEXT, decklistText)
+                            }
+                            context.startActivity(
+                                Intent.createChooser(shareIntent, AppLocale.deckExportShareChooser)
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                    ) {
+                        Text(AppLocale.deckExportShare)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(AppLocale.cancel, color = TextMuted)
+            }
+        }
+    )
 }
 
 @Composable
@@ -835,25 +981,46 @@ fun NewDeckBottomSheetContent(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp, 56.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(DarkBackground)
-                            .border(BorderStroke(1.dp, BlueCard.copy(alpha = 0.5f)), RoundedCornerShape(4.dp))
-                            .clickable { if(viewModel.selectedCardsIds.isNotEmpty()) showCoverPicker = !showCoverPicker },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (viewModel.coverImageUrl.isNotEmpty()) {
-                            AsyncImage(
-                                model = viewModel.coverImageUrl,
-                                contentDescription = null,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+                    Column(
+                        modifier = Modifier.clickable {
+                            if (viewModel.selectedCardsIds.isNotEmpty()) showCoverPicker = !showCoverPicker
                         }
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            repeat(2) { index ->
+                                val url = viewModel.coverImageUrls.getOrNull(index)
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp, 56.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(DarkBackground)
+                                        .border(BorderStroke(1.dp, BlueCard.copy(alpha = 0.5f)), RoundedCornerShape(4.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (!url.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = url,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Fit,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Default.AddPhotoAlternate,
+                                            contentDescription = null,
+                                            tint = TextMuted,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Text(
+                            text = "Copertina x2",
+                            color = TextMuted,
+                            fontSize = 9.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))
@@ -881,8 +1048,15 @@ fun NewDeckBottomSheetContent(
         if (showCoverPicker && viewModel.selectedCardsIds.isNotEmpty()) {
             Column(modifier = Modifier.padding(vertical = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = "Scegli Copertina", color = LavenderCard, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = "Scegli 2 Copertine", color = LavenderCard, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = "${viewModel.coverImageUrls.size}/2",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
                     IconButton(onClick = { showCoverPicker = false }, modifier = Modifier.size(20.dp)) {
                         Icon(Icons.Default.Close, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
                     }
@@ -891,6 +1065,7 @@ fun NewDeckBottomSheetContent(
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val selectedCards = viewModel.ownedCards.filter { it.id in viewModel.selectedCardsIds }.distinctBy { it.imageUrl }
                     items(selectedCards) { card ->
+                        val isSelectedCover = viewModel.coverImageUrls.contains(card.imageUrl)
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(card.imageUrl)
@@ -902,13 +1077,10 @@ fun NewDeckBottomSheetContent(
                                 .size(44.dp, 62.dp)
                                 .clip(RoundedCornerShape(4.dp))
                                 .border(
-                                    BorderStroke(if (viewModel.coverImageUrl == card.imageUrl) 2.dp else 0.dp, BlueCard),
+                                    BorderStroke(if (isSelectedCover) 2.dp else 0.dp, BlueCard),
                                     RoundedCornerShape(4.dp)
                                 )
-                                .clickable { 
-                                    viewModel.selectCoverCard(card.imageUrl)
-                                    showCoverPicker = false
-                                }
+                                .clickable { viewModel.toggleCoverCard(card.imageUrl) }
                         )
                     }
                 }
