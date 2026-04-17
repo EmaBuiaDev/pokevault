@@ -938,12 +938,26 @@ private fun buildDeckCardPool(deck: Deck, ownedCards: List<PokemonCard>): List<S
 }
 
 private fun PokemonCard.isBasicPokemon(): Boolean {
+    // A Pokémon is Basic if:
+    // 1. It's classified as Pokémon and has HP > 0
+    // 2. Either explicitly has "Basic" subtype OR has no evolution markers
     val isPokemon = classify() == "Pokémon"
-    val hasBasicSubtype = subtypes.any {
-        val normalized = it.lowercase()
-        normalized.contains("basic") || normalized.contains("base")
+    if (!isPokemon || hp <= 0) return false
+    
+    val subtypesLower = subtypes.map { it.lowercase() }
+    
+    // Check if explicitly marked as Basic
+    if (subtypesLower.any { it.contains("basic") || it.contains("base") }) {
+        return true
     }
-    return isPokemon && hasBasicSubtype
+    
+    // Check if it's NOT an evolution type - if no evolution markers, it's implicitly Basic
+    val evolutionMarkers = listOf("stage 1", "stage 2", "stage1", "stage2", "v-max", "vmax", "vstar", "v-star", "lv.x")
+    val hasEvolutionMarker = subtypesLower.any { subtype ->
+        evolutionMarkers.any { marker -> subtype.contains(marker) }
+    }
+    
+    return !hasEvolutionMarker
 }
 
 private fun PokemonCard.isSupporterCard(): Boolean {

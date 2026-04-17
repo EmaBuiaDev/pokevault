@@ -289,7 +289,7 @@ object AppLocale {
     val handSimulatorResults: String get() = if (isItalian) "Risultati" else "Results"
     val handSimulatorTotalRuns: String get() = if (isItalian) "Run" else "Runs"
     val handSimulatorStarterRate: String get() = if (isItalian) "Starter rate" else "Starter rate"
-    val handSimulatorMulliganRate: String get() = if (isItalian) "Mulligan rate" else "Mulligan rate"
+        val handSimulatorMulliganRate: String get() = if (isItalian) "Opening senza Starter" else "Opening without Starter"
     val handSimulatorAvgBasics: String get() = if (isItalian) "Basic medi in mano" else "Avg basics in hand"
     val handSimulatorAvgMulligans: String get() = if (isItalian) "Mulligan medi" else "Avg mulligans"
     val handSimulatorEnergyT1: String get() = if (isItalian) "Energia entro T1" else "Energy by T1"
@@ -329,13 +329,13 @@ object AppLocale {
     else
         "Starter rate: % of opening hands with at least 1 Basic."
     val handSimulatorMetricMulligan: String get() = if (isItalian)
-        "Mulligan rate: % di opening hand iniziali senza Basic."
+            "Opening senza Starter: % di prime mani (7 carte) senza alcun Pokémon Base. Il giocatore dovrà scartare e pescare nuove carte fino ad averne una con Starter."
     else
-        "Mulligan rate: % of initial opening hands with no Basic."
-    val handSimulatorMetricAvgBasics: String get() = if (isItalian)
-        "Basic medi in mano: media dei Basic nelle prime 7 carte."
-    else
-        "Avg basics in hand: average number of Basics in the first 7 cards."
+            "Opening without Starter: % of initial draws (7 cards) with no Basic Pokémon. Player must mulligan and redraw until finding a hand with a Starter."
+        val handSimulatorMetricAvgBasics: String get() = if (isItalian)
+            "Basic medi in mano: media dei Basic nelle prime 7 carte di ogni simulazione."
+        else
+            "Avg basics in hand: average number of Basic Pokémon in the initial 7 cards per simulation."
     val handSimulatorMetricEnergyT1: String get() = if (isItalian)
         "Energia entro T1: % di run con almeno 1 energia in mano entro il turno 1."
     else
