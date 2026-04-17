@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -321,6 +322,7 @@ private fun TypePicker(selected: String, onSelect: (String) -> Unit) {
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun CriteriaChipList(options: List<String>, selected: String, onSelect: (String) -> Unit) {
     Column {
         Text(AppLocale.chaseCriteriaValueLabel, color = TextGray, fontSize = 13.sp)
