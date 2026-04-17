@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.emabuia.pokevault.ui.competitive
 
 import androidx.compose.foundation.layout.Arrangement
