@@ -36,6 +36,7 @@ object RetrofitClient {
 class PokeTcgRepository {
 
     private val api = RetrofitClient.apiService
+    private val tcgdexRepository = TcgdexRepository()
     private val gson = Gson()
 
     // Cache memoria (thread-safe)
@@ -45,8 +46,8 @@ class PokeTcgRepository {
 
     companion object {
         private const val PREFS_NAME = "pokevault_cache"
-        private const val SETS_CACHE_KEY = "cached_sets"
-        private const val SETS_TIME_KEY = "cached_sets_time"
+        private const val SETS_CACHE_KEY = "cached_sets_v6"
+        private const val SETS_TIME_KEY = "cached_sets_time_v6"
         private const val CARDS_PREFIX = "cached_cards_"
         private const val CARDS_TIME_PREFIX = "cached_cards_time_"
         private const val CARDS_TOTAL_PREFIX = "cached_cards_total_"
@@ -94,6 +95,7 @@ class PokeTcgRepository {
             loadSetsFromCache(context)?.let { memorySets = it; return Result.success(it) }
         }
         return try {
+            val startedAt = System.currentTimeMillis()
             val allSets = mutableListOf<TcgSet>()
             var page = 1
             do {
@@ -101,11 +103,24 @@ class PokeTcgRepository {
                 allSets.addAll(response.data)
                 page++
             } while (response.data.size == 250)
-            
-            val uniqueSets = allSets.distinctBy { it.id }
-            memorySets = uniqueSets
-            context?.let { saveSetsToCache(it, uniqueSets) }
-            Result.success(uniqueSets)
+
+            val primarySets = allSets.distinctBy { it.id }
+            val extraSets = tcgdexRepository.getMissingSets(primarySets)
+                .onFailure { Timber.w(it, "TCGdex extra sets non disponibili, continuo con PokemonTCG") }
+                .getOrDefault(emptyList())
+
+            val mergedSets = mergePrimaryWithExtras(primarySets, extraSets)
+            Timber.i(
+                "Loaded sets primary=%d extra=%d merged=%d durationMs=%d",
+                primarySets.size,
+                extraSets.size,
+                mergedSets.size,
+                System.currentTimeMillis() - startedAt
+            )
+
+            memorySets = mergedSets
+            context?.let { saveSetsToCache(it, mergedSets) }
+            Result.success(mergedSets)
         } catch (e: Exception) {
             if (context != null) {
                 loadSetsFromCache(context, ignoreExpiry = true)?.let {
@@ -151,6 +166,21 @@ class PokeTcgRepository {
     }
 
     suspend fun getCardsBySet(setId: String, context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgCard>> {
+        if (isTcgdexSetId(setId)) {
+            if (!forceRefresh) {
+                val cached = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId) })
+                if (cached != null && cached.isNotEmpty()) {
+                    memoryCards[setId] = cached
+                    return Result.success(cached)
+                }
+            }
+
+            return tcgdexRepository.getCardsBySet(setId).onSuccess { cards ->
+                memoryCards[setId] = cards
+                context?.let { saveCardsToCache(it, setId, cards, cards.size) }
+            }
+        }
+
         // 1. Controllo Cache
         if (!forceRefresh) {
             val cached = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId) })
@@ -204,6 +234,10 @@ class PokeTcgRepository {
     }
 
     suspend fun getSetInfo(setId: String): Result<TcgSet> {
+        memorySets?.firstOrNull { it.id == setId }?.let { return Result.success(it) }
+        if (isTcgdexSetId(setId)) {
+            return tcgdexRepository.getSetInfo(setId)
+        }
         return try { Result.success(api.getSet(setId).data) }
         catch (e: Exception) { Result.failure(e) }
     }
@@ -223,7 +257,9 @@ class PokeTcgRepository {
             val total = match.groupValues[2].trimStart('0').ifEmpty { "0" }
 
             // Cerchiamo i set che hanno quel totale stampato
-            val candidateSets = memorySets?.filter { it.printedTotal.toString() == total } ?: emptyList()
+            val candidateSets = memorySets?.filter {
+                !isTcgdexSetId(it.id) && it.printedTotal.toString() == total
+            } ?: emptyList()
             
             return if (candidateSets.isNotEmpty()) {
                 val setIds = candidateSets.joinToString(" OR ") { "set.id:${it.id}" }
