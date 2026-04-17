@@ -387,12 +387,13 @@ class LimitlessTcgRepository {
 
                 if (name.isNotEmpty()) {
                     finalName = name
-                    finalSet = set
+                    finalSet = SetCodeMapper.normalizeDecklistSetCode(set) ?: set
                     finalNumber = number
                 } else if (cardId.isNotEmpty()) {
                     // Formato ID tipo "OBF_125" → set="OBF", number="125"
                     val parts = cardId.split("_", limit = 2)
-                    finalSet = parts.getOrElse(0) { "" }
+                    val parsedSet = parts.getOrElse(0) { "" }
+                    finalSet = SetCodeMapper.normalizeDecklistSetCode(parsedSet) ?: parsedSet
                     finalNumber = parts.getOrElse(1) { "" }
                     finalName = cardId // Usa l'ID come nome fallback
                 } else {

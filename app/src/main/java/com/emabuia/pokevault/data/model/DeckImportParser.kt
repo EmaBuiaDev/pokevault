@@ -1,5 +1,7 @@
 package com.emabuia.pokevault.data.model
 
+import com.emabuia.pokevault.data.remote.SetCodeMapper
+
 /**
  * Parser per decklist in formato testo standard PTCG.
  *
@@ -108,7 +110,8 @@ object DeckImportParser {
 
         if (setMatch != null) {
             name = setMatch.groupValues[1].trim()
-            set = setMatch.groupValues[2].uppercase()
+            val parsedSet = setMatch.groupValues[2].uppercase()
+            set = SetCodeMapper.normalizeDecklistSetCode(parsedSet)
             number = setMatch.groupValues[3]
         } else {
             name = rest

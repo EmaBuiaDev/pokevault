@@ -32,7 +32,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -920,6 +922,7 @@ fun NewDeckBottomSheetContent(
 ) {
     var showCoverPicker by remember { mutableStateOf(false) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val focusManager = LocalFocusManager.current
     val tabs = listOf("Pokémon", "Trainer", "Energia")
 
     val filteredCards = remember(selectedTabIndex, viewModel.ownedCards) {
@@ -941,6 +944,7 @@ fun NewDeckBottomSheetContent(
             .fillMaxWidth()
             .fillMaxHeight(0.92f)
             .padding(horizontal = 20.dp)
+            .imePadding()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
     ) {
         Box(
@@ -981,26 +985,37 @@ fun NewDeckBottomSheetContent(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    val coverPickerEnabled = viewModel.selectedCardsIds.isNotEmpty()
                     Column(
-                        modifier = Modifier.clickable {
-                            if (viewModel.selectedCardsIds.isNotEmpty()) showCoverPicker = !showCoverPicker
-                        }
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.Black.copy(alpha = 0.25f))
+                            .clickable(enabled = coverPickerEnabled) {
+                                showCoverPicker = !showCoverPicker
+                            }
+                            .padding(8.dp)
                     ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             repeat(2) { index ->
                                 val url = viewModel.coverImageUrls.getOrNull(index)
                                 Box(
                                     modifier = Modifier
-                                        .size(40.dp, 56.dp)
+                                        .size(48.dp, 68.dp)
                                         .clip(RoundedCornerShape(4.dp))
                                         .background(DarkBackground)
-                                        .border(BorderStroke(1.dp, BlueCard.copy(alpha = 0.5f)), RoundedCornerShape(4.dp)),
+                                        .border(
+                                            BorderStroke(1.dp, BlueCard.copy(alpha = if (coverPickerEnabled) 0.8f else 0.3f)),
+                                            RoundedCornerShape(4.dp)
+                                        ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (!url.isNullOrBlank()) {
                                         AsyncImage(
                                             model = url,
-                                            contentDescription = null,
+                                            contentDescription = "Copertina deck ${index + 1}",
                                             contentScale = ContentScale.Fit,
                                             modifier = Modifier.fillMaxSize()
                                         )
@@ -1014,11 +1029,32 @@ fun NewDeckBottomSheetContent(
                                     }
                                 }
                             }
+
+                            Surface(
+                                color = BlueCard.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "${viewModel.coverImageUrls.size}/2",
+                                    color = TextWhite,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            Icon(
+                                imageVector = if (showCoverPicker) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (showCoverPicker) "Chiudi selezione copertine" else "Apri selezione copertine",
+                                tint = if (coverPickerEnabled) BlueCard else TextMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
+
                         Text(
-                            text = "Copertina x2",
-                            color = TextMuted,
-                            fontSize = 9.sp,
+                            text = if (coverPickerEnabled) "Tocca per scegliere 2 copertine" else "Aggiungi carte per scegliere le copertine",
+                            color = if (coverPickerEnabled) TextWhite else TextMuted,
+                            fontSize = 10.sp,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
@@ -1030,6 +1066,10 @@ fun NewDeckBottomSheetContent(
                         onValueChange = { viewModel.newDeckName = it },
                         placeholder = { Text("Nome deck...", color = TextMuted, fontSize = 14.sp) },
                         modifier = Modifier.weight(1f),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = { focusManager.clearFocus() }
+                        ),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,
@@ -1066,22 +1106,44 @@ fun NewDeckBottomSheetContent(
                     val selectedCards = viewModel.ownedCards.filter { it.id in viewModel.selectedCardsIds }.distinctBy { it.imageUrl }
                     items(selectedCards) { card ->
                         val isSelectedCover = viewModel.coverImageUrls.contains(card.imageUrl)
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(card.imageUrl)
-                                .size(120, 168)
-                                .build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
+                        Box(
                             modifier = Modifier
-                                .size(44.dp, 62.dp)
+                                .size(48.dp, 68.dp)
                                 .clip(RoundedCornerShape(4.dp))
                                 .border(
-                                    BorderStroke(if (isSelectedCover) 2.dp else 0.dp, BlueCard),
+                                    BorderStroke(if (isSelectedCover) 2.dp else 1.dp, if (isSelectedCover) BlueCard else TextMuted.copy(alpha = 0.4f)),
                                     RoundedCornerShape(4.dp)
                                 )
                                 .clickable { viewModel.toggleCoverCard(card.imageUrl) }
-                        )
+                        ) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(card.imageUrl)
+                                    .size(120, 168)
+                                    .build(),
+                                contentDescription = "Seleziona copertina ${card.name}",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+
+                            if (isSelectedCover) {
+                                Surface(
+                                    color = BlueCard,
+                                    shape = CircleShape,
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(3.dp)
+                                        .size(16.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Copertina selezionata",
+                                        tint = TextWhite,
+                                        modifier = Modifier.padding(2.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1147,7 +1209,10 @@ fun NewDeckBottomSheetContent(
 
         val canSave = viewModel.newDeckName.isNotBlank() && viewModel.selectedCardsIds.isNotEmpty()
         Button(
-            onClick = onSave,
+            onClick = {
+                focusManager.clearFocus()
+                onSave()
+            },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = if (canSave) BlueCard else DarkCard),
@@ -1404,6 +1469,31 @@ fun ImportResultDialog(
                     color = TextWhite,
                     fontSize = 14.sp
                 )
+
+                    if (result.setMismatchWarnings.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Carte abbinate con espansione diversa (${result.setMismatchWarnings.size}):",
+                            color = OrangeCard,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        result.setMismatchWarnings.take(8).forEach { card ->
+                            Text(
+                                text = "• $card",
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
+                        }
+                        if (result.setMismatchWarnings.size > 8) {
+                            Text(
+                                text = "... e altre ${result.setMismatchWarnings.size - 8}",
+                                color = TextMuted.copy(alpha = 0.6f),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
 
                 if (result.missingCards.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))

@@ -325,13 +325,22 @@ class PokeTcgRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun searchByNameAndNumber(name: String?, number: String?): Result<List<TcgCard>> {
+    suspend fun searchByNameAndNumber(name: String?, number: String?, setId: String? = null): Result<List<TcgCard>> {
         val cleanName = name?.let { sanitizeQuery(it) }?.takeIf { it.isNotBlank() }
         val cleanNumber = number?.trim()?.trimStart('0')?.takeIf { it.isNotBlank() }
+        val cleanSetId = setId?.trim()?.takeIf { it.isNotBlank() }
 
         if (cleanName == null && cleanNumber == null) return Result.success(emptyList())
 
         return try {
+            if (cleanName != null && cleanNumber != null && cleanSetId != null) {
+                val setQuery = "name:\"$cleanName*\" number:\"$cleanNumber\" set.id:$cleanSetId"
+                val setResult = api.searchCards(query = setQuery, pageSize = 10)
+                if (setResult.data.isNotEmpty()) {
+                    return Result.success(setResult.data.distinctBy { it.id })
+                }
+            }
+
             if (cleanName != null && cleanNumber != null) {
                 val query = "name:\"$cleanName*\" number:\"$cleanNumber\""
                 val result = api.searchCards(query = query, pageSize = 10)

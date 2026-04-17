@@ -1,0 +1,40 @@
+package com.emabuia.pokevault.data.remote
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SetCodeMapperTest {
+
+    @Test
+    fun `normalize decklist set code maps known aliases`() {
+        assertEquals("sv6", SetCodeMapper.normalizeDecklistSetCode("TWM"))
+        assertEquals("sv1", SetCodeMapper.normalizeDecklistSetCode("svi"))
+        assertEquals("sv10", SetCodeMapper.normalizeDecklistSetCode("DRI"))
+    }
+
+    @Test
+    fun `matches imported set with api set id and set name acronym`() {
+        assertTrue(
+            SetCodeMapper.matchesImportedSet(
+                importedSet = "TWM",
+                cardSetName = "Twilight Masquerade",
+                cardApiSetId = "sv6",
+                cardApiId = "sv6-128"
+            )
+        )
+    }
+
+    @Test
+    fun `does not match different set alias`() {
+        assertFalse(
+            SetCodeMapper.matchesImportedSet(
+                importedSet = "TWM",
+                cardSetName = "Paldean Fates",
+                cardApiSetId = "sv4pt5",
+                cardApiId = "sv4pt5-128"
+            )
+        )
+    }
+}

@@ -14,6 +14,7 @@ import com.emabuia.pokevault.data.model.MetaDeck
 import com.emabuia.pokevault.data.model.MetaDeckCard
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.SetCodeMapper
 import com.emabuia.pokevault.data.remote.TcgCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -323,9 +324,11 @@ class DeckLabViewModel : ViewModel() {
             return
         }
 
-        val keptSelected = coverImageUrls.filter { it in availableUrls }
-        coverImageUrls = (keptSelected + availableUrls)
-            .distinct()
+        // Mantieni solo le copertine ancora presenti nel deck.
+        // Non riempire automaticamente per permettere all'utente
+        // di rimuoverle e sceglierne altre in modo esplicito.
+        coverImageUrls = coverImageUrls
+            .filter { it in availableUrls }
             .take(2)
         coverImageUrl = coverImageUrls.firstOrNull().orEmpty()
     }
@@ -338,8 +341,14 @@ class DeckLabViewModel : ViewModel() {
         val matched: Int,
         val missing: Int,
         val missingCards: List<String>,
+        val setMismatchWarnings: List<String> = emptyList(),
         val missingMetaDeckCards: List<MetaDeckCard> = emptyList(),
         val totalRequested: Int
+    )
+
+    private data class OwnedMatch(
+        val cards: List<PokemonCard>,
+        val usedFallbackSet: Boolean
     )
 
     var importResult by mutableStateOf<ImportResult?>(null)
@@ -385,6 +394,7 @@ class DeckLabViewModel : ViewModel() {
     private fun matchAndPopulate(cards: List<MetaDeckCard>): ImportResult {
         val idsToAdd = mutableListOf<String>()
         val missingCards = mutableListOf<String>()
+        val setMismatchWarnings = mutableListOf<String>()
         val missingMetaDeckCards = mutableListOf<MetaDeckCard>()
         var totalRequested = 0
 
@@ -394,15 +404,20 @@ class DeckLabViewModel : ViewModel() {
             // Cerca nelle carte possedute
             val matched = findOwnedCards(card.name, card.set, card.number)
 
-            if (matched.isEmpty()) {
+            if (matched.cards.isEmpty()) {
                 missingCards.add("${card.qty}x ${card.name}")
                 missingMetaDeckCards.add(card)
                 continue
             }
 
+            if (matched.usedFallbackSet && !card.set.isNullOrBlank()) {
+                val withNumber = if (card.number.isNullOrBlank()) card.name else "${card.name} ${card.number}"
+                setMismatchWarnings.add("${card.qty}x $withNumber (${card.set})")
+            }
+
             // Aggiungi la quantità richiesta (se disponibile)
             var remaining = card.qty
-            for (ownedCard in matched) {
+            for (ownedCard in matched.cards) {
                 if (remaining <= 0) break
                 val alreadyInDeck = idsToAdd.count { it == ownedCard.id }
                 val available = ownedCard.quantity - alreadyInDeck
@@ -432,6 +447,7 @@ class DeckLabViewModel : ViewModel() {
             matched = idsToAdd.size,
             missing = missingCards.size,
             missingCards = missingCards,
+            setMismatchWarnings = setMismatchWarnings.distinct(),
             missingMetaDeckCards = missingMetaDeckCards,
             totalRequested = totalRequested
         )
@@ -443,41 +459,63 @@ class DeckLabViewModel : ViewModel() {
      * Cerca le carte possedute che corrispondono a nome, set e numero.
      * Prima prova matching esatto, poi fallback su nome.
      */
-    private fun findOwnedCards(name: String, set: String?, number: String?): List<PokemonCard> {
+    private fun findOwnedCards(name: String, set: String?, number: String?): OwnedMatch {
         val nameLower = name.lowercase().trim()
 
         // 1. Match esatto: nome + set + numero
         if (set != null && number != null) {
             val exact = ownedCards.filter { card ->
                 card.name.lowercase().trim() == nameLower &&
-                    (card.set.lowercase().contains(set.lowercase()) ||
-                     card.apiCardId.lowercase().contains(set.lowercase())) &&
+                    SetCodeMapper.matchesImportedSet(
+                        importedSet = set,
+                        cardSetName = card.set,
+                        cardApiSetId = card.apiCardId.substringBefore("-"),
+                        cardApiId = card.apiCardId
+                    ) &&
                     card.cardNumber == number
             }
-            if (exact.isNotEmpty()) return exact
+            if (exact.isNotEmpty()) return OwnedMatch(exact, usedFallbackSet = false)
         }
 
-        // 2. Match per nome + numero
+        // 2. Match per nome + numero, con preferenza set quando disponibile
         if (number != null) {
-            val byNameAndNumber = ownedCards.filter { card ->
+            val byNameAndNumber = ownedCards
+                .filter { card ->
                 card.name.lowercase().trim() == nameLower &&
                     card.cardNumber == number
+                }
+                .sortedByDescending { card ->
+                    SetCodeMapper.matchesImportedSet(
+                        importedSet = set,
+                        cardSetName = card.set,
+                        cardApiSetId = card.apiCardId.substringBefore("-"),
+                        cardApiId = card.apiCardId
+                    )
+                }
+
+            if (byNameAndNumber.isNotEmpty()) {
+                val hasSetMatch = set.isNullOrBlank() || SetCodeMapper.matchesImportedSet(
+                    importedSet = set,
+                    cardSetName = byNameAndNumber.first().set,
+                    cardApiSetId = byNameAndNumber.first().apiCardId.substringBefore("-"),
+                    cardApiId = byNameAndNumber.first().apiCardId
+                )
+                return OwnedMatch(byNameAndNumber, usedFallbackSet = !hasSetMatch)
             }
-            if (byNameAndNumber.isNotEmpty()) return byNameAndNumber
         }
 
         // 3. Match per nome esatto
         val byName = ownedCards.filter { card ->
             card.name.lowercase().trim() == nameLower
         }
-        if (byName.isNotEmpty()) return byName
+        if (byName.isNotEmpty()) return OwnedMatch(byName, usedFallbackSet = !set.isNullOrBlank())
 
         // 4. Match parziale per nome (contiene)
         val byPartial = ownedCards.filter { card ->
             card.name.lowercase().contains(nameLower) ||
                 nameLower.contains(card.name.lowercase())
         }
-        return byPartial
+        return OwnedMatch(byPartial, usedFallbackSet = byPartial.isNotEmpty() && !set.isNullOrBlank())
     }
 
     fun clearImportResult() {
@@ -671,16 +709,20 @@ class DeckLabViewModel : ViewModel() {
 
         val found: TcgCard? = try {
             // 1. Cerca per nome + numero (searchByNameAndNumber ha già fallback interni)
-            val result = pokeTcgRepository.searchByNameAndNumber(name, number)
+            val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(set)
+            val result = pokeTcgRepository.searchByNameAndNumber(name, number, normalizedSet)
             var hit: TcgCard? = null
             result.onSuccess { cards ->
                 if (cards.isNotEmpty()) {
                     // Se abbiamo il set, preferiamo la carta dallo stesso set
                     hit = if (set != null) {
-                        val setLower = set.lowercase()
                         cards.find { card ->
-                            card.set?.id?.lowercase()?.contains(setLower) == true ||
-                                card.id.lowercase().startsWith(setLower)
+                            SetCodeMapper.matchesImportedSet(
+                                importedSet = set,
+                                cardSetName = card.set?.name,
+                                cardApiSetId = card.set?.id,
+                                cardApiId = card.id
+                            )
                         } ?: cards.first()
                     } else {
                         cards.first()
