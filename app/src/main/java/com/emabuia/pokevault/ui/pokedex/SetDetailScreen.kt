@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -164,6 +165,7 @@ fun SetDetailScreen(
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     var quickAddCard by remember { mutableStateOf<TcgCard?>(null) }
     var selectedRarityFilter by remember { mutableStateOf<String?>(null) }
+    var filtersExpanded by rememberSaveable { mutableStateOf(false) }
     var pickerCard by remember { mutableStateOf<TcgCard?>(null) }
     var createDialogCard by remember { mutableStateOf<TcgCard?>(null) }
 
@@ -320,7 +322,7 @@ fun SetDetailScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.pointerInput(sortedCards.size, state.viewMode) {
                         if (state.viewMode == "grid") {
-                            val headerCount = 5 // Adjusted for new filter row
+                            val headerCount = 4
                             detectDragGesturesAfterLongPress(
                                 onDragStart = { offset ->
                                     val item = gridState.layoutInfo.visibleItemsInfo.find { info ->
@@ -447,46 +449,125 @@ fun SetDetailScreen(
                     }
 
                     item(span = { GridItemSpan(3) }) {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Supertypes (Card type: Pokemon, Trainer, etc)
-                            state.availableSupertypes.forEach { supertype ->
-                                item {
-                                    FilterChip(
-                                        label = AppLocale.translateSupertype(supertype),
-                                        isSelected = state.selectedSupertype == supertype,
-                                        onClick = { viewModel.selectSupertype(if (state.selectedSupertype == supertype) null else supertype) }
-                                    )
-                                }
-                            }
-                            
-                            item { VerticalDivider(modifier = Modifier.height(20.dp).padding(horizontal = 4.dp), color = TextMuted.copy(alpha = 0.3f)) }
-                            
-                            // Types (Fire, Water, etc)
-                            state.availableTypes.forEach { type ->
-                                item {
-                                    FilterChip(
-                                        label = AppLocale.translateType(type),
-                                        isSelected = state.selectedType == type,
-                                        onClick = { viewModel.selectType(if (state.selectedType == type) null else type) }
-                                    )
-                                }
-                            }
-                        }
-                    }
+                        val activeFiltersCount = listOf(
+                            state.selectedSupertype,
+                            state.selectedType,
+                            selectedRarityFilter
+                        ).count { it != null }
 
-                    item(span = { GridItemSpan(3) }) {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
-                            item {
-                                RarityFilterChip("${AppLocale.all} (${state.cards.size})", selectedRarityFilter == null) { selectedRarityFilter = null }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(DarkCard)
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { filtersExpanded = !filtersExpanded }
+                                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Tune,
+                                    contentDescription = null,
+                                    tint = if (activeFiltersCount > 0) BlueCard else TextMuted,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (AppLocale.isItalian) "Filtri" else "Filters",
+                                    color = TextWhite,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                if (activeFiltersCount > 0) {
+                                    Text(
+                                        text = "$activeFiltersCount",
+                                        color = BlueCard,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .border(1.dp, BlueCard.copy(alpha = 0.6f), RoundedCornerShape(999.dp))
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
+
+                                Icon(
+                                    imageVector = if (filtersExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = null,
+                                    tint = TextMuted,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
-                            items(distinctRarities) { rarity ->
-                                val info = RarityUtils.getRarityInfo(rarity)
-                                val count = state.cards.count { it.rarity == rarity }
-                                RarityFilterChip("${info.emoji} ${AppLocale.translateRarity(rarity)} ($count)", selectedRarityFilter == rarity, info.color) { selectedRarityFilter = rarity }
+
+                            AnimatedVisibility(
+                                visible = filtersExpanded,
+                                enter = fadeIn(animationSpec = tween(180)) + expandVertically(animationSpec = tween(220)),
+                                exit = fadeOut(animationSpec = tween(140)) + shrinkVertically(animationSpec = tween(180))
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        state.availableSupertypes.forEach { supertype ->
+                                            item {
+                                                FilterChip(
+                                                    label = AppLocale.translateSupertype(supertype),
+                                                    isSelected = state.selectedSupertype == supertype,
+                                                    onClick = { viewModel.selectSupertype(if (state.selectedSupertype == supertype) null else supertype) }
+                                                )
+                                            }
+                                        }
+
+                                        item {
+                                            VerticalDivider(
+                                                modifier = Modifier
+                                                    .height(20.dp)
+                                                    .padding(horizontal = 4.dp),
+                                                color = TextMuted.copy(alpha = 0.3f)
+                                            )
+                                        }
+
+                                        state.availableTypes.forEach { type ->
+                                            item {
+                                                FilterChip(
+                                                    label = AppLocale.translateType(type),
+                                                    isSelected = state.selectedType == type,
+                                                    onClick = { viewModel.selectType(if (state.selectedType == type) null else type) }
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    ) {
+                                        item {
+                                            RarityFilterChip("${AppLocale.all} (${state.cards.size})", selectedRarityFilter == null) {
+                                                selectedRarityFilter = null
+                                            }
+                                        }
+                                        items(distinctRarities) { rarity ->
+                                            val info = RarityUtils.getRarityInfo(rarity)
+                                            val count = state.cards.count { it.rarity == rarity }
+                                            RarityFilterChip(
+                                                "${info.emoji} ${AppLocale.translateRarity(rarity)} ($count)",
+                                                selectedRarityFilter == rarity,
+                                                info.color
+                                            ) { selectedRarityFilter = rarity }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
