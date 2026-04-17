@@ -25,6 +25,7 @@ class PremiumManager private constructor(private val context: Context) {
         private const val KEY_IS_PREMIUM = "is_premium"
         private const val KEY_META_DECK_VIEWS = "meta_deck_views"
         private const val KEY_HOME_SPRITE_ID = "home_sprite_id"
+        private const val KEY_HAND_SIM_RUN_PREFIX = "hand_sim_runs_"
 
         private val HOME_SPRITE_IDS = listOf(25, 1, 4, 7, 133, 150, 151, 384, 448, 94, 158, 258, 393, 6, 9, 3)
 
@@ -257,6 +258,25 @@ class PremiumManager private constructor(private val context: Context) {
         return _isPremium.value
     }
 
+    fun canRunHandSimulator(deckId: String, currentDeckCount: Int): Boolean {
+        if (_isPremium.value) return true
+        if (deckId.isBlank()) return false
+        if (currentDeckCount != FREE_DECK_LIMIT) return false
+        return getHandSimulatorRuns(deckId) < 1
+    }
+
+    fun consumeHandSimulatorRun(deckId: String) {
+        if (_isPremium.value || deckId.isBlank()) return
+        val key = handSimulatorRunsKey(deckId)
+        val currentRuns = prefs.getInt(key, 0)
+        prefs.edit().putInt(key, currentRuns + 1).apply()
+    }
+
+    fun getHandSimulatorRuns(deckId: String): Int {
+        if (deckId.isBlank()) return 0
+        return prefs.getInt(handSimulatorRunsKey(deckId), 0)
+    }
+
     fun canChooseHomeSprite(): Boolean {
         return _isPremium.value
     }
@@ -274,6 +294,10 @@ class PremiumManager private constructor(private val context: Context) {
         val newCount = _metaDeckViewsUsed.value + 1
         _metaDeckViewsUsed.value = newCount
         prefs.edit().putInt(KEY_META_DECK_VIEWS, newCount).apply()
+    }
+
+    private fun handSimulatorRunsKey(deckId: String): String {
+        return "$KEY_HAND_SIM_RUN_PREFIX$deckId"
     }
 
     fun restorePurchases() {

@@ -27,7 +27,8 @@ import com.emabuia.pokevault.util.AppLocale
 fun CompetitiveHubScreen(
     onBack: () -> Unit,
     onNavigateToDeckLab: () -> Unit,
-    onNavigateToMatchLog: () -> Unit
+    onNavigateToMatchLog: () -> Unit,
+    onNavigateToHandSimulator: () -> Unit
 ) {
     Scaffold(
         containerColor = DarkBackground,
@@ -78,6 +79,15 @@ fun CompetitiveHubScreen(
                 icon = Icons.Default.EmojiEvents,
                 gradientColors = listOf(Color(0xFFE87A35), Color(0xFFD4631E)),
                 onClick = onNavigateToMatchLog
+            )
+
+            // Hand Simulator card
+            CompetitiveSectionCard(
+                title = AppLocale.competitiveHandSimulatorTab,
+                subtitle = AppLocale.handSimulatorSubtitle,
+                icon = Icons.Default.Shuffle,
+                gradientColors = listOf(BlueCard, BlueCard.copy(alpha = 0.65f)),
+                onClick = onNavigateToHandSimulator
             )
         }
     }

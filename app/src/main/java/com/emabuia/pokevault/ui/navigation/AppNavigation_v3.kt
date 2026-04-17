@@ -24,6 +24,7 @@ import com.emabuia.pokevault.ui.album.CreateAlbumScreen
 import com.emabuia.pokevault.ui.competitive.AddMatchScreen
 import com.emabuia.pokevault.ui.competitive.AddTournamentScreen
 import com.emabuia.pokevault.ui.competitive.CompetitiveHubScreen
+import com.emabuia.pokevault.ui.competitive.HandSimulatorScreen
 import com.emabuia.pokevault.ui.competitive.MatchLogScreen
 import com.emabuia.pokevault.ui.competitive.TournamentDetailScreen
 import com.emabuia.pokevault.ui.deck.DeckLabScreen
@@ -50,6 +51,7 @@ object Routes {
     const val COMPETITIVE = "competitive"
     const val DECK_LAB = "deck_lab"
     const val MATCH_LOG = "match_log"
+    const val HAND_SIMULATOR = "hand_simulator"
     const val ADD_TOURNAMENT = "add_tournament?tournamentId={tournamentId}"
     const val TOURNAMENT_DETAIL = "tournament_detail/{tournamentId}"
     const val ADD_MATCH = "add_match/{tournamentId}?matchId={matchId}"
@@ -234,7 +236,16 @@ fun AppNavigation(
             CompetitiveHubScreen(
                 onBack = { navController.popBackStack() },
                 onNavigateToDeckLab = { navController.navigate(Routes.DECK_LAB) },
-                onNavigateToMatchLog = { navController.navigate(Routes.MATCH_LOG) }
+                onNavigateToMatchLog = { navController.navigate(Routes.MATCH_LOG) },
+                onNavigateToHandSimulator = { navController.navigate(Routes.HAND_SIMULATOR) }
+            )
+        }
+
+        // ── Hand Simulator ──
+        composable(Routes.HAND_SIMULATOR) {
+            HandSimulatorScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }
             )
         }
 
