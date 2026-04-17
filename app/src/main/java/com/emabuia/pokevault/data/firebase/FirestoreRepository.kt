@@ -2,6 +2,8 @@ package com.emabuia.pokevault.data.firebase
 
 import com.emabuia.pokevault.data.model.Album
 import com.emabuia.pokevault.data.model.Deck
+import com.emabuia.pokevault.data.model.GoalAlbum
+import com.emabuia.pokevault.data.model.GoalCriteriaType
 import com.emabuia.pokevault.data.model.MatchLog
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.Tournament
@@ -45,6 +47,9 @@ class FirestoreRepository {
 
     private val tournamentsCollection
         get() = userDoc.collection("tournaments")
+
+    private val goalAlbumsCollection
+        get() = userDoc.collection("goal_albums")
 
     fun getCards(): Flow<List<PokemonCard>> = callbackFlow {
         val col = try { cardsCollection } catch (e: Exception) {
@@ -580,6 +585,61 @@ class FirestoreRepository {
                 doc.reference.delete().await()
             }
             tournamentsCollection.document(tournamentId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // --- GOAL ALBUM METHODS ---
+
+    fun getGoalAlbums(): Flow<List<GoalAlbum>> = callbackFlow {
+        val col = try { goalAlbumsCollection } catch (e: Exception) {
+            trySend(emptyList()); close(); return@callbackFlow
+        }
+        val listener = col.orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                val albums = snapshot?.documents?.mapNotNull { doc ->
+                    try {
+                        val criteriaTypeStr = doc.getString("criteriaType") ?: "SET"
+                        val criteriaType = try { GoalCriteriaType.valueOf(criteriaTypeStr) } catch (_: Exception) { GoalCriteriaType.SET }
+                        @Suppress("UNCHECKED_CAST")
+                        GoalAlbum(
+                            id = doc.id,
+                            name = doc.getString("name") ?: "",
+                            criteriaType = criteriaType,
+                            criteriaValue = doc.getString("criteriaValue") ?: "",
+                            targetCardApiIds = (doc.get("targetCardApiIds") as? List<String>) ?: emptyList(),
+                            createdAt = doc.getTimestamp("createdAt")
+                        )
+                    } catch (_: Exception) { null }
+                } ?: emptyList()
+                trySend(albums)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun saveGoalAlbum(album: GoalAlbum): Result<String> {
+        return try {
+            val data = hashMapOf<String, Any?>(
+                "name" to album.name,
+                "criteriaType" to album.criteriaType.name,
+                "criteriaValue" to album.criteriaValue,
+                "targetCardApiIds" to album.targetCardApiIds,
+                "createdAt" to (album.createdAt ?: com.google.firebase.Timestamp.now())
+            )
+            val docRef = if (album.id.isEmpty()) {
+                goalAlbumsCollection.add(data).await()
+            } else {
+                goalAlbumsCollection.document(album.id).set(data).await()
+                goalAlbumsCollection.document(album.id)
+            }
+            Result.success(docRef.id)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun deleteGoalAlbum(goalAlbumId: String): Result<Unit> {
+        return try {
+            goalAlbumsCollection.document(goalAlbumId).delete().await()
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }

@@ -28,10 +28,12 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.Album
+import com.emabuia.pokevault.data.model.GoalAlbum
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.AlbumViewModel
+import com.emabuia.pokevault.viewmodel.GoalAlbumViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,12 +41,17 @@ fun AlbumListScreen(
     onBack: () -> Unit,
     onCreateAlbum: (String?) -> Unit,
     onAlbumClick: (String) -> Unit,
+    onCreateChase: () -> Unit = {},
+    onChaseClick: (String) -> Unit = {},
     onPremiumRequired: () -> Unit = {},
-    viewModel: AlbumViewModel = viewModel()
+    viewModel: AlbumViewModel = viewModel(),
+    goalViewModel: GoalAlbumViewModel = viewModel()
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
     var showDeleteDialog by remember { mutableStateOf<Album?>(null) }
     var showPremiumDialog by remember { mutableStateOf(false) }
+    var showChasePremiumDialog by remember { mutableStateOf(false) }
+    var showDeleteChaseDialog by remember { mutableStateOf<GoalAlbum?>(null) }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -96,36 +103,6 @@ fun AlbumListScreen(
             ) {
                 CircularProgressIndicator(color = OrangeCard)
             }
-        } else if (viewModel.albums.isEmpty()) {
-            // Empty state
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.PhotoAlbum,
-                        contentDescription = null,
-                        tint = TextMuted,
-                        modifier = Modifier.size(64.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        AppLocale.albumEmpty,
-                        color = TextWhite,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        AppLocale.albumEmptySubtitle,
-                        color = TextMuted,
-                        fontSize = 14.sp
-                    )
-                }
-            }
         } else {
             LazyColumn(
                 modifier = Modifier
@@ -135,19 +112,75 @@ fun AlbumListScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
-                items(viewModel.albums, key = { it.id }) { album ->
-                    AlbumCard(
-                        album = album,
-                        cardsCount = album.cardIds.size,
-                        coverUrl = album.coverImageUrl.ifBlank {
-                            val cards = viewModel.getCardsForAlbum(album)
-                            cards.firstOrNull()?.imageUrl ?: ""
-                        },
-                        onClick = { onAlbumClick(album.id) },
-                        onDelete = { showDeleteDialog = album },
-                        onEdit = { onCreateAlbum(album.id) }
+                // ── Sezione Espositore ────────────────────────────────────
+                item {
+                    SectionHeader(
+                        title = AppLocale.albumSectionEspositore,
+                        subtitle = AppLocale.albumSectionEspositoreSubtitle
                     )
                 }
+                if (viewModel.albums.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.PhotoAlbum, contentDescription = null, tint = TextMuted, modifier = Modifier.size(40.dp))
+                                Spacer(Modifier.height(8.dp))
+                                Text(AppLocale.albumEmpty, color = TextMuted, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                } else {
+                    items(viewModel.albums, key = { it.id }) { album ->
+                        AlbumCard(
+                            album = album,
+                            cardsCount = album.cardIds.size,
+                            coverUrl = album.coverImageUrl.ifBlank {
+                                val cards = viewModel.getCardsForAlbum(album)
+                                cards.firstOrNull()?.imageUrl ?: ""
+                            },
+                            onClick = { onAlbumClick(album.id) },
+                            onDelete = { showDeleteDialog = album },
+                            onEdit = { onCreateAlbum(album.id) }
+                        )
+                    }
+                }
+
+                // ── Sezione Chase ─────────────────────────────────────────
+                item { Spacer(Modifier.height(8.dp)) }
+                item {
+                    SectionHeader(
+                        title = AppLocale.albumSectionChase,
+                        subtitle = AppLocale.albumSectionChaseSubtitle
+                    )
+                }
+                item {
+                    // Card "Nuovo Chase" sempre visibile come primo elemento
+                    NewChaseCard(
+                        onClick = {
+                            if (goalViewModel.canCreate()) {
+                                onCreateChase()
+                            } else {
+                                showChasePremiumDialog = true
+                            }
+                        }
+                    )
+                }
+                items(goalViewModel.goalAlbums, key = { it.id }) { goalAlbum ->
+                    ChaseCard(
+                        goalAlbum = goalAlbum,
+                        ownedCount = goalAlbum.targetCardApiIds.count { apiId ->
+                            goalViewModel.ownedCards.any { pc -> pc.apiCardId.trim() == apiId }
+                        },
+                        onClick = { onChaseClick(goalAlbum.id) },
+                        onDelete = { showDeleteChaseDialog = goalAlbum }
+                    )
+                }
+
                 item { Spacer(modifier = Modifier.height(80.dp)) }
             }
         }
@@ -191,6 +224,171 @@ fun AlbumListScreen(
             }
         )
     }
+
+    // Chase delete dialog
+    showDeleteChaseDialog?.let { goalAlbum ->
+        AlertDialog(
+            onDismissRequest = { showDeleteChaseDialog = null },
+            containerColor = DarkSurface,
+            title = { Text(AppLocale.chaseDeleteTitle, color = TextWhite) },
+            text = { Text(AppLocale.chaseDeleteMessage, color = TextGray) },
+            confirmButton = {
+                TextButton(onClick = {
+                    goalViewModel.deleteGoalAlbum(goalAlbum.id)
+                    showDeleteChaseDialog = null
+                }) { Text(AppLocale.delete, color = RedCard) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteChaseDialog = null }) {
+                    Text(AppLocale.cancel, color = TextGray)
+                }
+            }
+        )
+    }
+
+    if (showChasePremiumDialog) {
+        PremiumRequiredDialog(
+            title = AppLocale.premiumChaseLimitTitle,
+            message = AppLocale.premiumChaseLimitMessage,
+            onDismiss = { showChasePremiumDialog = false },
+            onUpgrade = {
+                showChasePremiumDialog = false
+                onPremiumRequired()
+            }
+        )
+    }
+}
+
+// ── Section Header ────────────────────────────────────────────────────────────
+
+@Composable
+private fun SectionHeader(title: String, subtitle: String) {
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        Text(title, color = TextWhite, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Text(subtitle, color = TextMuted, fontSize = 12.sp)
+    }
+}
+
+// ── New Chase Card (CTA) ──────────────────────────────────────────────────────
+
+@Composable
+private fun NewChaseCard(onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(OrangeCard.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = OrangeCard, modifier = Modifier.size(26.dp))
+            }
+            Column {
+                Text(AppLocale.newChaseLabel, color = OrangeCard, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(AppLocale.newChaseSubtitle, color = TextMuted, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+// ── Chase Card ────────────────────────────────────────────────────────────────
+
+@Composable
+private fun ChaseCard(
+    goalAlbum: GoalAlbum,
+    ownedCount: Int,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val pct = if (goalAlbum.targetCardApiIds.isEmpty()) 0f
+    else (ownedCount.toFloat() / goalAlbum.targetCardApiIds.size * 100f).coerceIn(0f, 100f)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Mini progress ring
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(52.dp)) {
+                CircularProgressIndicator(
+                    progress = { 1f },
+                    modifier = Modifier.size(52.dp),
+                    color = DarkBackground,
+                    strokeWidth = 4.dp
+                )
+                CircularProgressIndicator(
+                    progress = { pct / 100f },
+                    modifier = Modifier.size(52.dp),
+                    color = OrangeCard,
+                    strokeWidth = 4.dp
+                )
+                Text(
+                    "${pct.toInt()}%",
+                    color = TextWhite,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    goalAlbum.name,
+                    color = TextWhite,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "$ownedCount / ${goalAlbum.targetCardApiIds.size} carte",
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+                Text(
+                    goalAlbum.criteriaType.displayName() + (if (goalAlbum.criteriaValue.isNotBlank()) " · ${goalAlbum.criteriaValue}" else ""),
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Delete, contentDescription = AppLocale.delete, tint = TextMuted, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+private fun com.emabuia.pokevault.data.model.GoalCriteriaType.displayName(): String = when (this) {
+    com.emabuia.pokevault.data.model.GoalCriteriaType.SET -> "Set"
+    com.emabuia.pokevault.data.model.GoalCriteriaType.RARITY -> "Rarità"
+    com.emabuia.pokevault.data.model.GoalCriteriaType.SUPERTYPE -> "Categoria"
+    com.emabuia.pokevault.data.model.GoalCriteriaType.TYPE -> "Tipo"
+    com.emabuia.pokevault.data.model.GoalCriteriaType.CUSTOM -> "Personalizzato"
 }
 
 @Composable

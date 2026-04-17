@@ -821,4 +821,59 @@ object AppLocale {
         "$count visualizzazioni rimanenti"
     else
         "$count views remaining"
+
+    // ══════════════════════════════════════
+    // CHASE (GOAL ALBUM)
+    // ══════════════════════════════════════
+
+    // Album list sections
+    val albumSectionEspositore: String get() = if (isItalian) "Espositore" else "Display"
+    val albumSectionEspositoreSubtitle: String get() = if (isItalian)
+        "Le tue carte organizzate come un album fisico"
+    else
+        "Your cards organized like a physical binder"
+    val albumSectionChase: String get() = "Chase"
+    val albumSectionChaseSubtitle: String get() = if (isItalian)
+        "Tieni traccia dei set e delle rarità che stai cacciando"
+    else
+        "Track the sets and rarities you're hunting"
+
+    // New Chase CTA card
+    val newChaseLabel: String get() = if (isItalian) "Nuovo Chase" else "New Chase"
+    val newChaseSubtitle: String get() = if (isItalian)
+        "Crea un album obiettivo per completare un set o una rarità"
+    else
+        "Create a goal album to complete a set or rarity"
+
+    // CreateGoalAlbumScreen
+    val createChaseTitle: String get() = if (isItalian) "Nuovo Chase" else "New Chase"
+    val chaseNameLabel: String get() = if (isItalian) "Nome Chase" else "Chase Name"
+    val chaseCriteriaTypeLabel: String get() = if (isItalian) "Tipo obiettivo" else "Goal type"
+    val chaseCriteriaValueLabel: String get() = if (isItalian) "Seleziona valore" else "Select value"
+    val chaseCustomSearchLabel: String get() = if (isItalian) "Cerca carte da aggiungere" else "Search cards to add"
+    val searchSet: String get() = if (isItalian) "Cerca un set..." else "Search a set..."
+    val saveChase: String get() = if (isItalian) "Salva Chase" else "Save Chase"
+
+    // GoalAlbumDetailScreen
+    val chaseDeleteTitle: String get() = if (isItalian) "Eliminare Chase?" else "Delete Chase?"
+    val chaseDeleteMessage: String get() = if (isItalian)
+        "Questa azione è irreversibile. Le carte nella collezione non verranno eliminate."
+    else
+        "This action is irreversible. Cards in your collection won't be deleted."
+    val chaseStatTotal: String get() = if (isItalian) "Totale:" else "Total:"
+    val chaseStatOwned: String get() = if (isItalian) "Possedute:" else "Owned:"
+    val chaseStatMissing: String get() = if (isItalian) "Mancanti:" else "Missing:"
+    val chaseStatDuplicates: String get() = if (isItalian) "Doppie:" else "Duplicates:"
+    val chaseCardMissingLabel: String get() = if (isItalian) "Mancante" else "Missing"
+
+    // Premium gates
+    val premiumChaseLimitTitle: String get() = if (isItalian)
+        "Limite Chase raggiunto"
+    else
+        "Chase limit reached"
+    val premiumChaseLimitMessage: String get() = if (isItalian)
+        "Hai raggiunto il limite di 1 Chase gratuito.\n\nPassa a Premium per creare Chase illimitati!"
+    else
+        "You've reached the 1 free Chase limit.\n\nGo Premium to create unlimited Chases!"
 }
+

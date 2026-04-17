@@ -15,6 +15,7 @@ class PremiumManager private constructor(private val context: Context) {
     companion object {
         const val FREE_DECK_LIMIT = 1
         const val FREE_ALBUM_LIMIT = 1
+        const val FREE_GOAL_ALBUM_LIMIT = 1
         const val FREE_WISHLIST_LIMIT = 1
         const val FREE_TOURNAMENT_LIMIT = 1
         const val FREE_META_DECK_VIEWS = 10
@@ -240,6 +241,10 @@ class PremiumManager private constructor(private val context: Context) {
 
     fun canCreateAlbum(currentAlbumCount: Int): Boolean {
         return _isPremium.value || currentAlbumCount < FREE_ALBUM_LIMIT
+    }
+
+    fun canCreateGoalAlbum(currentGoalAlbumCount: Int): Boolean {
+        return _isPremium.value || currentGoalAlbumCount < FREE_GOAL_ALBUM_LIMIT
     }
 
     fun canCreateWishlist(currentWishlistCount: Int): Boolean {
