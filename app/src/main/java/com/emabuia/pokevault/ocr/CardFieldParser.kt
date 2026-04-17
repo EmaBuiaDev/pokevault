@@ -23,6 +23,7 @@ import com.emabuia.pokevault.BuildConfig
 object CardFieldParser {
 
     private const val TAG = "CardFieldParser"
+    private const val MAX_NAME_TOKENS = 4
 
     // ═══════════════════════════════════════════
     // PARSING FULL-FRAME (testo intero OCR)
@@ -168,6 +169,11 @@ object CardFieldParser {
         "damage", "attach", "opponent", "energy", "energia",
         "trainer", "allenatore", "supporter", "aiuto",
         "item", "strumento", "stadium", "stadio",
+        "ability", "abilita", "attack", "attacco",
+        "fire", "water", "grass", "lightning", "psychic", "fighting",
+        "darkness", "metal", "dragon", "fairy", "colorless",
+        "fuoco", "acqua", "erba", "elettro", "psico", "lotta",
+        "buio", "metallo", "drago", "folletto", "incolore",
         "coin", "discard", "shuffle", "search",
         "your", "this", "each", "does", "from", "into",
         "draw", "put", "take", "choose", "look",
@@ -175,6 +181,8 @@ object CardFieldParser {
         "rule", "regulation", "mark",
         "©", "®", "™"
     )
+
+    private val NAME_STOP_TOKENS = NAME_EXCLUSIONS + setOf("hp")
 
     /** Pattern per HP nella stessa riga del nome */
     private val HP_IN_NAME_PATTERN = Regex("""[\s\-]+HP\s*\d+|[\s\-]+\d+\s*HP""", RegexOption.IGNORE_CASE)
@@ -225,18 +233,42 @@ object CardFieldParser {
         if (topText.isBlank()) return null
 
         // Rimuovi HP dal testo top
-        var cleaned = topText
+        val cleaned = topText
             .replace(HP_IN_NAME_PATTERN, "")
             .replace(STAGE_PREFIX_PATTERN, "")
             .trim()
 
+        val candidateTokens = mutableListOf<String>()
+        cleaned
+            .split(Regex("""\s+"""))
+            .forEach { rawToken ->
+                val token = rawToken.trim(' ', '.', ',', ';', ':', '-', '_', '/', '\\')
+                val normalized = token.lowercase()
+
+                if (normalized.isBlank()) return@forEach
+                if (normalized.matches(Regex("""\d+(/\d+)?"""))) return@forEach
+
+                if (normalized in NAME_STOP_TOKENS) {
+                    return@forEach
+                }
+
+                if (normalized.any { it.isLetter() }) {
+                    candidateTokens += token
+                }
+            }
+
+        val candidate = candidateTokens
+            .take(MAX_NAME_TOKENS)
+            .joinToString(" ")
+            .ifBlank { cleaned }
+
         // Se rimane qualcosa di valido, e il nome
-        return cleanCardName(cleaned).takeIf { it != null && it.length >= 2 }
+        return cleanCardName(candidate).takeIf { it != null && isLikelyCardName(it) }
     }
 
     /** Pulisce il nome rimuovendo artefatti OCR e formattando */
     private fun cleanCardName(rawName: String): String? {
-        return rawName
+        val cleaned = rawName
             // Rimuovi HP se presente
             .replace(HP_IN_NAME_PATTERN, "")
             // Rimuovi numero carta se presente alla fine
@@ -250,7 +282,15 @@ object CardFieldParser {
             .trim()
             // Limite lunghezza
             .take(45)
-            .takeIf { it.length >= 2 }
+
+        val withoutNoise = cleaned
+            .split(Regex("""\s+"""))
+            .take(MAX_NAME_TOKENS)
+            .filter { token -> token.lowercase() !in NAME_STOP_TOKENS }
+            .joinToString(" ")
+            .trim()
+
+        return withoutNoise.takeIf { isLikelyCardName(it) }
     }
 
     // ═══════════════════════════════════════════
@@ -372,6 +412,10 @@ object CardFieldParser {
     /** Rileva se la carta e un Pokemon, Trainer o Energy */
     fun detectSupertype(text: String, hp: Int?, name: String?): CardSupertype {
         val lower = text.lowercase()
+        val normalizedName = name.orEmpty().lowercase()
+
+        if (hp != null && hp > 0) return CardSupertype.POKEMON
+        if (extractStage(text) != null) return CardSupertype.POKEMON
 
         // Energy
         if (lower.contains("energy") || lower.contains("energia")) {
@@ -383,18 +427,36 @@ object CardFieldParser {
             lower.contains("supporter") || lower.contains("aiuto") ||
             lower.contains("item") || lower.contains("strumento") ||
             lower.contains("stadium") || lower.contains("stadio") ||
+            normalizedName.contains("supporter") || normalizedName.contains("aiuto") ||
             lower.contains("tool") || lower.contains("oggetto")) {
             return CardSupertype.TRAINER
         }
 
-        // Se ha HP, quasi sicuramente e un Pokemon
-        if (hp != null && hp > 0) return CardSupertype.POKEMON
-
-        // Se ha stage/evoluzione, e un Pokemon
-        if (extractStage(text) != null) return CardSupertype.POKEMON
+        val hasPokemonMarkers = lower.contains("weakness") ||
+            lower.contains("resistance") ||
+            lower.contains("retreat") ||
+            lower.contains("ability") ||
+            lower.contains("abilita") ||
+            lower.contains("attack") ||
+            lower.contains("attacco")
+        if (hasPokemonMarkers) return CardSupertype.POKEMON
 
         // Default
         return CardSupertype.POKEMON
+    }
+
+    private fun isLikelyCardName(value: String?): Boolean {
+        val safeValue = value?.trim().orEmpty()
+        if (safeValue.length < 2) return false
+
+        return safeValue.split(Regex("""\s+"""))
+            .filter { it.isNotBlank() }
+            .any { token ->
+                val normalized = token.lowercase()
+                normalized.length >= 2 &&
+                    normalized.any { it.isLetter() } &&
+                    normalized !in NAME_STOP_TOKENS
+            }
     }
 
     // ═══════════════════════════════════════════

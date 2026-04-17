@@ -18,6 +18,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -96,13 +97,13 @@ fun ScannerScreen(
         CameraPreview(
             onTextDetected = { viewModel.onTextDetected(it) },
             flashEnabled = state.flashEnabled,
-            scanEnabled = state.pendingCard == null && state.lastAddedCard == null
+            scanEnabled = state.pendingCard == null && state.candidateCards.isEmpty() && state.lastAddedCard == null
         )
 
         // Overlay zona di scansione (card-shaped)
         ScanZoneOverlay(
             isDetecting = state.isSearching,
-            hasResult = state.pendingCard != null || state.lastAddedCard != null,
+            hasResult = state.pendingCard != null || state.candidateCards.isNotEmpty() || state.lastAddedCard != null,
             detectedName = state.detectedName
         )
 
@@ -152,7 +153,7 @@ fun ScannerScreen(
         }
 
         // Istruzione iniziale (sopra la zona di scansione)
-        if (state.pendingCard == null && state.lastAddedCard == null && !state.isSearching &&
+        if (state.pendingCard == null && state.candidateCards.isEmpty() && state.lastAddedCard == null && !state.isSearching &&
             state.detectedName.isBlank()
         ) {
             Text(
@@ -234,6 +235,18 @@ fun ScannerScreen(
                 }
             }
 
+            AnimatedVisibility(
+                visible = state.pendingCard == null && state.candidateCards.isNotEmpty(),
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            ) {
+                CandidateCardPicker(
+                    cards = state.candidateCards,
+                    onSelect = { viewModel.selectCandidate(it) },
+                    onDismiss = { viewModel.dismissCard() }
+                )
+            }
+
             // Carta appena aggiunta - conferma visiva
             AnimatedVisibility(
                 visible = state.lastAddedCard != null,
@@ -287,6 +300,100 @@ fun ScannerScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CandidateCardPicker(
+    cards: List<com.emabuia.pokevault.data.remote.TcgCard>,
+    onSelect: (com.emabuia.pokevault.data.remote.TcgCard) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(DarkSurface.copy(alpha = 0.96f), RoundedCornerShape(16.dp))
+            .padding(12.dp)
+    ) {
+        Text(
+            "Più risultati trovati",
+            color = BlueCard,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            "Tocca la carta corretta per confermare.",
+            color = TextGray,
+            fontSize = 12.sp
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        cards.forEach { card ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onSelect(card) }
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = card.images.small,
+                    contentDescription = card.name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .height(72.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        card.name,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        buildString {
+                            append(card.set?.name ?: "Set sconosciuto")
+                            append(" · #")
+                            append(card.number)
+                        },
+                        color = TextGray,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    val metadata = listOfNotNull(card.supertype.takeIf { it.isNotBlank() }, card.rarity)
+                    if (metadata.isNotEmpty()) {
+                        Text(
+                            metadata.joinToString(" · "),
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        OutlinedButton(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = TextGray)
+        ) {
+            Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Nessuna di queste", fontSize = 14.sp)
         }
     }
 }

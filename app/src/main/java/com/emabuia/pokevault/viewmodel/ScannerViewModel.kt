@@ -3,6 +3,7 @@ package com.emabuia.pokevault.viewmodel
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
+import com.emabuia.pokevault.BuildConfig
 import timber.log.Timber
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,11 +19,14 @@ import com.emabuia.pokevault.ocr.OCRManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.max
 
 data class ScannerUiState(
     val isSearching: Boolean = false,
     /** Carta trovata in attesa di conferma dall'utente */
     val pendingCard: TcgCard? = null,
+    /** Candidati mostrati quando il match migliore non e abbastanza netto */
+    val candidateCards: List<TcgCard> = emptyList(),
     /** Carta appena aggiunta (conferma visiva temporanea) */
     val lastAddedCard: TcgCard? = null,
     val addedCount: Int = 0,
@@ -35,6 +39,17 @@ data class ScannerUiState(
 )
 
 class ScannerViewModel(application: Application) : AndroidViewModel(application) {
+
+    private data class RankedCard(
+        val card: TcgCard,
+        val score: Int,
+        val nameSimilarity: Double
+    )
+
+    private data class MatchResolution(
+        val bestCard: TcgCard? = null,
+        val ambiguousCandidates: List<TcgCard> = emptyList()
+    )
 
     private val repository = PokeTcgRepository()
     private val firestoreRepository = FirestoreRepository()
@@ -106,7 +121,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
      */
     fun onTextDetected(rawText: String) {
         if (rawText.isBlank()) return
-        if (uiState.pendingCard != null || uiState.lastAddedCard != null) return
+        if (uiState.pendingCard != null || uiState.candidateCards.isNotEmpty() || uiState.lastAddedCard != null) return
 
         val ocrResult = ocrManager.extractCardFields(rawText)
         if (!ocrResult.isSearchable()) return
@@ -150,8 +165,14 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             searchJob?.cancel()
         }
 
-        // Lancio ricerca quando il numero e stabile
-        if (stabilityCount >= STABILITY_THRESHOLD && searchJob?.isActive != true) {
+        // Lancio ricerca quando il numero e stabile.
+        // Se OCR ha gia numero/totale completi, basta un frame stabile.
+        val requiredStability = when {
+            number.isNotBlank() && total.isNotBlank() -> FAST_STABILITY_THRESHOLD
+            else -> STABILITY_THRESHOLD
+        }
+
+        if (stabilityCount >= requiredStability && searchJob?.isActive != true) {
             activeSearchKey = searchKey
             searchJob = viewModelScope.launch {
                 searchCard(
@@ -169,7 +190,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     // ═══════════════════════════════════════════
 
     fun analyzeCardImage(bitmap: Bitmap) {
-        if (uiState.pendingCard != null) return
+        if (uiState.pendingCard != null || uiState.candidateCards.isNotEmpty()) return
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             uiState = uiState.copy(isSearching = true, errorMessage = null)
@@ -220,83 +241,95 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         uiState = uiState.copy(isSearching = true, errorMessage = null)
 
         try {
-            var cards: List<TcgCard> = emptyList()
+            val candidates = linkedMapOf<String, TcgCard>()
+            val candidateSetIds = repository.getCandidateSetIdsByPrintedTotal(setTotal, tolerance = SET_TOTAL_TOLERANCE)
+            val normalizedSearchName = normalizeNameForApiSearch(name)
+            val queryName = normalizedSearchName ?: name
+
+            fun addCandidates(results: List<TcgCard>) {
+                results.forEach { card -> candidates.putIfAbsent(card.id, card) }
+            }
 
             // Strategia 1: numero/totale → usa searchCards che identifica il set
             if (number != null && setTotal != null) {
                 val fullNumber = "$number/$setTotal"
                 Timber.d("Ricerca con numero completo: $fullNumber")
                 repository.searchCards(fullNumber)
-                    .onSuccess { results ->
-                        cards = results
-                        // Se abbiamo il nome, filtra per match migliore
-                        if (name != null && results.size > 1) {
-                            val nameFiltered = filterByName(results, name)
-                            if (nameFiltered.isNotEmpty()) cards = nameFiltered
-                        }
-                    }
+                    .onSuccess(::addCandidates)
             }
 
-            // Strategia 2: nome + numero
-            if (cards.isEmpty() && name != null && number != null) {
-                Timber.d("Ricerca con nome+numero: $name #$number")
-                repository.searchByNameAndNumber(name, number)
-                    .onSuccess { cards = it }
+            // Strategia 2: nome + numero, preferendo i set compatibili col totale OCR
+            if (queryName != null && number != null && candidateSetIds.isNotEmpty()) {
+                Timber.d("Ricerca set-aware con nome+numero: $queryName #$number in ${candidateSetIds.size} set")
+                candidateSetIds.take(MAX_SET_CANDIDATES).forEach { setId ->
+                    repository.searchByNameAndNumber(queryName, number, setId)
+                        .onSuccess(::addCandidates)
+                }
+            }
+
+            if (queryName != null && number != null) {
+                Timber.d("Ricerca con nome+numero: $queryName #$number")
+                repository.searchByNameAndNumber(queryName, number)
+                    .onSuccess(::addCandidates)
             }
 
             // Strategia 3: solo nome
-            if (cards.isEmpty() && name != null && name.length >= 3) {
-                Timber.d("Ricerca con solo nome: $name")
-                repository.searchCardsFuzzy(name)
+            if (queryName != null && isUsableSearchName(queryName)) {
+                Timber.d("Ricerca con solo nome: $queryName")
+                repository.searchCardsFuzzy(queryName)
                     .onSuccess { results ->
-                        // Se abbiamo il numero, filtra
-                        if (number != null) {
-                            val filtered = results.filter { it.number == number }
-                            cards = filtered.ifEmpty { results }
+                        val filtered = if (number != null) {
+                            val exactNumber = results.filter { normalizeCardNumber(it.number) == number }
+                            exactNumber.ifEmpty { results }
                         } else {
-                            cards = results
+                            results
                         }
+                        addCandidates(filtered)
                     }
             }
 
             // Strategia 4: solo numero (ultimo fallback)
-            if (cards.isEmpty() && number != null) {
+            if (number != null) {
                 Timber.d("Ricerca con solo numero: $number")
                 repository.searchCards(number)
-                    .onSuccess { cards = it }
+                    .onSuccess(::addCandidates)
             }
 
-            // Filtro supertype: se l'OCR ha rilevato TRAINER o ENERGY con certezza,
-            // escludiamo i Pokémon dall'elenco risultati (stesso numero, categoria diversa)
-            if (supertype != CardSupertype.POKEMON && cards.size > 1) {
-                val apiType = when (supertype) {
-                    CardSupertype.TRAINER -> "trainer"
-                    CardSupertype.ENERGY  -> "energy"
-                    else                  -> null
-                }
-                if (apiType != null) {
-                    val filtered = cards.filter { it.supertype.equals(apiType, ignoreCase = true) }
-                    if (filtered.isNotEmpty()) {
-                        Timber.d("Filtro supertype '$apiType': ${cards.size} → ${filtered.size} carte")
-                        cards = filtered
-                    }
-                }
-            }
-
-            val bestMatch = cards.firstOrNull()
+            val resolution = resolveMatch(
+                cards = candidates.values.toList(),
+                name = name,
+                number = number,
+                setTotal = setTotal,
+                supertype = supertype
+            )
+            val bestMatch = resolution.bestCard
             if (bestMatch != null && bestMatch.id !in recentlyAddedIds) {
                 uiState = uiState.copy(
                     isSearching = false,
                     pendingCard = bestMatch,
+                    candidateCards = emptyList(),
                     errorMessage = null
                 )
             } else if (bestMatch != null) {
                 // Carta gia scartata/aggiunta in questa sessione
                 uiState = uiState.copy(isSearching = false)
+            } else if (resolution.ambiguousCandidates.isNotEmpty()) {
+                uiState = uiState.copy(
+                    isSearching = false,
+                    pendingCard = null,
+                    candidateCards = resolution.ambiguousCandidates,
+                    errorMessage = "Più risultati possibili. Seleziona la carta corretta."
+                )
             } else {
                 uiState = uiState.copy(
                     isSearching = false,
-                    errorMessage = "Nessuna carta trovata. Riprova."
+                    pendingCard = null,
+                    candidateCards = emptyList(),
+                    errorMessage = if (candidates.isNotEmpty()) {
+                        "Risultato ambiguo. Riprova inquadrando meglio nome e numero."
+                    } else {
+                        "Nessuna carta trovata. Riprova."
+                    }
                 )
                 activeSearchKey = ""
             }
@@ -310,23 +343,206 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /**
-     * Filtra risultati per nome: match esatto o parziale (prima parola).
-     */
-    private fun filterByName(cards: List<TcgCard>, name: String): List<TcgCard> {
-        val cleanName = name.lowercase().trim()
-        val firstName = cleanName.split(" ").firstOrNull() ?: cleanName
+    private fun resolveMatch(
+        cards: List<TcgCard>,
+        name: String?,
+        number: String?,
+        setTotal: String?,
+        supertype: CardSupertype
+    ): MatchResolution {
+        if (cards.isEmpty()) return MatchResolution()
 
-        // Match esatto
-        val exact = cards.filter { it.name.equals(name, ignoreCase = true) }
-        if (exact.isNotEmpty()) return exact
+        val exactNumberCards = number?.let { expected ->
+            cards.filter { normalizeCardNumber(it.number) == expected }
+        }.orEmpty()
+        val pool = exactNumberCards.ifEmpty { cards }
 
-        // Match con la prima parola
-        val partial = cards.filter {
-            it.name.lowercase().startsWith(firstName) ||
-            it.name.lowercase().contains(cleanName)
+        val strictPool = when (supertype) {
+            CardSupertype.TRAINER -> pool.filter { it.supertype.equals("trainer", ignoreCase = true) }
+            CardSupertype.ENERGY -> pool.filter { it.supertype.equals("energy", ignoreCase = true) }
+            CardSupertype.POKEMON -> emptyList()
+        }.ifEmpty { pool }
+
+        val ranked = strictPool
+            .filterNot { it.id in recentlyAddedIds }
+            .map { rankCandidate(it, name, number, setTotal, supertype) }
+            .sortedWith(compareByDescending<RankedCard> { it.score }.thenByDescending { it.nameSimilarity })
+
+        val best = ranked.firstOrNull() ?: return MatchResolution()
+        val second = ranked.getOrNull(1)
+
+        if (BuildConfig.DEBUG) {
+            ranked.take(3).forEach { rankedCard ->
+                Timber.d(
+                    "Scanner candidate %s score=%d nameSimilarity=%.2f",
+                    rankedCard.card.name,
+                    rankedCard.score,
+                    rankedCard.nameSimilarity
+                )
+            }
         }
-        return partial
+
+        val topMargin = best.score - (second?.score ?: Int.MIN_VALUE)
+        val hasStrongNumberSignal = number != null && normalizeCardNumber(best.card.number) == number
+        val hasStrongSetSignal = setTotal != null && repository.getPrintedTotalForSet(best.card.set?.id)?.toString() == setTotal
+        val ambiguousCandidates = ranked
+            .take(MAX_AMBIGUOUS_CANDIDATES)
+            .filter { rankedCard ->
+                rankedCard.score >= MIN_CANDIDATE_SCORE &&
+                    (rankedCard.nameSimilarity >= MIN_CANDIDATE_NAME_SIMILARITY ||
+                        (number != null && normalizeCardNumber(rankedCard.card.number) == number))
+            }
+            .map { it.card }
+
+        if (best.score < MIN_MATCH_SCORE) {
+            return MatchResolution(ambiguousCandidates = ambiguousCandidates.takeIf { it.size >= 2 }.orEmpty())
+        }
+        if (second != null && topMargin < MIN_SCORE_MARGIN && !(hasStrongNumberSignal && hasStrongSetSignal && best.nameSimilarity >= MIN_NAME_SIMILARITY)) {
+            return MatchResolution(ambiguousCandidates = ambiguousCandidates.takeIf { it.size >= 2 }.orEmpty())
+        }
+
+        return MatchResolution(bestCard = best.card)
+    }
+
+    private fun rankCandidate(
+        card: TcgCard,
+        name: String?,
+        number: String?,
+        setTotal: String?,
+        supertype: CardSupertype
+    ): RankedCard {
+        var score = 0
+        val nameSimilarity = computeNameSimilarity(name, card.name)
+        val normalizedExpectedNumber = number?.takeIf { it.isNotBlank() }
+        val normalizedCardNumber = normalizeCardNumber(card.number)
+
+        if (normalizedExpectedNumber != null) {
+            score += if (normalizedCardNumber == normalizedExpectedNumber) 45 else -30
+        }
+
+        if (setTotal != null) {
+            val printedTotal = repository.getPrintedTotalForSet(card.set?.id)
+            if (printedTotal != null) {
+                val totalValue = setTotal.toIntOrNull()
+                score += when {
+                    totalValue == null -> 0
+                    printedTotal == totalValue -> 25
+                    kotlin.math.abs(printedTotal - totalValue) == 1 -> 10
+                    else -> -10
+                }
+            }
+        }
+
+        val expectedApiType = when (supertype) {
+            CardSupertype.TRAINER -> "trainer"
+            CardSupertype.ENERGY -> "energy"
+            CardSupertype.POKEMON -> "pokemon"
+        }
+        score += when {
+            supertype == CardSupertype.POKEMON && card.supertype.equals("pokemon", ignoreCase = true) -> 10
+            card.supertype.equals(expectedApiType, ignoreCase = true) -> 20
+            supertype != CardSupertype.POKEMON -> -25
+            else -> -5
+        }
+
+        if (name != null) {
+            score += (nameSimilarity * 45).toInt()
+            if (nameSimilarity >= 0.96) score += 15
+            if (nameSimilarity < MIN_NAME_SIMILARITY && normalizedExpectedNumber == null) score -= 15
+        }
+
+        return RankedCard(card = card, score = score, nameSimilarity = nameSimilarity)
+    }
+
+    private fun computeNameSimilarity(expectedName: String?, actualName: String): Double {
+        val normalizedExpected = normalizeNameForMatching(expectedName)
+        val normalizedActual = normalizeNameForMatching(actualName)
+
+        if (normalizedExpected.isBlank() || normalizedActual.isBlank()) return 0.0
+        if (normalizedExpected == normalizedActual) return 1.0
+        if (normalizedActual.startsWith(normalizedExpected) || normalizedExpected.startsWith(normalizedActual)) {
+            return 0.92
+        }
+
+        val distance = levenshtein(normalizedExpected, normalizedActual)
+        val maxLength = max(normalizedExpected.length, normalizedActual.length)
+        val charSimilarity = (1.0 - distance.toDouble() / maxLength.toDouble()).coerceIn(0.0, 1.0)
+
+        val expectedTokens = normalizedExpected.split(" ").filter { it.isNotBlank() }.toSet()
+        val actualTokens = normalizedActual.split(" ").filter { it.isNotBlank() }.toSet()
+        val tokenSimilarity = if (expectedTokens.isNotEmpty() && actualTokens.isNotEmpty()) {
+            expectedTokens.intersect(actualTokens).size.toDouble() /
+                max(expectedTokens.size, actualTokens.size).toDouble()
+        } else {
+            0.0
+        }
+
+        return (charSimilarity * 0.75) + (tokenSimilarity * 0.25)
+    }
+
+    private fun normalizeNameForMatching(name: String?): String {
+        if (name.isNullOrBlank()) return ""
+
+        val stopWords = setOf(
+            "trainer", "allenatore", "supporter", "aiuto", "item", "strumento",
+            "stadium", "stadio", "tool", "energy", "energia", "pokemon", "pokmon",
+            "basic", "base", "lotta", "fight", "fighting", "ability", "abilita",
+            "attack", "attacco"
+        )
+
+        return name
+            .lowercase()
+            .replace(Regex("""[^a-z0-9à-ÿ\s'-]"""), " ")
+            .split(Regex("""\s+"""))
+            .filter { token -> token.length >= 2 && token !in stopWords }
+            .joinToString(" ")
+            .trim()
+    }
+
+    private fun normalizeNameForApiSearch(name: String?): String? {
+        val normalized = normalizeNameForMatching(name)
+        if (normalized.isBlank()) return null
+
+        val tokens = normalized
+            .split(Regex("""\s+"""))
+            .filter { it.length >= 3 }
+
+        if (tokens.isEmpty()) return null
+        return tokens.take(2).joinToString(" ")
+    }
+
+    private fun isUsableSearchName(name: String): Boolean {
+        val normalized = normalizeNameForMatching(name)
+        return normalized.length >= 3 && normalized.any { it.isLetter() }
+    }
+
+    private fun normalizeCardNumber(number: String): String {
+        val digits = number.takeWhile { it.isDigit() }
+        return digits.trimStart('0').ifEmpty { digits.ifBlank { number }.trimStart('0').ifEmpty { "0" } }
+    }
+
+    private fun levenshtein(left: String, right: String): Int {
+        if (left == right) return 0
+        if (left.isEmpty()) return right.length
+        if (right.isEmpty()) return left.length
+
+        val previous = IntArray(right.length + 1) { it }
+        val current = IntArray(right.length + 1)
+
+        for (leftIndex in left.indices) {
+            current[0] = leftIndex + 1
+            for (rightIndex in right.indices) {
+                val substitutionCost = if (left[leftIndex] == right[rightIndex]) 0 else 1
+                current[rightIndex + 1] = minOf(
+                    current[rightIndex] + 1,
+                    previous[rightIndex + 1] + 1,
+                    previous[rightIndex] + substitutionCost
+                )
+            }
+            previous.indices.forEach { index -> previous[index] = current[index] }
+        }
+
+        return previous[right.length]
     }
 
     // ═══════════════════════════════════════════
@@ -335,14 +551,23 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun confirmAdd() {
         val card = uiState.pendingCard ?: return
-        uiState = uiState.copy(pendingCard = null, isSearching = true)
+        uiState = uiState.copy(pendingCard = null, candidateCards = emptyList(), isSearching = true)
         viewModelScope.launch { addToFirestore(card) }
+    }
+
+    fun selectCandidate(card: TcgCard) {
+        uiState = uiState.copy(
+            pendingCard = card,
+            candidateCards = emptyList(),
+            errorMessage = null
+        )
     }
 
     fun dismissCard() {
         val card = uiState.pendingCard
         uiState = uiState.copy(
             pendingCard = null,
+            candidateCards = emptyList(),
             detectedName = "",
             detectedNumber = "",
             errorMessage = null
@@ -441,6 +666,15 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     companion object {
         private const val TAG = "ScannerViewModel"
-        private const val STABILITY_THRESHOLD = 3
+        private const val STABILITY_THRESHOLD = 2
+        private const val FAST_STABILITY_THRESHOLD = 1
+        private const val SET_TOTAL_TOLERANCE = 3
+        private const val MAX_SET_CANDIDATES = 4
+        private const val MAX_AMBIGUOUS_CANDIDATES = 3
+        private const val MIN_MATCH_SCORE = 48
+        private const val MIN_CANDIDATE_SCORE = 20
+        private const val MIN_SCORE_MARGIN = 8
+        private const val MIN_NAME_SIMILARITY = 0.42
+        private const val MIN_CANDIDATE_NAME_SIMILARITY = 0.18
     }
 }

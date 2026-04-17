@@ -10,6 +10,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 object RetrofitClient {
     private const val BASE_URL = "https://api.pokemontcg.io/"
@@ -257,9 +258,7 @@ class PokeTcgRepository {
             val total = match.groupValues[2].trimStart('0').ifEmpty { "0" }
 
             // Cerchiamo i set che hanno quel totale stampato
-            val candidateSets = memorySets?.filter {
-                !isTcgdexSetId(it.id) && it.printedTotal.toString() == total
-            } ?: emptyList()
+            val candidateSets = getCandidateSetsByPrintedTotal(total, tolerance = 1)
             
             return if (candidateSets.isNotEmpty()) {
                 val setIds = candidateSets.joinToString(" OR ") { "set.id:${it.id}" }
@@ -385,6 +384,38 @@ class PokeTcgRepository {
             .replace(SANITIZE_NON_WORD, "")
             .replace(SANITIZE_MULTI_SPACE, " ")
             .trim()
+    }
+
+    fun getCandidateSetIdsByPrintedTotal(total: String?, tolerance: Int = 1): List<String> {
+        return getCandidateSetsByPrintedTotal(total, tolerance).map { it.id }
+    }
+
+    fun getPrintedTotalForSet(setId: String?): Int? {
+        val safeSetId = setId?.takeIf { it.isNotBlank() } ?: return null
+        return memorySets?.firstOrNull { it.id == safeSetId }?.printedTotal
+    }
+
+    private fun getCandidateSetsByPrintedTotal(total: String?, tolerance: Int): List<TcgSet> {
+        val parsedTotal = total?.toIntOrNull() ?: return emptyList()
+        val sets = memorySets ?: return emptyList()
+
+        val exactMatches = sets.filter {
+            !isTcgdexSetId(it.id) && it.printedTotal == parsedTotal
+        }
+        if (exactMatches.isNotEmpty()) {
+            return exactMatches.sortedByDescending { it.releaseDate }
+        }
+
+        if (tolerance <= 0) return emptyList()
+
+        return sets
+            .asSequence()
+            .filter { !isTcgdexSetId(it.id) }
+            .map { set -> set to abs(set.printedTotal - parsedTotal) }
+            .filter { (_, diff) -> diff in 1..tolerance }
+            .sortedWith(compareBy<Pair<TcgSet, Int>> { it.second }.thenByDescending { it.first.releaseDate })
+            .map { it.first }
+            .toList()
     }
 
     suspend fun getCard(cardId: String): Result<TcgCard> {
