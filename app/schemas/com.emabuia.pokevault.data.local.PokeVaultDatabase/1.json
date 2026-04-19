@@ -1,0 +1,318 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "bcea7f2a39b8f506cc2858791bfb8f26",
+    "entities": [
+      {
+        "tableName": "sets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `series` TEXT NOT NULL, `language` TEXT, `printedTotal` INTEGER NOT NULL, `total` INTEGER NOT NULL, `releaseDate` TEXT NOT NULL, `symbolUrl` TEXT NOT NULL, `logoUrl` TEXT NOT NULL, `cachedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "series",
+            "columnName": "series",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "language",
+            "columnName": "language",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "printedTotal",
+            "columnName": "printedTotal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "total",
+            "columnName": "total",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseDate",
+            "columnName": "releaseDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "symbolUrl",
+            "columnName": "symbolUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "logoUrl",
+            "columnName": "logoUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cachedAt",
+            "columnName": "cachedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "cards",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `supertype` TEXT NOT NULL, `subtypesJson` TEXT, `hp` TEXT, `typesJson` TEXT, `setId` TEXT NOT NULL, `setName` TEXT NOT NULL, `setSeries` TEXT NOT NULL, `number` TEXT NOT NULL, `rarity` TEXT, `smallImageUrl` TEXT NOT NULL, `largeImageUrl` TEXT NOT NULL, `tcgplayerUrl` TEXT, `tcgplayerPricesJson` TEXT, `cardmarketUrl` TEXT, `cardmarketAvgSellPrice` REAL, `cardmarketLowPrice` REAL, `cardmarketTrendPrice` REAL, `cardmarketAvg1` REAL, `cardmarketAvg7` REAL, `cardmarketAvg30` REAL, `cachedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "supertype",
+            "columnName": "supertype",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subtypesJson",
+            "columnName": "subtypesJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hp",
+            "columnName": "hp",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "typesJson",
+            "columnName": "typesJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "setId",
+            "columnName": "setId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setName",
+            "columnName": "setName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setSeries",
+            "columnName": "setSeries",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "number",
+            "columnName": "number",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rarity",
+            "columnName": "rarity",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "smallImageUrl",
+            "columnName": "smallImageUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "largeImageUrl",
+            "columnName": "largeImageUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tcgplayerUrl",
+            "columnName": "tcgplayerUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tcgplayerPricesJson",
+            "columnName": "tcgplayerPricesJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cardmarketUrl",
+            "columnName": "cardmarketUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cardmarketAvgSellPrice",
+            "columnName": "cardmarketAvgSellPrice",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cardmarketLowPrice",
+            "columnName": "cardmarketLowPrice",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cardmarketTrendPrice",
+            "columnName": "cardmarketTrendPrice",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cardmarketAvg1",
+            "columnName": "cardmarketAvg1",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cardmarketAvg7",
+            "columnName": "cardmarketAvg7",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cardmarketAvg30",
+            "columnName": "cardmarketAvg30",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cachedAt",
+            "columnName": "cachedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_cards_setId",
+            "unique": false,
+            "columnNames": [
+              "setId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cards_setId` ON `${TABLE_NAME}` (`setId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "prices",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`cardId` TEXT NOT NULL, `setCode` TEXT NOT NULL, `eurAvg` REAL, `eurLow` REAL, `eurTrend` REAL, `eurAvg1` REAL, `eurAvg7` REAL, `eurAvg30` REAL, `eurVariantType` TEXT, `usdMarket` REAL, `usdLow` REAL, `cardMarketUrl` TEXT, `tcgPlayerUrl` TEXT, `cachedAt` INTEGER NOT NULL, PRIMARY KEY(`cardId`, `setCode`))",
+        "fields": [
+          {
+            "fieldPath": "cardId",
+            "columnName": "cardId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setCode",
+            "columnName": "setCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eurAvg",
+            "columnName": "eurAvg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "eurLow",
+            "columnName": "eurLow",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "eurTrend",
+            "columnName": "eurTrend",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "eurAvg1",
+            "columnName": "eurAvg1",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "eurAvg7",
+            "columnName": "eurAvg7",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "eurAvg30",
+            "columnName": "eurAvg30",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "eurVariantType",
+            "columnName": "eurVariantType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "usdMarket",
+            "columnName": "usdMarket",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "usdLow",
+            "columnName": "usdLow",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cardMarketUrl",
+            "columnName": "cardMarketUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tcgPlayerUrl",
+            "columnName": "tcgPlayerUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cachedAt",
+            "columnName": "cachedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "cardId",
+            "setCode"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'bcea7f2a39b8f506cc2858791bfb8f26')"
+    ]
+  }
+}

@@ -27,6 +27,8 @@ class PremiumManager private constructor(private val context: Context) {
         private const val KEY_META_DECK_VIEWS = "meta_deck_views"
         private const val KEY_HOME_SPRITE_ID = "home_sprite_id"
         private const val KEY_HAND_SIM_RUN_PREFIX = "hand_sim_runs_"
+        private const val KEY_TRIAL_EXPIRES_AT = "trial_expires_at"
+        private const val TRIAL_DURATION_MS = 7L * 24 * 60 * 60 * 1000  // 7 days
 
         private val HOME_SPRITE_IDS = listOf(25, 1, 4, 7, 133, 150, 151, 384, 448, 94, 158, 258, 393, 6, 9, 3)
 
@@ -78,6 +80,7 @@ class PremiumManager private constructor(private val context: Context) {
         .build()
 
     init {
+        initTrial()
         connectAndQueryPurchases()
     }
 
@@ -284,6 +287,22 @@ class PremiumManager private constructor(private val context: Context) {
 
     fun canChooseHomeSprite(): Boolean {
         return _isPremium.value
+    }
+
+    fun canViewPrices(): Boolean {
+        return _isPremium.value || isInTrial()
+    }
+
+    private fun initTrial() {
+        if (!prefs.contains(KEY_TRIAL_EXPIRES_AT)) {
+            val trialExpiresAt = System.currentTimeMillis() + TRIAL_DURATION_MS
+            prefs.edit().putLong(KEY_TRIAL_EXPIRES_AT, trialExpiresAt).apply()
+        }
+    }
+
+    private fun isInTrial(): Boolean {
+        val trialExpiresAt = prefs.getLong(KEY_TRIAL_EXPIRES_AT, 0L)
+        return trialExpiresAt > System.currentTimeMillis()
     }
 
     fun setSelectedHomeSpriteId(spriteId: Int) {

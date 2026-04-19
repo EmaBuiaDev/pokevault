@@ -409,12 +409,21 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().height(80.dp),
                 contentAlignment = Alignment.Center
             ) {
-                AsyncImage(
-                    model = set.images.logo,
-                    contentDescription = set.name,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxWidth().height(70.dp)
-                )
+                if (set.images.logo.isNotBlank()) {
+                    AsyncImage(
+                        model = set.images.logo,
+                        contentDescription = set.name,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth().height(70.dp)
+                    )
+                } else {
+                    Text(
+                        text = "No image",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
             Column {
@@ -506,7 +515,18 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
                 items(setCards.sortedBy { it.number.toIntOrNull() ?: 999 }, key = { "${it.id}_$setName" }) { card ->
                     Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp))
                         .clickable { onCardClick(card) }) {
-                        AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        if (card.images.small.isNotBlank()) {
+                            AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(DarkSurface),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("No image", color = TextMuted, fontSize = 10.sp)
+                            }
+                        }
                     }
                 }
             }

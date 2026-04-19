@@ -354,7 +354,7 @@ private fun CustomCardSearch(viewModel: GoalAlbumViewModel) {
     var searchResults by remember { mutableStateOf<List<TcgCard>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val tcgRepo = remember { com.emabuia.pokevault.data.remote.PokeTcgRepository() }
+    val tcgRepo = remember { com.emabuia.pokevault.data.remote.RepositoryProvider.tcgRepository }
 
     // Api ids selezionati, separati da virgola in formCriteriaValue
     val selectedIds = remember(viewModel.formCriteriaValue) {

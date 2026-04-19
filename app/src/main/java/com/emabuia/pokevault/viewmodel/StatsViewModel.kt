@@ -8,7 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.CollectionStats
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
-import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.util.AppLocale
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
@@ -39,7 +39,7 @@ data class StatsUiState(
 class StatsViewModel : ViewModel() {
 
     private val repository = FirestoreRepository()
-    private val tcgRepository = PokeTcgRepository()
+    private val tcgRepository = RepositoryProvider.tcgRepository
 
     var uiState by mutableStateOf(StatsUiState())
         private set

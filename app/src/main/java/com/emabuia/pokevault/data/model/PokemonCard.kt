@@ -57,15 +57,7 @@ object CardOptions {
     val CONDITIONS = listOf("Mint", "Near Mint", "Excellent", "Good", "Light Played", "Played", "Poor")
     val GRADING_COMPANIES = listOf("PSA", "BGS", "CGC", "ACE", "SGC")
     val LANGUAGES = listOf(
-        "🇮🇹 Italiano",
-        "🇬🇧 Inglese",
-        "🇯🇵 Giapponese",
-        "🇫🇷 Francese",
-        "🇩🇪 Tedesco",
-        "🇪🇸 Spagnolo",
-        "🇰🇷 Coreano",
-        "🇨🇳 Cinese",
-        "🇧🇷 Portoghese"
+        "🇬🇧 English"
     )
     val DEFAULT_VARIANTS = listOf("Normal", "Reverse", "Holo")
 

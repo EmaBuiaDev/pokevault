@@ -1,29 +1,13 @@
 package com.emabuia.pokevault.data.remote
 
-import retrofit2.http.GET
-import retrofit2.http.Header
-import retrofit2.http.Path
-import retrofit2.http.Query
-
-// ── Modelli risposta API ──
-
-data class SetsResponse(
-    val data: List<TcgSet> = emptyList()
-)
-
-data class CardsResponse(
-    val data: List<TcgCard> = emptyList(),
-    val totalCount: Int = 0
-)
-
-data class SingleCardResponse(
-    val data: TcgCard
-)
+// Shared domain models used across ViewModels/UI.
+// Data is now sourced from PokeWallet and mapped into these models.
 
 data class TcgSet(
     val id: String = "",
     val name: String = "",
     val series: String = "",
+    val language: String? = null,
     val printedTotal: Int = 0,
     val total: Int = 0,
     val releaseDate: String = "",
@@ -89,45 +73,4 @@ data class CardMarketPrices(
     val avg30: Double? = null,
     val reverseHoloLow: Double? = null,
     val reverseHoloTrend: Double? = null
-)
-
-// ── Retrofit Interface ──
-
-interface PokeTcgApiService {
-
-    @GET("v2/sets")
-    suspend fun getSets(
-        @Query("orderBy") orderBy: String = "-releaseDate",
-        @Query("page") page: Int = 1,
-        @Query("pageSize") pageSize: Int = 50
-    ): SetsResponse
-
-    @GET("v2/sets/{id}")
-    suspend fun getSet(
-        @Path("id") setId: String
-    ): SingleSetResponse
-
-    @GET("v2/cards")
-    suspend fun getCardsBySet(
-        @Query("q") query: String,
-        @Query("orderBy") orderBy: String? = null,
-        @Query("page") page: Int = 1,
-        @Query("pageSize") pageSize: Int = 250
-    ): CardsResponse
-
-    @GET("v2/cards/{id}")
-    suspend fun getCard(
-        @Path("id") cardId: String
-    ): SingleCardResponse
-
-    @GET("v2/cards")
-    suspend fun searchCards(
-        @Query("q") query: String,
-        @Query("page") page: Int = 1,
-        @Query("pageSize") pageSize: Int = 20
-    ): CardsResponse
-}
-
-data class SingleSetResponse(
-    val data: TcgSet
 )

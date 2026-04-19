@@ -13,7 +13,7 @@ import com.emabuia.pokevault.data.model.DeckImportParser
 import com.emabuia.pokevault.data.model.MetaDeck
 import com.emabuia.pokevault.data.model.MetaDeckCard
 import com.emabuia.pokevault.data.model.PokemonCard
-import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.SetCodeMapper
 import com.emabuia.pokevault.data.remote.TcgCard
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 
 class DeckLabViewModel : ViewModel() {
     private val repository = FirestoreRepository()
-    private val pokeTcgRepository = PokeTcgRepository()
+    private val pokeTcgRepository = RepositoryProvider.tcgRepository
 
     companion object {
         // Cache di processo per i risultati della ricerca Pokemon TCG API.

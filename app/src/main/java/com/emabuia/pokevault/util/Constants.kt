@@ -5,9 +5,6 @@ object Constants {
     const val USERS_COLLECTION = "users"
     const val CARDS_COLLECTION = "cards"
 
-    // PokéTCG API
-    const val POKETCG_BASE_URL = "https://api.pokemontcg.io/v2/"
-
     // Tipi Pokémon con colori (hex) - chiavi localizzate
     val POKEMON_TYPES: Map<String, String>
         get() = AppLocale.getTypes().zip(

@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.ksp)
 }
 
 val localProperties = Properties().apply {
@@ -24,6 +25,7 @@ android {
         versionName = "2.0.5"
 
         buildConfigField("String", "POKETCG_API_KEY", "\"${localProperties.getProperty("POKETCG_API_KEY", "")}\"")
+        buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
     }
 
     signingConfigs {
@@ -58,6 +60,9 @@ android {
     }
     kotlinOptions {
         jvmTarget = "11"
+    }
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
     }
     buildFeatures {
         compose = true
@@ -148,6 +153,14 @@ dependencies {
 
     // ── Logging ──
     implementation(libs.timber)
+
+    // ── Room (local cache) ──
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+    // ── WorkManager (background sync) ──
+    implementation(libs.androidx.work.runtime.ktx)
 
     // ── Test Dependencies ──
     testImplementation(libs.junit)

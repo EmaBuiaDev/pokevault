@@ -1,389 +1,293 @@
 package com.emabuia.pokevault.data.remote
 
 import android.content.Context
-import com.emabuia.pokevault.BuildConfig
-import com.emabuia.pokevault.util.AppLocale
-import timber.log.Timber
+import com.emabuia.pokevault.data.local.toEntity
+import com.emabuia.pokevault.data.local.toTcgCard
+import com.emabuia.pokevault.data.local.toTcgSet
+import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.google.gson.Gson
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import retrofit2.HttpException
+import timber.log.Timber
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
-
-object RetrofitClient {
-    private const val BASE_URL = "https://api.pokemontcg.io/"
-    private val API_KEY = com.emabuia.pokevault.BuildConfig.POKETCG_API_KEY
-
-    private val okHttpClient = OkHttpClient.Builder()
-        .addInterceptor { chain ->
-            val request = chain.request().newBuilder()
-            if (API_KEY.isNotBlank()) request.addHeader("X-Api-Key", API_KEY)
-            chain.proceed(request.build())
-        }
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
-
-    val apiService: PokeTcgApiService by lazy {
-        Retrofit.Builder().baseUrl(BASE_URL).client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create()).build()
-            .create(PokeTcgApiService::class.java)
-    }
-}
 
 class PokeTcgRepository {
 
-    private val api = RetrofitClient.apiService
-    private val tcgdexRepository = TcgdexRepository()
+    private val api = PokeWalletRetrofitClient.create(com.emabuia.pokevault.BuildConfig.POKEWALLET_API_KEY)
+    private val db get() = RepositoryProvider.database
     private val gson = Gson()
 
-    // Cache memoria (thread-safe)
     @Volatile
     private var memorySets: List<TcgSet>? = null
-    private val memoryCards = java.util.concurrent.ConcurrentHashMap<String, List<TcgCard>>()
+    private val memoryCards = ConcurrentHashMap<String, List<TcgCard>>()
+    private val memorySearch = ConcurrentHashMap<String, Pair<List<TcgCard>, Long>>()
+
+    // Concurrency control to avoid duplicated requests when multiple screens ask the same data.
+    private val setsMutex = Mutex()
+    private val cardsMutex = Mutex()
+    private val searchMutex = Mutex()
+    private val setInfoMutex = Mutex()
+    private val cardByIdMutex = Mutex()
+    private val setLanguageMapMutex = Mutex()
+
+    // Anti-spike protection to reduce credit usage during repeated bursts.
+    private val lastNetworkAttempt = ConcurrentHashMap<String, Long>()
+    @Volatile
+    private var globalRateLimitUntil: Long = 0L
+    private val setLanguageById = ConcurrentHashMap<String, String?>()
+    @Volatile
+    private var cacheHitCount: Long = 0
+    @Volatile
+    private var cacheMissCount: Long = 0
+    @Volatile
+    private var networkCallCount: Long = 0
 
     companion object {
-        private const val PREFS_NAME = "pokevault_cache"
-        private const val SETS_CACHE_KEY = "cached_sets_v6"
-        private const val SETS_TIME_KEY = "cached_sets_time_v6"
-        private const val CARDS_PREFIX = "cached_cards_"
-        private const val CARDS_TIME_PREFIX = "cached_cards_time_"
-        private const val CARDS_TOTAL_PREFIX = "cached_cards_total_"
-        private const val CACHE_DURATION = 24 * 60 * 60 * 1000L // 24 ore
-        private const val CARDS_CACHE_DURATION = 6 * 60 * 60 * 1000L // 6 ore per carte
+        private const val SETS_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000L   // 7 days
+        private const val CARDS_CACHE_DURATION = 30 * 24 * 60 * 60 * 1000L  // 30 days
+        private const val SEARCH_CACHE_DURATION = 60 * 60 * 1000L           // 1 hour
+        private val ALLOWED_LANGUAGES = setOf("ENG")
 
-        // Pattern compilati una sola volta per evitare recompilation ad ogni ricerca
-        private val SANITIZE_SPECIAL = Regex("[+\\-=&|><!(){}\\[\\]^~?:\\\\/]")
-        private val SANITIZE_NON_WORD = Regex("[^a-zA-ZÀ-ÿ0-9\\s'-]")
+        private const val RATE_LIMIT_COOLDOWN_MS = 60 * 1000L
+
         private val SANITIZE_MULTI_SPACE = Regex("\\s+")
+        private val LEGACY_ID_REGEX = Regex("^([A-Za-z0-9]+)-(.+)$")
+        private val HASH_ID_REGEX = Regex("^[a-f0-9]{32,}$", RegexOption.IGNORE_CASE)
+        private val FULL_NUMBER_REGEX = Regex("""^(\\d+)/(\\d+)$""")
+
+        private val ISO_DATE = DateTimeFormatter.ISO_LOCAL_DATE
+        private val HUMAN_DATE_LONG = DateTimeFormatter.ofPattern("d MMMM, uuuu", Locale.ENGLISH)
+        private val HUMAN_DATE_SHORT = DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH)
     }
 
-    // ══════════════════════════════════════
-    // CACHE SETS
-    // ══════════════════════════════════════
-
-    private fun saveSetsToCache(context: Context, sets: List<TcgSet>) {
-        try {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit()
-                .putString(SETS_CACHE_KEY, gson.toJson(sets))
-                .putLong(SETS_TIME_KEY, System.currentTimeMillis())
-                .apply()
-        } catch (e: Exception) {
-            Timber.w(e, "Errore salvataggio cache sets")
-        }
-    }
-
-    private fun loadSetsFromCache(context: Context, ignoreExpiry: Boolean = false): List<TcgSet>? {
-        try {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val time = prefs.getLong(SETS_TIME_KEY, 0)
-            if (!ignoreExpiry && System.currentTimeMillis() - time > CACHE_DURATION) return null
-            val json = prefs.getString(SETS_CACHE_KEY, null) ?: return null
-            return gson.fromJson(json, Array<TcgSet>::class.java).toList()
-        } catch (e: Exception) {
-            Timber.w(e, "Errore lettura cache sets")
-            return null
-        }
-    }
-
-    suspend fun getSets(context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgSet>> {
-        if (!forceRefresh && memorySets != null) return Result.success(memorySets!!)
-        if (!forceRefresh && context != null) {
-            loadSetsFromCache(context)?.let { memorySets = it; return Result.success(it) }
-        }
-        return try {
-            val startedAt = System.currentTimeMillis()
-            val allSets = mutableListOf<TcgSet>()
-            var page = 1
-            do {
-                val response = api.getSets(page = page, pageSize = 250)
-                allSets.addAll(response.data)
-                page++
-            } while (response.data.size == 250)
-
-            val primarySets = allSets.distinctBy { it.id }
-            val extraSets = tcgdexRepository.getMissingSets(primarySets)
-                .onFailure { Timber.w(it, "TCGdex extra sets non disponibili, continuo con PokemonTCG") }
-                .getOrDefault(emptyList())
-
-            val mergedSets = mergePrimaryWithExtras(primarySets, extraSets)
-            Timber.i(
-                "Loaded sets primary=%d extra=%d merged=%d durationMs=%d",
-                primarySets.size,
-                extraSets.size,
-                mergedSets.size,
-                System.currentTimeMillis() - startedAt
-            )
-
-            memorySets = mergedSets
-            context?.let { saveSetsToCache(it, mergedSets) }
-            Result.success(mergedSets)
-        } catch (e: Exception) {
-            if (context != null) {
-                loadSetsFromCache(context, ignoreExpiry = true)?.let {
-                    memorySets = it; return Result.success(it)
-                }
+    suspend fun getSets(context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgSet>> =
+        setsMutex.withLock {
+            if (!forceRefresh && memorySets != null) {
+                recordCacheHit("getSets:memory")
+                return Result.success(memorySets!!)
             }
-            Result.failure(e)
-        }
-    }
 
-    // ══════════════════════════════════════
-    // CACHE CARTE PER SET
-    // ══════════════════════════════════════
-
-    private fun saveCardsToCache(context: Context, setId: String, cards: List<TcgCard>, totalCount: Int) {
-        try {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit()
-                .putString("$CARDS_PREFIX$setId", gson.toJson(cards))
-                .putLong("$CARDS_TIME_PREFIX$setId", System.currentTimeMillis())
-                .putInt("$CARDS_TOTAL_PREFIX$setId", totalCount)
-                .commit()
-        } catch (e: Exception) {
-            Timber.w(e, "Errore salvataggio cache cards per set $setId")
-        }
-    }
-
-    private fun loadCardsFromCache(context: Context, setId: String, ignoreExpiry: Boolean = false): List<TcgCard>? {
-        try {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val time = prefs.getLong("$CARDS_TIME_PREFIX$setId", 0)
-            if (!ignoreExpiry && System.currentTimeMillis() - time > CARDS_CACHE_DURATION) return null
-            val json = prefs.getString("$CARDS_PREFIX$setId", null) ?: return null
-            val cards: List<TcgCard> = gson.fromJson(json, Array<TcgCard>::class.java).toList()
-            val expectedTotal = prefs.getInt("$CARDS_TOTAL_PREFIX$setId", -1)
-            if (expectedTotal <= 0) return null
-            if (cards.size < expectedTotal) return null
-            return cards
-        } catch (e: Exception) {
-            Timber.w(e, "Errore lettura cache cards per set $setId")
-            return null
-        }
-    }
-
-    suspend fun getCardsBySet(setId: String, context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgCard>> {
-        if (isTcgdexSetId(setId)) {
+            // L2: Room DB
             if (!forceRefresh) {
-                val cached = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId) })
-                if (cached != null && cached.isNotEmpty()) {
-                    memoryCards[setId] = cached
-                    return Result.success(cached)
+                val roomSets = loadSetsFromRoom()
+                if (roomSets != null) {
+                    memorySets = roomSets
+                    recordCacheHit("getSets:room")
+                    return Result.success(roomSets)
                 }
             }
 
-            return tcgdexRepository.getCardsBySet(setId).onSuccess { cards ->
-                memoryCards[setId] = cards
-                context?.let { saveCardsToCache(it, setId, cards, cards.size) }
+            // Stale fallback for network errors
+            val staleCache = loadSetsFromRoom(ignoreExpiry = true)
+
+            recordCacheMiss("getSets")
+
+            val networkResult = guardedApiCall(resourceKey = "sets") {
+                val response = api.getSets()
+                setLanguageById.clear()
+                response.data
+                    .mapNotNull { remoteSet ->
+                        runCatching {
+                            val mapped = remoteSet.toTcgSet()
+                            if (mapped.id.isBlank() || mapped.name.isBlank()) return@runCatching null
+                            setLanguageById[mapped.id] = mapped.language
+                            mapped
+                        }.onFailure { err ->
+                            Timber.w(err, "Skip invalid set record while loading expansions")
+                        }.getOrNull()
+                    }
+                    .filter { it.language in ALLOWED_LANGUAGES }
+                    .sortedWith(
+                        compareByDescending<TcgSet> { parseReleaseDateToEpoch(it.releaseDate) }
+                            .thenByDescending { it.id }
+                            .thenBy { it.name }
+                    )
             }
-        }
 
-        // 1. Controllo Cache
-        if (!forceRefresh) {
-            val cached = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId) })
-            if (cached != null && cached.isNotEmpty()) {
-                memoryCards[setId] = cached
-                return Result.success(cached)
+            networkResult.onSuccess { sets ->
+                memorySets = sets
+                refreshLanguageMapFromSets(sets)
+                saveSetsToRoom(sets)
             }
-        }
 
-        // 2. API con Paginazione completa
-        return try {
-            val uniqueCards = fetchAllCards(setId)
-            memoryCards[setId] = uniqueCards
-            context?.let { saveCardsToCache(it, setId, uniqueCards, uniqueCards.size) }
-            Result.success(uniqueCards)
-        } catch (e: Exception) {
-            val fallback = memoryCards[setId] ?: (context?.let { loadCardsFromCache(it, setId, ignoreExpiry = true) })
-            if (fallback != null) return Result.success(fallback)
-            Result.failure(e)
-        }
-    }
-
-    // ══════════════════════════════════════
-    // ALTRI METODI
-    // ══════════════════════════════════════
-
-    private suspend fun fetchAllCards(setId: String, orderBy: String? = null): List<TcgCard> {
-        val cardMap = linkedMapOf<String, TcgCard>()
-        var page = 1
-        var totalCount = 0
-
-        while (true) {
-            val response = api.getCardsBySet(query = "set.id:$setId", orderBy = orderBy, page = page, pageSize = 250)
-            val fetched = response.data.size
-            if (page == 1) totalCount = response.totalCount
-            for (card in response.data) { cardMap[card.id] = card }
-
-            if (fetched == 0) break
-            if (totalCount > 0 && cardMap.size >= totalCount) break
-            if (totalCount <= 0 && fetched < 250) break
-            page++
-        }
-
-        // Se la paginazione ha prodotto duplicati, riprova con sort inverso
-        if (totalCount > 0 && cardMap.size < totalCount && orderBy == null) {
-            val retryCards = fetchAllCards(setId, orderBy = "-number")
-            for (card in retryCards) { cardMap[card.id] = card }
-        }
-
-        return cardMap.values.toList()
-    }
-
-    suspend fun getSetInfo(setId: String): Result<TcgSet> {
-        memorySets?.firstOrNull { it.id == setId }?.let { return Result.success(it) }
-        if (isTcgdexSetId(setId)) {
-            return tcgdexRepository.getSetInfo(setId)
-        }
-        return try { Result.success(api.getSet(setId).data) }
-        catch (e: Exception) { Result.failure(e) }
-    }
-
-    suspend fun searchCards(query: String, page: Int = 1): Result<List<TcgCard>> {
-        if (query.isBlank()) return Result.success(emptyList())
-        
-        val trimmed = query.trim()
-        val isIt = AppLocale.isItalian
-        
-        // Gestione numero con totale (es. 001/217)
-        val fullNumberRegex = Regex("""^(\d+)/(\d+)$""")
-        val match = fullNumberRegex.find(trimmed)
-        
-        if (match != null) {
-            val number = match.groupValues[1].trimStart('0').ifEmpty { "0" }
-            val total = match.groupValues[2].trimStart('0').ifEmpty { "0" }
-
-            // Cerchiamo i set che hanno quel totale stampato
-            val candidateSets = getCandidateSetsByPrintedTotal(total, tolerance = 1)
-            
-            return if (candidateSets.isNotEmpty()) {
-                val setIds = candidateSets.joinToString(" OR ") { "set.id:${it.id}" }
-                val apiQuery = "($setIds) number:\"$number\""
-                try {
-                    val res = api.searchCards(query = apiQuery, page = page)
-                    Result.success(res.data.distinctBy { it.id })
-                } catch (e: Exception) { Result.failure(e) }
+            if (networkResult.isSuccess) {
+                networkResult
             } else {
-                // Fallback: cerca solo per numero se non troviamo il set corrispondente al totale
-                try {
-                    val res = api.searchCards(query = "number:\"$number\"", page = page)
-                    Result.success(res.data.distinctBy { it.id })
-                } catch (e: Exception) { Result.failure(e) }
+                staleCache?.let {
+                    memorySets = it
+                    refreshLanguageMapFromSets(it)
+                    recordCacheHit("getSets:stale")
+                    Result.success(it)
+                } ?: networkResult
             }
         }
 
-        val apiQuery = when {
-            trimmed.matches(Regex("""^\d+$""")) -> {
-                val number = trimmed.trimStart('0').ifEmpty { "0" }
-                "number:\"$number\""
+    suspend fun getCardsBySet(setId: String, context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgCard>> =
+        cardsMutex.withLock {
+            // L1: Memory
+            if (!forceRefresh) {
+                memoryCards[setId]?.let {
+                    if (it.isNotEmpty()) {
+                        recordCacheHit("getCardsBySet:memory:$setId")
+                        return Result.success(it)
+                    }
+                }
             }
-            isIt && trimmed.equals("energia", ignoreCase = true) -> "supertype:energy"
-            isIt && trimmed.equals("allenatore", ignoreCase = true) -> "supertype:trainer"
-            isIt && trimmed.equals("aiuto", ignoreCase = true) -> "subtypes:supporter"
-            isIt && trimmed.equals("strumento", ignoreCase = true) -> "subtypes:item"
-            isIt && trimmed.equals("stadio", ignoreCase = true) -> "subtypes:stadium"
-            isIt && trimmed.equals("fuoco", ignoreCase = true) -> "types:fire"
-            isIt && trimmed.equals("acqua", ignoreCase = true) -> "types:water"
-            isIt && trimmed.equals("erba", ignoreCase = true) -> "types:grass"
-            isIt && trimmed.equals("elettro", ignoreCase = true) -> "types:lightning"
-            isIt && trimmed.equals("psico", ignoreCase = true) -> "types:psychic"
-            isIt && trimmed.equals("lotta", ignoreCase = true) -> "types:fighting"
-            isIt && trimmed.equals("buio", ignoreCase = true) -> "types:darkness"
-            isIt && trimmed.equals("metallo", ignoreCase = true) -> "types:metal"
-            isIt && trimmed.equals("drago", ignoreCase = true) -> "types:dragon"
-            isIt && trimmed.equals("folletto", ignoreCase = true) -> "types:fairy"
-            isIt && trimmed.equals("incolore", ignoreCase = true) -> "types:colorless"
-            else -> "name:\"${sanitizeQuery(trimmed)}*\""
+
+            // L2: Room DB
+            if (!forceRefresh) {
+                val roomCards = loadCardsFromRoom(setId)
+                if (roomCards != null) {
+                    memoryCards[setId] = roomCards
+                    recordCacheHit("getCardsBySet:room:$setId")
+                    return Result.success(roomCards)
+                }
+            }
+
+            ensureSetLanguageMapReady()
+            if (!isAllowedSetLanguage(setId)) {
+                return Result.success(emptyList())
+            }
+
+            recordCacheMiss("getCardsBySet:$setId")
+
+            val staleCache = loadCardsFromRoom(setId, ignoreExpiry = true)
+            val networkResult = guardedApiCall(resourceKey = "cards:$setId") {
+                fetchAllCardsForSet(setId)
+            }
+
+            networkResult.onSuccess { result ->
+                memoryCards[setId] = result.cards
+                saveCardsToRoom(result.cards)
+            }
+
+            if (networkResult.isSuccess) {
+                Result.success(networkResult.getOrThrow().cards)
+            } else {
+                val fallback = memoryCards[setId] ?: staleCache
+                fallback?.let {
+                    recordCacheHit("getCardsBySet:stale:$setId")
+                    Result.success(it)
+                } ?: Result.failure(networkResult.exceptionOrNull()!!)
+            }
         }
 
-        return try {
-            val res = api.searchCards(query = apiQuery, page = page)
-            Result.success(res.data.distinctBy { it.id })
-        } catch (e: Exception) { Result.failure(e) }
+    suspend fun getSetInfo(setId: String): Result<TcgSet> = setInfoMutex.withLock {
+        memorySets?.firstOrNull { it.id == setId }?.let { return Result.success(it) }
+
+        val networkResult = guardedApiCall(resourceKey = "set:$setId") {
+            val response = api.getSet(setId, page = 1, limit = 1)
+            when {
+                response.set != null -> response.set.toTcgSet()
+                response.matches.isNotEmpty() -> response.matches.first().toTcgSet()
+                else -> throw NoSuchElementException("Set non trovato")
+            }
+        }
+
+        if (networkResult.isSuccess) return networkResult
+
+        memorySets?.firstOrNull { it.id == setId }?.let { return Result.success(it) }
+        networkResult
+    }
+
+    suspend fun searchCards(query: String, page: Int = 1): Result<List<TcgCard>> = searchMutex.withLock {
+        if (query.isBlank()) return Result.success(emptyList())
+
+        val normalized = sanitizeQuery(query)
+        val cacheKey = "search::$normalized::$page"
+        memorySearch[cacheKey]?.let { (cards, timestamp) ->
+            if (System.currentTimeMillis() - timestamp < SEARCH_CACHE_DURATION) {
+                recordCacheHit("search:$normalized:$page")
+                return Result.success(cards)
+            }
+        }
+        recordCacheMiss("search:$normalized:$page")
+
+        val networkResult = guardedApiCall(resourceKey = "search:$normalized:$page") {
+            val cards = when (val match = FULL_NUMBER_REGEX.matchEntire(normalized)) {
+                null -> performGenericSearch(normalized, page)
+                else -> {
+                    val number = match.groupValues[1].trimStart('0').ifEmpty { "0" }
+                    val total = match.groupValues[2].trimStart('0').ifEmpty { "0" }
+                    val candidateSetIds = getCandidateSetIdsByPrintedTotal(total, tolerance = 1).toSet()
+                    val broad = performAdaptiveApiSearch(number, page = 1)
+                    if (candidateSetIds.isEmpty()) {
+                        broad.filter { extractCardNumber(it.number) == number }
+                    } else {
+                        broad.filter {
+                            extractCardNumber(it.number) == number && it.set?.id in candidateSetIds
+                        }
+                    }
+                }
+            }
+            cards.distinctBy { it.id }
+        }
+
+        networkResult.onSuccess { cards ->
+            memorySearch[cacheKey] = cards to System.currentTimeMillis()
+        }
+
+        networkResult
     }
 
     suspend fun searchCardsFuzzy(name: String, page: Int = 1): Result<List<TcgCard>> {
         val clean = sanitizeQuery(name)
         if (clean.isBlank()) return Result.success(emptyList())
-        return try {
-            val result = api.searchCards(query = "name:\"$clean*\"", page = page, pageSize = 30)
-            if (result.data.isNotEmpty()) {
-                return Result.success(result.data.distinctBy { it.id })
-            }
-            val firstWord = clean.split(" ").firstOrNull()?.trim() ?: clean
-            if (firstWord.length >= 3 && firstWord != clean) {
-                val fallback = api.searchCards(query = "name:\"$firstWord*\"", page = page, pageSize = 30)
-                Result.success(fallback.data.distinctBy { it.id })
-            } else {
-                Result.success(emptyList())
-            }
-        } catch (e: Exception) { Result.failure(e) }
+
+        val direct = searchCards(clean, page).getOrDefault(emptyList())
+        if (direct.isNotEmpty()) return Result.success(direct)
+
+        val firstWord = clean.split(" ").firstOrNull().orEmpty()
+        if (firstWord.length >= 3 && firstWord != clean) {
+            return searchCards(firstWord, page)
+        }
+        return Result.success(emptyList())
     }
 
     suspend fun searchByNameAndNumber(name: String?, number: String?, setId: String? = null): Result<List<TcgCard>> {
-        val cleanName = name?.let { sanitizeQuery(it) }?.takeIf { it.isNotBlank() }
+        val cleanName = name?.let(::sanitizeQuery)?.takeIf { it.isNotBlank() }
         val cleanNumber = number?.trim()?.trimStart('0')?.takeIf { it.isNotBlank() }
         val cleanSetId = setId?.trim()?.takeIf { it.isNotBlank() }
 
         if (cleanName == null && cleanNumber == null) return Result.success(emptyList())
 
-        return try {
-            if (cleanName != null && cleanNumber != null && cleanSetId != null) {
-                val setQuery = "name:\"$cleanName*\" number:\"$cleanNumber\" set.id:$cleanSetId"
-                val setResult = api.searchCards(query = setQuery, pageSize = 10)
-                if (setResult.data.isNotEmpty()) {
-                    return Result.success(setResult.data.distinctBy { it.id })
-                }
+        if (cleanSetId != null && cleanNumber != null) {
+            val setScoped = searchCards("$cleanSetId $cleanNumber", page = 1).getOrDefault(emptyList())
+            val filtered = filterByName(setScoped, cleanName)
+            if (filtered.isNotEmpty()) return Result.success(filtered)
+        }
+
+        if (cleanName != null && cleanNumber != null) {
+            val combined = searchCards("$cleanName $cleanNumber", page = 1).getOrDefault(emptyList())
+            val filtered = combined.filter { extractCardNumber(it.number) == cleanNumber }.ifEmpty {
+                filterByName(combined, cleanName)
             }
+            if (filtered.isNotEmpty()) return Result.success(filtered.distinctBy { it.id })
+        }
 
-            if (cleanName != null && cleanNumber != null) {
-                val query = "name:\"$cleanName*\" number:\"$cleanNumber\""
-                val result = api.searchCards(query = query, pageSize = 10)
-                if (result.data.isNotEmpty()) return Result.success(result.data.distinctBy { it.id })
+        if (cleanName != null) {
+            val byName = searchCardsFuzzy(cleanName).getOrDefault(emptyList())
+            if (byName.isNotEmpty()) {
+                val filtered = if (cleanNumber != null) {
+                    byName.filter { extractCardNumber(it.number) == cleanNumber }
+                } else byName
+                if (filtered.isNotEmpty()) return Result.success(filtered.distinctBy { it.id })
+                return Result.success(byName.distinctBy { it.id })
             }
+        }
 
-            if (cleanName != null && cleanName.length >= 3) {
-                val query = "name:\"$cleanName*\""
-                val result = api.searchCards(query = query, pageSize = 10)
-                if (result.data.isNotEmpty()) {
-                    if (cleanNumber != null) {
-                        val filtered = result.data.filter { it.number == cleanNumber }
-                        if (filtered.isNotEmpty()) return Result.success(filtered.distinctBy { it.id })
-                    }
-                    return Result.success(result.data.distinctBy { it.id })
-                }
-                val firstWord = cleanName.split(" ").firstOrNull()?.trim() ?: cleanName
-                if (firstWord.length >= 3 && firstWord != cleanName) {
-                    val fallback = api.searchCards(query = "name:\"$firstWord*\"", pageSize = 15)
-                    if (fallback.data.isNotEmpty()) {
-                        if (cleanNumber != null) {
-                            val filtered = fallback.data.filter { it.number == cleanNumber }
-                            if (filtered.isNotEmpty()) return Result.success(filtered.distinctBy { it.id })
-                        }
-                        return Result.success(fallback.data.distinctBy { it.id })
-                    }
-                }
-            }
+        if (cleanNumber != null) {
+            return searchCards(cleanNumber, page = 1)
+        }
 
-            if (cleanNumber != null) {
-                val result = api.searchCards(query = "number:\"$cleanNumber\"", pageSize = 20)
-                return Result.success(result.data.distinctBy { it.id })
-            }
-
-            Result.success(emptyList())
-        } catch (e: Exception) { Result.failure(e) }
-    }
-
-    private fun sanitizeQuery(raw: String): String {
-        return raw
-            .replace(SANITIZE_SPECIAL, "")
-            .replace(SANITIZE_NON_WORD, "")
-            .replace(SANITIZE_MULTI_SPACE, " ")
-            .trim()
+        return Result.success(emptyList())
     }
 
     fun getCandidateSetIdsByPrintedTotal(total: String?, tolerance: Int = 1): List<String> {
@@ -395,31 +299,474 @@ class PokeTcgRepository {
         return memorySets?.firstOrNull { it.id == safeSetId }?.printedTotal
     }
 
+    suspend fun getCard(cardId: String): Result<TcgCard> = cardByIdMutex.withLock {
+        val networkResult = guardedApiCall(resourceKey = "card:$cardId") {
+            when {
+                isPokeWalletCardId(cardId) -> api.getCard(cardId).toTcgCard()
+                else -> {
+                    val legacy = LEGACY_ID_REGEX.matchEntire(cardId)
+                    if (legacy == null) {
+                        throw NoSuchElementException("Carta non trovata: $cardId")
+                    }
+                    val setRef = legacy.groupValues[1]
+                    val number = legacy.groupValues[2]
+                    val hits = performApiSearch("$setRef $number", page = 1, limit = 20)
+                    hits.firstOrNull() ?: throw NoSuchElementException("Carta non trovata per id legacy $cardId")
+                }
+            }
+        }
+
+        if (networkResult.isSuccess) return networkResult
+
+        val fallback = memorySearch.values
+            .asSequence()
+            .flatMap { it.first.asSequence() }
+            .firstOrNull { it.id == cardId }
+
+        fallback?.let {
+            recordCacheHit("getCard:searchIndex:$cardId")
+            Result.success(it)
+        } ?: networkResult
+    }
+
+    private suspend fun fetchAllCardsForSet(setId: String): SetCardsResult {
+        val cards = linkedMapOf<String, TcgCard>()
+        var page = 1
+        var apiTotalCount = 0
+
+        while (true) {
+            val response = api.getSet(setId, page = page, limit = 200)
+            val set = response.set ?: response.matches.firstOrNull()
+                ?: throw NoSuchElementException("Set PokeWallet non trovato: $setId")
+            val setLanguage = mapLanguageMacro(set.language)
+            if (setLanguage !in ALLOWED_LANGUAGES) {
+                return SetCardsResult(emptyList(), 0)
+            }
+
+            val batch = response.cards
+                .filter { isActualCard(it) }
+                .map { it.toTcgCard(set) }
+            if (page == 1) {
+                // Store API total count to know when to stop fetching
+                apiTotalCount = set.totalCards.takeIf { it > 0 } ?: set.cardCount.takeIf { it > 0 } ?: batch.size
+            }
+            batch.forEach { cards[it.id] = it }
+
+            if (batch.isEmpty()) break
+            if (cards.size >= apiTotalCount) break
+            if (response.cards.size < 200) break
+            page++
+        }
+
+        // Return actual filtered card count, not API totalCount (which includes non-card products)
+        return SetCardsResult(cards.values.toList(), cards.size)
+    }
+
+    private fun isActualCard(card: PokeWalletCard): Boolean {
+        val info = card.cardInfo ?: return false
+        // Must have a card number
+        if (info.cardNumber.isNullOrBlank()) return false
+        // Filter out non-card products by name
+        val name = info.name.lowercase()
+        val productKeywords = listOf(
+            "mini tin", "booster", "box", "bundle", "collection box",
+            "elite trainer", "blister", "display", "theme deck",
+            "starter set", "build & battle", "build and battle",
+            "etb", "pack", "tin"
+        )
+        if (productKeywords.any { name.contains(it) }) return false
+        return true
+    }
+
+    private suspend fun performGenericSearch(query: String, page: Int): List<TcgCard> {
+        val translated = when (query.lowercase()) {
+            "fuoco" -> "fire"
+            "acqua" -> "water"
+            "erba" -> "grass"
+            "elettro" -> "lightning"
+            "psico" -> "psychic"
+            "lotta" -> "fighting"
+            "buio" -> "darkness"
+            "metallo" -> "metal"
+            "drago" -> "dragon"
+            "folletto" -> "fairy"
+            "incolore" -> "colorless"
+            "energia" -> "energy"
+            "allenatore" -> "trainer"
+            else -> query
+        }
+        return performAdaptiveApiSearch(translated, page = page)
+    }
+
+    private suspend fun performApiSearch(query: String, page: Int, limit: Int): List<TcgCard> {
+        ensureSetLanguageMapReady()
+        val response = api.search(query = query, page = page, limit = limit)
+        return response.results
+            .map { it.toTcgCard() }
+            .filter { card ->
+                val setId = card.set?.id.orEmpty()
+                if (setId.isBlank()) return@filter false
+                val language = setLanguageById[setId]
+                language in ALLOWED_LANGUAGES
+            }
+    }
+
+    private suspend fun performAdaptiveApiSearch(query: String, page: Int): List<TcgCard> {
+        val first = performApiSearch(query = query, page = page, limit = 15)
+        if (first.size >= 8) return first
+
+        val second = performApiSearch(query = query, page = page, limit = 30)
+        return (first + second).distinctBy { it.id }
+    }
+
+    private fun filterByName(cards: List<TcgCard>, expectedName: String?): List<TcgCard> {
+        if (expectedName == null) return cards.distinctBy { it.id }
+        return cards.filter { it.name.contains(expectedName, ignoreCase = true) }.distinctBy { it.id }
+    }
+
     private fun getCandidateSetsByPrintedTotal(total: String?, tolerance: Int): List<TcgSet> {
         val parsedTotal = total?.toIntOrNull() ?: return emptyList()
         val sets = memorySets ?: return emptyList()
 
-        val exactMatches = sets.filter {
-            !isTcgdexSetId(it.id) && it.printedTotal == parsedTotal
-        }
-        if (exactMatches.isNotEmpty()) {
-            return exactMatches.sortedByDescending { it.releaseDate }
-        }
-
+        val exactMatches = sets.filter { it.printedTotal == parsedTotal }
+        if (exactMatches.isNotEmpty()) return exactMatches.sortedByDescending { parseReleaseDateToEpoch(it.releaseDate) }
         if (tolerance <= 0) return emptyList()
 
         return sets
-            .asSequence()
-            .filter { !isTcgdexSetId(it.id) }
-            .map { set -> set to abs(set.printedTotal - parsedTotal) }
+            .map { it to abs(it.printedTotal - parsedTotal) }
             .filter { (_, diff) -> diff in 1..tolerance }
-            .sortedWith(compareBy<Pair<TcgSet, Int>> { it.second }.thenByDescending { it.first.releaseDate })
+            .sortedWith(compareBy<Pair<TcgSet, Int>> { it.second }.thenByDescending { parseReleaseDateToEpoch(it.first.releaseDate) })
             .map { it.first }
-            .toList()
     }
 
-    suspend fun getCard(cardId: String): Result<TcgCard> {
-        return try { Result.success(api.getCard(cardId).data) }
-        catch (e: Exception) { Result.failure(e) }
+    // ── Room Cache Layer ──────────────────────────────────────────────
+
+    private suspend fun saveSetsToRoom(sets: List<TcgSet>) {
+        try {
+            db.setDao().upsertSets(sets.map { it.toEntity() })
+        } catch (e: Exception) {
+            Timber.w(e, "Errore salvataggio cache set Room")
+        }
     }
+
+    private suspend fun loadSetsFromRoom(ignoreExpiry: Boolean = false): List<TcgSet>? {
+        return try {
+            val lastTime = db.setDao().getLastCacheTime() ?: return null
+            if (!ignoreExpiry && System.currentTimeMillis() - lastTime > SETS_CACHE_DURATION) return null
+            val entities = db.setDao().getAll()
+            if (entities.isEmpty()) return null
+            entities.map { it.toTcgSet() }.also { refreshLanguageMapFromSets(it) }
+        } catch (e: Exception) {
+            Timber.w(e, "Errore lettura cache set Room")
+            null
+        }
+    }
+
+    private suspend fun saveCardsToRoom(cards: List<TcgCard>) {
+        try {
+            db.cardDao().upsertCards(cards.map { it.toEntity() })
+        } catch (e: Exception) {
+            Timber.w(e, "Errore salvataggio cache carte Room")
+        }
+    }
+
+    private suspend fun loadCardsFromRoom(setId: String, ignoreExpiry: Boolean = false): List<TcgCard>? {
+        return try {
+            val lastTime = db.cardDao().getLastCacheTimeForSet(setId) ?: return null
+            if (!ignoreExpiry && System.currentTimeMillis() - lastTime > CARDS_CACHE_DURATION) return null
+            val entities = db.cardDao().getBySetId(setId)
+            if (entities.isEmpty()) return null
+            entities.map { it.toTcgCard() }
+        } catch (e: Exception) {
+            Timber.w(e, "Errore lettura cache carte Room per set %s", setId)
+            null
+        }
+    }
+
+    private fun sanitizeQuery(raw: String): String {
+        return raw.replace(SANITIZE_MULTI_SPACE, " ").trim()
+    }
+
+    private fun extractCardNumber(number: String): String {
+        return number.substringBefore("/").trim().trimStart('0').ifEmpty { "0" }
+    }
+
+    private fun isPokeWalletCardId(cardId: String): Boolean {
+        return cardId.startsWith("pk_") || HASH_ID_REGEX.matches(cardId)
+    }
+
+    private fun PokeWalletSet.toTcgSet(): TcgSet {
+        val totalCount = totalCards.takeIf { it > 0 } ?: cardCount
+        // Remove set code prefix if present (e.g., "ME03:Perfect Order" → "Perfect Order")
+        val cleanName = name.substringAfterLast(":").trim().takeIf { it.isNotBlank() } ?: name
+        return TcgSet(
+            id = setId,
+            name = ItalianTranslations.translateExpansionName(cleanName),
+            series = deriveSeriesName(setCode = setCode, language = language, setName = cleanName),
+            language = mapLanguageMacro(language),
+            printedTotal = totalCount,
+            total = totalCount,
+            releaseDate = releaseDate.orEmpty(),
+            images = SetImages(
+                symbol = buildSetImageUrl(setId),
+                logo = buildSetImageUrl(setId)
+            )
+        )
+    }
+
+    private fun PokeWalletCard.toTcgCard(setOverride: PokeWalletSet? = null): TcgCard {
+        val info = cardInfo
+        val setId = setOverride?.setId ?: info?.setId.orEmpty()
+        val setName = setOverride?.name ?: info?.setName.orEmpty()
+        val setCode = setOverride?.setCode ?: info?.setCode
+        val rawNumber = info?.cardNumber.orEmpty()
+        val tcgSet = TcgCardSet(
+            id = setId,
+            name = setName,
+            series = deriveSeriesName(setCode = setCode, language = setOverride?.language, setName = setName)
+        )
+
+        return TcgCard(
+            id = id,
+            name = info?.name.orEmpty(),
+            supertype = deriveSupertype(info?.cardType),
+            subtypes = info?.stage?.let { listOf(it) },
+            hp = info?.hp?.substringBefore('.'),
+            types = info?.cardType?.let(::deriveTypes),
+            set = tcgSet,
+            number = rawNumber.substringBefore('/').trim().ifBlank { rawNumber },
+            rarity = normalizeRarity(info?.rarity),
+            images = CardImages(
+                small = buildCardImageUrl(id, "low"),
+                large = buildCardImageUrl(id, "high")
+            ),
+            tcgplayer = tcgplayer?.toLegacyTcgPlayer(),
+            cardmarket = cardmarket?.toLegacyCardMarket()
+        )
+    }
+
+    private fun PokeWalletTcgPlayer.toLegacyTcgPlayer(): TcgPlayer {
+        val mappedPrices = prices.associate { price ->
+            mapSubTypeNameToKey(price.subTypeName) to TcgPriceInfo(
+                low = price.lowPrice,
+                mid = price.midPrice,
+                high = price.highPrice,
+                market = price.marketPrice
+            )
+        }
+        return TcgPlayer(url = url.orEmpty(), prices = mappedPrices)
+    }
+
+    private fun PokeWalletCardMarket.toLegacyCardMarket(): CardMarket {
+        val preferred = prices.firstOrNull { it.variantType == "normal" } ?: prices.firstOrNull()
+        return CardMarket(
+            url = productUrl.orEmpty(),
+            prices = CardMarketPrices(
+                averageSellPrice = preferred?.avg,
+                lowPrice = preferred?.low,
+                trendPrice = preferred?.trend,
+                avg1 = preferred?.avg1,
+                avg7 = preferred?.avg7,
+                avg30 = preferred?.avg30
+            )
+        )
+    }
+
+    private fun buildCardImageUrl(cardId: String, size: String): String {
+        return "${PokeWalletRetrofitClient.imageBaseUrl}images/$cardId?size=$size"
+    }
+
+    private fun buildSetImageUrl(setId: String): String {
+        return "${PokeWalletRetrofitClient.imageBaseUrl}sets/$setId/image"
+    }
+
+    private fun mapSubTypeNameToKey(subTypeName: String?): String {
+        return when (subTypeName?.trim()?.lowercase()) {
+            "normal" -> "normal"
+            "holofoil", "holo" -> "holofoil"
+            "reverse holofoil", "reverse holo" -> "reverseHolofoil"
+            "1st edition holofoil" -> "1stEditionHolofoil"
+            "1st edition" -> "1stEditionNormal"
+            "unlimited" -> "unlimited"
+            "shadowless" -> "shadowless"
+            else -> subTypeName?.replace(" ", "")?.replaceFirstChar { it.lowercase() } ?: "normal"
+        }
+    }
+
+    private fun deriveTypes(cardType: String): List<String> {
+        val normalized = cardType.trim()
+        return when (normalized.lowercase()) {
+            "fire", "water", "grass", "lightning", "psychic", "fighting", "darkness", "metal", "dragon", "fairy", "colorless" -> listOf(normalized.replaceFirstChar { it.uppercase() })
+            else -> emptyList()
+        }
+    }
+
+    private fun deriveSupertype(cardType: String?): String {
+        return when (cardType?.trim()?.lowercase()) {
+            "trainer" -> "Trainer"
+            "energy" -> "Energy"
+            else -> "Pokémon"
+        }
+    }
+
+    private fun deriveSeriesName(setCode: String?, language: String?, setName: String?): String {
+        val code = setCode?.uppercase().orEmpty()
+        val name = setName?.lowercase().orEmpty()
+
+        if (name.contains("mega")) return ItalianTranslations.translateSeriesName("Mega Evolutions")
+        if (name.contains("world championship")) return ItalianTranslations.translateSeriesName("World Championships")
+        if (name.contains("black star") || name.contains("promo")) return ItalianTranslations.translateSeriesName("Promos")
+
+        val series = when {
+            code.startsWith("ME") || code.startsWith("MEX") || code.startsWith("MEGA") -> "Mega Evolutions"
+            code.startsWith("SV") -> "Scarlet & Violet"
+            code.startsWith("SWSH") -> "Sword & Shield"
+            code.startsWith("SM") -> "Sun & Moon"
+            code.startsWith("XY") -> "XY"
+            code.startsWith("BW") -> "Black & White"
+            code.startsWith("HGSS") -> "HeartGold & SoulSilver"
+            code.startsWith("DP") -> "Diamond & Pearl"
+            code.startsWith("EX") -> "EX"
+            code.isNotBlank() -> code.takeWhile { !it.isDigit() }.ifBlank { code }
+            else -> language?.uppercase().orEmpty()
+        }
+        return ItalianTranslations.translateSeriesName(series)
+    }
+
+    private fun isAllowedSetLanguage(setId: String): Boolean {
+        val language = setLanguageById[setId]
+        // If language is unknown at this stage, allow card retrieval and let
+        // set-level filtering decide after first successful response.
+        return language == null || language in ALLOWED_LANGUAGES
+    }
+
+    private fun refreshLanguageMapFromSets(sets: List<TcgSet>) {
+        sets.forEach { set ->
+            setLanguageById[set.id] = set.language
+        }
+    }
+
+    private suspend fun ensureSetLanguageMapReady() {
+        if (setLanguageById.isNotEmpty()) return
+        setLanguageMapMutex.withLock {
+            if (setLanguageById.isNotEmpty()) return@withLock
+
+            // Try existing in-memory sets first (0 credits).
+            memorySets?.takeIf { it.isNotEmpty() }?.let {
+                refreshLanguageMapFromSets(it)
+                return@withLock
+            }
+
+            val response = api.getSets()
+            response.data.forEach { remoteSet ->
+                setLanguageById[remoteSet.setId] = mapLanguageMacro(remoteSet.language)
+            }
+            recordNetworkCall("bootstrap:setLanguageMap")
+        }
+    }
+
+    private fun mapLanguageMacro(raw: String?): String? {
+        val normalized = raw?.trim()?.lowercase()?.replace('_', ' ') ?: return null
+        return when {
+            normalized in setOf("it", "ita", "italian", "italiano") || normalized.contains("ital") -> "IT"
+            normalized in setOf("en", "eng", "english", "inglese") || normalized.contains("engl") || normalized.contains("ingl") -> "ENG"
+            normalized in setOf("jp", "jap", "ja", "japanese", "giapponese") || normalized.contains("jap") || normalized.contains("giapp") -> "JAP"
+            else -> null
+        }
+    }
+
+    private fun normalizeRarity(raw: String?): String? {
+        val value = raw?.trim().orEmpty()
+        if (value.isBlank()) return null
+        val key = value.lowercase()
+        return when {
+            "special illustration rare" in key || "sir" == key -> "Special Illustration Rare"
+            "illustration rare" in key || key == "ir" -> "Illustration Rare"
+            "hyper rare" in key -> "Hyper Rare"
+            "ultra rare" in key -> "Ultra Rare"
+            "double rare" in key -> "Double Rare"
+            "ace spec" in key -> "ACE SPEC Rare"
+            "radiant" in key -> "Radiant Rare"
+            "amazing" in key -> "Amazing Rare"
+            "secret" in key -> "Secret Rare"
+            "trainer gallery" in key -> "Trainer Gallery Rare"
+            "holo" in key && "rare" in key -> "Rare Holo"
+            "rare" in key -> "Rare"
+            "uncommon" in key -> "Uncommon"
+            "common" in key -> "Common"
+            else -> value
+        }
+    }
+
+    private fun parseReleaseDateToEpoch(value: String?): Long {
+        val source = value?.trim().orEmpty()
+        if (source.isBlank()) return 0L
+
+        parseDate(source, ISO_DATE)?.let { return it }
+
+        val cleaned = source
+            .replace(Regex("(\\d+)(st|nd|rd|th)"), "$1")
+            .replace("_", " ")
+            .trim()
+
+        parseDate(cleaned, HUMAN_DATE_LONG)?.let { return it }
+        parseDate(cleaned, HUMAN_DATE_SHORT)?.let { return it }
+        return 0L
+    }
+
+    private fun parseDate(value: String, formatter: DateTimeFormatter): Long? {
+        return try {
+            LocalDate.parse(value, formatter).atStartOfDay().toEpochSecond(ZoneOffset.UTC)
+        } catch (_: DateTimeParseException) {
+            null
+        }
+    }
+
+    private suspend fun <T> guardedApiCall(resourceKey: String, call: suspend () -> T): Result<T> {
+        val now = System.currentTimeMillis()
+        if (now < globalRateLimitUntil) {
+            return Result.failure(IllegalStateException("Rate limit cooldown active"))
+        }
+
+        lastNetworkAttempt[resourceKey] = now
+
+        return try {
+            val result = call()
+            recordNetworkCall(resourceKey)
+            Result.success(result)
+        } catch (e: HttpException) {
+            if (e.code() == 429) {
+                globalRateLimitUntil = System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS
+            }
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun recordCacheHit(tag: String) {
+        cacheHitCount++
+        if (com.emabuia.pokevault.BuildConfig.DEBUG) {
+            Timber.d("CACHE_HIT[%s] hit=%d miss=%d net=%d", tag, cacheHitCount, cacheMissCount, networkCallCount)
+        }
+    }
+
+    private fun recordCacheMiss(tag: String) {
+        cacheMissCount++
+        if (com.emabuia.pokevault.BuildConfig.DEBUG) {
+            Timber.d("CACHE_MISS[%s] hit=%d miss=%d net=%d", tag, cacheHitCount, cacheMissCount, networkCallCount)
+        }
+    }
+
+    private fun recordNetworkCall(tag: String) {
+        networkCallCount++
+        if (com.emabuia.pokevault.BuildConfig.DEBUG) {
+            Timber.d("NETWORK_CALL[%s] hit=%d miss=%d net=%d", tag, cacheHitCount, cacheMissCount, networkCallCount)
+        }
+    }
+
+    private data class SetCardsResult(
+        val cards: List<TcgCard>,
+        val totalCount: Int
+    )
 }

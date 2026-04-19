@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.ui.pokedex
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,8 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import coil.compose.AsyncImage
 import com.emabuia.pokevault.data.model.CardOptions
+import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.RarityUtils.getRarityInfo
@@ -43,7 +47,9 @@ fun CardDetailBottomSheet(
     onRemoveCard: () -> Unit,
     onDismiss: () -> Unit,
     cardList: List<TcgCard> = emptyList(),
-    onCardChange: (TcgCard) -> Unit = {}
+    onCardChange: (TcgCard) -> Unit = {},
+    pokeWalletPrices: PokeWalletPriceData? = null,
+    isLoadingPokeWalletPrices: Boolean = false
 ) {
     val rarityInfo = getRarityInfo(card.rarity)
 
@@ -448,9 +454,186 @@ fun CardDetailBottomSheet(
                         }
                     }
 
+                    // ── Prezzi Live (PokeWallet) ──
+                    if (isLoadingPokeWalletPrices) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 1.5.dp,
+                                color = BlueCard
+                            )
+                            Text("Caricamento prezzi...", color = TextMuted, fontSize = 12.sp)
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    } else if (pokeWalletPrices != null && pokeWalletPrices.hasEurPrices) {
+                        Text("Prezzi Live", color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(DarkCard)
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("\uD83C\uDDEA\uD83C\uDDFA", fontSize = 14.sp)
+                                Text("CardMarket", color = TextGray, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                            }
+
+                            val mainEurPrice = pokeWalletPrices.eurAvg ?: pokeWalletPrices.eurLow
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                if (mainEurPrice != null) {
+                                    Column {
+                                        Text("Prezzo medio", color = TextMuted, fontSize = 11.sp)
+                                        Text(
+                                            "\u20AC${".2f".format(mainEurPrice).let { String.format("%.2f", mainEurPrice) }}",
+                                            color = GreenCard,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 22.sp
+                                        )
+                                    }
+                                }
+                                if (pokeWalletPrices.eurTrend != null) {
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("Trend", color = TextMuted, fontSize = 11.sp)
+                                        Text(
+                                            "\u20AC${String.format("%.2f", pokeWalletPrices.eurTrend)}",
+                                            color = TextWhite,
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (pokeWalletPrices.hasSparklineData) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                PriceSparkline(
+                                    avg30 = pokeWalletPrices.eurAvg30!!,
+                                    avg7 = pokeWalletPrices.eurAvg7!!,
+                                    avg1 = pokeWalletPrices.eurAvg1!!
+                                )
+                            }
+
+                            if (pokeWalletPrices.eurLow != null) {
+                                HorizontalDivider(color = TextMuted.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 2.dp))
+                                DetailInfoRow("Prezzo minimo", "\u20AC${String.format("%.2f", pokeWalletPrices.eurLow)}")
+                            }
+                        }
+
+                        if (pokeWalletPrices.usdMarket != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(DarkCard)
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text("\uD83C\uDDFA\uD83C\uDDF8", fontSize = 14.sp)
+                                    Text("TCGPlayer", color = TextGray, fontSize = 13.sp)
+                                }
+                                Text(
+                                    "\$${String.format("%.2f", pokeWalletPrices.usdMarket)}",
+                                    color = TextWhite,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
                     Spacer(modifier = Modifier.height(32.dp))
                 }
 
+            }
+        }
+    }
+}
+
+@Composable
+fun PriceSparkline(avg30: Double, avg7: Double, avg1: Double) {
+    val points = listOf(avg30, avg7, avg1)
+    val labels = listOf("30gg", "7gg", "Oggi")
+    val min = points.min()
+    val max = points.max()
+    val range = (max - min).coerceAtLeast(0.01)
+
+    val trendColor = when {
+        avg1 > avg30 * 1.01 -> Color(0xFF22C55E)   // green: rising
+        avg1 < avg30 * 0.99 -> Color(0xFFEF4444)   // red: falling
+        else -> Color(0xFF9CA3AF)                    // gray: stable
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+        ) {
+            val w = size.width
+            val h = size.height
+            val pad = 12f
+            val xStep = (w - 2 * pad) / (points.size - 1)
+
+            val coords = points.mapIndexed { i, v ->
+                val x = pad + i * xStep
+                val y = (h - pad) - ((v - min) / range * (h - 2 * pad)).toFloat()
+                Offset(x, y)
+            }
+
+            for (i in 0 until coords.size - 1) {
+                drawLine(
+                    color = trendColor,
+                    start = coords[i],
+                    end = coords[i + 1],
+                    strokeWidth = 2.5f,
+                    cap = StrokeCap.Round
+                )
+            }
+            coords.forEach { offset ->
+                drawCircle(color = trendColor, radius = 4.5f, center = offset)
+                drawCircle(color = android.graphics.Color.BLACK.let { Color(it) }, radius = 2f, center = offset)
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            points.forEachIndexed { i, v ->
+                Column(
+                    horizontalAlignment = when (i) {
+                        0 -> Alignment.Start
+                        points.lastIndex -> Alignment.End
+                        else -> Alignment.CenterHorizontally
+                    }
+                ) {
+                    Text(labels[i], color = TextMuted, fontSize = 10.sp)
+                    Text("\u20AC${String.format("%.2f", v)}", color = TextGray, fontSize = 10.sp)
+                }
             }
         }
     }

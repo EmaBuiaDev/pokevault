@@ -10,7 +10,7 @@ import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.GoalAlbum
 import com.emabuia.pokevault.data.model.GoalCriteriaType
 import com.emabuia.pokevault.data.model.PokemonCard
-import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import kotlinx.coroutines.flow.catch
@@ -29,7 +29,7 @@ data class GoalProgress(
 class GoalAlbumViewModel : ViewModel() {
 
     private val repository = FirestoreRepository()
-    private val tcgRepository = PokeTcgRepository()
+    private val tcgRepository = RepositoryProvider.tcgRepository
     private val premiumManager = PremiumManager.getInstance()
 
     // ── State ──────────────────────────────────────────────────────────────

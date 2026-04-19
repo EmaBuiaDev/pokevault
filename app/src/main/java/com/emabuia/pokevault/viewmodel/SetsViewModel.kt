@@ -10,6 +10,7 @@ import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
@@ -17,6 +18,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 data class SetsUiState(
     val allSets: List<TcgSet> = emptyList(),
@@ -36,7 +38,7 @@ data class SetsUiState(
 // Usa AndroidViewModel per accedere al Context
 class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository = PokeTcgRepository()
+    private val repository = RepositoryProvider.tcgRepository
     private val firestoreRepository = FirestoreRepository()
     private var searchJob: Job? = null
     private var setSearchJob: Job? = null
@@ -66,7 +68,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                 .onFailure { error ->
                     uiState = uiState.copy(
                         isLoading = false,
-                        errorMessage = "Errore: ${error.message}"
+                        errorMessage = buildSetsErrorMessage(error)
                     )
                 }
         }
@@ -101,7 +103,10 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                     applyFilters()
                 }
                 .onFailure {
-                    uiState = uiState.copy(isLoading = false)
+                    uiState = uiState.copy(
+                        isLoading = false,
+                        errorMessage = buildSetsErrorMessage(it)
+                    )
                 }
         }
     }
@@ -177,5 +182,23 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             matchesSearch && matchesSeries
         }
         uiState = uiState.copy(filteredSets = filtered)
+    }
+
+    private fun buildSetsErrorMessage(error: Throwable): String {
+        return when (error) {
+            is HttpException -> {
+                when (error.code()) {
+                    401, 403 -> "Accesso API non autorizzato. Verifica la chiave PokeWallet."
+                    429 -> "Troppe richieste. Riprova tra qualche secondo."
+                    else -> "Servizio non disponibile (${error.code()})."
+                }
+            }
+
+            else -> {
+                val raw = error.message?.trim().orEmpty()
+                if (raw.isNotBlank()) "Errore: $raw"
+                else "Errore durante il caricamento di carte ed espansioni."
+            }
+        }
     }
 }

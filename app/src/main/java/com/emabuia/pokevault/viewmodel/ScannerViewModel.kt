@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ocr.CardOCRResult
 import com.emabuia.pokevault.ocr.CardSupertype
@@ -51,7 +52,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         val ambiguousCandidates: List<TcgCard> = emptyList()
     )
 
-    private val repository = PokeTcgRepository()
+    private val repository = RepositoryProvider.tcgRepository
     private val firestoreRepository = FirestoreRepository()
     private var searchJob: Job? = null
 
@@ -88,15 +89,6 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 Timber.i("OCR inizializzato: ${ocrManager.activeEngineName}")
             } catch (e: Exception) {
                 Timber.e(e, "Errore inizializzazione OCR: ${e.message}")
-            }
-        }
-        // Precarica i set per poter identificare l'espansione dal totale carte
-        viewModelScope.launch {
-            try {
-                repository.getSets(application)
-                Timber.d("Set precaricati per matching espansione")
-            } catch (e: Exception) {
-                Timber.w("Errore precaricamento set: ${e.message}")
             }
         }
     }

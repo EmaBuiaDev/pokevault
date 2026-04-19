@@ -9,7 +9,7 @@ import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.model.WishlistIcons
 import com.emabuia.pokevault.data.remote.TcgCard
-import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.util.AppLocale
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
@@ -38,7 +38,7 @@ class WishlistViewModel : ViewModel() {
     }
 
     private val repository = FirestoreRepository()
-    private val tcgRepository = PokeTcgRepository()
+    private val tcgRepository = RepositoryProvider.tcgRepository
 
     var wishlists by mutableStateOf<List<Wishlist>>(emptyList())
         private set

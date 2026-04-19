@@ -57,7 +57,7 @@ fun GoalAlbumDetailScreen(
     // Carichiamo le TcgCard per il dettaglio (da cache/api progressivamente)
     var targetCards by remember { mutableStateOf<List<TcgCard>>(emptyList()) }
     var isLoadingCards by remember { mutableStateOf(false) }
-    val tcgRepo = remember { com.emabuia.pokevault.data.remote.PokeTcgRepository() }
+    val tcgRepo = remember { com.emabuia.pokevault.data.remote.RepositoryProvider.tcgRepository }
 
     LaunchedEffect(album) {
         if (album == null) return@LaunchedEffect

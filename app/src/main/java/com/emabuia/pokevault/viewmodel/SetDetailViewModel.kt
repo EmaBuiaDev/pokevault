@@ -10,7 +10,10 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.remote.PokeWalletPriceData
+import com.emabuia.pokevault.data.remote.PokeWalletRepository
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
@@ -37,7 +40,9 @@ data class SetDetailUiState(
     val selectedType: String? = null,
     val selectedSupertype: String? = null,
     val errorMessage: String? = null,
-    val successMessage: String? = null
+    val successMessage: String? = null,
+    val selectedCardPokeWalletPrices: PokeWalletPriceData? = null,
+    val isLoadingPokeWalletPrices: Boolean = false
 ) {
     val ownedCount: Int get() = cards.count { it.id in ownedCardIds }
     val totalCount: Int get() = cards.size
@@ -51,14 +56,16 @@ data class SetDetailUiState(
 
 class SetDetailViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val tcgRepository = PokeTcgRepository()
+    private val tcgRepository = RepositoryProvider.tcgRepository
     private val firestoreRepository = FirestoreRepository()
+    private val pokeWalletRepository = RepositoryProvider.pokeWalletRepository
 
     var uiState by mutableStateOf(SetDetailUiState())
         private set
 
     private var currentSetId: String? = null
     private var translationJob: Job? = null
+    private var lastPricedCardId: String? = null
 
     init {
         TranslationService.loadCache(application.applicationContext)
@@ -71,19 +78,10 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         val context = getApplication<Application>().applicationContext
         uiState = uiState.copy(isLoading = true, isLoadingCards = true)
 
-        // Load set info independently - show it as soon as it arrives
-        viewModelScope.launch {
-            tcgRepository.getSetInfo(setId).onSuccess { setInfo ->
-                uiState = uiState.copy(set = setInfo, isLoading = false)
-                observeOwnedCards(setInfo.name)
-            }
-        }
-
-        // Load cards independently - show them as soon as they arrive
         viewModelScope.launch {
             tcgRepository.getCardsBySet(setId, context = context)
                 .onSuccess { cards ->
-                    if (uiState.set == null && cards.isNotEmpty()) {
+                    if (cards.isNotEmpty()) {
                         val fallbackSet = TcgSet(
                             id = setId,
                             name = cards.firstOrNull()?.set?.name ?: setId,
@@ -91,6 +89,11 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                         )
                         uiState = uiState.copy(set = fallbackSet)
                         observeOwnedCards(fallbackSet.name)
+                    } else {
+                        tcgRepository.getSetInfo(setId).onSuccess { setInfo ->
+                            uiState = uiState.copy(set = setInfo)
+                            observeOwnedCards(setInfo.name)
+                        }
                     }
                     uiState = uiState.copy(cards = cards, isLoading = false, isLoadingCards = false)
                 }
@@ -224,4 +227,26 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setViewMode(mode: String) { uiState = uiState.copy(viewMode = mode) }
     fun clearMessages() { uiState = uiState.copy(errorMessage = null, successMessage = null) }
+
+    fun loadPokeWalletPrices(card: TcgCard) {
+        if (lastPricedCardId == card.id && uiState.selectedCardPokeWalletPrices != null) return
+        lastPricedCardId = card.id
+        uiState = uiState.copy(isLoadingPokeWalletPrices = true, selectedCardPokeWalletPrices = null)
+        viewModelScope.launch {
+            val setCode = card.set?.id ?: ""
+            val cardNumber = card.number
+            pokeWalletRepository.getCardPrices(card.name, setCode, cardNumber)
+                .onSuccess { prices ->
+                    uiState = uiState.copy(selectedCardPokeWalletPrices = prices, isLoadingPokeWalletPrices = false)
+                }
+                .onFailure {
+                    uiState = uiState.copy(isLoadingPokeWalletPrices = false)
+                }
+        }
+    }
+
+    fun clearPokeWalletPrices() {
+        lastPricedCardId = null
+        uiState = uiState.copy(selectedCardPokeWalletPrices = null, isLoadingPokeWalletPrices = false)
+    }
 }
