@@ -62,6 +62,13 @@ fun formatReleaseDate(date: String): String {
     } catch (_: Exception) { date }
 }
 
+private fun resolveDisplayPrice(card: TcgCard): Double? {
+    return card.cardmarket?.prices?.averageSellPrice
+        ?: card.cardmarket?.prices?.lowPrice
+        ?: card.tcgplayer?.prices?.values?.firstOrNull { (it.market ?: 0.0) > 0.0 }?.market
+        ?: card.tcgplayer?.prices?.values?.firstOrNull { (it.low ?: 0.0) > 0.0 }?.low
+}
+
 private val ITALIAN_TYPE_MAP = mapOf(
     "fuoco" to "fire", "acqua" to "water", "erba" to "grass",
     "elettro" to "lightning", "elettrico" to "lightning", "fulmine" to "lightning",
@@ -1035,6 +1042,7 @@ fun TcgCardCompactItem(
             .clip(RoundedCornerShape(10.dp))
             .then(
                 when {
+                    isAdding -> Modifier.border(2.dp, BlueCard.copy(alpha = 0.95f), RoundedCornerShape(10.dp))
                     isSelected -> Modifier.border(2.dp, BlueCard, RoundedCornerShape(10.dp))
                     isOwned -> Modifier.border(2.dp, GreenCard.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
                     else -> Modifier
@@ -1062,6 +1070,12 @@ fun TcgCardCompactItem(
             if (isSelected) Box(modifier = Modifier
                 .fillMaxSize()
                 .background(BlueCard.copy(alpha = 0.15f)))
+
+            if (isAdding && !isSelected) Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(BlueCard.copy(alpha = 0.18f))
+            )
 
             // Selection checkbox (top-left)
             if (isSelectionMode) {
@@ -1140,82 +1154,108 @@ fun TcgCardCompactItem(
                         )
                     }
                 } else {
-                    // Card name only (price moved outside)
-                    Text(card.name, color = TextWhite, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // Card name + actions inside card
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            card.name,
+                            color = TextWhite,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        if (!isSelectionMode) {
+                            val heartColor by animateColorAsState(
+                                targetValue = if (isWishlisted) RedCard else Color.White.copy(alpha = 0.92f),
+                                label = "wishlistHeartColor"
+                            )
+                            val heartScale by animateFloatAsState(
+                                targetValue = if (isWishlisted) 1.08f else 1f,
+                                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                                label = "wishlistHeartScale"
+                            )
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(start = 6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .clip(CircleShape)
+                                        .background(DarkSurface.copy(alpha = 0.78f))
+                                        .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                        .clickable { onWishlistClick() },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isWishlisted) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                        contentDescription = AppLocale.wishlistTitle,
+                                        tint = heartColor,
+                                        modifier = Modifier.size((13.dp * heartScale))
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            when {
+                                                isAdding -> BlueCard.copy(alpha = 0.9f)
+                                                isOwned -> Color.Transparent
+                                                else -> DarkSurface.copy(alpha = 0.8f)
+                                            }
+                                        )
+                                        .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                        .clickable { onQuickAddClick() },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isAdding) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(12.dp),
+                                            color = Color.White,
+                                            strokeWidth = 1.5.dp
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            null,
+                                            tint = if (isOwned) TextMuted.copy(alpha = 0.5f) else Color.White,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // Price + buttons row (OUTSIDE the card)
+        // Price row (OUTSIDE the card, left aligned)
         if (!isSelectionMode && !isPopupOpen) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.Start
             ) {
                 // Price (or premium message)
                 if (canViewPrices) {
-                    val price = card.cardmarket?.prices?.averageSellPrice
-                    if (price != null && price > 0) {
-                        Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    }
+                    val price = resolveDisplayPrice(card)
+                    val priceLabel = if (price != null && price > 0) "${"%.2f".format(price)}€" else "-"
+                    Text(priceLabel, color = GreenCard, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 } else {
                     Text("🔒 Premium", color = TextMuted, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Wishlist heart
-                val heartColor by animateColorAsState(
-                    targetValue = if (isWishlisted) RedCard else Color.White.copy(alpha = 0.92f),
-                    label = "wishlistHeartColor"
-                )
-                val heartScale by animateFloatAsState(
-                    targetValue = if (isWishlisted) 1.08f else 1f,
-                    animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                    label = "wishlistHeartScale"
-                )
-
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .background(DarkSurface.copy(alpha = 0.78f))
-                        .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-                        .clickable { onWishlistClick() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isWishlisted) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = AppLocale.wishlistTitle,
-                        tint = heartColor,
-                        modifier = Modifier.size((13.dp * heartScale))
-                    )
-                }
-
-                // Quick add button
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when {
-                                isAdding -> BlueCard.copy(alpha = 0.9f)
-                                isOwned -> Color.Transparent
-                                else -> DarkSurface.copy(alpha = 0.8f)
-                            }
-                        )
-                        .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-                        .clickable { onQuickAddClick() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isAdding) {
-                        CircularProgressIndicator(modifier = Modifier.size(12.dp), color = Color.White, strokeWidth = 1.5.dp)
-                    } else {
-                        Icon(Icons.Default.Add, null, tint = if (isOwned) TextMuted.copy(alpha = 0.5f) else Color.White, modifier = Modifier.size(13.dp))
-                    }
                 }
             }
         }
@@ -1267,8 +1307,9 @@ fun TcgCardListRow(
             Text("#${card.number} · ${AppLocale.translateRarity(card.rarity ?: "")}", color = TextMuted, fontSize = 11.sp)
         }
         if (canViewPrices) {
-            val price = card.cardmarket?.prices?.averageSellPrice
-            if (price != null && price > 0) Text("${"%.2f".format(price)}€", color = GreenCard, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            val price = resolveDisplayPrice(card)
+            val priceLabel = if (price != null && price > 0) "${"%.2f".format(price)}€" else "-"
+            Text(priceLabel, color = GreenCard, fontSize = 13.sp, fontWeight = FontWeight.Medium)
         } else {
             Text("🔒 Premium", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
         }

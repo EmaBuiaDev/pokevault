@@ -368,13 +368,22 @@ class PokeTcgRepository {
         if (info.cardNumber.isNullOrBlank()) return false
         // Filter out non-card products by name
         val name = info.name.lowercase()
-        val productKeywords = listOf(
-            "mini tin", "booster", "box", "bundle", "collection box",
-            "elite trainer", "blister", "display", "theme deck",
-            "starter set", "build & battle", "build and battle",
-            "etb", "pack", "tin"
+        val productPatterns = listOf(
+            Regex("\\bmini tin\\b"),
+            Regex("\\bbooster box\\b"),
+            Regex("\\bbooster bundle\\b"),
+            Regex("\\bbooster pack\\b"),
+            Regex("\\bcollection box\\b"),
+            Regex("\\belite trainer box\\b"),
+            Regex("\\betb\\b"),
+            Regex("\\bblister\\b"),
+            Regex("\\bdisplay\\b"),
+            Regex("\\btheme deck\\b"),
+            Regex("\\bstarter set\\b"),
+            Regex("\\bbuild\\s*&\\s*battle\\b"),
+            Regex("\\bbuild and battle\\b")
         )
-        if (productKeywords.any { name.contains(it) }) return false
+        if (productPatterns.any { it.containsMatchIn(name) }) return false
         return true
     }
 
@@ -558,7 +567,14 @@ class PokeTcgRepository {
     }
 
     private fun PokeWalletCardMarket.toLegacyCardMarket(): CardMarket {
-        val preferred = prices.firstOrNull { it.variantType == "normal" } ?: prices.firstOrNull()
+        val preferred = prices
+            .firstOrNull {
+                it.variantType.equals("normal", ignoreCase = true) &&
+                    ((it.avg ?: 0.0) > 0.0 || (it.low ?: 0.0) > 0.0)
+            }
+            ?: prices.firstOrNull { (it.avg ?: 0.0) > 0.0 || (it.low ?: 0.0) > 0.0 }
+            ?: prices.firstOrNull { it.variantType.equals("normal", ignoreCase = true) }
+            ?: prices.firstOrNull()
         return CardMarket(
             url = productUrl.orEmpty(),
             prices = CardMarketPrices(

@@ -14,6 +14,8 @@ import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.PokeWalletRepository
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
 import com.emabuia.pokevault.data.remote.RepositoryProvider
+import com.emabuia.pokevault.data.remote.CardMarket
+import com.emabuia.pokevault.data.remote.CardMarketPrices
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
@@ -79,23 +81,29 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         uiState = uiState.copy(isLoading = true, isLoadingCards = true)
 
         viewModelScope.launch {
-            tcgRepository.getCardsBySet(setId, context = context)
+            val cardsDeferred = async { tcgRepository.getCardsBySet(setId, context = context, forceRefresh = true) }
+            val setDeferred = async { tcgRepository.getSetInfo(setId) }
+
+            val cardsResult = cardsDeferred.await()
+            val setResult = setDeferred.await()
+
+            cardsResult
                 .onSuccess { cards ->
-                    if (cards.isNotEmpty()) {
-                        val fallbackSet = TcgSet(
-                            id = setId,
-                            name = cards.firstOrNull()?.set?.name ?: setId,
-                            series = cards.firstOrNull()?.set?.series ?: ""
-                        )
-                        uiState = uiState.copy(set = fallbackSet)
-                        observeOwnedCards(fallbackSet.name)
-                    } else {
-                        tcgRepository.getSetInfo(setId).onSuccess { setInfo ->
-                            uiState = uiState.copy(set = setInfo)
-                            observeOwnedCards(setInfo.name)
-                        }
-                    }
-                    uiState = uiState.copy(cards = cards, isLoading = false, isLoadingCards = false)
+                    val setInfo = setResult.getOrNull()
+                    val resolvedSet = setInfo ?: TcgSet(
+                        id = setId,
+                        name = cards.firstOrNull()?.set?.name ?: setId,
+                        series = cards.firstOrNull()?.set?.series ?: ""
+                    )
+
+                    uiState = uiState.copy(
+                        set = resolvedSet,
+                        cards = cards,
+                        isLoading = false,
+                        isLoadingCards = false
+                    )
+                    observeOwnedCards(resolvedSet.name)
+                    launch { enrichMissingCardPrices(cards) }
                 }
                 .onFailure { error ->
                     uiState = uiState.copy(isLoading = false, isLoadingCards = false, errorMessage = "Errore: ${error.message}")
@@ -248,5 +256,50 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun clearPokeWalletPrices() {
         lastPricedCardId = null
         uiState = uiState.copy(selectedCardPokeWalletPrices = null, isLoadingPokeWalletPrices = false)
+    }
+
+    private suspend fun enrichMissingCardPrices(cards: List<TcgCard>) {
+        val needingPrices = cards.filter { card ->
+            val cm = card.cardmarket?.prices
+            val hasCmPrice = (cm?.averageSellPrice ?: 0.0) > 0.0 || (cm?.lowPrice ?: 0.0) > 0.0
+            val hasTcgPrice = card.tcgplayer?.prices?.values?.any { p -> (p.market ?: 0.0) > 0.0 || (p.low ?: 0.0) > 0.0 } == true
+            !hasCmPrice && !hasTcgPrice
+        }
+
+        if (needingPrices.isEmpty()) return
+
+        val updatedById = HashMap<String, TcgCard>()
+        val lastIndex = needingPrices.lastIndex
+
+        needingPrices.forEachIndexed { index, card ->
+            val priceData = pokeWalletRepository
+                .getCardPrices(card.name, card.set?.id.orEmpty(), card.number)
+                .getOrNull()
+
+            if (priceData != null) {
+                val cmPrices = CardMarketPrices(
+                    averageSellPrice = priceData.eurAvg,
+                    lowPrice = priceData.eurLow,
+                    trendPrice = priceData.eurTrend,
+                    avg1 = priceData.eurAvg1,
+                    avg7 = priceData.eurAvg7,
+                    avg30 = priceData.eurAvg30
+                )
+                updatedById[card.id] = card.copy(
+                    cardmarket = CardMarket(
+                        url = priceData.cardMarketUrl.orEmpty(),
+                        prices = cmPrices
+                    )
+                )
+            }
+
+            // Apply in small batches to keep UI responsive while prices stream in.
+            if ((index + 1) % 8 == 0 || index == lastIndex) {
+                if (updatedById.isNotEmpty()) {
+                    val merged = uiState.cards.map { current -> updatedById[current.id] ?: current }
+                    uiState = uiState.copy(cards = merged)
+                }
+            }
+        }
     }
 }
