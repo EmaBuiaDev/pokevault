@@ -526,7 +526,10 @@ class PokeTcgRepository {
     private fun PokeWalletCard.toTcgCard(setOverride: PokeWalletSet? = null): TcgCard {
         val info = cardInfo
         val setId = setOverride?.setId ?: info?.setId.orEmpty()
-        val setName = setOverride?.name ?: info?.setName.orEmpty()
+        val rawSetName = setOverride?.name ?: info?.setName.orEmpty()
+        val setName = ItalianTranslations.translateExpansionName(
+            rawSetName.substringAfterLast(":").trim().ifBlank { rawSetName }
+        )
         val setCode = setOverride?.setCode ?: info?.setCode
         val rawNumber = info?.cardNumber.orEmpty()
         val tcgSet = TcgCardSet(

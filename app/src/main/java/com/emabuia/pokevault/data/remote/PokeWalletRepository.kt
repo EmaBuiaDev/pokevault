@@ -16,7 +16,7 @@ class PokeWalletRepository {
 
     // L1 in-memory cache
     private val priceCache = ConcurrentHashMap<String, Pair<PokeWalletPriceData, Long>>()
-    private val CACHE_DURATION_MS = 12L * 60 * 60 * 1000 // 12 hours
+    private val CACHE_DURATION_MS = 24L * 60 * 60 * 1000 // 24 hours
 
     suspend fun getCardPrices(
         cardName: String,
@@ -50,28 +50,46 @@ class PokeWalletRepository {
 
         // L3: Network
         return try {
-            val query = if (setCode.isNotBlank() && cleanNumber.isNotBlank()) {
+            val queryPrimary = if (setCode.isNotBlank() && cleanNumber.isNotBlank()) {
                 "$setCode $cleanNumber"
             } else {
-                cardName
+                "$cardName $cleanNumber".trim()
             }
 
-            val response = apiService.search(query, limit = 10)
+            val queryFallback = "$cardName $cleanNumber".trim()
 
-            val match = response.results.firstOrNull { card ->
-                val apiNum = card.cardInfo?.cardNumber?.split("/")?.firstOrNull()?.trim() ?: ""
-                apiNum.equals(cleanNumber, ignoreCase = true)
-            } ?: response.results.firstOrNull { card ->
-                card.cardInfo?.cleanName?.contains(cardName, ignoreCase = true) == true
-            } ?: response.results.firstOrNull()
+            fun pickMatch(results: List<PokeWalletCard>): PokeWalletCard? {
+                return results.firstOrNull { card ->
+                    val apiNum = card.cardInfo?.cardNumber?.split("/")?.firstOrNull()?.trim() ?: ""
+                    val hasEur = card.cardmarket?.prices?.any { (it.avg ?: 0.0) > 0.0 || (it.low ?: 0.0) > 0.0 } == true
+                    apiNum.equals(cleanNumber, ignoreCase = true) && hasEur
+                } ?: results.firstOrNull { card ->
+                    val hasEur = card.cardmarket?.prices?.any { (it.avg ?: 0.0) > 0.0 || (it.low ?: 0.0) > 0.0 } == true
+                    card.cardInfo?.cleanName?.contains(cardName, ignoreCase = true) == true && hasEur
+                } ?: results.firstOrNull { card ->
+                    card.cardmarket?.prices?.any { (it.avg ?: 0.0) > 0.0 || (it.low ?: 0.0) > 0.0 } == true
+                }
+            }
+
+            val responsePrimary = apiService.search(queryPrimary, limit = 10)
+            val matchPrimary = pickMatch(responsePrimary.results)
+            val match = if (matchPrimary != null || queryFallback == queryPrimary) {
+                matchPrimary
+            } else {
+                val responseFallback = apiService.search(queryFallback, limit = 10)
+                pickMatch(responseFallback.results)
+            }
 
             if (match != null) {
                 val priceData = match.toPriceData()
-                priceCache[cacheKey] = Pair(priceData, System.currentTimeMillis())
-                try {
-                    db.priceDao().upsertPrice(priceData.toEntity(cacheKey, setCode.lowercase()))
-                } catch (e: Exception) {
-                    Timber.w(e, "Errore salvataggio cache prezzi Room")
+                val hasEur = (priceData.eurAvg ?: 0.0) > 0.0 || (priceData.eurLow ?: 0.0) > 0.0
+                if (hasEur) {
+                    priceCache[cacheKey] = Pair(priceData, System.currentTimeMillis())
+                    try {
+                        db.priceDao().upsertPrice(priceData.toEntity(cacheKey, setCode.lowercase()))
+                    } catch (e: Exception) {
+                        Timber.w(e, "Errore salvataggio cache prezzi Room")
+                    }
                 }
                 Result.success(priceData)
             } else {

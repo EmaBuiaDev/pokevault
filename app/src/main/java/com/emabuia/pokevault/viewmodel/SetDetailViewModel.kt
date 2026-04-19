@@ -68,6 +68,13 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentSetId: String? = null
     private var translationJob: Job? = null
     private var lastPricedCardId: String? = null
+    private val hydratedPriceSetIds = mutableSetOf<String>()
+    private val hydrationPrefs = application.applicationContext.getSharedPreferences("price_hydration", Application.MODE_PRIVATE)
+
+    companion object {
+        private const val PRICE_HYDRATION_WINDOW_MS = 24L * 60 * 60 * 1000
+        private const val MAX_PRICE_HYDRATION_REQUESTS_PER_SET = 20
+    }
 
     init {
         TranslationService.loadCache(application.applicationContext)
@@ -81,7 +88,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         uiState = uiState.copy(isLoading = true, isLoadingCards = true)
 
         viewModelScope.launch {
-            val cardsDeferred = async { tcgRepository.getCardsBySet(setId, context = context, forceRefresh = true) }
+            val cardsDeferred = async { tcgRepository.getCardsBySet(setId, context = context) }
             val setDeferred = async { tcgRepository.getSetInfo(setId) }
 
             val cardsResult = cardsDeferred.await()
@@ -103,7 +110,9 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                         isLoadingCards = false
                     )
                     observeOwnedCards(resolvedSet.name)
-                    launch { enrichMissingCardPrices(cards) }
+                    if (shouldHydratePrices(setId) && hydratedPriceSetIds.add(setId)) {
+                        launch { enrichMissingCardPrices(setId, cards) }
+                    }
                 }
                 .onFailure { error ->
                     uiState = uiState.copy(isLoading = false, isLoadingCards = false, errorMessage = "Errore: ${error.message}")
@@ -188,14 +197,27 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 variant = variant, quantity = quantity, condition = condition, language = language
             )
             firestoreRepository.addCard(card)
-                .onSuccess { uiState = uiState.copy(isAddingCard = null, successMessage = "${tcgCard.name} aggiunta!") }
-                .onFailure { uiState = uiState.copy(isAddingCard = null, errorMessage = "Errore") }
+                .onSuccess {
+                    uiState = uiState.copy(
+                        successMessage = "${tcgCard.name} aggiunta!",
+                        ownedCardIds = uiState.ownedCardIds + tcgCard.id
+                    )
+                    // Keep highlight visible briefly so feedback is noticeable.
+                    delay(350)
+                    uiState = uiState.copy(isAddingCard = null)
+                }
+                .onFailure {
+                    uiState = uiState.copy(errorMessage = "Errore")
+                    delay(350)
+                    uiState = uiState.copy(isAddingCard = null)
+                }
         }
     }
 
     fun addMultipleCards(cards: List<TcgCard>, preferredVariant: String) {
         viewModelScope.launch {
             var addedCount = 0
+            val addedIds = mutableSetOf<String>()
             cards.forEach { tcgCard ->
                 val availableVariants = CardOptions.getVariantsForCard(
                     tcgCard.tcgplayer?.prices?.keys ?: emptySet(), tcgCard.rarity
@@ -217,9 +239,13 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                     apiCardId = tcgCard.id, cardNumber = tcgCard.number,
                     variant = actualVariant, quantity = 1, condition = "Near Mint", language = "🇮🇹 Italiano"
                 )
-                firestoreRepository.addCard(card).onSuccess { addedCount++ }
+                firestoreRepository.addCard(card).onSuccess {
+                    addedCount++
+                    addedIds += tcgCard.id
+                }
             }
             uiState = uiState.copy(
+                ownedCardIds = uiState.ownedCardIds + addedIds,
                 successMessage = if (AppLocale.isItalian) "$addedCount carte aggiunte!" else "$addedCount cards added!"
             )
         }
@@ -258,13 +284,12 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         uiState = uiState.copy(selectedCardPokeWalletPrices = null, isLoadingPokeWalletPrices = false)
     }
 
-    private suspend fun enrichMissingCardPrices(cards: List<TcgCard>) {
+    private suspend fun enrichMissingCardPrices(setId: String, cards: List<TcgCard>) {
         val needingPrices = cards.filter { card ->
             val cm = card.cardmarket?.prices
-            val hasCmPrice = (cm?.averageSellPrice ?: 0.0) > 0.0 || (cm?.lowPrice ?: 0.0) > 0.0
-            val hasTcgPrice = card.tcgplayer?.prices?.values?.any { p -> (p.market ?: 0.0) > 0.0 || (p.low ?: 0.0) > 0.0 } == true
-            !hasCmPrice && !hasTcgPrice
-        }
+            val hasApiEurPrice = (cm?.averageSellPrice ?: 0.0) > 0.0 || (cm?.lowPrice ?: 0.0) > 0.0
+            !hasApiEurPrice
+        }.take(MAX_PRICE_HYDRATION_REQUESTS_PER_SET)
 
         if (needingPrices.isEmpty()) return
 
@@ -276,7 +301,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 .getCardPrices(card.name, card.set?.id.orEmpty(), card.number)
                 .getOrNull()
 
-            if (priceData != null) {
+            if (priceData != null && ((priceData.eurAvg ?: 0.0) > 0.0 || (priceData.eurLow ?: 0.0) > 0.0)) {
                 val cmPrices = CardMarketPrices(
                     averageSellPrice = priceData.eurAvg,
                     lowPrice = priceData.eurLow,
@@ -301,5 +326,23 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
         }
+
+        // Mark hydration window only if at least one EUR API price was resolved.
+        if (updatedById.isNotEmpty()) {
+            hydratedPriceSetIds.add(setId)
+            markHydration(setId)
+        } else {
+            // Allow retries in the same session if no prices were resolved.
+            hydratedPriceSetIds.remove(setId)
+        }
+    }
+
+    private fun shouldHydratePrices(setId: String): Boolean {
+        val lastHydration = hydrationPrefs.getLong("set_$setId", 0L)
+        return System.currentTimeMillis() - lastHydration > PRICE_HYDRATION_WINDOW_MS
+    }
+
+    private fun markHydration(setId: String) {
+        hydrationPrefs.edit().putLong("set_$setId", System.currentTimeMillis()).apply()
     }
 }
