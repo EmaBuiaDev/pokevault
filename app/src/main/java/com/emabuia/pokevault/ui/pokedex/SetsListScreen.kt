@@ -392,21 +392,31 @@ fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: ()
 // ── Set Card con total (non printedTotal) e data formattata ──
 @Composable
 fun SetCard(set: TcgSet, onClick: () -> Unit) {
+    val displayCount = when {
+        set.printedTotal > 0 -> set.printedTotal
+        set.total > 0 -> set.total
+        else -> 0
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(185.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .height(170.dp)
+            .clip(RoundedCornerShape(14.dp))
             .background(DarkCard)
             .clickable(onClick = onClick)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(14.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             // Logo
             Box(
-                modifier = Modifier.fillMaxWidth().height(80.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(68.dp),
                 contentAlignment = Alignment.Center
             ) {
                 if (set.images.logo.isNotBlank()) {
@@ -414,13 +424,15 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
                         model = set.images.logo,
                         contentDescription = set.name,
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxWidth().height(70.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(58.dp)
                     )
                 } else {
                     Text(
                         text = "No image",
                         color = TextMuted,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -429,25 +441,24 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
             Column {
                 Text(
                     text = set.name, color = TextWhite, fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 16.sp
+                    fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 15.sp
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Usa total (include secret rare)
                     Text(
-                        text = AppLocale.cardsCount(set.total),
+                        text = AppLocale.cardsCount(displayCount),
                         color = BlueCard,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     // Data formattata GG/MM/AAAA
                     Text(
                         text = formatDate(set.releaseDate),
                         color = TextMuted,
-                        fontSize = 11.sp
+                        fontSize = 10.sp
                     )
                 }
                 Text(
@@ -483,7 +494,7 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
             }
         }
     } else {
-        val grouped = cards.groupBy { it.set?.name ?: AppLocale.unknown }
+        val grouped = cards.groupBy { it.set?.id?.takeIf { id -> id.isNotBlank() } ?: "unknown" }
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -493,11 +504,14 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
             item(span = { GridItemSpan(3) }) {
                 Text(AppLocale.resultsCountInExpansions(cards.size, grouped.size), color = TextMuted, fontSize = 13.sp)
             }
-            grouped.forEach { (setName, setCards) ->
+            grouped.forEach { (setId, setCards) ->
+                val setName = setCards.firstOrNull()?.set?.name ?: AppLocale.unknown
                 item(span = { GridItemSpan(3) }) {
                     Row(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DarkCard)
-                            .clickable { setCards.firstOrNull()?.set?.id?.let { onCardSetClick(it) } }
+                            .clickable {
+                                setCards.firstOrNull()?.set?.id?.takeIf { id -> id.isNotBlank() }?.let { onCardSetClick(it) }
+                            }
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -509,10 +523,7 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
                         Icon(Icons.Default.ChevronRight, null, tint = TextMuted, modifier = Modifier.size(20.dp))
                     }
                 }
-                // FIX DEFINITIVO: La chiave deve essere unica in tutta la LazyVerticalGrid.
-                // Se una carta appare in più set raggruppati, "it.id" non basta perché si ripete.
-                // Usiamo "id_setName" per garantire l'univocità assoluta.
-                items(setCards.sortedBy { it.number.toIntOrNull() ?: 999 }, key = { "${it.id}_$setName" }) { card ->
+                items(setCards.sortedBy { it.number.toIntOrNull() ?: 999 }, key = { "${it.id}_$setId" }) { card ->
                     Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp))
                         .clickable { onCardClick(card) }) {
                         if (card.images.small.isNotBlank()) {

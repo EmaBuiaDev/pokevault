@@ -353,7 +353,8 @@ fun SetDetailScreen(
                             ownedCount = state.ownedCount,
                             displayTotal = state.displayTotal,
                             completionPercent = state.completionPercent,
-                            rarityCounts = rarityCounts
+                            rarityCounts = rarityCounts,
+                            debugCounters = state.debugCounters
                         )
                     }
 
@@ -598,6 +599,15 @@ fun SetDetailScreen(
                     } else {
                         when (state.viewMode) {
                             "grid" -> items(sortedCards, key = { "${it.id}_${it.number}" }) { card ->
+                                if (premiumManager.canViewPrices()) {
+                                    val currentPrice = resolveDisplayPrice(card)
+                                    LaunchedEffect(card.id, currentPrice) {
+                                        if (currentPrice == null || currentPrice <= 0.0) {
+                                            viewModel.ensureCardPrice(card)
+                                        }
+                                    }
+                                }
+
                                 TcgCardCompactItem(
                                     card = card,
                                     isOwned = card.id in state.ownedCardIds,
@@ -660,6 +670,15 @@ fun SetDetailScreen(
                                 )
                             }
                             "list" -> items(sortedCards, key = { "${it.id}_${it.number}" }, span = { GridItemSpan(3) }) { card ->
+                                if (premiumManager.canViewPrices()) {
+                                    val currentPrice = resolveDisplayPrice(card)
+                                    LaunchedEffect(card.id, currentPrice) {
+                                        if (currentPrice == null || currentPrice <= 0.0) {
+                                            viewModel.ensureCardPrice(card)
+                                        }
+                                    }
+                                }
+
                                 TcgCardListRow(
                                     card = card,
                                     isOwned = card.id in state.ownedCardIds,
@@ -832,7 +851,8 @@ fun SetInfoHeader(
     ownedCount: Int,
     displayTotal: Int,
     completionPercent: Int,
-    rarityCounts: Map<RarityInfo, Pair<Int, Int>>
+    rarityCounts: Map<RarityInfo, Pair<Int, Int>>,
+    debugCounters: String? = null
 ) {
     Column(
         modifier = Modifier
@@ -933,6 +953,17 @@ fun SetInfoHeader(
                     }
                 }
             }
+        }
+
+        if (!debugCounters.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = debugCounters,
+                color = TextMuted,
+                fontSize = 9.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

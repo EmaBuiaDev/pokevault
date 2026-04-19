@@ -44,7 +44,8 @@ data class SetDetailUiState(
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val selectedCardPokeWalletPrices: PokeWalletPriceData? = null,
-    val isLoadingPokeWalletPrices: Boolean = false
+    val isLoadingPokeWalletPrices: Boolean = false,
+    val debugCounters: String? = null
 ) {
     val ownedCount: Int get() = cards.count { it.id in ownedCardIds }
     val totalCount: Int get() = cards.size
@@ -68,6 +69,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentSetId: String? = null
     private var translationJob: Job? = null
     private var lastPricedCardId: String? = null
+    private val requestedCardPriceIds = mutableSetOf<String>()
     private val hydratedPriceSetIds = mutableSetOf<String>()
     private val hydrationPrefs = application.applicationContext.getSharedPreferences("price_hydration", Application.MODE_PRIVATE)
 
@@ -110,9 +112,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                         isLoadingCards = false
                     )
                     observeOwnedCards(resolvedSet.name)
-                    if (shouldHydratePrices(setId) && hydratedPriceSetIds.add(setId)) {
-                        launch { enrichMissingCardPrices(setId, cards) }
-                    }
+                    refreshDebugCounters()
                 }
                 .onFailure { error ->
                     uiState = uiState.copy(isLoading = false, isLoadingCards = false, errorMessage = "Errore: ${error.message}")
@@ -272,9 +272,11 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             pokeWalletRepository.getCardPrices(card.name, setCode, cardNumber)
                 .onSuccess { prices ->
                     uiState = uiState.copy(selectedCardPokeWalletPrices = prices, isLoadingPokeWalletPrices = false)
+                    refreshDebugCounters()
                 }
                 .onFailure {
                     uiState = uiState.copy(isLoadingPokeWalletPrices = false)
+                    refreshDebugCounters()
                 }
         }
     }
@@ -282,6 +284,57 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun clearPokeWalletPrices() {
         lastPricedCardId = null
         uiState = uiState.copy(selectedCardPokeWalletPrices = null, isLoadingPokeWalletPrices = false)
+    }
+
+    fun ensureCardPrice(card: TcgCard) {
+        val current = uiState.cards.firstOrNull { it.id == card.id } ?: card
+        val cm = current.cardmarket?.prices
+        val hasApiEurPrice = (cm?.averageSellPrice ?: 0.0) > 0.0 || (cm?.lowPrice ?: 0.0) > 0.0
+        if (hasApiEurPrice) return
+        if (!requestedCardPriceIds.add(card.id)) return
+
+        viewModelScope.launch {
+            val result = pokeWalletRepository.getCardPrices(
+                cardName = current.name,
+                setCode = current.set?.id.orEmpty(),
+                cardNumber = current.number
+            )
+
+            val priceData = result.getOrNull()
+            if (priceData != null && ((priceData.eurAvg ?: 0.0) > 0.0 || (priceData.eurLow ?: 0.0) > 0.0)) {
+                val cmPrices = CardMarketPrices(
+                    averageSellPrice = priceData.eurAvg,
+                    lowPrice = priceData.eurLow,
+                    trendPrice = priceData.eurTrend,
+                    avg1 = priceData.eurAvg1,
+                    avg7 = priceData.eurAvg7,
+                    avg30 = priceData.eurAvg30
+                )
+                val merged = uiState.cards.map { listCard ->
+                    if (listCard.id == current.id) {
+                        listCard.copy(
+                            cardmarket = CardMarket(
+                                url = priceData.cardMarketUrl.orEmpty(),
+                                prices = cmPrices
+                            )
+                        )
+                    } else {
+                        listCard
+                    }
+                }
+                uiState = uiState.copy(cards = merged)
+            }
+            refreshDebugCounters()
+        }
+    }
+
+    private fun refreshDebugCounters() {
+        if (!BuildConfig.DEBUG) return
+        val tcg = tcgRepository.getDiagnostics()
+        val prices = pokeWalletRepository.getDiagnostics()
+        uiState = uiState.copy(
+            debugCounters = "TCG h:${tcg.hits} m:${tcg.misses} n:${tcg.networkCalls} | PRICE h:${prices.hits} m:${prices.misses} n:${prices.networkCalls}"
+        )
     }
 
     private suspend fun enrichMissingCardPrices(setId: String, cards: List<TcgCard>) {

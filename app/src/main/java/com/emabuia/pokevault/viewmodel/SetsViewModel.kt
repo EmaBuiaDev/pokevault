@@ -57,10 +57,15 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             val context = getApplication<Application>().applicationContext
             repository.getSets(context = context)
                 .onSuccess { sets ->
-                    val series = sets.map { it.series }.distinct()
+                    val resolvedSets = if (hasSuspiciousTotals(sets)) {
+                        repository.getSets(context = context, forceRefresh = true).getOrDefault(sets)
+                    } else {
+                        sets
+                    }
+                    val series = resolvedSets.map { it.series }.distinct()
                     uiState = uiState.copy(
-                        allSets = sets,
-                        filteredSets = sets,
+                        allSets = resolvedSets,
+                        filteredSets = resolvedSets,
                         seriesList = series,
                         isLoading = false
                     )
@@ -201,4 +206,10 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    private fun hasSuspiciousTotals(sets: List<TcgSet>): Boolean {
+        // Cached legacy data may contain inflated totals (e.g. > 400 for standard sets).
+        return sets.any { (it.printedTotal > 400) || (it.total > 400) }
+    }
+
 }

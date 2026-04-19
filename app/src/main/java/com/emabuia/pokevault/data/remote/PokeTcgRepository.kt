@@ -49,6 +49,20 @@ class PokeTcgRepository {
     @Volatile
     private var networkCallCount: Long = 0
 
+    data class CacheDiagnostics(
+        val hits: Long,
+        val misses: Long,
+        val networkCalls: Long
+    )
+
+    fun getDiagnostics(): CacheDiagnostics {
+        return CacheDiagnostics(
+            hits = cacheHitCount,
+            misses = cacheMissCount,
+            networkCalls = networkCallCount
+        )
+    }
+
     companion object {
         private const val SETS_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000L   // 7 days
         private const val CARDS_CACHE_DURATION = 30 * 24 * 60 * 60 * 1000L  // 30 days
@@ -181,6 +195,18 @@ class PokeTcgRepository {
 
     suspend fun getSetInfo(setId: String): Result<TcgSet> = setInfoMutex.withLock {
         memorySets?.firstOrNull { it.id == setId }?.let { return Result.success(it) }
+
+        // Prefer Room cache to avoid unnecessary credit consumption when opening set details.
+        val roomSets = loadSetsFromRoom()
+        roomSets?.firstOrNull { it.id == setId }?.let {
+            memorySets = roomSets
+            return Result.success(it)
+        }
+
+        // Fallback to stale Room cache if fresh cache is expired.
+        loadSetsFromRoom(ignoreExpiry = true)?.firstOrNull { it.id == setId }?.let {
+            return Result.success(it)
+        }
 
         val networkResult = guardedApiCall(resourceKey = "set:$setId") {
             val response = api.getSet(setId, page = 1, limit = 1)
@@ -347,8 +373,8 @@ class PokeTcgRepository {
                 .filter { isActualCard(it) }
                 .map { it.toTcgCard(set) }
             if (page == 1) {
-                // Store API total count to know when to stop fetching
-                apiTotalCount = set.totalCards.takeIf { it > 0 } ?: set.cardCount.takeIf { it > 0 } ?: batch.size
+                // Prefer cardCount: totalCards may include extra records that inflate set size.
+                apiTotalCount = set.cardCount.takeIf { it > 0 } ?: set.totalCards.takeIf { it > 0 } ?: batch.size
             }
             batch.forEach { cards[it.id] = it }
 
@@ -505,7 +531,8 @@ class PokeTcgRepository {
     }
 
     private fun PokeWalletSet.toTcgSet(): TcgSet {
-        val totalCount = totalCards.takeIf { it > 0 } ?: cardCount
+        val printedCount = cardCount.takeIf { it > 0 } ?: totalCards
+        val totalCount = printedCount
         // Remove set code prefix if present (e.g., "ME03:Perfect Order" → "Perfect Order")
         val cleanName = name.substringAfterLast(":").trim().takeIf { it.isNotBlank() } ?: name
         return TcgSet(
@@ -513,7 +540,7 @@ class PokeTcgRepository {
             name = ItalianTranslations.translateExpansionName(cleanName),
             series = deriveSeriesName(setCode = setCode, language = language, setName = cleanName),
             language = mapLanguageMacro(language),
-            printedTotal = totalCount,
+            printedTotal = printedCount,
             total = totalCount,
             releaseDate = releaseDate.orEmpty(),
             images = SetImages(

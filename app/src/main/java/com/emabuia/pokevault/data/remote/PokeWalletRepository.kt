@@ -17,6 +17,26 @@ class PokeWalletRepository {
     // L1 in-memory cache
     private val priceCache = ConcurrentHashMap<String, Pair<PokeWalletPriceData, Long>>()
     private val CACHE_DURATION_MS = 24L * 60 * 60 * 1000 // 24 hours
+    @Volatile
+    private var cacheHitCount: Long = 0
+    @Volatile
+    private var cacheMissCount: Long = 0
+    @Volatile
+    private var networkCallCount: Long = 0
+
+    data class CacheDiagnostics(
+        val hits: Long,
+        val misses: Long,
+        val networkCalls: Long
+    )
+
+    fun getDiagnostics(): CacheDiagnostics {
+        return CacheDiagnostics(
+            hits = cacheHitCount,
+            misses = cacheMissCount,
+            networkCalls = networkCallCount
+        )
+    }
 
     suspend fun getCardPrices(
         cardName: String,
@@ -33,6 +53,7 @@ class PokeWalletRepository {
         // L1: Memory
         val memoryCached = priceCache[cacheKey]
         if (memoryCached != null && System.currentTimeMillis() - memoryCached.second < CACHE_DURATION_MS) {
+            recordCacheHit("prices:memory:$cacheKey")
             return Result.success(memoryCached.first)
         }
 
@@ -42,14 +63,18 @@ class PokeWalletRepository {
             if (roomCached != null && System.currentTimeMillis() - roomCached.cachedAt < CACHE_DURATION_MS) {
                 val data = roomCached.toPriceData()
                 priceCache[cacheKey] = Pair(data, roomCached.cachedAt)
+                recordCacheHit("prices:room:$cacheKey")
                 return Result.success(data)
             }
         } catch (e: Exception) {
             Timber.w(e, "Errore lettura cache prezzi Room")
         }
 
+        recordCacheMiss("prices:$cacheKey")
+
         // L3: Network
         return try {
+            recordNetworkCall("prices:$cacheKey")
             val queryPrimary = if (setCode.isNotBlank() && cleanNumber.isNotBlank()) {
                 "$setCode $cleanNumber"
             } else {
@@ -97,6 +122,27 @@ class PokeWalletRepository {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    private fun recordCacheHit(tag: String) {
+        cacheHitCount++
+        if (BuildConfig.DEBUG) {
+            Timber.d("PW_CACHE_HIT[%s] hit=%d miss=%d net=%d", tag, cacheHitCount, cacheMissCount, networkCallCount)
+        }
+    }
+
+    private fun recordCacheMiss(tag: String) {
+        cacheMissCount++
+        if (BuildConfig.DEBUG) {
+            Timber.d("PW_CACHE_MISS[%s] hit=%d miss=%d net=%d", tag, cacheHitCount, cacheMissCount, networkCallCount)
+        }
+    }
+
+    private fun recordNetworkCall(tag: String) {
+        networkCallCount++
+        if (BuildConfig.DEBUG) {
+            Timber.d("PW_NETWORK[%s] hit=%d miss=%d net=%d", tag, cacheHitCount, cacheMissCount, networkCallCount)
         }
     }
 
