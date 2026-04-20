@@ -1,0 +1,25 @@
+{
+  "name": "pokevault-proxy-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker proxy for PokeWallet API with KV caching",
+  "main": "src/index.ts",
+  "scripts": {
+    "deploy": "wrangler publish",
+    "dev": "wrangler dev",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "wrangler": "^3.45.0",
+    "typescript": "^5.3.3",
+    "@types/node": "^20.10.0",
+    "@cloudflare/workers-types": "^4.20231218.1"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "pokemon",
+    "pokewallet",
+    "cache",
+    "kv"
+  ]
+}

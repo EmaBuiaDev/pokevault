@@ -1,0 +1,52 @@
+# ============================================================================
+# Local.properties template for Pokévault development
+# Copy to local.properties and fill in your actual credentials
+# DO NOT commit local.properties to version control (it contains secrets)
+# ============================================================================
+
+# ── Firebase Configuration ──
+# These are used in local development; production uses Firebase config file
+
+# ── API Keys (for direct API calls, if proxy disabled) ──
+# Get these from the respective API providers:
+# - POKETCG_API_KEY: from pokemontcg.io (optional, fallback to free tier)
+# - POKEWALLET_API_KEY: from pokewallet.io (only needed if NOT using proxy)
+POKETCG_API_KEY=your_poketcg_api_key_here
+POKEWALLET_API_KEY=your_pokewallet_api_key_here
+
+# ── Cloudflare Proxy Configuration ──
+# Enable/disable the Cloudflare Worker proxy for PokeWallet API
+# When enabled, the app routes all PokeWallet requests through the Worker
+# instead of calling the API directly. This provides:
+#   - Global caching (3 day TTL)
+#   - Reduced API credit usage
+#   - Better performance via CDN
+#   - Automatic stale-cache fallback on network errors
+
+# Set to 'true' to enable proxy, 'false' to use direct API calls
+POKEWALLET_PROXY_ENABLED=false
+
+# URL of the deployed Cloudflare Worker
+# Format: https://<worker-name>.<account-id>.workers.dev/
+# Example: https://pokevault-proxy.abc123xyz.workers.dev/
+# Leave empty if POKEWALLET_PROXY_ENABLED=false
+POKEWALLET_PROXY_URL=https://pokevault-proxy.YOUR_ACCOUNT_ID.workers.dev/
+
+# ── Release Build Signing Configuration ──
+# For building release APK/AAB. These are only needed for release builds.
+# Generate a keystore using: keytool -genkey -v -keystore release.keystore ...
+RELEASE_STORE_FILE=release.keystore
+RELEASE_STORE_PASSWORD=your_keystore_password
+RELEASE_KEY_ALIAS=your_key_alias
+RELEASE_KEY_PASSWORD=your_key_password
+
+# ============================================================================
+# SETUP INSTRUCTIONS:
+# 
+# 1. Copy this file to local.properties (from project root)
+# 2. Fill in your API keys (if not using proxy)
+# 3. After deploying Cloudflare Worker:
+#    - Set POKEWALLET_PROXY_ENABLED=true
+#    - Set POKEWALLET_PROXY_URL to your deployed Worker URL
+# 4. Rebuild Android app (Build > Clean Project, then Build > Make Project)
+# ============================================================================

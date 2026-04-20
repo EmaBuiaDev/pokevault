@@ -64,10 +64,12 @@ class CardsVaultTCGApp : Application(), ImageLoaderFactory {
     }
 
     override fun newImageLoader(): ImageLoader {
+        val proxyEnabled = BuildConfig.POKEWALLET_PROXY_ENABLED && BuildConfig.POKEWALLET_PROXY_URL.isNotBlank()
         val client = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val requestBuilder = chain.request().newBuilder()
                 if (
+                    !proxyEnabled &&
                     chain.request().url.host.equals("api.pokewallet.io", ignoreCase = true) &&
                     BuildConfig.POKEWALLET_API_KEY.isNotBlank()
                 ) {

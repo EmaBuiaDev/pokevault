@@ -15,7 +15,7 @@ class CardsSyncWorker(
         return try {
             val db = RepositoryProvider.database
             val repo = RepositoryProvider.tcgRepository
-            val threshold = System.currentTimeMillis() - 25L * 24 * 60 * 60 * 1000 // 25 days
+            val threshold = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000 // 30 days
 
             val visitedSetIds = db.cardDao().getVisitedSetIds()
             val staleSetIds = visitedSetIds.filter { setId ->
@@ -27,7 +27,7 @@ class CardsSyncWorker(
 
             var successCount = 0
             for (setId in staleSetIds) {
-                val result = repo.getCardsBySet(setId, context = applicationContext, forceRefresh = true)
+                val result = repo.getCardsBySet(setId, context = applicationContext, forceRefresh = false)
                 if (result.isSuccess) successCount++
             }
 

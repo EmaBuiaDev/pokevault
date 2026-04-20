@@ -3,6 +3,7 @@ package com.emabuia.pokevault.data.remote
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.local.toPriceData
 import com.emabuia.pokevault.data.local.toEntity
+import kotlinx.coroutines.CompletableDeferred
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 
@@ -16,6 +17,7 @@ class PokeWalletRepository {
 
     // L1 in-memory cache
     private val priceCache = ConcurrentHashMap<String, Pair<PokeWalletPriceData, Long>>()
+    private val inFlightPriceRequests = ConcurrentHashMap<String, CompletableDeferred<Result<PokeWalletPriceData>>>()
     private val CACHE_DURATION_MS = 24L * 60 * 60 * 1000 // 24 hours
     @Volatile
     private var cacheHitCount: Long = 0
@@ -72,8 +74,15 @@ class PokeWalletRepository {
 
         recordCacheMiss("prices:$cacheKey")
 
+        val pendingRequest = CompletableDeferred<Result<PokeWalletPriceData>>()
+        val existingRequest = inFlightPriceRequests.putIfAbsent(cacheKey, pendingRequest)
+        if (existingRequest != null) {
+            recordCacheHit("prices:inflight:$cacheKey")
+            return existingRequest.await()
+        }
+
         // L3: Network
-        return try {
+        val result = try {
             recordNetworkCall("prices:$cacheKey")
             val queryPrimary = if (setCode.isNotBlank() && cleanNumber.isNotBlank()) {
                 "$setCode $cleanNumber"
@@ -122,7 +131,12 @@ class PokeWalletRepository {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            inFlightPriceRequests.remove(cacheKey, pendingRequest)
         }
+
+        pendingRequest.complete(result)
+        return result
     }
 
     private fun recordCacheHit(tag: String) {

@@ -17,7 +17,7 @@ class PriceSyncWorker(
         return try {
             val db = RepositoryProvider.database
             val repo = RepositoryProvider.pokeWalletRepository
-            val threshold = System.currentTimeMillis() - 10L * 60 * 60 * 1000 // 10 hours
+            val threshold = System.currentTimeMillis() - 24L * 60 * 60 * 1000 // 24 hours
 
             val stalePrices = db.priceDao().getExpiredPrices(threshold, limit = 50)
             Timber.d("PriceSyncWorker: %d prezzi da aggiornare", stalePrices.size)

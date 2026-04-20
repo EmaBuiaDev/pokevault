@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.data.remote
 
+import com.emabuia.pokevault.BuildConfig
 import com.google.gson.annotations.SerializedName
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -159,23 +160,39 @@ interface PokeWalletApiService {
 // ── Retrofit Client ──
 
 object PokeWalletRetrofitClient {
-    private const val BASE_URL = "https://api.pokewallet.io/"
-    val imageBaseUrl: String = BASE_URL
+    private const val DIRECT_API_URL = "https://api.pokewallet.io/"
+    val imageBaseUrl: String
+        get() = resolveBaseUrl()
+
+    private fun resolveBaseUrl(): String {
+        val proxyUrl = BuildConfig.POKEWALLET_PROXY_URL.trim()
+        val useProxy = BuildConfig.POKEWALLET_PROXY_ENABLED && proxyUrl.isNotEmpty()
+        val raw = if (useProxy) proxyUrl else DIRECT_API_URL
+        return if (raw.endsWith("/")) raw else "$raw/"
+    }
 
     fun create(apiKey: String): PokeWalletApiService {
-        val client = OkHttpClient.Builder()
+        val baseUrl = resolveBaseUrl()
+
+        val clientBuilder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
-            .addInterceptor { chain ->
+
+        // Only add X-API-Key header when using direct API
+        // When using Cloudflare Worker proxy, the Worker handles the API key server-side
+        if (!BuildConfig.POKEWALLET_PROXY_ENABLED || BuildConfig.POKEWALLET_PROXY_URL.isEmpty()) {
+            clientBuilder.addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .addHeader("X-API-Key", apiKey)
                     .build()
                 chain.proceed(request)
             }
-            .build()
+        }
+
+        val client = clientBuilder.build()
 
         return Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(baseUrl)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

@@ -1,0 +1,20 @@
+name = "pokevault-proxy"
+main = "src/index.ts"
+account_id = "e6c4d1ff864abf6dbcb4ec1e0de6b34a"  # TODO: Fill with your Cloudflare Account ID (see "wrangler whoami" after login)
+workers_dev = true
+compatibility_date = "2024-12-19"
+compatibility_flags = ["nodejs_compat"]
+
+# KV namespace for caching PokeWallet API responses
+kv_namespaces = [
+  { binding = "CACHE", id = "382844930a304e588bcd0327cbfc291e", preview_id = "aca3009c69ab4875b95795e2326577a1" }  # TODO: Fill after creating KV namespace
+]
+
+# Environment variables
+[vars]
+ORIGIN_API = "https://api.pokewallet.io"
+CACHE_TTL_SECONDS = "259200"
+
+# Triggers for the Worker
+[triggers]
+crons = []
