@@ -30,12 +30,14 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.emabuia.pokevault.data.remote.TcgCard
@@ -43,6 +45,19 @@ import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.SetsViewModel
+import java.util.concurrent.ConcurrentHashMap
+
+private object MissingSetLogoRegistry {
+    private val missingUrls = ConcurrentHashMap.newKeySet<String>()
+
+    fun isMissing(url: String): Boolean = missingUrls.contains(url)
+
+    fun markMissing(url: String) {
+        if (url.isNotBlank()) {
+            missingUrls.add(url)
+        }
+    }
+}
 
 // Formatta data
 fun formatDate(date: String): String {
@@ -397,6 +412,8 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
         set.total > 0 -> set.total
         else -> 0
     }
+    val logoUrl = set.images.logo.trim()
+    val shouldLoadLogo = logoUrl.isNotBlank() && !MissingSetLogoRegistry.isMissing(logoUrl)
 
     Box(
         modifier = Modifier
@@ -419,22 +436,28 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
                     .height(68.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (set.images.logo.isNotBlank()) {
-                    AsyncImage(
-                        model = set.images.logo,
+                if (shouldLoadLogo) {
+                    SubcomposeAsyncImage(
+                        model = logoUrl,
                         contentDescription = set.name,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(58.dp)
+                            .height(58.dp),
+                        loading = {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = BlueCard,
+                                strokeWidth = 2.dp
+                            )
+                        },
+                        error = {
+                            MissingSetLogoRegistry.markMissing(logoUrl)
+                            MissingSetLogoFallback(setName = set.name)
+                        }
                     )
                 } else {
-                    Text(
-                        text = "No image",
-                        color = TextMuted,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    MissingSetLogoFallback(setName = set.name)
                 }
             }
 
@@ -467,6 +490,31 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun MissingSetLogoFallback(setName: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(BlueCard.copy(alpha = 0.12f))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = setName,
+            color = TextWhite,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            textDecoration = TextDecoration.None,
+            lineHeight = 14.sp
+        )
     }
 }
 

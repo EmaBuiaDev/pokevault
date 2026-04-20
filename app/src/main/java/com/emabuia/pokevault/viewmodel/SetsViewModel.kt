@@ -38,6 +38,11 @@ data class SetsUiState(
 // Usa AndroidViewModel per accedere al Context
 class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
+    companion object {
+        @Volatile
+        private var hasValidatedSetsCacheThisSession: Boolean = false
+    }
+
     private val repository = RepositoryProvider.tcgRepository
     private val firestoreRepository = FirestoreRepository()
     private var searchJob: Job? = null
@@ -57,11 +62,13 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             val context = getApplication<Application>().applicationContext
             repository.getSets(context = context)
                 .onSuccess { sets ->
-                    val resolvedSets = if (hasSuspiciousTotals(sets)) {
+                    val shouldValidateLegacyCache = !hasValidatedSetsCacheThisSession && hasSuspiciousTotals(sets)
+                    val resolvedSets = if (shouldValidateLegacyCache) {
                         repository.getSets(context = context, forceRefresh = true).getOrDefault(sets)
                     } else {
                         sets
                     }
+                    hasValidatedSetsCacheThisSession = true
                     val series = resolvedSets.map { it.series }.distinct()
                     uiState = uiState.copy(
                         allSets = resolvedSets,
@@ -99,6 +106,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             val context = getApplication<Application>().applicationContext
             repository.getSets(context = context, forceRefresh = true)
                 .onSuccess { sets ->
+                    hasValidatedSetsCacheThisSession = true
                     val series = sets.map { it.series }.distinct()
                     uiState = uiState.copy(
                         allSets = sets,

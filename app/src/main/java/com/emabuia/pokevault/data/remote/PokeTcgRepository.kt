@@ -64,6 +64,7 @@ class PokeTcgRepository {
     }
 
     companion object {
+        private const val SET_IMAGE_CACHE_VERSION = "setimg-v3"
         private const val SETS_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000L   // 7 days
         private const val CARDS_CACHE_DURATION = 30 * 24 * 60 * 60 * 1000L  // 30 days
         private const val SEARCH_CACHE_DURATION = 60 * 60 * 1000L           // 1 hour
@@ -490,11 +491,18 @@ class PokeTcgRepository {
             if (!ignoreExpiry && System.currentTimeMillis() - lastTime > SETS_CACHE_DURATION) return null
             val entities = db.setDao().getAll()
             if (entities.isEmpty()) return null
+            if (entities.any { isLegacyNumericSetImageUrl(it.symbolUrl) || isLegacyNumericSetImageUrl(it.logoUrl) }) {
+                return null
+            }
             entities.map { it.toTcgSet() }.also { refreshLanguageMapFromSets(it) }
         } catch (e: Exception) {
             Timber.w(e, "Errore lettura cache set Room")
             null
         }
+    }
+
+    private fun isLegacyNumericSetImageUrl(url: String): Boolean {
+        return Regex("""/sets/\d+/image(?:\?.*)?$""").containsMatchIn(url)
     }
 
     private suspend fun saveCardsToRoom(cards: List<TcgCard>) {
@@ -535,6 +543,7 @@ class PokeTcgRepository {
         val totalCount = printedCount
         // Remove set code prefix if present (e.g., "ME03:Perfect Order" → "Perfect Order")
         val cleanName = name.substringAfterLast(":").trim().takeIf { it.isNotBlank() } ?: name
+        val imageSetRef = setCode?.takeIf { it.isNotBlank() } ?: setId
         return TcgSet(
             id = setId,
             name = ItalianTranslations.translateExpansionName(cleanName),
@@ -544,8 +553,8 @@ class PokeTcgRepository {
             total = totalCount,
             releaseDate = releaseDate.orEmpty(),
             images = SetImages(
-                symbol = buildSetImageUrl(setId),
-                logo = buildSetImageUrl(setId)
+                symbol = buildSetImageUrl(imageSetRef),
+                logo = buildSetImageUrl(imageSetRef)
             )
         )
     }
@@ -622,8 +631,8 @@ class PokeTcgRepository {
         return "${PokeWalletRetrofitClient.imageBaseUrl}images/$cardId?size=$size"
     }
 
-    private fun buildSetImageUrl(setId: String): String {
-        return "${PokeWalletRetrofitClient.imageBaseUrl}sets/$setId/image"
+    private fun buildSetImageUrl(setRef: String): String {
+        return "${PokeWalletRetrofitClient.imageBaseUrl}sets/$setRef/image?v=$SET_IMAGE_CACHE_VERSION"
     }
 
     private fun mapSubTypeNameToKey(subTypeName: String?): String {
