@@ -13,9 +13,6 @@ interface SetDao {
     @Query("SELECT * FROM sets")
     suspend fun getAll(): List<CachedSetEntity>
 
-    @Query("SELECT * FROM sets WHERE id = :id")
-    suspend fun getById(id: String): CachedSetEntity?
-
     @Query("SELECT MAX(cachedAt) FROM sets")
     suspend fun getLastCacheTime(): Long?
 

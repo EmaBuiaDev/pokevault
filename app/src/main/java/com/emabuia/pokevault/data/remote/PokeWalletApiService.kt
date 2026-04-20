@@ -28,7 +28,6 @@ data class PokeWalletSetDetailResponse(
     val success: Boolean = false,
     val set: PokeWalletSet? = null,
     val cards: List<PokeWalletCard> = emptyList(),
-    val disambiguation: Boolean = false,
     val matches: List<PokeWalletSet> = emptyList(),
     val total: Int = 0
 )

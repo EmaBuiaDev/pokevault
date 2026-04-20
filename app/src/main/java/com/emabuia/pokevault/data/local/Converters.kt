@@ -15,12 +15,4 @@ class Converters {
     @TypeConverter
     fun toStringList(value: String?): List<String>? =
         value?.let { gson.fromJson(it, object : TypeToken<List<String>>() {}.type) }
-
-    @TypeConverter
-    fun fromStringMap(value: Map<String, String>?): String? =
-        value?.let { gson.toJson(it) }
-
-    @TypeConverter
-    fun toStringMap(value: String?): Map<String, String>? =
-        value?.let { gson.fromJson(it, object : TypeToken<Map<String, String>>() {}.type) }
 }

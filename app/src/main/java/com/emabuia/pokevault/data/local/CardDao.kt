@@ -13,12 +13,6 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE setId = :setId")
     suspend fun getBySetId(setId: String): List<CachedCardEntity>
 
-    @Query("SELECT * FROM cards WHERE id = :id")
-    suspend fun getById(id: String): CachedCardEntity?
-
-    @Query("SELECT * FROM cards WHERE name LIKE '%' || :query || '%'")
-    suspend fun searchByName(query: String): List<CachedCardEntity>
-
     @Query("SELECT MAX(cachedAt) FROM cards WHERE setId = :setId")
     suspend fun getLastCacheTimeForSet(setId: String): Long?
 

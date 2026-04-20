@@ -16,9 +16,6 @@ interface PriceDao {
     @Query("SELECT * FROM prices WHERE cardId = :cardId AND setCode = :setCode")
     suspend fun getPrice(cardId: String, setCode: String): CachedPriceEntity?
 
-    @Query("SELECT * FROM prices WHERE cardId = :cardId")
-    suspend fun getPricesForCard(cardId: String): List<CachedPriceEntity>
-
     @Query("SELECT * FROM prices WHERE cachedAt < :threshold ORDER BY cachedAt ASC LIMIT :limit")
     suspend fun getExpiredPrices(threshold: Long, limit: Int): List<CachedPriceEntity>
 
