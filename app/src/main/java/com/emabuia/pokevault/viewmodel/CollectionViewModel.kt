@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.CollectionStats
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.remote.PokeTcgRepository
 import com.emabuia.pokevault.util.AppLocale
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
@@ -40,6 +41,9 @@ data class CollectionUiState(
 class CollectionViewModel : ViewModel() {
 
     private val repository = FirestoreRepository()
+    private val tcgRepository = PokeTcgRepository()
+    private val hydratedPriceCardIds = mutableSetOf<String>()
+    private val hydratingPriceCardIds = mutableSetOf<String>()
 
     var uiState by mutableStateOf(CollectionUiState())
         private set
@@ -71,7 +75,41 @@ class CollectionViewModel : ViewModel() {
                         stats = newStats,
                         isLoading = false
                     )
+
+                    hydrateMissingPrices(cards)
                 }
+        }
+    }
+
+    private fun hydrateMissingPrices(cards: List<PokemonCard>) {
+        val candidates = cards
+            .filter { card ->
+                card.estimatedValue <= 0.0 &&
+                    card.apiCardId.isNotBlank() &&
+                    card.id !in hydratedPriceCardIds &&
+                    card.id !in hydratingPriceCardIds
+            }
+            .take(8)
+
+        if (candidates.isEmpty()) return
+
+        viewModelScope.launch {
+            candidates.forEach { card ->
+                hydratingPriceCardIds += card.id
+                try {
+                    val remoteCard = tcgRepository.getCard(card.apiCardId).getOrNull()
+                    val eurPrice = remoteCard?.cardmarket?.prices?.averageSellPrice
+                        ?: remoteCard?.cardmarket?.prices?.lowPrice
+                        ?: 0.0
+
+                    if (eurPrice > 0.0) {
+                        repository.updateCard(card.id, card.copy(estimatedValue = eurPrice))
+                    }
+                } finally {
+                    hydratingPriceCardIds -= card.id
+                    hydratedPriceCardIds += card.id
+                }
+            }
         }
     }
 

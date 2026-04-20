@@ -653,9 +653,8 @@ class DeckLabViewModel : ViewModel() {
         val tcgCard = searchTcgCard(card.name, card.set, card.number)
 
         return if (tcgCard != null) {
-            val price = tcgCard.tcgplayer?.prices?.get("normal")?.market
-                ?: tcgCard.cardmarket?.prices?.lowPrice
-                ?: tcgCard.cardmarket?.prices?.averageSellPrice ?: 0.0
+            val price = tcgCard.cardmarket?.prices?.averageSellPrice
+                ?: tcgCard.cardmarket?.prices?.lowPrice ?: 0.0
 
             PokemonCard(
                 name = tcgCard.name,

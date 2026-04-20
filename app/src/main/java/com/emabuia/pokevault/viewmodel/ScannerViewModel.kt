@@ -573,10 +573,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     // ═══════════════════════════════════════════
 
     private suspend fun addToFirestore(tcgCard: TcgCard) {
-        val price = tcgCard.tcgplayer?.prices?.values?.firstOrNull()?.let { p ->
-            p.market ?: p.mid ?: p.low ?: 0.0
-        } ?: tcgCard.cardmarket?.prices?.lowPrice
-          ?: tcgCard.cardmarket?.prices?.averageSellPrice ?: 0.0
+        val price = tcgCard.cardmarket?.prices?.averageSellPrice
+            ?: tcgCard.cardmarket?.prices?.lowPrice ?: 0.0
 
         val pokemonCard = PokemonCard(
             name = tcgCard.name,

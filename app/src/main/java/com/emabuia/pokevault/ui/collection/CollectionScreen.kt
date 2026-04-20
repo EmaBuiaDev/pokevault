@@ -165,7 +165,7 @@ fun CollectionScreen(
                 ) {
                     StatMiniCard("Carte", "${state.stats.totalCards}", BlueCard, Modifier.weight(1f))
                     StatMiniCard("Uniche", "${state.stats.uniqueCards}", PurpleCard, Modifier.weight(1f))
-                    StatMiniCard("Valore", "\u20AC${"%.0f".format(state.stats.totalValue)}", GreenCard, Modifier.weight(1f))
+                    StatMiniCard("Valore", "\u20AC${"%.2f".format(state.stats.totalValue)}", GreenCard, Modifier.weight(1f))
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
