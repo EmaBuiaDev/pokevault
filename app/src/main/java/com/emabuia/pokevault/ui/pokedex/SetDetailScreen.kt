@@ -955,16 +955,7 @@ fun SetInfoHeader(
             }
         }
 
-        if (!debugCounters.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = debugCounters,
-                color = TextMuted,
-                fontSize = 9.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+
     }
 }
 
