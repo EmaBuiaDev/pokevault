@@ -1,5 +1,7 @@
 package com.emabuia.pokevault.ui.pokedex
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -23,6 +25,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,6 +55,7 @@ fun CardDetailBottomSheet(
     isLoadingPokeWalletPrices: Boolean = false
 ) {
     val rarityInfo = getRarityInfo(card.rarity)
+    val context = LocalContext.current
 
     // Varianti disponibili (API + fallback per rarità)
     val availableVariants = remember(card) {
@@ -472,6 +476,10 @@ fun CardDetailBottomSheet(
                         Text("Prezzi Live", color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                         Spacer(modifier = Modifier.height(10.dp))
 
+                        val cardMarketUrl = pokeWalletPrices.cardMarketUrl
+                            ?.takeIf { it.isNotBlank() }
+                            ?: card.cardmarket?.url?.takeIf { it.isNotBlank() }
+
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -481,11 +489,33 @@ fun CardDetailBottomSheet(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Row(
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("\uD83C\uDDEA\uD83C\uDDFA", fontSize = 14.sp)
-                                Text("CardMarket", color = TextGray, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text("\uD83C\uDDEA\uD83C\uDDFA", fontSize = 14.sp)
+                                    Text("CardMarket", color = TextGray, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                }
+
+                                if (cardMarketUrl != null) {
+                                    IconButton(
+                                        onClick = {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cardMarketUrl)))
+                                        },
+                                        modifier = Modifier.size(22.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.OpenInNew,
+                                            contentDescription = "Apri su CardMarket",
+                                            tint = TextGray,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                }
                             }
 
                             val mainEurPrice = pokeWalletPrices.eurAvg ?: pokeWalletPrices.eurLow

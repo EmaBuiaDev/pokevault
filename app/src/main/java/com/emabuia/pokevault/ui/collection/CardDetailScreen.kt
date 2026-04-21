@@ -1,5 +1,7 @@
 package com.emabuia.pokevault.ui.collection
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,6 +29,9 @@ import coil.compose.AsyncImage
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.remote.PokeWalletPriceData
+import com.emabuia.pokevault.data.remote.RepositoryProvider
+import com.emabuia.pokevault.ui.pokedex.PriceSparkline
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import kotlinx.coroutines.flow.first
@@ -39,11 +45,19 @@ fun CardDetailScreen(
     onEdit: (String) -> Unit
 ) {
     val repository = remember { FirestoreRepository() }
+    val tcgRepository = remember { RepositoryProvider.tcgRepository }
+    val pokeWalletRepository = remember { RepositoryProvider.pokeWalletRepository }
+    val context = LocalContext.current
+
     var variants by remember { mutableStateOf<List<PokemonCard>>(emptyList()) }
     var editedQuantities by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(true) }
     var selectedVariantIndex by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
+
+    var livePrices by remember { mutableStateOf<PokeWalletPriceData?>(null) }
+    var isLoadingLivePrices by remember { mutableStateOf(false) }
+    val livePriceCacheByApiId = remember { mutableStateMapOf<String, PokeWalletPriceData?>() }
 
     var tempIsGraded by remember { mutableStateOf(false) }
     var tempGrade by remember { mutableStateOf<Float?>(null) }
@@ -88,6 +102,63 @@ fun CardDetailScreen(
             tempGradeStr = it.grade?.toString() ?: ""
             tempCompany = it.gradingCompany
         }
+    }
+
+    LaunchedEffect(selectedVariantIndex, variants) {
+        val selected = variants.getOrNull(selectedVariantIndex)
+        if (selected == null || selected.apiCardId.isBlank()) {
+            livePrices = null
+            isLoadingLivePrices = false
+            return@LaunchedEffect
+        }
+
+        val cached = livePriceCacheByApiId[selected.apiCardId]
+        if (cached != null || livePriceCacheByApiId.containsKey(selected.apiCardId)) {
+            livePrices = cached
+            isLoadingLivePrices = false
+            return@LaunchedEffect
+        }
+
+        isLoadingLivePrices = true
+
+        val remoteCard = tcgRepository.getCard(selected.apiCardId).getOrNull()
+        val localPriceData = remoteCard?.let { remote ->
+            val firstUsdPrice = remote.tcgplayer?.prices?.values?.firstOrNull { it.market != null || it.low != null }
+            PokeWalletPriceData(
+                eurAvg = remote.cardmarket?.prices?.averageSellPrice,
+                eurLow = remote.cardmarket?.prices?.lowPrice,
+                eurTrend = remote.cardmarket?.prices?.trendPrice,
+                eurAvg1 = remote.cardmarket?.prices?.avg1,
+                eurAvg7 = remote.cardmarket?.prices?.avg7,
+                eurAvg30 = remote.cardmarket?.prices?.avg30,
+                cardMarketUrl = remote.cardmarket?.url,
+                usdMarket = firstUsdPrice?.market,
+                usdLow = firstUsdPrice?.low,
+                tcgPlayerUrl = remote.tcgplayer?.url
+            )
+        }
+
+        val needsEnrichment = localPriceData == null ||
+            !localPriceData.hasEurPrices ||
+            !localPriceData.hasSparklineData ||
+            localPriceData.cardMarketUrl.isNullOrBlank()
+
+        val enriched = if (needsEnrichment) {
+            pokeWalletRepository
+                .getCardPrices(
+                    cardName = selected.name,
+                    setCode = selected.set,
+                    cardNumber = selected.cardNumber
+                )
+                .getOrNull()
+        } else {
+            null
+        }
+
+        val resolved = mergePriceData(primary = localPriceData, fallback = enriched)
+        livePriceCacheByApiId[selected.apiCardId] = resolved
+        livePrices = resolved
+        isLoadingLivePrices = false
     }
 
     fun confirmVariantChange(card: PokemonCard, newQty: Int, isGraded: Boolean? = null, grade: Float? = null, company: String? = null) {
@@ -356,10 +427,131 @@ fun CardDetailScreen(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val cardMarketUrl = livePrices?.cardMarketUrl?.takeIf { it.isNotBlank() }
+                DetailSection(title = "Prezzi Live") {
+                    if (isLoadingLivePrices) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 1.5.dp,
+                                color = BlueCard
+                            )
+                            Text("Caricamento prezzi...", color = TextMuted, fontSize = 12.sp)
+                        }
+                    } else if (livePrices != null && livePrices?.hasEurPrices == true) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("\uD83C\uDDEA\uD83C\uDDFA", fontSize = 14.sp)
+                                Text("CardMarket", color = TextGray, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                            }
+                            if (cardMarketUrl != null) {
+                                IconButton(
+                                    onClick = {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cardMarketUrl)))
+                                    },
+                                    modifier = Modifier.size(22.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.OpenInNew,
+                                        contentDescription = "Apri su CardMarket",
+                                        tint = TextGray,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val mainEurPrice = livePrices?.eurAvg ?: livePrices?.eurLow
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            if (mainEurPrice != null) {
+                                Column {
+                                    Text("Prezzo medio", color = TextMuted, fontSize = 11.sp)
+                                    Text(
+                                        "€${String.format("%.2f", mainEurPrice)}",
+                                        color = GreenCard,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 22.sp
+                                    )
+                                }
+                            }
+                            if (livePrices?.eurTrend != null) {
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("Trend", color = TextMuted, fontSize = 11.sp)
+                                    Text(
+                                        "€${String.format("%.2f", livePrices?.eurTrend)}",
+                                        color = TextWhite,
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        if (livePrices?.hasSparklineData == true) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            PriceSparkline(
+                                avg30 = livePrices!!.eurAvg30!!,
+                                avg7 = livePrices!!.eurAvg7!!,
+                                avg1 = livePrices!!.eurAvg1!!
+                            )
+                        }
+
+                        if (livePrices?.eurLow != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            HorizontalDivider(color = TextMuted.copy(alpha = 0.15f))
+                            DetailRow("Prezzo minimo", "€${String.format("%.2f", livePrices?.eurLow)}")
+                        }
+
+                        if (livePrices?.usdMarket != null) {
+                            HorizontalDivider(color = TextMuted.copy(alpha = 0.15f), modifier = Modifier.padding(top = 2.dp))
+                            DetailRow("TCGPlayer", "$${String.format("%.2f", livePrices?.usdMarket)}")
+                        }
+                    } else {
+                        Text("Prezzi live non disponibili per questa carta", color = TextMuted, fontSize = 12.sp)
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(40.dp))
             }
         }
     }
+}
+
+private fun mergePriceData(primary: PokeWalletPriceData?, fallback: PokeWalletPriceData?): PokeWalletPriceData? {
+    if (primary == null) return fallback
+    if (fallback == null) return primary
+
+    return PokeWalletPriceData(
+        eurAvg = primary.eurAvg ?: fallback.eurAvg,
+        eurLow = primary.eurLow ?: fallback.eurLow,
+        eurTrend = primary.eurTrend ?: fallback.eurTrend,
+        eurAvg1 = primary.eurAvg1 ?: fallback.eurAvg1,
+        eurAvg7 = primary.eurAvg7 ?: fallback.eurAvg7,
+        eurAvg30 = primary.eurAvg30 ?: fallback.eurAvg30,
+        eurVariantType = primary.eurVariantType ?: fallback.eurVariantType,
+        usdMarket = primary.usdMarket ?: fallback.usdMarket,
+        usdLow = primary.usdLow ?: fallback.usdLow,
+        cardMarketUrl = primary.cardMarketUrl ?: fallback.cardMarketUrl,
+        tcgPlayerUrl = primary.tcgPlayerUrl ?: fallback.tcgPlayerUrl
+    )
 }
 
 @Composable
