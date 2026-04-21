@@ -14,7 +14,8 @@ kv_namespaces = [
 [vars]
 ORIGIN_API = "https://api.pokewallet.io"
 CACHE_TTL_SECONDS = "259200"
+BACKFILL_BATCH_SIZE = "6"
 
 # Triggers for the Worker
 [triggers]
-crons = []
+crons = ["*/30 * * * *"]

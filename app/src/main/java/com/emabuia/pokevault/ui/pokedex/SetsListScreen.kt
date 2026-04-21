@@ -296,21 +296,43 @@ fun SetsListScreen(
         if (isSearchingCards) {
             CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery, onCardClick = { card -> selectedCard = card }) { setId -> onSetClick(setId) }
         } else {
+            val languageMacros = listOf("ENG", "JAP", "CHN")
+
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(languageMacros) { macro ->
+                    val count = state.allSets.count { it.language == macro }
+                    SeriesFilterChip(
+                        label = macro,
+                        count = count,
+                        isSelected = state.selectedLanguageMacro == macro,
+                        onClick = { viewModel.filterByLanguageMacro(macro) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // ── Filtri serie migliorati ──
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
+                    val languageCount = state.allSets.count { it.language == state.selectedLanguageMacro }
                     SeriesFilterChip(
                         label = AppLocale.all,
-                        count = state.allSets.size,
+                        count = languageCount,
                         isSelected = state.selectedSeries == null,
                         onClick = { viewModel.filterBySeries(null) }
                     )
                 }
                 items(state.seriesList) { series ->
-                    val count = state.allSets.count { it.series == series }
+                    val count = state.allSets.count {
+                        it.language == state.selectedLanguageMacro && it.series == series
+                    }
                     SeriesFilterChip(
                         label = series,
                         count = count,
@@ -358,8 +380,8 @@ fun SetsListScreen(
                 ) {
                     items(items = state.filteredSets, key = { it.id }) { set ->
                         val listDisplayCount = state.cachedSetCardTotals[set.id]
-                            ?: set.total.takeIf { it > 0 }
                             ?: set.printedTotal.takeIf { it > 0 }
+                            ?: set.total.takeIf { it > 0 }
                             ?: 0
                         SetCard(
                             set = set,

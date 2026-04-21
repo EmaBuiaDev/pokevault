@@ -63,6 +63,7 @@ Then rebuild the Android app.
 ✅ **Fast Fallback** — Stale cache served if PokeWallet API is unreachable  
 ✅ **API Key Security** — Secret stored server-side (never exposed to clients)  
 ✅ **Debug Headers** — `X-Cache-Status`, `X-Cached-At` for monitoring  
+✅ **Real Set Totals Enrichment** — `/sets` responses can be transparently overridden with exact card totals precomputed in KV  
 ✅ **Free Tier** — Cloudflare free tier fully supported  
 
 ---
@@ -83,6 +84,26 @@ curl http://localhost:8787/sets
 npm run type-check
 ```
 
+### Real Totals Backfill
+
+The worker now supports a scheduled backfill that computes exact set totals using the same filtering rules as the app set detail screen:
+
+- reads upstream `/sets`
+- processes a small ENG/JAP/CHN batch each cron run
+- fetches set pages from upstream
+- filters out non-card products
+- stores exact totals in KV
+- overrides raw `/sets` metadata before sending it to the app
+
+Default schedule and batch size are configured in [wrangler.toml](wrangler.toml):
+
+```toml
+BACKFILL_BATCH_SIZE = "6"
+crons = ["*/30 * * * *"]
+```
+
+You can increase or decrease `BACKFILL_BATCH_SIZE` depending on your API budget.
+
 ---
 
 ## Architecture
@@ -99,6 +120,13 @@ Cloudflare Worker (pokevault-proxy)
        ├─ Call PokeWallet API with X-API-Key
        ├─ Cache response in KV (TTL: 3 days)
        └─ Return response (1-2s)
+
+Scheduled Backfill
+    ├─ Read upstream `/sets`
+    ├─ Process next small batch of ENG/JAP/CHN sets
+    ├─ Compute exact filtered card totals
+    ├─ Persist totals index in KV
+    └─ Override future `/sets` responses with exact totals
 
 Firebase (Unchanged)
     ↓

@@ -25,6 +25,7 @@ data class SetsUiState(
     val allSets: List<TcgSet> = emptyList(),
     val filteredSets: List<TcgSet> = emptyList(),
     val cachedSetCardTotals: Map<String, Int> = emptyMap(),
+    val selectedLanguageMacro: String = "ENG",
     val seriesList: List<String> = emptyList(),
     val selectedSeries: String? = null,
     val searchQuery: String = "",
@@ -72,14 +73,13 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                         sets
                     }
                     hasValidatedSetsCacheThisSession = true
-                    val series = buildSeriesListByLatestRelease(resolvedSets)
                     uiState = uiState.copy(
                         allSets = resolvedSets,
-                        filteredSets = resolvedSets,
                         cachedSetCardTotals = cachedTotals,
-                        seriesList = series,
+                        errorMessage = null,
                         isLoading = false
                     )
+                    applyFilters()
                 }
                 .onFailure { error ->
                     uiState = uiState.copy(
@@ -104,17 +104,21 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         applyFilters()
     }
 
+    fun filterByLanguageMacro(languageMacro: String) {
+        if (uiState.selectedLanguageMacro == languageMacro) return
+        uiState = uiState.copy(selectedLanguageMacro = languageMacro)
+        applyFilters()
+    }
+
     fun refreshFromCache() {
         viewModelScope.launch {
             val context = getApplication<Application>().applicationContext
             val cachedTotals = repository.getCachedSetCardCounts()
             repository.getSets(context = context)
                 .onSuccess { sets ->
-                    val series = buildSeriesListByLatestRelease(sets)
                     uiState = uiState.copy(
                         allSets = sets,
                         cachedSetCardTotals = cachedTotals,
-                        seriesList = series,
                         isLoading = false,
                         errorMessage = null
                     )
@@ -131,11 +135,10 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             repository.getSets(context = context, forceRefresh = true)
                 .onSuccess { sets ->
                     hasValidatedSetsCacheThisSession = true
-                    val series = buildSeriesListByLatestRelease(sets)
                     uiState = uiState.copy(
                         allSets = sets,
                         cachedSetCardTotals = cachedTotals,
-                        seriesList = series,
+                        errorMessage = null,
                         isLoading = false
                     )
                     applyFilters()
@@ -209,15 +212,25 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun applyFilters() {
-        val filtered = uiState.allSets.filter { set ->
+        val scopedSets = uiState.allSets.filter { set ->
+            set.language == uiState.selectedLanguageMacro
+        }
+        val scopedSeries = buildSeriesListByLatestRelease(scopedSets)
+        val selectedSeries = uiState.selectedSeries?.takeIf { it in scopedSeries }
+
+        val filtered = scopedSets.filter { set ->
             val matchesSearch = uiState.searchQuery.isBlank() ||
                 set.name.contains(uiState.searchQuery, ignoreCase = true) ||
                 set.series.contains(uiState.searchQuery, ignoreCase = true)
-            val matchesSeries = uiState.selectedSeries == null ||
-                set.series == uiState.selectedSeries
+            val matchesSeries = selectedSeries == null ||
+                set.series == selectedSeries
             matchesSearch && matchesSeries
         }
-        uiState = uiState.copy(filteredSets = filtered)
+        uiState = uiState.copy(
+            seriesList = scopedSeries,
+            selectedSeries = selectedSeries,
+            filteredSets = filtered
+        )
     }
 
     private fun buildSetsErrorMessage(error: Throwable): String {
@@ -240,16 +253,25 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun hasSuspiciousTotals(sets: List<TcgSet>): Boolean {
         // Cached legacy data may contain inflated totals (e.g. > 400 for standard sets).
-        return sets.any { (it.printedTotal > 400) || (it.total > 400) }
+        return sets.any { set ->
+            val hasHugeLegacyCount = (set.printedTotal > 400) || (set.total > 400)
+            val isPerfectOrderLegacyCount =
+                set.name.contains("Perfect Order", ignoreCase = true) &&
+                    (set.printedTotal > 124 || set.total > 124)
+            hasHugeLegacyCount || isPerfectOrderLegacyCount
+        }
     }
 
     private fun buildSeriesListByLatestRelease(sets: List<TcgSet>): List<String> {
         return sets
             .groupBy { it.series }
             .entries
-            .sortedByDescending { (_, groupedSets) ->
-                groupedSets.maxOfOrNull { parseReleaseDate(it.releaseDate) } ?: LocalDate.MIN
-            }
+            .sortedWith(
+                compareBy<Map.Entry<String, List<TcgSet>>> { it.key.equals("Altro", ignoreCase = true) }
+                    .thenByDescending { (_, groupedSets) ->
+                        groupedSets.maxOfOrNull { parseReleaseDate(it.releaseDate) } ?: LocalDate.MIN
+                    }
+            )
             .map { it.key }
     }
 

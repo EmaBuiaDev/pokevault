@@ -80,7 +80,7 @@ class PokeTcgRepository {
         private const val SETS_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000L   // 7 days
         private const val CARDS_CACHE_DURATION = 30 * 24 * 60 * 60 * 1000L  // 30 days
         private const val SEARCH_CACHE_DURATION = 60 * 60 * 1000L           // 1 hour
-        private val ALLOWED_LANGUAGES = setOf("ENG")
+        private val ALLOWED_LANGUAGES = setOf("ENG", "JAP", "CHN")
 
         private const val RATE_LIMIT_COOLDOWN_MS = 60 * 1000L
 
@@ -974,6 +974,12 @@ class PokeTcgRepository {
             normalized in setOf("it", "ita", "italian", "italiano") || normalized.contains("ital") -> "IT"
             normalized in setOf("en", "eng", "english", "inglese") || normalized.contains("engl") || normalized.contains("ingl") -> "ENG"
             normalized in setOf("jp", "jap", "ja", "japanese", "giapponese") || normalized.contains("jap") || normalized.contains("giapp") -> "JAP"
+            normalized in setOf("zh", "zhs", "zht", "cn", "chn", "chi", "chinese") ||
+                normalized.contains("chinese") ||
+                normalized.contains("mandarin") ||
+                normalized.contains("simplified chinese") ||
+                normalized.contains("traditional chinese") ||
+                normalized.contains("cinese") -> "CHN"
             else -> null
         }
     }
