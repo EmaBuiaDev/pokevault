@@ -40,11 +40,14 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.SetsViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import java.util.concurrent.ConcurrentHashMap
 
 private object MissingSetLogoRegistry {
@@ -68,7 +71,7 @@ fun formatDate(date: String): String {
 }
 
 private fun formatSetCardsCount(count: Int): String {
-    return if (count > 0) AppLocale.cardsCount(count) else "0/—"
+    return if (count > 0) AppLocale.cardsCount(count) else "—"
 }
 
 // ── Animazione Pokéball ──
@@ -174,6 +177,18 @@ fun SetsListScreen(
     var isSearchingCards by remember { mutableStateOf(false) }
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     val haptic = LocalHapticFeedback.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // Pull latest totals from repository/cache without forcing network.
+                viewModel.refreshFromCache()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.successMessage, state.errorMessage) {
@@ -342,7 +357,11 @@ fun SetsListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(items = state.filteredSets, key = { it.id }) { set ->
-                        SetCard(set = set, onClick = { onSetClick(set.id) })
+                        SetCard(
+                            set = set,
+                            cachedCardsCount = state.cachedSetCardTotals[set.id],
+                            onClick = { onSetClick(set.id) }
+                        )
                     }
                 }
             }
@@ -410,12 +429,9 @@ fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: ()
 
 // ── Set Card con total (non printedTotal) e data formattata ──
 @Composable
-fun SetCard(set: TcgSet, onClick: () -> Unit) {
-    val displayCount = when {
-        set.printedTotal > 0 -> set.printedTotal
-        set.total > 0 -> set.total
-        else -> 0
-    }
+fun SetCard(set: TcgSet, cachedCardsCount: Int?, onClick: () -> Unit) {
+    // Same logic used by set detail progress bar: count actual cards (cards.size).
+    val displayCount = cachedCardsCount ?: 0
     val logoUrl = set.images.logo.trim()
     val shouldLoadLogo = logoUrl.isNotBlank() && !MissingSetLogoRegistry.isMissing(logoUrl)
 

@@ -23,6 +23,7 @@ import retrofit2.HttpException
 data class SetsUiState(
     val allSets: List<TcgSet> = emptyList(),
     val filteredSets: List<TcgSet> = emptyList(),
+    val cachedSetCardTotals: Map<String, Int> = emptyMap(),
     val seriesList: List<String> = emptyList(),
     val selectedSeries: String? = null,
     val searchQuery: String = "",
@@ -60,6 +61,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
+            val cachedTotals = repository.getCachedSetCardCounts()
             repository.getSets(context = context)
                 .onSuccess { sets ->
                     val shouldValidateLegacyCache = !hasValidatedSetsCacheThisSession && hasSuspiciousTotals(sets)
@@ -73,6 +75,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                     uiState = uiState.copy(
                         allSets = resolvedSets,
                         filteredSets = resolvedSets,
+                        cachedSetCardTotals = cachedTotals,
                         seriesList = series,
                         isLoading = false
                     )
@@ -100,16 +103,37 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         applyFilters()
     }
 
+    fun refreshFromCache() {
+        viewModelScope.launch {
+            val context = getApplication<Application>().applicationContext
+            val cachedTotals = repository.getCachedSetCardCounts()
+            repository.getSets(context = context)
+                .onSuccess { sets ->
+                    val series = sets.map { it.series }.distinct()
+                    uiState = uiState.copy(
+                        allSets = sets,
+                        cachedSetCardTotals = cachedTotals,
+                        seriesList = series,
+                        isLoading = false,
+                        errorMessage = null
+                    )
+                    applyFilters()
+                }
+        }
+    }
+
     fun refresh() {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
+            val cachedTotals = repository.getCachedSetCardCounts()
             repository.getSets(context = context, forceRefresh = true)
                 .onSuccess { sets ->
                     hasValidatedSetsCacheThisSession = true
                     val series = sets.map { it.series }.distinct()
                     uiState = uiState.copy(
                         allSets = sets,
+                        cachedSetCardTotals = cachedTotals,
                         seriesList = series,
                         isLoading = false
                     )

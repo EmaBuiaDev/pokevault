@@ -63,6 +63,18 @@ class PokeTcgRepository {
         )
     }
 
+    suspend fun getCachedSetCardCounts(): Map<String, Int> {
+        return try {
+            db.cardDao().getCachedCardCountsBySet()
+                .asSequence()
+                .filter { it.setId.isNotBlank() && it.count > 0 }
+                .associate { it.setId to it.count }
+        } catch (e: Exception) {
+            Timber.w(e, "Errore lettura conteggi cache carte per set")
+            emptyMap()
+        }
+    }
+
     companion object {
         private const val SET_IMAGE_CACHE_VERSION = "setimg-v3"
         private const val SETS_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000L   // 7 days
@@ -85,17 +97,22 @@ class PokeTcgRepository {
     suspend fun getSets(context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgSet>> =
         setsMutex.withLock {
             if (!forceRefresh && memorySets != null) {
+                val reconciled = reconcileSetTotalsWithCachedCards(memorySets!!)
+                if (reconciled != memorySets) {
+                    memorySets = reconciled
+                }
                 recordCacheHit("getSets:memory")
-                return Result.success(memorySets!!)
+                return Result.success(reconciled)
             }
 
             // L2: Room DB
             if (!forceRefresh) {
                 val roomSets = loadSetsFromRoom()
                 if (roomSets != null) {
-                    memorySets = roomSets
+                    val reconciled = reconcileSetTotalsWithCachedCards(roomSets)
+                    memorySets = reconciled
                     recordCacheHit("getSets:room")
-                    return Result.success(roomSets)
+                    return Result.success(reconciled)
                 }
             }
 
@@ -127,19 +144,21 @@ class PokeTcgRepository {
             }
 
             networkResult.onSuccess { sets ->
-                memorySets = sets
-                refreshLanguageMapFromSets(sets)
-                saveSetsToRoom(sets)
+                val reconciled = reconcileSetTotalsWithCachedCards(sets)
+                memorySets = reconciled
+                refreshLanguageMapFromSets(reconciled)
+                saveSetsToRoom(reconciled)
             }
 
             if (networkResult.isSuccess) {
                 networkResult
             } else {
                 staleCache?.let {
-                    memorySets = it
-                    refreshLanguageMapFromSets(it)
+                    val reconciled = reconcileSetTotalsWithCachedCards(it)
+                    memorySets = reconciled
+                    refreshLanguageMapFromSets(reconciled)
                     recordCacheHit("getSets:stale")
-                    Result.success(it)
+                    Result.success(reconciled)
                 } ?: networkResult
             }
         }
@@ -150,6 +169,7 @@ class PokeTcgRepository {
             if (!forceRefresh) {
                 memoryCards[setId]?.let {
                     if (it.isNotEmpty()) {
+                        updateSetTotalsFromKnownCards(setId = setId, cardsCount = it.size)
                         recordCacheHit("getCardsBySet:memory:$setId")
                         return Result.success(it)
                     }
@@ -161,6 +181,7 @@ class PokeTcgRepository {
                 val roomCards = loadCardsFromRoom(setId)
                 if (roomCards != null) {
                     memoryCards[setId] = roomCards
+                    updateSetTotalsFromKnownCards(setId = setId, cardsCount = roomCards.size)
                     recordCacheHit("getCardsBySet:room:$setId")
                     return Result.success(roomCards)
                 }
@@ -181,6 +202,7 @@ class PokeTcgRepository {
             networkResult.onSuccess { result ->
                 memoryCards[setId] = result.cards
                 saveCardsToRoom(result.cards)
+                updateSetTotalsFromKnownCards(setId = setId, cardsCount = result.cards.size)
             }
 
             if (networkResult.isSuccess) {
@@ -485,6 +507,27 @@ class PokeTcgRepository {
         }
     }
 
+    private suspend fun reconcileSetTotalsWithCachedCards(sets: List<TcgSet>): List<TcgSet> {
+        if (sets.isEmpty()) return sets
+        return try {
+            val cachedCounts = db.cardDao().getCachedCardCountsBySet()
+            if (cachedCounts.isEmpty()) return sets
+
+            val countBySetId = cachedCounts.associate { it.setId to it.count }
+            sets.map { set ->
+                val cachedCount = countBySetId[set.id]
+                if (cachedCount != null && cachedCount > 0 && (set.total != cachedCount || set.printedTotal != cachedCount)) {
+                    set.copy(printedTotal = cachedCount, total = cachedCount)
+                } else {
+                    set
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Errore riconciliazione totali set con cache carte")
+            sets
+        }
+    }
+
     private suspend fun loadSetsFromRoom(ignoreExpiry: Boolean = false): List<TcgSet>? {
         return try {
             val lastTime = db.setDao().getLastCacheTime() ?: return null
@@ -526,6 +569,27 @@ class PokeTcgRepository {
         }
     }
 
+    private suspend fun updateSetTotalsFromKnownCards(setId: String, cardsCount: Int) {
+        if (setId.isBlank() || cardsCount <= 0) return
+
+        val baseSets = memorySets ?: loadSetsFromRoom(ignoreExpiry = true) ?: return
+        var hasChanged = false
+        val updatedSets = baseSets.map { set ->
+            if (set.id == setId && (set.total != cardsCount || set.printedTotal != cardsCount)) {
+                hasChanged = true
+                set.copy(printedTotal = cardsCount, total = cardsCount)
+            } else {
+                set
+            }
+        }
+
+        if (hasChanged) {
+            memorySets = updatedSets
+            refreshLanguageMapFromSets(updatedSets)
+            saveSetsToRoom(updatedSets)
+        }
+    }
+
     private fun sanitizeQuery(raw: String): String {
         return raw.replace(SANITIZE_MULTI_SPACE, " ").trim()
     }
@@ -539,11 +603,13 @@ class PokeTcgRepository {
     }
 
     private fun PokeWalletSet.toTcgSet(): TcgSet {
-        // Both fields can diverge; use the conservative overlap to avoid inflated totals.
-        val printedCount = if (cardCount > 0 && totalCards > 0) {
-            minOf(cardCount, totalCards)
-        } else {
-            0
+        // Both fields can diverge; use conservative overlap when available.
+        // Fallback to the available positive value to avoid 0 totals in list view.
+        val printedCount = when {
+            cardCount > 0 && totalCards > 0 -> minOf(cardCount, totalCards)
+            cardCount > 0 -> cardCount
+            totalCards > 0 -> totalCards
+            else -> 0
         }
         val totalCount = printedCount
         // Remove set code prefix if present (e.g., "ME03:Perfect Order" → "Perfect Order")

@@ -4,6 +4,11 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 
+data class CachedSetCardCount(
+    val setId: String,
+    val count: Int
+)
+
 @Dao
 interface CardDao {
 
@@ -18,6 +23,9 @@ interface CardDao {
 
     @Query("SELECT DISTINCT setId FROM cards")
     suspend fun getVisitedSetIds(): List<String>
+
+    @Query("SELECT setId, COUNT(*) as count FROM cards GROUP BY setId")
+    suspend fun getCachedCardCountsBySet(): List<CachedSetCardCount>
 
     @Query("DELETE FROM cards WHERE cachedAt < :threshold")
     suspend fun deleteExpired(threshold: Long)
