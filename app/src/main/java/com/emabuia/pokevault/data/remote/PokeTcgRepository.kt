@@ -63,6 +63,15 @@ class PokeTcgRepository {
         )
     }
 
+    suspend fun clearSetsCache() {
+        try {
+            db.setDao().deleteAll()
+        } catch (e: Exception) {
+            Timber.w(e, "clearSetsCache: errore pulizia tabella sets")
+        }
+        memorySets = null
+    }
+
     suspend fun getCachedSetCardCounts(): Map<String, Int> {
         return try {
             db.cardDao().getCachedCardCountsBySet()
@@ -717,13 +726,12 @@ class PokeTcgRepository {
     }
 
     private fun PokeWalletSet.toTcgSet(): TcgSet {
-        // Both fields can diverge; use conservative overlap when available.
-        // Fallback to the available positive value to avoid 0 totals in list view.
+        // totalCards is the proxy-enriched real count (only actual cards).
+        // cardCount alone includes non-card products and must not be used as fallback.
         val printedCount = when {
             cardCount > 0 && totalCards > 0 -> minOf(cardCount, totalCards)
-            cardCount > 0 -> cardCount
             totalCards > 0 -> totalCards
-            else -> 0
+            else -> 0   // un-enriched: list shows "—" instead of inflated API value
         }
         val totalCount = printedCount
         // Remove set code prefix if present (e.g., "ME03:Perfect Order" → "Perfect Order")

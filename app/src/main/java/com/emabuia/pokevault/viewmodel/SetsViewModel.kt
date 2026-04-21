@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -63,6 +64,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
+            performOneTimeCacheClearIfNeeded(context)
             val cachedTotals = repository.getCachedSetCardCounts()
             repository.getSets(context = context)
                 .onSuccess { sets ->
@@ -251,14 +253,26 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun performOneTimeCacheClearIfNeeded(context: Context) {
+        val prefs = context.getSharedPreferences("pokevault_cache_flags", Context.MODE_PRIVATE)
+        val key = "sets_cache_proxy_v2"
+        if (!prefs.contains(key)) {
+            repository.clearSetsCache()
+            prefs.edit().putBoolean(key, true).apply()
+        }
+    }
+
     private fun hasSuspiciousTotals(sets: List<TcgSet>): Boolean {
         // Cached legacy data may contain inflated totals (e.g. > 400 for standard sets).
+        // Also trigger a refresh when un-enriched sets (printedTotal=0) are present,
+        // so newly KV-backfilled values from the proxy are picked up each session.
         return sets.any { set ->
             val hasHugeLegacyCount = (set.printedTotal > 400) || (set.total > 400)
             val isPerfectOrderLegacyCount =
                 set.name.contains("Perfect Order", ignoreCase = true) &&
                     (set.printedTotal > 124 || set.total > 124)
-            hasHugeLegacyCount || isPerfectOrderLegacyCount
+            val isUnEnriched = set.id.isNotBlank() && set.printedTotal == 0 && set.total == 0
+            hasHugeLegacyCount || isPerfectOrderLegacyCount || isUnEnriched
         }
     }
 

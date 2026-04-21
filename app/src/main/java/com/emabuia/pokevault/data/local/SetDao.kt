@@ -18,4 +18,7 @@ interface SetDao {
 
     @Query("DELETE FROM sets WHERE cachedAt < :threshold")
     suspend fun deleteExpired(threshold: Long)
+
+    @Query("DELETE FROM sets")
+    suspend fun deleteAll()
 }
