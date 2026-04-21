@@ -1,7 +1,11 @@
 package com.emabuia.pokevault.ui.scanner
 
 import android.Manifest
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageFormat
 import android.graphics.Rect as AndroidRect
+import android.graphics.YuvImage
 import android.util.Log
 import com.emabuia.pokevault.BuildConfig
 import android.util.Size
@@ -62,6 +66,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.viewmodel.ScannerViewModel
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 
 /**
@@ -704,11 +709,15 @@ private fun CameraPreview(
                                 isProcessing = true
 
                                 val cropRect = computeCenterCardCropRect(imageProxy.width, imageProxy.height)
-                                imageProxy.setCropRect(cropRect)
-                                mediaImage.cropRect = cropRect
+                                val croppedBitmap = imageProxy.toCroppedBitmap(cropRect)
+                                if (croppedBitmap == null) {
+                                    isProcessing = false
+                                    imageProxy.close()
+                                    return@setAnalyzer
+                                }
 
-                                val image = InputImage.fromMediaImage(
-                                    mediaImage,
+                                val image = InputImage.fromBitmap(
+                                    croppedBitmap,
                                     imageProxy.imageInfo.rotationDegrees
                                 )
 
@@ -719,6 +728,7 @@ private fun CameraPreview(
                                         }
                                     }
                                     .addOnCompleteListener {
+                                        croppedBitmap.recycle()
                                         isProcessing = false
                                         imageProxy.close()
                                     }
@@ -771,3 +781,79 @@ private fun computeCenterCardCropRect(imageWidth: Int, imageHeight: Int): Androi
 }
 
 private const val ANALYSIS_THROTTLE_MS = 200L
+
+private fun ImageProxy.toCroppedBitmap(cropRect: AndroidRect): Bitmap? {
+    if (format != ImageFormat.YUV_420_888 || planes.size < 3) return null
+
+    val nv21 = yuv420888ToNv21()
+    val yuvImage = YuvImage(nv21, ImageFormat.NV21, width, height, null)
+    val output = ByteArrayOutputStream()
+    val safeCropRect = AndroidRect(
+        cropRect.left.coerceIn(0, width - 1),
+        cropRect.top.coerceIn(0, height - 1),
+        cropRect.right.coerceIn(1, width),
+        cropRect.bottom.coerceIn(1, height)
+    )
+
+    if (!yuvImage.compressToJpeg(safeCropRect, 95, output)) {
+        return null
+    }
+
+    val bytes = output.toByteArray()
+    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+}
+
+private fun ImageProxy.yuv420888ToNv21(): ByteArray {
+    val yPlane = planes[0]
+    val uPlane = planes[1]
+    val vPlane = planes[2]
+
+    val ySize = width * height
+    val uvSize = width * height / 2
+    val nv21 = ByteArray(ySize + uvSize)
+
+    copyPlane(
+        plane = yPlane,
+        width = width,
+        height = height,
+        output = nv21,
+        offset = 0,
+        pixelStrideOverride = 1
+    )
+
+    val chromaWidth = width / 2
+    val chromaHeight = height / 2
+    val vBuffer = vPlane.buffer.duplicate()
+    val uBuffer = uPlane.buffer.duplicate()
+    var outputOffset = ySize
+
+    for (row in 0 until chromaHeight) {
+        val vRowStart = row * vPlane.rowStride
+        val uRowStart = row * uPlane.rowStride
+        for (col in 0 until chromaWidth) {
+            nv21[outputOffset++] = vBuffer.get(vRowStart + col * vPlane.pixelStride)
+            nv21[outputOffset++] = uBuffer.get(uRowStart + col * uPlane.pixelStride)
+        }
+    }
+
+    return nv21
+}
+
+private fun copyPlane(
+    plane: ImageProxy.PlaneProxy,
+    width: Int,
+    height: Int,
+    output: ByteArray,
+    offset: Int,
+    pixelStrideOverride: Int = plane.pixelStride
+) {
+    val buffer = plane.buffer.duplicate()
+    var outputOffset = offset
+
+    for (row in 0 until height) {
+        val rowStart = row * plane.rowStride
+        for (col in 0 until width) {
+            output[outputOffset++] = buffer.get(rowStart + col * pixelStrideOverride)
+        }
+    }
+}

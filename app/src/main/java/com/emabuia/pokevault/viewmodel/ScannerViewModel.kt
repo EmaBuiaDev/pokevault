@@ -379,6 +379,19 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
         val best = ranked.firstOrNull() ?: return MatchResolution()
         val second = ranked.getOrNull(1)
+        val exactNumberRanked = number?.let { expected ->
+            ranked.filter { normalizeCardNumber(it.card.number) == expected }
+        }.orEmpty()
+        val exactSetRanked = setTotal?.let { expected ->
+            ranked.filter { repository.getPrintedTotalForSet(it.card.set?.id)?.toString() == expected }
+        }.orEmpty()
+        val exactNumberAndSetRanked = if (number != null && setTotal != null) {
+            exactNumberRanked.filter { rankedCard ->
+                repository.getPrintedTotalForSet(rankedCard.card.set?.id)?.toString() == setTotal
+            }
+        } else {
+            emptyList()
+        }
 
         if (BuildConfig.DEBUG) {
             ranked.take(3).forEach { rankedCard ->
@@ -389,6 +402,13 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     rankedCard.nameSimilarity
                 )
             }
+        }
+
+        if (exactNumberAndSetRanked.size == 1) {
+            return MatchResolution(bestCard = exactNumberAndSetRanked.first().card)
+        }
+        if (exactNumberRanked.size == 1 && exactSetRanked.isEmpty()) {
+            return MatchResolution(bestCard = exactNumberRanked.first().card)
         }
 
         val topMargin = best.score - (second?.score ?: Int.MIN_VALUE)
