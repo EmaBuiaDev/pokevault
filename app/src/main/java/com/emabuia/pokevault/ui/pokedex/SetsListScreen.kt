@@ -357,9 +357,13 @@ fun SetsListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(items = state.filteredSets, key = { it.id }) { set ->
+                        val listDisplayCount = state.cachedSetCardTotals[set.id]
+                            ?: set.total.takeIf { it > 0 }
+                            ?: set.printedTotal.takeIf { it > 0 }
+                            ?: 0
                         SetCard(
                             set = set,
-                            cachedCardsCount = state.cachedSetCardTotals[set.id],
+                            displayCardsCount = listDisplayCount,
                             onClick = { onSetClick(set.id) }
                         )
                     }
@@ -429,9 +433,9 @@ fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: ()
 
 // ── Set Card con total (non printedTotal) e data formattata ──
 @Composable
-fun SetCard(set: TcgSet, cachedCardsCount: Int?, onClick: () -> Unit) {
+fun SetCard(set: TcgSet, displayCardsCount: Int, onClick: () -> Unit) {
     // Same logic used by set detail progress bar: count actual cards (cards.size).
-    val displayCount = cachedCardsCount ?: 0
+    val displayCount = displayCardsCount
     val logoUrl = set.images.logo.trim()
     val shouldLoadLogo = logoUrl.isNotBlank() && !MissingSetLogoRegistry.isMissing(logoUrl)
 
