@@ -92,120 +92,6 @@ class PokeTcgRepository {
         private val ISO_DATE = DateTimeFormatter.ISO_LOCAL_DATE
         private val HUMAN_DATE_LONG = DateTimeFormatter.ofPattern("d MMMM, uuuu", Locale.ENGLISH)
         private val HUMAN_DATE_SHORT = DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH)
-
-        private val MEGA_EVOLUTION_SET_CODES = setOf("MEG", "PFL", "ASC", "POR", "CRI")
-        private val MEGA_EVOLUTION_CODE_PATTERN = Regex("^ME\\d+$")
-        private val SCARLET_VIOLET_SET_CODES = setOf("BLK", "WHT")
-        private val PLAY_POKEMON_CODE_PATTERN = Regex("^(POP\\d+|PPS\\d+)$")
-        private val BASE_ENERGY_SET_CODES = setOf("SVE", "MEE")
-        private val PROMO_SET_CODES = setOf("WP", "NP", "DPP", "HSP", "BWP", "XYP", "SMP", "SVP", "MEP")
-        private val MCDONALD_COLLECTION_CODE_PATTERN = Regex("^M\\d{2}$")
-        private val LEGACY_CODE_TO_SERIES = mapOf(
-            "BS" to "Base",
-            "JU" to "Base",
-            "FO" to "Base",
-            "B2" to "Base",
-            "TR" to "Base",
-            "G1" to "Gym",
-            "G2" to "Gym",
-            "N1" to "Neo",
-            "N2" to "Neo",
-            "N3" to "Neo",
-            "N4" to "Neo",
-            "LC" to "Legendary Collection",
-            "EX" to "e-Card",
-            "AQ" to "e-Card",
-            "SK" to "e-Card",
-            "RS" to "EX",
-            "SS" to "EX",
-            "DR" to "EX",
-            "MA" to "EX",
-            "HL" to "EX",
-            "FG" to "EX",
-            "TRR" to "EX",
-            "DX" to "EX",
-            "EM" to "EX",
-            "UF" to "EX",
-            "DS" to "EX",
-            "LM" to "EX",
-            "HP" to "EX",
-            "CG" to "EX",
-            "DF" to "EX",
-            "PK" to "EX",
-            "MT" to "Diamond & Pearl",
-            "SW" to "Diamond & Pearl",
-            "GE" to "Diamond & Pearl",
-            "MD" to "Diamond & Pearl",
-            "LA" to "Diamond & Pearl",
-            "SF" to "Diamond & Pearl",
-            "PL" to "Platinum",
-            "RR" to "Platinum",
-            "SV" to "Platinum",
-            "AR" to "Platinum",
-            "UL" to "HeartGold & SoulSilver",
-            "UD" to "HeartGold & SoulSilver",
-            "TM" to "HeartGold & SoulSilver",
-            "CL" to "HeartGold & SoulSilver",
-            "BLW" to "Black & White",
-            "EPO" to "Black & White",
-            "NVI" to "Black & White",
-            "NXD" to "Black & White",
-            "DEX" to "Black & White",
-            "DRX" to "Black & White",
-            "DRV" to "Black & White",
-            "BCR" to "Black & White",
-            "PLS" to "Black & White",
-            "PLF" to "Black & White",
-            "PLB" to "Black & White",
-            "LTR" to "Black & White",
-            "KSS" to "XY",
-            "FLF" to "XY",
-            "FFI" to "XY",
-            "PHF" to "XY",
-            "PRC" to "XY",
-            "DCR" to "XY",
-            "ROS" to "XY",
-            "AOR" to "XY",
-            "BKT" to "XY",
-            "BKP" to "XY",
-            "GEN" to "XY",
-            "FCO" to "XY",
-            "STS" to "XY",
-            "EVO" to "XY",
-            "SUM" to "Sun & Moon",
-            "GRI" to "Sun & Moon",
-            "BUS" to "Sun & Moon",
-            "SLG" to "Sun & Moon",
-            "CIN" to "Sun & Moon",
-            "UPR" to "Sun & Moon",
-            "FLI" to "Sun & Moon",
-            "CES" to "Sun & Moon",
-            "DRM" to "Sun & Moon",
-            "LOT" to "Sun & Moon",
-            "TEU" to "Sun & Moon",
-            "DET" to "Sun & Moon",
-            "UNB" to "Sun & Moon",
-            "UNM" to "Sun & Moon",
-            "HIF" to "Sun & Moon",
-            "CEC" to "Sun & Moon",
-            "SSH" to "Sword & Shield",
-            "RCL" to "Sword & Shield",
-            "DAA" to "Sword & Shield",
-            "CPA" to "Sword & Shield",
-            "VIV" to "Sword & Shield",
-            "SHF" to "Sword & Shield",
-            "BST" to "Sword & Shield",
-            "CRE" to "Sword & Shield",
-            "EVS" to "Sword & Shield",
-            "CEL" to "Sword & Shield",
-            "FST" to "Sword & Shield",
-            "BRS" to "Sword & Shield",
-            "ASR" to "Sword & Shield",
-            "PGO" to "Sword & Shield",
-            "LOR" to "Sword & Shield",
-            "SIT" to "Sword & Shield",
-            "CRZ" to "Sword & Shield"
-        )
     }
 
     suspend fun getSets(context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgSet>> =
@@ -849,89 +735,26 @@ class PokeTcgRepository {
         }
     }
 
-    internal fun deriveSeriesName(setCode: String?, language: String?, setName: String?): String {
-        val code = setCode?.trim()?.uppercase().orEmpty()
-        val name = setName?.trim()?.lowercase().orEmpty()
+    private fun deriveSeriesName(setCode: String?, language: String?, setName: String?): String {
+        val code = setCode?.uppercase().orEmpty()
+        val name = setName?.lowercase().orEmpty()
 
-        val normalizedCode = SetCodeMapper.normalizeDecklistSetCode(code)?.uppercase() ?: code
-        val isMegaByName =
-            name.contains("megaevoluzione") ||
-                name.contains("mega evoluzione") ||
-                name.contains("mega evolution") ||
-                name.contains("fiamme spettrali") ||
-                name.contains("phantasmal flames") ||
-                name.contains("ascesa eroica") ||
-                name.contains("heroic rise") ||
-                name.contains("perfect order") ||
-                name.contains("equilibrio perfetto") ||
-                name.contains("caos nascente")
-        val isScarletVioletByName =
-            name.contains("scarlatto e violetto") ||
-                name.contains("scarlet & violet") ||
-                name.contains("white flare") ||
-                name.contains("fuoco bianco") ||
-                name.contains("black bolt") ||
-                name.contains("luce nera")
-        val isPlayPokemonByName =
-            name.contains("play pokemon") ||
-                name.contains("play! pokemon") ||
-                name.contains("busta premio") ||
-                name.contains("prize pack") ||
-                name.contains("pop serie")
-        val isTrickOrTreatByName =
-            name.contains("trick or trade") ||
-                name.contains("trick-or-trade") ||
-                name.contains("trick or treat") ||
-                name.contains("trickortreat")
-        val isEvolutionCollectionByName =
-            (name.contains("evolution") && name.contains("collection")) ||
-                name.contains("evolutions collection") ||
-                name.contains("collezione evoluzioni")
-        val isMcDonaldsByName =
-            name.contains("mcdonald") ||
-                name.contains("mcdonald's")
-        val isGymByName =
-            name.contains("gym heroes") ||
-                name.contains("gym challenge") ||
-                name.startsWith("gym ")
-        val isNeoByName =
-            name.contains("neo genesis") ||
-                name.contains("neo discovery") ||
-                name.contains("neo revelation") ||
-                name.contains("neo destiny")
-        val isLegendaryCollectionByName = name.contains("legendary collection")
-        val isECardByName =
-            name.contains("expedition") ||
-                name.contains("aquapolis") ||
-                name.contains("skyridge")
-        val exactLegacySeries = LEGACY_CODE_TO_SERIES[code]
+        if (name.contains("mega")) return ItalianTranslations.translateSeriesName("Mega Evolutions")
+        if (name.contains("world championship")) return ItalianTranslations.translateSeriesName("World Championships")
+        if (name.contains("black star") || name.contains("promo")) return ItalianTranslations.translateSeriesName("Promos")
 
         val series = when {
-            code in MEGA_EVOLUTION_SET_CODES || MEGA_EVOLUTION_CODE_PATTERN.matches(code) -> "Mega Evolutions"
-            isMegaByName -> "Mega Evolutions"
-            name.contains("world championship") -> "World Championships"
-            exactLegacySeries != null -> exactLegacySeries
-            isGymByName -> "Gym"
-            isNeoByName -> "Neo"
-            isLegendaryCollectionByName -> "Legendary Collection"
-            isECardByName -> "e-Card"
-            code in BASE_ENERGY_SET_CODES || name.contains("energie base") || name.contains("base energie") || name.contains("basic energy") -> "Base Energy"
-            code in PROMO_SET_CODES || name.contains("black star") || name.contains("promo") -> "Promos"
-            PLAY_POKEMON_CODE_PATTERN.matches(code) || isPlayPokemonByName -> "PlayPokemon"
-            isTrickOrTreatByName -> "TrickOrTreat"
-            isEvolutionCollectionByName -> "EvolutionCollection"
-            MCDONALD_COLLECTION_CODE_PATTERN.matches(code) || isMcDonaldsByName -> "McDonaldsCollection"
-            normalizedCode in SCARLET_VIOLET_SET_CODES -> "Scarlet & Violet"
-            isScarletVioletByName -> "Scarlet & Violet"
-            normalizedCode.startsWith("SV") -> "Scarlet & Violet"
-            normalizedCode.startsWith("SWSH") -> "Sword & Shield"
-            normalizedCode.startsWith("SM") -> "Sun & Moon"
-            normalizedCode.startsWith("XY") -> "XY"
-            normalizedCode.startsWith("BW") -> "Black & White"
-            normalizedCode.startsWith("HGSS") || normalizedCode.startsWith("HS") -> "HeartGold & SoulSilver"
-            normalizedCode.startsWith("DP") -> "Diamond & Pearl"
-            normalizedCode.startsWith("EX") -> "EX"
-            else -> "Other"
+            code.startsWith("ME") || code.startsWith("MEX") || code.startsWith("MEGA") -> "Mega Evolutions"
+            code.startsWith("SV") -> "Scarlet & Violet"
+            code.startsWith("SWSH") -> "Sword & Shield"
+            code.startsWith("SM") -> "Sun & Moon"
+            code.startsWith("XY") -> "XY"
+            code.startsWith("BW") -> "Black & White"
+            code.startsWith("HGSS") -> "HeartGold & SoulSilver"
+            code.startsWith("DP") -> "Diamond & Pearl"
+            code.startsWith("EX") -> "EX"
+            code.isNotBlank() -> code.takeWhile { !it.isDigit() }.ifBlank { code }
+            else -> language?.uppercase().orEmpty()
         }
         return ItalianTranslations.translateSeriesName(series)
     }

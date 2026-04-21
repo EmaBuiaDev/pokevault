@@ -19,7 +19,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
-import java.time.LocalDate
 
 data class SetsUiState(
     val allSets: List<TcgSet> = emptyList(),
@@ -72,7 +71,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                         sets
                     }
                     hasValidatedSetsCacheThisSession = true
-                    val series = buildSeriesListByLatestRelease(resolvedSets)
+                    val series = resolvedSets.map { it.series }.distinct()
                     uiState = uiState.copy(
                         allSets = resolvedSets,
                         filteredSets = resolvedSets,
@@ -110,7 +109,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             val cachedTotals = repository.getCachedSetCardCounts()
             repository.getSets(context = context)
                 .onSuccess { sets ->
-                    val series = buildSeriesListByLatestRelease(sets)
+                    val series = sets.map { it.series }.distinct()
                     uiState = uiState.copy(
                         allSets = sets,
                         cachedSetCardTotals = cachedTotals,
@@ -131,7 +130,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             repository.getSets(context = context, forceRefresh = true)
                 .onSuccess { sets ->
                     hasValidatedSetsCacheThisSession = true
-                    val series = buildSeriesListByLatestRelease(sets)
+                    val series = sets.map { it.series }.distinct()
                     uiState = uiState.copy(
                         allSets = sets,
                         cachedSetCardTotals = cachedTotals,
@@ -241,20 +240,6 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     private fun hasSuspiciousTotals(sets: List<TcgSet>): Boolean {
         // Cached legacy data may contain inflated totals (e.g. > 400 for standard sets).
         return sets.any { (it.printedTotal > 400) || (it.total > 400) }
-    }
-
-    private fun buildSeriesListByLatestRelease(sets: List<TcgSet>): List<String> {
-        return sets
-            .groupBy { it.series }
-            .entries
-            .sortedByDescending { (_, groupedSets) ->
-                groupedSets.maxOfOrNull { parseReleaseDate(it.releaseDate) } ?: LocalDate.MIN
-            }
-            .map { it.key }
-    }
-
-    private fun parseReleaseDate(raw: String): LocalDate {
-        return runCatching { LocalDate.parse(raw) }.getOrDefault(LocalDate.MIN)
     }
 
 }

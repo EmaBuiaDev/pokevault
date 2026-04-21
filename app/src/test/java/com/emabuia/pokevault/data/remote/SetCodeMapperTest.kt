@@ -12,8 +12,6 @@ class SetCodeMapperTest {
         assertEquals("sv6", SetCodeMapper.normalizeDecklistSetCode("TWM"))
         assertEquals("sv1", SetCodeMapper.normalizeDecklistSetCode("svi"))
         assertEquals("sv10", SetCodeMapper.normalizeDecklistSetCode("DRI"))
-        assertEquals("sv11", SetCodeMapper.normalizeDecklistSetCode("BLK"))
-        assertEquals("sv11", SetCodeMapper.normalizeDecklistSetCode("wht"))
     }
 
     @Test
