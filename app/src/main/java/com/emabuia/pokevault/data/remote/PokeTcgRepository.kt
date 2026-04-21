@@ -539,8 +539,12 @@ class PokeTcgRepository {
     }
 
     private fun PokeWalletSet.toTcgSet(): TcgSet {
-        // cardCount is the only reliable card-only value; totalCards may include non-card products.
-        val printedCount = cardCount.takeIf { it > 0 } ?: 0
+        // Both fields can diverge; use the conservative overlap to avoid inflated totals.
+        val printedCount = if (cardCount > 0 && totalCards > 0) {
+            minOf(cardCount, totalCards)
+        } else {
+            0
+        }
         val totalCount = printedCount
         // Remove set code prefix if present (e.g., "ME03:Perfect Order" → "Perfect Order")
         val cleanName = name.substringAfterLast(":").trim().takeIf { it.isNotBlank() } ?: name
