@@ -1,7 +1,6 @@
 package com.emabuia.pokevault.viewmodel
 
 import android.app.Application
-import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -25,7 +24,6 @@ import java.time.LocalDate
 data class SetsUiState(
     val allSets: List<TcgSet> = emptyList(),
     val filteredSets: List<TcgSet> = emptyList(),
-    val cachedSetCardTotals: Map<String, Int> = emptyMap(),
     val selectedLanguageMacro: String = "ENG",
     val seriesList: List<String> = emptyList(),
     val selectedSeries: String? = null,
@@ -41,11 +39,6 @@ data class SetsUiState(
 
 // Usa AndroidViewModel per accedere al Context
 class SetsViewModel(application: Application) : AndroidViewModel(application) {
-
-    companion object {
-        @Volatile
-        private var hasValidatedSetsCacheThisSession: Boolean = false
-    }
 
     private val repository = RepositoryProvider.tcgRepository
     private val firestoreRepository = FirestoreRepository()
@@ -64,20 +57,10 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
-            performOneTimeCacheClearIfNeeded(context)
-            val cachedTotals = repository.getCachedSetCardCounts()
             repository.getSets(context = context)
                 .onSuccess { sets ->
-                    val shouldValidateLegacyCache = !hasValidatedSetsCacheThisSession && hasSuspiciousTotals(sets)
-                    val resolvedSets = if (shouldValidateLegacyCache) {
-                        repository.getSets(context = context, forceRefresh = true).getOrDefault(sets)
-                    } else {
-                        sets
-                    }
-                    hasValidatedSetsCacheThisSession = true
                     uiState = uiState.copy(
-                        allSets = resolvedSets,
-                        cachedSetCardTotals = cachedTotals,
+                        allSets = sets,
                         errorMessage = null,
                         isLoading = false
                     )
@@ -115,12 +98,10 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshFromCache() {
         viewModelScope.launch {
             val context = getApplication<Application>().applicationContext
-            val cachedTotals = repository.getCachedSetCardCounts()
             repository.getSets(context = context)
                 .onSuccess { sets ->
                     uiState = uiState.copy(
                         allSets = sets,
-                        cachedSetCardTotals = cachedTotals,
                         isLoading = false,
                         errorMessage = null
                     )
@@ -133,13 +114,10 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
-            val cachedTotals = repository.getCachedSetCardCounts()
             repository.getSets(context = context, forceRefresh = true)
                 .onSuccess { sets ->
-                    hasValidatedSetsCacheThisSession = true
                     uiState = uiState.copy(
                         allSets = sets,
-                        cachedSetCardTotals = cachedTotals,
                         errorMessage = null,
                         isLoading = false
                     )
@@ -250,29 +228,6 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                 if (raw.isNotBlank()) "Errore: $raw"
                 else "Errore durante il caricamento di carte ed espansioni."
             }
-        }
-    }
-
-    private suspend fun performOneTimeCacheClearIfNeeded(context: Context) {
-        val prefs = context.getSharedPreferences("pokevault_cache_flags", Context.MODE_PRIVATE)
-        val key = "sets_cache_proxy_v2"
-        if (!prefs.contains(key)) {
-            repository.clearSetsCache()
-            prefs.edit().putBoolean(key, true).apply()
-        }
-    }
-
-    private fun hasSuspiciousTotals(sets: List<TcgSet>): Boolean {
-        // Cached legacy data may contain inflated totals (e.g. > 400 for standard sets).
-        // Also trigger a refresh when un-enriched sets (printedTotal=0) are present,
-        // so newly KV-backfilled values from the proxy are picked up each session.
-        return sets.any { set ->
-            val hasHugeLegacyCount = (set.printedTotal > 400) || (set.total > 400)
-            val isPerfectOrderLegacyCount =
-                set.name.contains("Perfect Order", ignoreCase = true) &&
-                    (set.printedTotal > 124 || set.total > 124)
-            val isUnEnriched = set.id.isNotBlank() && set.printedTotal == 0 && set.total == 0
-            hasHugeLegacyCount || isPerfectOrderLegacyCount || isUnEnriched
         }
     }
 

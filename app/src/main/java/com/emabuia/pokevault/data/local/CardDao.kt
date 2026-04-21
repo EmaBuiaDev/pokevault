@@ -24,6 +24,7 @@ interface CardDao {
     @Query("SELECT DISTINCT setId FROM cards")
     suspend fun getVisitedSetIds(): List<String>
 
+    // All rows were saved through the isActualCard filter, so historical data is accurate.
     @Query("SELECT setId, COUNT(*) as count FROM cards GROUP BY setId")
     suspend fun getCachedCardCountsBySet(): List<CachedSetCardCount>
 

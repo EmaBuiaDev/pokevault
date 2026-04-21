@@ -70,10 +70,6 @@ fun formatDate(date: String): String {
     } catch (_: Exception) { date }
 }
 
-private fun formatSetCardsCount(count: Int): String {
-    return if (count > 0) AppLocale.cardsCount(count) else "—"
-}
-
 // ── Animazione Pokéball ──
 @Composable
 fun PokeballLoadingAnimation(
@@ -182,7 +178,7 @@ fun SetsListScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                // Pull latest totals from repository/cache without forcing network.
+                // Refresh current cached sets without forcing network.
                 viewModel.refreshFromCache()
             }
         }
@@ -379,13 +375,8 @@ fun SetsListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(items = state.filteredSets, key = { it.id }) { set ->
-                        val listDisplayCount = state.cachedSetCardTotals[set.id]
-                            ?: set.printedTotal.takeIf { it > 0 }
-                            ?: set.total.takeIf { it > 0 }
-                            ?: 0
                         SetCard(
                             set = set,
-                            displayCardsCount = listDisplayCount,
                             onClick = { onSetClick(set.id) }
                         )
                     }
@@ -453,11 +444,9 @@ fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: ()
     }
 }
 
-// ── Set Card con total (non printedTotal) e data formattata ──
+// ── Set Card con logo, nome e data formattata ──
 @Composable
-fun SetCard(set: TcgSet, displayCardsCount: Int, onClick: () -> Unit) {
-    // Same logic used by set detail progress bar: count actual cards (cards.size).
-    val displayCount = displayCardsCount
+fun SetCard(set: TcgSet, onClick: () -> Unit) {
     val logoUrl = set.images.logo.trim()
     val shouldLoadLogo = logoUrl.isNotBlank() && !MissingSetLogoRegistry.isMissing(logoUrl)
 
@@ -513,23 +502,12 @@ fun SetCard(set: TcgSet, displayCardsCount: Int, onClick: () -> Unit) {
                     fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 15.sp
                 )
                 Spacer(modifier = Modifier.height(3.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = formatSetCardsCount(displayCount),
-                        color = BlueCard,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    // Data formattata GG/MM/AAAA
-                    Text(
-                        text = formatDate(set.releaseDate),
-                        color = TextMuted,
-                        fontSize = 10.sp
-                    )
-                }
+                // Data formattata GG/MM/AAAA
+                Text(
+                    text = formatDate(set.releaseDate),
+                    color = TextMuted,
+                    fontSize = 10.sp
+                )
             }
         }
     }

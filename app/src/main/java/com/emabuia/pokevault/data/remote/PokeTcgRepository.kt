@@ -72,18 +72,6 @@ class PokeTcgRepository {
         memorySets = null
     }
 
-    suspend fun getCachedSetCardCounts(): Map<String, Int> {
-        return try {
-            db.cardDao().getCachedCardCountsBySet()
-                .asSequence()
-                .filter { it.setId.isNotBlank() && it.count > 0 }
-                .associate { it.setId to it.count }
-        } catch (e: Exception) {
-            Timber.w(e, "Errore lettura conteggi cache carte per set")
-            emptyMap()
-        }
-    }
-
     companion object {
         private const val SET_IMAGE_CACHE_VERSION = "setimg-v3"
         private const val SETS_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000L   // 7 days
@@ -220,22 +208,17 @@ class PokeTcgRepository {
     suspend fun getSets(context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgSet>> =
         setsMutex.withLock {
             if (!forceRefresh && memorySets != null) {
-                val reconciled = reconcileSetTotalsWithCachedCards(memorySets!!)
-                if (reconciled != memorySets) {
-                    memorySets = reconciled
-                }
                 recordCacheHit("getSets:memory")
-                return Result.success(reconciled)
+                return Result.success(memorySets!!)
             }
 
             // L2: Room DB
             if (!forceRefresh) {
                 val roomSets = loadSetsFromRoom()
                 if (roomSets != null) {
-                    val reconciled = reconcileSetTotalsWithCachedCards(roomSets)
-                    memorySets = reconciled
+                    memorySets = roomSets
                     recordCacheHit("getSets:room")
-                    return Result.success(reconciled)
+                    return Result.success(roomSets)
                 }
             }
 
@@ -267,21 +250,19 @@ class PokeTcgRepository {
             }
 
             networkResult.onSuccess { sets ->
-                val reconciled = reconcileSetTotalsWithCachedCards(sets)
-                memorySets = reconciled
-                refreshLanguageMapFromSets(reconciled)
-                saveSetsToRoom(reconciled)
+                memorySets = sets
+                refreshLanguageMapFromSets(sets)
+                saveSetsToRoom(sets)
             }
 
             if (networkResult.isSuccess) {
-                networkResult
+                Result.success(memorySets!!)
             } else {
                 staleCache?.let {
-                    val reconciled = reconcileSetTotalsWithCachedCards(it)
-                    memorySets = reconciled
-                    refreshLanguageMapFromSets(reconciled)
+                    memorySets = it
+                    refreshLanguageMapFromSets(it)
                     recordCacheHit("getSets:stale")
-                    Result.success(reconciled)
+                    Result.success(it)
                 } ?: networkResult
             }
         }
@@ -627,27 +608,6 @@ class PokeTcgRepository {
             db.setDao().upsertSets(sets.map { it.toEntity() })
         } catch (e: Exception) {
             Timber.w(e, "Errore salvataggio cache set Room")
-        }
-    }
-
-    private suspend fun reconcileSetTotalsWithCachedCards(sets: List<TcgSet>): List<TcgSet> {
-        if (sets.isEmpty()) return sets
-        return try {
-            val cachedCounts = db.cardDao().getCachedCardCountsBySet()
-            if (cachedCounts.isEmpty()) return sets
-
-            val countBySetId = cachedCounts.associate { it.setId to it.count }
-            sets.map { set ->
-                val cachedCount = countBySetId[set.id]
-                if (cachedCount != null && cachedCount > 0 && (set.total != cachedCount || set.printedTotal != cachedCount)) {
-                    set.copy(printedTotal = cachedCount, total = cachedCount)
-                } else {
-                    set
-                }
-            }
-        } catch (e: Exception) {
-            Timber.w(e, "Errore riconciliazione totali set con cache carte")
-            sets
         }
     }
 
