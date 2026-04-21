@@ -172,6 +172,8 @@ object PokeWalletRetrofitClient {
 
     fun create(apiKey: String): PokeWalletApiService {
         val baseUrl = resolveBaseUrl()
+        val proxyUrl = BuildConfig.POKEWALLET_PROXY_URL.trim()
+        val useProxy = BuildConfig.POKEWALLET_PROXY_ENABLED && proxyUrl.isNotEmpty()
 
         val clientBuilder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -179,7 +181,7 @@ object PokeWalletRetrofitClient {
 
         // Only add X-API-Key header when using direct API
         // When using Cloudflare Worker proxy, the Worker handles the API key server-side
-        if (!BuildConfig.POKEWALLET_PROXY_ENABLED || BuildConfig.POKEWALLET_PROXY_URL.isEmpty()) {
+        if (!useProxy) {
             clientBuilder.addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .addHeader("X-API-Key", apiKey)

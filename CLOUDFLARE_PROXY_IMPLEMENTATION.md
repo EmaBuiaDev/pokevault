@@ -33,7 +33,7 @@ pokevault-proxy-worker/
 - Intercepts ALL requests to `/*`
 - Generates cache key from full URL (path + query)
 - KV cache hit check: serves response + header `X-Cache-Status: HIT` (~50-100ms)
-- KV cache miss: fetches from PokeWallet API, caches response, adds header `X-Cache-Status: MISS` (~1-2s)
+- KV cache miss: fetches from PokeWallet API, registers KV persistence with `ExecutionContext.waitUntil(...)`, adds header `X-Cache-Status: MISS` (~1-2s)
 - Stale cache fallback: if PokeWallet API unreachable, serves expired cache with header `X-Cache-Status: STALE`
 - API key injection: adds `X-API-Key: env.POKEWALLET_API_KEY` to upstream requests
 - TTL: 259,200 seconds (3 days)
@@ -147,7 +147,7 @@ Worker receives request
     ├─ Check KV: cache key "pokewallet:/sets" → NOT FOUND
     ├─ Call PokeWallet API with X-API-Key
     ├─ Receive: List of 50+ TCG sets in JSON
-    ├─ Store in KV: { status, headers, body, cachedAt, ttl }
+    ├─ Register KV write with waitUntil: { status, headers, body, cachedAt, ttl }
     └─ Return response + header "X-Cache-Status: MISS"
     ↓
 Retrofit receives response → Parse JSON → Store in Room cache → Update UI
@@ -326,6 +326,26 @@ curl https://pokevault-proxy.<ID>.workers.dev/sets
 # Should return: X-Cache-Status: HIT, response in 50-100ms
 ```
 
+### 2b. Verify Persistent Proxy Cache
+
+Use the same endpoint twice and confirm the cache survives beyond the first response lifecycle:
+
+```bash
+# First request: warms KV
+curl -i https://pokevault-proxy.<ID>.workers.dev/sets
+
+# Second request: must be served from KV
+curl -i https://pokevault-proxy.<ID>.workers.dev/sets
+
+# Optional: inspect stored key directly
+wrangler kv:key get "pokewallet:/sets" --namespace-id=YOUR_NAMESPACE_ID
+```
+
+Expected behavior:
+- First request: `X-Cache-Status: MISS`
+- Second request: `X-Cache-Status: HIT`
+- KV key exists after the first request completes
+
 ### 3. Update local.properties
 
 ```properties
@@ -415,6 +435,27 @@ See [pokevault-proxy-worker/DEPLOYMENT_GUIDE.md](pokevault-proxy-worker/DEPLOYME
 4. Verify network traffic + Firebase integration
 
 **Expected result:** 75-80% API credit savings + faster app response times + better offline support!
+
+## Reset Procedure
+
+To restart from a clean state and validate the proxy end-to-end:
+
+1. Clear app data or reinstall the app to remove Room cache, memory cache, and local WorkManager state.
+2. Purge Cloudflare KV keys for the proxy cache.
+3. Send the same request twice to the Worker and verify `MISS -> HIT`.
+4. Reinstall the app again without purging KV and confirm the same resource still returns `HIT` from the proxy.
+
+Example KV reset commands:
+
+```bash
+# Delete one key
+wrangler kv:key delete "pokewallet:/sets" --namespace-id=YOUR_NAMESPACE_ID
+
+# Or recreate the namespace for a full reset
+wrangler kv:namespace delete pokevault-cache
+wrangler kv:namespace create pokevault-cache
+# Then update wrangler.toml with the new namespace IDs before redeploying
+```
 
 ---
 

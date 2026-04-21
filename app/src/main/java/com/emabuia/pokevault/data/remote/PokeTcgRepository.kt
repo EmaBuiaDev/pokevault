@@ -726,12 +726,14 @@ class PokeTcgRepository {
     }
 
     private fun PokeWalletSet.toTcgSet(): TcgSet {
-        // totalCards is the proxy-enriched real count (only actual cards).
-        // cardCount alone includes non-card products and must not be used as fallback.
+        // totalCards = proxy-enriched real count (only actual cards, highest accuracy).
+        // cardCount = raw API value, accurate for most sets but may be inflated on sets
+        // with non-card products (e.g. ME03). The proxy corrects those via KV or forced overrides.
         val printedCount = when {
             cardCount > 0 && totalCards > 0 -> minOf(cardCount, totalCards)
+            cardCount > 0 -> cardCount
             totalCards > 0 -> totalCards
-            else -> 0   // un-enriched: list shows "—" instead of inflated API value
+            else -> 0
         }
         val totalCount = printedCount
         // Remove set code prefix if present (e.g., "ME03:Perfect Order" → "Perfect Order")

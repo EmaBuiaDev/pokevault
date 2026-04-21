@@ -483,7 +483,7 @@ async function createResponseFromCache(cached: CachedResponse, isHit: boolean, p
  * Main request handler
  */
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // Only cache GET requests
     if (request.method !== 'GET') {
       return new Response('Method not allowed', { status: 405 });
@@ -590,12 +590,15 @@ export default {
           ttl: effectiveTtlSeconds,
         };
 
-        // Store in KV (fire and forget, don't block response)
-        cache.put(cacheKey, JSON.stringify(cachedResponse), {
-          expirationTtl: effectiveTtlSeconds,
-        }).catch((err) => {
-          console.error(`Failed to cache ${cacheKey}:`, err);
-        });
+        // Register the KV write with the execution context so Cloudflare keeps
+        // the Worker alive long enough to persist the cache entry reliably.
+        ctx.waitUntil(
+          cache.put(cacheKey, JSON.stringify(cachedResponse), {
+            expirationTtl: effectiveTtlSeconds,
+          }).catch((err) => {
+            console.error(`Failed to cache ${cacheKey}:`, err);
+          })
+        );
       }
 
       // ===== RETURN RESPONSE WITH CACHE STATUS =====

@@ -7,7 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 
 # KV namespace for caching PokeWallet API responses
 kv_namespaces = [
-  { binding = "CACHE", id = "382844930a304e588bcd0327cbfc291e", preview_id = "aca3009c69ab4875b95795e2326577a1" }  # TODO: Fill after creating KV namespace
+  { binding = "CACHE", id = "14e664fe935345578443564f353685b9", preview_id = "f1354c6fde154f51bfe18f9c139d73df" }  # Reset on 2026-04-21 to start from a clean proxy cache
 ]
 
 # Environment variables

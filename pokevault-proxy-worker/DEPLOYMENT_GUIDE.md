@@ -298,11 +298,26 @@ The app will automatically use direct API calls to `api.pokewallet.io`.
 - First request is always slow (cache miss)
 - KV namespace not properly bound
 - Cache TTL expired (3 days)
+- KV write was not persisted for the request lifecycle in an older Worker build
 
 **Solutions:**
 1. Make 2+ requests to same endpoint
 2. Verify cache: `wrangler kv:key list --namespace-id=YOUR_NAMESPACE_ID`
 3. Wait 3 seconds between requests, then re-test
+4. Confirm the deployed Worker includes the `ExecutionContext.waitUntil(...)` cache write fix
+
+### Problem: Second Identical Request Is Still MISS
+
+**Causes:**
+- Old Worker deployment still running without the KV persistence fix
+- Wrong KV namespace bound in production
+- Cache key differs because the request URL is not identical
+
+**Solutions:**
+1. Redeploy the Worker and retest the same exact URL twice
+2. Inspect the cached key directly: `wrangler kv:key get "pokewallet:/sets" --namespace-id=YOUR_NAMESPACE_ID`
+3. Check the production binding in `wrangler.toml` and in the Cloudflare dashboard
+4. Ensure the second request uses the same path and query string as the first
 
 ### Problem: Firebase Queries Not Working
 
@@ -350,6 +365,23 @@ wrangler kv:namespace delete pokevault-cache
 wrangler kv:namespace create pokevault-cache
 # Update wrangler.toml with new namespace IDs
 ```
+
+### Full Reset Validation
+
+After clearing KV and app data, validate the expected proxy flow:
+
+```bash
+# First call after reset
+curl -i https://pokevault-proxy.<ID>.workers.dev/sets
+
+# Second identical call
+curl -i https://pokevault-proxy.<ID>.workers.dev/sets
+```
+
+Expected result:
+- First call: `X-Cache-Status: MISS`
+- Second call: `X-Cache-Status: HIT`
+- `wrangler kv:key get "pokewallet:/sets" --namespace-id=YOUR_NAMESPACE_ID` returns a stored value
 
 ---
 
