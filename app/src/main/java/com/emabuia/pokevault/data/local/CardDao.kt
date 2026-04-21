@@ -18,6 +18,18 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE setId = :setId")
     suspend fun getBySetId(setId: String): List<CachedCardEntity>
 
+    @Query("SELECT * FROM cards WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): CachedCardEntity?
+
+    @Query("SELECT * FROM cards WHERE setId = :setId AND (LTRIM(number, '0') = LTRIM(:number, '0') OR number = :number)")
+    suspend fun getBySetIdAndNumber(setId: String, number: String): List<CachedCardEntity>
+
+    @Query("SELECT * FROM cards WHERE LTRIM(number, '0') = LTRIM(:number, '0') OR number = :number")
+    suspend fun getByNumber(number: String): List<CachedCardEntity>
+
+    @Query("SELECT * FROM cards WHERE LOWER(name) LIKE LOWER(:pattern) ORDER BY cachedAt DESC LIMIT :limit")
+    suspend fun searchByName(pattern: String, limit: Int): List<CachedCardEntity>
+
     @Query("SELECT MAX(cachedAt) FROM cards WHERE setId = :setId")
     suspend fun getLastCacheTimeForSet(setId: String): Long?
 

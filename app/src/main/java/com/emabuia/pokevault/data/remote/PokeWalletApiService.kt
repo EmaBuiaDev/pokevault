@@ -165,7 +165,7 @@ object PokeWalletRetrofitClient {
 
     private fun resolveBaseUrl(): String {
         val proxyUrl = BuildConfig.POKEWALLET_PROXY_URL.trim()
-        val useProxy = BuildConfig.POKEWALLET_PROXY_ENABLED && proxyUrl.isNotEmpty()
+        val useProxy = proxyUrl.isNotEmpty()
         val raw = if (useProxy) proxyUrl else DIRECT_API_URL
         return if (raw.endsWith("/")) raw else "$raw/"
     }
@@ -173,7 +173,7 @@ object PokeWalletRetrofitClient {
     fun create(apiKey: String): PokeWalletApiService {
         val baseUrl = resolveBaseUrl()
         val proxyUrl = BuildConfig.POKEWALLET_PROXY_URL.trim()
-        val useProxy = BuildConfig.POKEWALLET_PROXY_ENABLED && proxyUrl.isNotEmpty()
+        val useProxy = proxyUrl.isNotEmpty()
 
         val clientBuilder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)

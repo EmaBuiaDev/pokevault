@@ -1,8 +1,7 @@
 package com.emabuia.pokevault.ui.scanner
 
 import android.Manifest
-import android.graphics.Bitmap
-import android.graphics.Matrix
+import android.graphics.Rect as AndroidRect
 import android.util.Log
 import com.emabuia.pokevault.BuildConfig
 import android.util.Size
@@ -63,6 +62,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.viewmodel.ScannerViewModel
+import java.util.concurrent.Executors
 
 /**
  * Proporzioni carta Pokemon standard (63mm × 88mm).
@@ -641,9 +641,18 @@ private fun CameraPreview(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val recognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+    val analyzerExecutor = remember { Executors.newSingleThreadExecutor() }
     var cameraRef by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
     // Flag per evitare di processare piu frame contemporaneamente
     var isProcessing by remember { mutableStateOf(false) }
+    var lastAnalyzedAt by remember { mutableStateOf(0L) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            recognizer.close()
+            analyzerExecutor.shutdown()
+        }
+    }
 
     LaunchedEffect(flashEnabled) {
         cameraRef?.cameraControl?.enableTorch(flashEnabled)
@@ -676,18 +685,28 @@ private fun CameraPreview(
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also { analysis ->
-                        analysis.setAnalyzer(ContextCompat.getMainExecutor(ctx)) { imageProxy ->
+                        analysis.setAnalyzer(analyzerExecutor) { imageProxy ->
                             // Non processare se OCR e in pausa (carta gia trovata)
                             if (!scanEnabled || isProcessing) {
                                 imageProxy.close()
                                 return@setAnalyzer
                             }
 
+                            val now = System.currentTimeMillis()
+                            if (now - lastAnalyzedAt < ANALYSIS_THROTTLE_MS) {
+                                imageProxy.close()
+                                return@setAnalyzer
+                            }
+                            lastAnalyzedAt = now
+
                             val mediaImage = imageProxy.image
                             if (mediaImage != null) {
                                 isProcessing = true
 
-                                // Crop al centro dell'immagine (zona della carta)
+                                val cropRect = computeCenterCardCropRect(imageProxy.width, imageProxy.height)
+                                imageProxy.setCropRect(cropRect)
+                                mediaImage.cropRect = cropRect
+
                                 val image = InputImage.fromMediaImage(
                                     mediaImage,
                                     imageProxy.imageInfo.rotationDegrees
@@ -730,3 +749,25 @@ private fun CameraPreview(
         modifier = Modifier.fillMaxSize()
     )
 }
+
+private fun computeCenterCardCropRect(imageWidth: Int, imageHeight: Int): AndroidRect {
+    val maxWidth = (imageWidth * 0.78f).toInt()
+    val maxHeight = (imageHeight * 0.82f).toInt()
+
+    var cropWidth = maxWidth
+    var cropHeight = (cropWidth / CARD_ASPECT_RATIO).toInt()
+
+    if (cropHeight > maxHeight) {
+        cropHeight = maxHeight
+        cropWidth = (cropHeight * CARD_ASPECT_RATIO).toInt()
+    }
+
+    val left = ((imageWidth - cropWidth) / 2).coerceAtLeast(0)
+    val top = (((imageHeight - cropHeight) / 2f) - imageHeight * 0.05f).toInt().coerceIn(0, imageHeight - cropHeight)
+    val right = (left + cropWidth).coerceAtMost(imageWidth)
+    val bottom = (top + cropHeight).coerceAtMost(imageHeight)
+
+    return AndroidRect(left, top, right, bottom)
+}
+
+private const val ANALYSIS_THROTTLE_MS = 200L

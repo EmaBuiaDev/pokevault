@@ -59,6 +59,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private val ocrManager = OCRManager(application)
 
     private val recentlyAddedIds = mutableSetOf<String>()
+    private val recentSearchAttempts = mutableMapOf<String, Long>()
+    private var lastSearchTimestamp = 0L
 
     /**
      * Chiave della ricerca attualmente in corso o completata.
@@ -138,6 +140,11 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         // Se la ricerca per questa chiave e gia partita o completata, non rilanciarla
         if (searchKey == activeSearchKey) return
 
+        val now = System.currentTimeMillis()
+        if (now - lastSearchTimestamp < SEARCH_MIN_INTERVAL_MS) return
+        val lastAttempt = recentSearchAttempts[searchKey] ?: 0L
+        if (now - lastAttempt < SEARCH_KEY_COOLDOWN_MS) return
+
         // Aggiorna contatore di stabilita
         if (number.isNotBlank() && number == stableNumber) {
             stabilityCount++
@@ -166,6 +173,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
         if (stabilityCount >= requiredStability && searchJob?.isActive != true) {
             activeSearchKey = searchKey
+            recentSearchAttempts[searchKey] = now
+            lastSearchTimestamp = now
             searchJob = viewModelScope.launch {
                 searchCard(
                     name = stableName.takeIf { it.isNotBlank() },
@@ -242,6 +251,14 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 results.forEach { card -> candidates.putIfAbsent(card.id, card) }
             }
 
+            fun hasStrongCandidate(): Boolean {
+                if (candidates.isEmpty()) return false
+                val exactNumberMatch = number != null && candidates.values.any { normalizeCardNumber(it.number) == number }
+                if (!exactNumberMatch) return false
+                if (setTotal == null) return true
+                return candidates.values.any { repository.getPrintedTotalForSet(it.set?.id)?.toString() == setTotal }
+            }
+
             // Strategia 1: numero/totale → usa searchCards che identifica il set
             if (number != null && setTotal != null) {
                 val fullNumber = "$number/$setTotal"
@@ -266,7 +283,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             }
 
             // Strategia 3: solo nome
-            if (queryName != null && isUsableSearchName(queryName)) {
+            if (!hasStrongCandidate() && queryName != null && isUsableSearchName(queryName)) {
                 Timber.d("Ricerca con solo nome: $queryName")
                 repository.searchCardsFuzzy(queryName)
                     .onSuccess { results ->
@@ -281,7 +298,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             }
 
             // Strategia 4: solo numero (ultimo fallback)
-            if (number != null) {
+            if (candidates.isEmpty() && number != null) {
                 Timber.d("Ricerca con solo numero: $number")
                 repository.searchCards(number)
                     .onSuccess(::addCandidates)
@@ -633,6 +650,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         stableName = ""
         stableSupertype = CardSupertype.POKEMON
         stabilityCount = 0
+        recentSearchAttempts.entries.removeIf { System.currentTimeMillis() - it.value > SEARCH_KEY_COOLDOWN_MS * 2 }
     }
 
     fun toggleFlash() {
@@ -656,15 +674,17 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     companion object {
         private const val TAG = "ScannerViewModel"
-        private const val STABILITY_THRESHOLD = 2
-        private const val FAST_STABILITY_THRESHOLD = 1
+        private const val STABILITY_THRESHOLD = 3
+        private const val FAST_STABILITY_THRESHOLD = 2
         private const val SET_TOTAL_TOLERANCE = 3
-        private const val MAX_SET_CANDIDATES = 4
+        private const val MAX_SET_CANDIDATES = 2
         private const val MAX_AMBIGUOUS_CANDIDATES = 3
         private const val MIN_MATCH_SCORE = 48
         private const val MIN_CANDIDATE_SCORE = 20
         private const val MIN_SCORE_MARGIN = 8
         private const val MIN_NAME_SIMILARITY = 0.42
         private const val MIN_CANDIDATE_NAME_SIMILARITY = 0.18
+        private const val SEARCH_MIN_INTERVAL_MS = 1500L
+        private const val SEARCH_KEY_COOLDOWN_MS = 6000L
     }
 }

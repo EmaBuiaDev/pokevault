@@ -361,6 +361,16 @@ class PokeTcgRepository {
                 return Result.success(cards)
             }
         }
+
+        if (page == 1) {
+            val localCards = searchCardsFromLocalCache(normalized)
+            if (localCards.isNotEmpty()) {
+                memorySearch[cacheKey] = localCards to System.currentTimeMillis()
+                recordCacheHit("search:local:$normalized:$page")
+                return Result.success(localCards)
+            }
+        }
+
         recordCacheMiss("search:$normalized:$page")
 
         val networkResult = guardedApiCall(resourceKey = "search:$normalized:$page") {
@@ -453,6 +463,24 @@ class PokeTcgRepository {
     }
 
     suspend fun getCard(cardId: String): Result<TcgCard> = cardByIdMutex.withLock {
+        val memoryCard = memoryCards.values
+            .asSequence()
+            .flatMap { it.asSequence() }
+            .firstOrNull { it.id == cardId }
+        if (memoryCard != null) {
+            recordCacheHit("getCard:memory:$cardId")
+            return Result.success(memoryCard)
+        }
+
+        val roomCard = runCatching { db.cardDao().getById(cardId) }
+            .onFailure { Timber.w(it, "getCard: errore lettura Room per id=%s", cardId) }
+            .getOrNull()
+            ?.toTcgCard()
+        if (roomCard != null) {
+            recordCacheHit("getCard:room:$cardId")
+            return Result.success(roomCard)
+        }
+
         val networkResult = guardedApiCall(resourceKey = "card:$cardId") {
             when {
                 isPokeWalletCardId(cardId) -> api.getCard(cardId).toTcgCard()
@@ -584,6 +612,89 @@ class PokeTcgRepository {
     private fun filterByName(cards: List<TcgCard>, expectedName: String?): List<TcgCard> {
         if (expectedName == null) return cards.distinctBy { it.id }
         return cards.filter { it.name.contains(expectedName, ignoreCase = true) }.distinctBy { it.id }
+    }
+
+    private suspend fun searchCardsFromLocalCache(query: String): List<TcgCard> {
+        if (query.isBlank()) return emptyList()
+
+        val memoryPool = memoryCards.values
+            .asSequence()
+            .flatMap { it.asSequence() }
+            .toList()
+
+        val fullNumberMatch = FULL_NUMBER_REGEX.matchEntire(query)
+        if (fullNumberMatch != null) {
+            val normalizedNumber = fullNumberMatch.groupValues[1].trimStart('0').ifEmpty { "0" }
+            val total = fullNumberMatch.groupValues[2].trimStart('0').ifEmpty { "0" }
+            val candidateSetIds = getCandidateSetIdsByPrintedTotal(total, tolerance = 1).toSet()
+
+            val memoryMatches = memoryPool.filter { card ->
+                extractCardNumber(card.number) == normalizedNumber &&
+                    (candidateSetIds.isEmpty() || card.set?.id in candidateSetIds)
+            }
+            if (memoryMatches.isNotEmpty()) return memoryMatches.distinctBy { it.id }
+
+            val roomMatches = runCatching {
+                db.cardDao().getByNumber(normalizedNumber)
+            }.onFailure { err ->
+                Timber.w(err, "searchCardsFromLocalCache: errore Room numero=%s", normalizedNumber)
+            }.getOrDefault(emptyList())
+                .map { it.toTcgCard() }
+                .filter { card -> candidateSetIds.isEmpty() || card.set?.id in candidateSetIds }
+
+            return roomMatches.distinctBy { it.id }
+        }
+
+        val parts = query.split(" ").filter { it.isNotBlank() }
+        if (parts.size == 2 && parts[1].all { it.isDigit() }) {
+            val setId = parts[0]
+            val normalizedNumber = parts[1].trimStart('0').ifEmpty { "0" }
+
+            val memoryMatches = memoryPool.filter { card ->
+                card.set?.id.equals(setId, ignoreCase = true) &&
+                    extractCardNumber(card.number) == normalizedNumber
+            }
+            if (memoryMatches.isNotEmpty()) return memoryMatches.distinctBy { it.id }
+
+            val roomMatches = runCatching {
+                db.cardDao().getBySetIdAndNumber(setId, normalizedNumber)
+            }.onFailure { err ->
+                Timber.w(err, "searchCardsFromLocalCache: errore Room set+numero=%s %s", setId, normalizedNumber)
+            }.getOrDefault(emptyList())
+                .map { it.toTcgCard() }
+
+            if (roomMatches.isNotEmpty()) return roomMatches.distinctBy { it.id }
+        }
+
+        if (parts.size == 1 && parts[0].all { it.isDigit() }) {
+            val normalizedNumber = parts[0].trimStart('0').ifEmpty { "0" }
+
+            val memoryMatches = memoryPool.filter { extractCardNumber(it.number) == normalizedNumber }
+            if (memoryMatches.isNotEmpty()) return memoryMatches.distinctBy { it.id }
+
+            val roomMatches = runCatching {
+                db.cardDao().getByNumber(normalizedNumber)
+            }.onFailure { err ->
+                Timber.w(err, "searchCardsFromLocalCache: errore Room solo numero=%s", normalizedNumber)
+            }.getOrDefault(emptyList())
+                .map { it.toTcgCard() }
+
+            return roomMatches.distinctBy { it.id }
+        }
+
+        val namePattern = "%$query%"
+        val memoryMatches = memoryPool
+            .filter { it.name.contains(query, ignoreCase = true) }
+            .take(60)
+        if (memoryMatches.isNotEmpty()) return memoryMatches.distinctBy { it.id }
+
+        return runCatching {
+            db.cardDao().searchByName(namePattern, 60)
+                .map { it.toTcgCard() }
+                .distinctBy { it.id }
+        }.onFailure { err ->
+            Timber.w(err, "searchCardsFromLocalCache: errore Room nome=%s", query)
+        }.getOrDefault(emptyList())
     }
 
     private fun getCandidateSetsByPrintedTotal(total: String?, tolerance: Int): List<TcgSet> {
