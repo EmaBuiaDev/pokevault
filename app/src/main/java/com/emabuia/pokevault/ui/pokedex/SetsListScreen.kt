@@ -67,6 +67,10 @@ fun formatDate(date: String): String {
     } catch (_: Exception) { date }
 }
 
+private fun formatSetCardsCount(count: Int): String {
+    return if (count > 0) AppLocale.cardsCount(count) else "0/—"
+}
+
 // ── Animazione Pokéball ──
 @Composable
 fun PokeballLoadingAnimation(
@@ -472,7 +476,7 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = AppLocale.cardsCount(displayCount),
+                        text = formatSetCardsCount(displayCount),
                         color = BlueCard,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold
@@ -484,10 +488,6 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
                         fontSize = 10.sp
                     )
                 }
-                Text(
-                    text = set.series, color = TextMuted, fontSize = 11.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
