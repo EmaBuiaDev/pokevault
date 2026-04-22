@@ -925,8 +925,29 @@ fun NewDeckBottomSheetContent(
     val focusManager = LocalFocusManager.current
     val tabs = listOf("Pokémon", "Trainer", "Energia")
 
-    val filteredCards = remember(selectedTabIndex, viewModel.ownedCards) {
-        viewModel.ownedCards
+    val filteredCards = remember(
+        selectedTabIndex,
+        viewModel.ownedCards,
+        viewModel.selectedCardsIds,
+        viewModel.isImportReviewMode
+    ) {
+        val ownedById = viewModel.ownedCards.associateBy { it.id }
+        val deckCardKeys = if (viewModel.isImportReviewMode) {
+            viewModel.selectedCardsIds
+                .mapNotNull { id -> ownedById[id] }
+                .map { viewModel.getCardKey(it) }
+                .toSet()
+        } else {
+            emptySet()
+        }
+
+        val sourceCards = if (viewModel.isImportReviewMode) {
+            viewModel.ownedCards.filter { card -> viewModel.getCardKey(card) in deckCardKeys }
+        } else {
+            viewModel.ownedCards
+        }
+
+        sourceCards
             .filter { card ->
                 val category = card.classify()
                 when (selectedTabIndex) {

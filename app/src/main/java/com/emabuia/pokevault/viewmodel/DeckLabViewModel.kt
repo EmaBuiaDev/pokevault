@@ -67,6 +67,9 @@ class DeckLabViewModel : ViewModel() {
     var validationError by mutableStateOf<String?>(null)
         private set
 
+    var isImportReviewMode by mutableStateOf(false)
+        private set
+
     // Optimized map for quick lookups during UI rendering
     private val cardIdToKeyMap by derivedStateOf {
         ownedCards.associate { it.id to getCardKey(it) }
@@ -285,6 +288,7 @@ class DeckLabViewModel : ViewModel() {
         selectedCardsIds = emptyList()
         coverImageUrl = ""
         coverImageUrls = emptyList()
+        isImportReviewMode = false
         currentAnalysis = DeckAnalysis()
         validationError = null
     }
@@ -360,6 +364,7 @@ class DeckLabViewModel : ViewModel() {
      */
     fun importFromText(text: String): ImportResult {
         resetNewDeckState()
+        isImportReviewMode = true
 
         val parsed = DeckImportParser.parse(text)
         if (parsed.deckName != null) {
@@ -382,6 +387,7 @@ class DeckLabViewModel : ViewModel() {
      */
     fun importFromMetaDeck(metaDeck: MetaDeck): ImportResult {
         resetNewDeckState()
+        isImportReviewMode = true
         newDeckName = metaDeck.archetype ?: metaDeck.player ?: "Deck Importato"
 
         return matchAndPopulate(metaDeck.cards)
