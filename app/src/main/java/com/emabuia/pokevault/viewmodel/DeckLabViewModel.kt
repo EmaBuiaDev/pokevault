@@ -703,7 +703,11 @@ class DeckLabViewModel : ViewModel() {
 
         val found: TcgCard? = try {
             val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(setCode)
-            val direct = pokeTcgRepository
+            val localExact = pokeTcgRepository
+                .findExactCardInCatalog(name, normalizedSet, number)
+                .getOrNull()
+
+            val direct = localExact ?: pokeTcgRepository
                 .searchPokewalletCardByNameSetAndNumber(name, normalizedSet, number)
                 .getOrNull()
 

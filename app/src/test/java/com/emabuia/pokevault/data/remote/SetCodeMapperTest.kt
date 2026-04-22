@@ -12,6 +12,7 @@ class SetCodeMapperTest {
         assertEquals("sv6", SetCodeMapper.normalizeDecklistSetCode("TWM"))
         assertEquals("sv1", SetCodeMapper.normalizeDecklistSetCode("svi"))
         assertEquals("sv10", SetCodeMapper.normalizeDecklistSetCode("DRI"))
+        assertEquals("me03", SetCodeMapper.normalizeDecklistSetCode("POR"))
         assertEquals("sv11", SetCodeMapper.normalizeDecklistSetCode("BLK"))
         assertEquals("sv11", SetCodeMapper.normalizeDecklistSetCode("wht"))
     }
@@ -36,6 +37,18 @@ class SetCodeMapperTest {
                 cardSetName = "Paldean Fates",
                 cardApiSetId = "sv4pt5",
                 cardApiId = "sv4pt5-128"
+            )
+        )
+    }
+
+    @Test
+    fun `matches imported por alias against me03 api set`() {
+        assertTrue(
+            SetCodeMapper.matchesImportedSet(
+                importedSet = "POR",
+                cardSetName = "Perfect Order",
+                cardApiSetId = "ME03",
+                cardApiId = "pk_test"
             )
         )
     }

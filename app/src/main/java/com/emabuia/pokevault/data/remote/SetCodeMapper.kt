@@ -19,6 +19,7 @@ object SetCodeMapper {
         "PRE" to "sv8pt5",
         "JTG" to "sv9",
         "DRI" to "sv10",
+        "POR" to "me03",
         "BLK" to "sv11",
         "WHT" to "sv11",
         "RCL" to "swsh2",

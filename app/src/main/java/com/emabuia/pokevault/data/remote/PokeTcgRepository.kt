@@ -14,6 +14,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
+import java.text.Normalizer
 import java.util.Locale
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -478,6 +479,49 @@ class PokeTcgRepository {
         return Result.success(remoteCard.toTcgCard())
     }
 
+    suspend fun findExactCardInCatalog(
+        name: String?,
+        setCode: String?,
+        number: String?
+    ): Result<TcgCard?> {
+        val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(setCode)
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+            ?: return Result.success(null)
+        val normalizedNumber = extractCardNumber(number.orEmpty())
+            .takeIf { it.isNotBlank() }
+            ?: return Result.success(null)
+        val normalizedName = normalizeNameForLookup(name).takeIf { it.isNotBlank() }
+
+        val candidates = resolveImportedSetCandidates(normalizedSet)
+        if (candidates.isEmpty()) return Result.success(null)
+
+        for (candidate in candidates) {
+            val cachedCards = linkedSetOf<TcgCard>()
+            memoryCards[candidate.id]?.let { cards ->
+                cachedCards += cards.filter { extractCardNumber(it.number) == normalizedNumber }
+            }
+
+            val roomCards = runCatching {
+                db.cardDao().getBySetIdAndNumber(candidate.id, normalizedNumber)
+            }.onFailure { err ->
+                Timber.w(err, "findExactCardInCatalog: errore Room set+numero=%s %s", candidate.id, normalizedNumber)
+            }.getOrDefault(emptyList())
+                .map { it.toTcgCard() }
+            cachedCards += roomCards
+
+            val catalogHit = selectCatalogMatch(cachedCards.toList(), normalizedName)
+            if (catalogHit != null) return Result.success(catalogHit)
+
+            val setCards = getCardsBySet(candidate.id, forceRefresh = false).getOrDefault(emptyList())
+            val exactCards = setCards.filter { extractCardNumber(it.number) == normalizedNumber }
+            val setHit = selectCatalogMatch(exactCards, normalizedName)
+            if (setHit != null) return Result.success(setHit)
+        }
+
+        return Result.success(null)
+    }
+
     suspend fun searchPokewalletCardByNameSetAndNumber(
         name: String,
         setCode: String?,
@@ -494,7 +538,7 @@ class PokeTcgRepository {
         if (cleanName.isBlank()) return Result.success(null)
 
         val exactMatches = mutableListOf<PokeWalletCard>()
-        for (query in buildStrictNameSetNumberQueries(cleanName, normalizedSet, number)) {
+        for (query in buildStrictNameSetNumberQueries(name, normalizedSet, number)) {
             val networkResult = guardedApiCall(resourceKey = "cards:search:strict:$query") {
                 api.search(query = query, page = 1, limit = 30)
             }
@@ -506,7 +550,7 @@ class PokeTcgRepository {
             exactMatches += networkResult.getOrThrow().results.filter { card ->
                 matchesExactNameSetAndNumber(
                     card = card,
-                    expectedName = cleanName,
+                    expectedName = name,
                     expectedSet = normalizedSet,
                     expectedNumber = normalizedNumber
                 )
@@ -520,7 +564,7 @@ class PokeTcgRepository {
         val fallbackMatches = mutableListOf<PokeWalletCard>()
         for (page in 1..3) {
             val networkResult = guardedApiCall(resourceKey = "search:name:$cleanName:$page") {
-                api.search(query = cleanName, page = page, limit = 50)
+                api.search(query = preferredNameQuery(name), page = page, limit = 50)
             }
 
             if (networkResult.isFailure) {
@@ -534,7 +578,7 @@ class PokeTcgRepository {
             val pageMatches = networkResult.getOrThrow().results.filter { card ->
                 matchesExactNameSetAndNumber(
                     card = card,
-                    expectedName = cleanName,
+                    expectedName = name,
                     expectedSet = normalizedSet,
                     expectedNumber = normalizedNumber
                 )
@@ -819,16 +863,32 @@ class PokeTcgRepository {
 
     private suspend fun buildStrictNameSetNumberQueries(name: String, setCode: String, rawNumber: String?): List<String> {
         val setTokens = SetCodeMapper.searchTokensForSetQuery(setCode)
+        val nameVariants = buildNameQueryVariants(name)
         val numberVariants = buildNumberVariants(rawNumber)
         val queries = linkedSetOf<String>()
-        setTokens.forEach { token ->
-            numberVariants.forEach { number ->
-                queries += "$name $token $number"
-                queries += "$token $number $name"
-                queries += "$token $name $number"
+        nameVariants.forEach { variant ->
+            setTokens.forEach { token ->
+                numberVariants.forEach { number ->
+                    queries += "$variant $token $number"
+                    queries += "$token $number $variant"
+                    queries += "$token $variant $number"
+                }
             }
         }
         return queries.toList()
+    }
+
+    private fun buildNameQueryVariants(rawName: String): List<String> {
+        val original = sanitizeQuery(rawName)
+        val normalized = normalizeNameForLookup(rawName)
+        val titleCased = normalized
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { token -> token.replaceFirstChar { it.uppercase() } }
+
+        return linkedSetOf(original, titleCased)
+            .filter { it.isNotBlank() }
+            .toList()
     }
 
     private fun buildNumberVariants(rawNumber: String?): List<String> {
@@ -860,7 +920,7 @@ class PokeTcgRepository {
         expectedNumber: String
     ): Boolean {
         if (!matchesExactSetAndNumber(card, expectedSet, expectedNumber)) return false
-        return sanitizeQuery(card.cardInfo?.name.orEmpty()).equals(expectedName, ignoreCase = true)
+        return normalizeNameForLookup(card.cardInfo?.name.orEmpty()) == normalizeNameForLookup(expectedName)
     }
 
     private suspend fun rankStrictMatches(cards: List<PokeWalletCard>): List<PokeWalletCard> {
@@ -895,6 +955,33 @@ class PokeTcgRepository {
             ?.groupValues
             ?.getOrNull(1)
             ?.takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun resolveImportedSetCandidates(canonicalSetCode: String): List<TcgSet> {
+        val sets = memorySets
+            ?: loadSetsFromRoom(ignoreExpiry = true)
+            ?: getSets(forceRefresh = false).getOrDefault(emptyList())
+
+        return sets.filter { set ->
+            val setRef = extractSetRefFromImageUrl(set.images.symbol)
+                ?: extractSetRefFromImageUrl(set.images.logo)
+                ?: return@filter false
+            SetCodeMapper.normalizeDecklistSetCode(setRef)?.lowercase() == canonicalSetCode
+        }.sortedByDescending { parseReleaseDateToEpoch(it.releaseDate) }
+    }
+
+    private fun selectCatalogMatch(cards: List<TcgCard>, normalizedName: String?): TcgCard? {
+        if (cards.isEmpty()) return null
+        return if (normalizedName != null) {
+            cards.firstOrNull { normalizeNameForLookup(it.name) == normalizedName }
+                ?: cards.firstOrNull { normalizeNameForLookup(it.name).contains(normalizedName) }
+        } else {
+            cards.firstOrNull()
+        }
+    }
+
+    private fun preferredNameQuery(rawName: String): String {
+        return buildNameQueryVariants(rawName).firstOrNull().orEmpty()
     }
 
     // ── Room Cache Layer ──────────────────────────────────────────────
@@ -971,6 +1058,17 @@ class PokeTcgRepository {
 
     private fun sanitizeQuery(raw: String): String {
         return raw.replace(SANITIZE_MULTI_SPACE, " ").trim()
+    }
+
+    private fun normalizeNameForLookup(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        val deCamel = raw.replace(Regex("([a-z])([A-Z])"), "$1 $2")
+        val normalized = Normalizer.normalize(deCamel, Normalizer.Form.NFD)
+            .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+            .lowercase()
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
+        return sanitizeQuery(normalized)
     }
 
     private fun extractCardNumber(number: String): String {
