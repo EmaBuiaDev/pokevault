@@ -45,7 +45,8 @@ class PokeWalletRepository {
         setCode: String,
         cardNumber: String
     ): Result<PokeWalletPriceData> {
-        if (BuildConfig.POKEWALLET_API_KEY.isBlank()) {
+        val proxyEnabled = BuildConfig.POKEWALLET_PROXY_ENABLED && BuildConfig.POKEWALLET_PROXY_URL.isNotBlank()
+        if (!proxyEnabled && BuildConfig.POKEWALLET_API_KEY.isBlank()) {
             return Result.failure(IllegalStateException("POKEWALLET_API_KEY not configured"))
         }
 
