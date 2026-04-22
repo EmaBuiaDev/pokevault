@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
@@ -20,12 +21,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.time.LocalDate
+import java.util.Locale
+
+data class SeriesSetsGroup(
+    val seriesKey: String,
+    val seriesLabel: String,
+    val sets: List<TcgSet>
+)
+
+data class LanguageMacroGroup(
+    val macro: String,
+    val seriesGroups: List<SeriesSetsGroup>
+)
 
 data class SetsUiState(
     val allSets: List<TcgSet> = emptyList(),
     val filteredSets: List<TcgSet> = emptyList(),
     val selectedLanguageMacro: String = "ENG",
+    val languageCountByMacro: Map<String, Int> = emptyMap(),
+    val macroGroups: List<LanguageMacroGroup> = emptyList(),
     val seriesList: List<String> = emptyList(),
+    val seriesCountByLabel: Map<String, Int> = emptyMap(),
     val selectedSeries: String? = null,
     val searchQuery: String = "",
     val cardSearchQuery: String = "",
@@ -44,6 +60,25 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     private val firestoreRepository = FirestoreRepository()
     private var searchJob: Job? = null
     private var setSearchJob: Job? = null
+
+    private val languageMacros = listOf("ENG", "JAP", "CHN")
+    private val officialSeriesOrder = listOf(
+        "Mega Evolutions",
+        "Scarlet & Violet",
+        "Sword & Shield",
+        "Sun & Moon",
+        "XY",
+        "Black & White",
+        "HeartGold & SoulSilver",
+        "Platinum",
+        "Diamond & Pearl",
+        "EX",
+        "e-Card",
+        "Neo",
+        "Gym",
+        "Base",
+        "Other"
+    )
 
     var uiState by mutableStateOf(SetsUiState())
         private set
@@ -192,22 +227,42 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun applyFilters() {
-        val scopedSets = uiState.allSets.filter { set ->
-            set.language == uiState.selectedLanguageMacro
+        val languageCountByMacro = languageMacros.associateWith { macro ->
+            uiState.allSets.count { it.language == macro }
         }
-        val scopedSeries = buildSeriesListByLatestRelease(scopedSets)
+        val macroGroups = buildMacroGroups(uiState.allSets)
+        val selectedMacroGroup = macroGroups.firstOrNull { it.macro == uiState.selectedLanguageMacro }
+            ?: macroGroups.firstOrNull()
+        val selectedMacro = selectedMacroGroup?.macro ?: uiState.selectedLanguageMacro
+
+        val scopedSeriesGroups = selectedMacroGroup?.seriesGroups.orEmpty()
+        val scopedSeries = scopedSeriesGroups
+            .filter { it.sets.isNotEmpty() }
+            .map { it.seriesLabel }
+        val seriesCountByLabel = scopedSeriesGroups
+            .associate { it.seriesLabel to it.sets.size }
+            .filterValues { it > 0 }
         val selectedSeries = uiState.selectedSeries?.takeIf { it in scopedSeries }
 
-        val filtered = scopedSets.filter { set ->
+        val selectedSeriesSets = if (selectedSeries == null) {
+            scopedSeriesGroups.flatMap { it.sets }
+        } else {
+            scopedSeriesGroups.firstOrNull { it.seriesLabel == selectedSeries }?.sets.orEmpty()
+        }
+
+        val filtered = selectedSeriesSets.filter { set ->
             val matchesSearch = uiState.searchQuery.isBlank() ||
                 set.name.contains(uiState.searchQuery, ignoreCase = true) ||
                 set.series.contains(uiState.searchQuery, ignoreCase = true)
-            val matchesSeries = selectedSeries == null ||
-                set.series == selectedSeries
-            matchesSearch && matchesSeries
+            matchesSearch
         }
+
         uiState = uiState.copy(
+            selectedLanguageMacro = selectedMacro,
+            languageCountByMacro = languageCountByMacro,
+            macroGroups = macroGroups,
             seriesList = scopedSeries,
+            seriesCountByLabel = seriesCountByLabel,
             selectedSeries = selectedSeries,
             filteredSets = filtered
         )
@@ -231,17 +286,53 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun buildSeriesListByLatestRelease(sets: List<TcgSet>): List<String> {
-        return sets
-            .groupBy { it.series }
-            .entries
-            .sortedWith(
-                compareBy<Map.Entry<String, List<TcgSet>>> { it.key.equals("Altro", ignoreCase = true) }
-                    .thenByDescending { (_, groupedSets) ->
-                        groupedSets.maxOfOrNull { parseReleaseDate(it.releaseDate) } ?: LocalDate.MIN
-                    }
-            )
-            .map { it.key }
+    private fun buildMacroGroups(allSets: List<TcgSet>): List<LanguageMacroGroup> {
+        return languageMacros.map { macro ->
+            val setsInMacro = allSets.filter { it.language == macro }
+            val groupedByCanonicalSeries = setsInMacro.groupBy { set ->
+                canonicalSeries(set.series)
+            }
+            val orderedSeriesGroups = officialSeriesOrder.map { canonicalSeries ->
+                val orderedSets = groupedByCanonicalSeries[canonicalSeries]
+                    .orEmpty()
+                    .sortedByDescending { parseReleaseDate(it.releaseDate) }
+                SeriesSetsGroup(
+                    seriesKey = canonicalSeries,
+                    seriesLabel = ItalianTranslations.translateSeriesName(canonicalSeries),
+                    sets = orderedSets
+                )
+            }
+            LanguageMacroGroup(macro = macro, seriesGroups = orderedSeriesGroups)
+        }
+    }
+
+    private fun canonicalSeries(raw: String): String {
+        val normalized = raw
+            .trim()
+            .lowercase(Locale.ROOT)
+            .replace("&", " and ")
+            .replace(Regex("[^a-z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        return when {
+            normalized in setOf("mega evolution", "mega evolutions", "mega evoluzione") -> "Mega Evolutions"
+            normalized in setOf("scarlet and violet", "scarlatto e violetto", "scarlatto e violetto") -> "Scarlet & Violet"
+            normalized in setOf("sword and shield", "spada e scudo") -> "Sword & Shield"
+            normalized in setOf("sun and moon", "sole e luna") -> "Sun & Moon"
+            normalized == "xy" -> "XY"
+            normalized in setOf("black and white", "nero e bianco") -> "Black & White"
+            normalized == "heartgold and soulsilver" || normalized == "heartgold soulsilver" -> "HeartGold & SoulSilver"
+            normalized == "platinum" || normalized == "platino" -> "Platinum"
+            normalized in setOf("diamond and pearl", "diamante e perla") -> "Diamond & Pearl"
+            normalized == "ex" -> "EX"
+            normalized in setOf("e card", "ecard") -> "e-Card"
+            normalized == "neo" -> "Neo"
+            normalized == "gym" -> "Gym"
+            normalized == "base" || normalized == "legendary collection" -> "Base"
+            normalized == "other" || normalized == "altro" -> "Other"
+            else -> "Other"
+        }
     }
 
     private fun parseReleaseDate(raw: String): LocalDate {

@@ -85,36 +85,36 @@ class SeriesDerivationTest {
     }
 
     @Test
-    fun `maps evolution collection group`() {
+    fun `maps evolution collection group to altro`() {
         val series = repository.deriveSeriesName(
             setCode = "EVOC",
             language = "eng",
             setName = "Evolutions Collection 2026"
         )
 
-        assertEquals("EvolutionCollection", series)
+        assertEquals("Altro", series)
     }
 
     @Test
-    fun `maps play pokemon prize packs group`() {
+    fun `maps play pokemon prize packs group to altro`() {
         val series = repository.deriveSeriesName(
             setCode = "PPS7",
             language = "eng",
             setName = "Play! Pokemon Prize Pack Series 7"
         )
 
-        assertEquals("PlayPokemon", series)
+        assertEquals("Altro", series)
     }
 
     @Test
-    fun `maps trick or treat group`() {
+    fun `maps trick or treat group to altro`() {
         val series = repository.deriveSeriesName(
             setCode = "TOT24",
             language = "eng",
             setName = "Trick or Trade 2024"
         )
 
-        assertEquals("TrickOrTreat", series)
+        assertEquals("Altro", series)
     }
 
     @Test
@@ -162,14 +162,14 @@ class SeriesDerivationTest {
     }
 
     @Test
-    fun `maps world championships by name`() {
+    fun `maps world championships by name to altro`() {
         val series = repository.deriveSeriesName(
             setCode = "",
             language = "eng",
             setName = "World Championships Deck 2024"
         )
 
-        assertEquals("Campionati Mondiali", series)
+        assertEquals("Altro", series)
     }
 
     @Test

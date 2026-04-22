@@ -55,11 +55,15 @@ private object MissingSetLogoRegistry {
 
     fun isMissing(url: String): Boolean = missingUrls.contains(url)
 
-    fun markMissing(url: String) {
-        if (url.isNotBlank()) {
-            missingUrls.add(url)
-        }
+    fun markMissing(url: String): Boolean {
+        if (url.isBlank()) return false
+        return missingUrls.add(url)
     }
+}
+
+private fun isFallbackSetLogo(set: TcgSet): Boolean {
+    val logoUrl = set.images.logo.trim()
+    return logoUrl.isBlank() || MissingSetLogoRegistry.isMissing(logoUrl)
 }
 
 // Formatta data
@@ -172,6 +176,7 @@ fun SetsListScreen(
     val state = viewModel.uiState
     var isSearchingCards by remember { mutableStateOf(false) }
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
+    var logoOrderVersion by remember { mutableIntStateOf(0) }
     val haptic = LocalHapticFeedback.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -299,7 +304,7 @@ fun SetsListScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(languageMacros) { macro ->
-                    val count = state.allSets.count { it.language == macro }
+                    val count = state.languageCountByMacro[macro] ?: 0
                     SeriesFilterChip(
                         label = macro,
                         count = count,
@@ -317,7 +322,7 @@ fun SetsListScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
-                    val languageCount = state.allSets.count { it.language == state.selectedLanguageMacro }
+                    val languageCount = state.languageCountByMacro[state.selectedLanguageMacro] ?: 0
                     SeriesFilterChip(
                         label = AppLocale.all,
                         count = languageCount,
@@ -326,9 +331,7 @@ fun SetsListScreen(
                     )
                 }
                 items(state.seriesList) { series ->
-                    val count = state.allSets.count {
-                        it.language == state.selectedLanguageMacro && it.series == series
-                    }
+                    val count = state.seriesCountByLabel[series] ?: 0
                     SeriesFilterChip(
                         label = series,
                         count = count,
@@ -368,16 +371,21 @@ fun SetsListScreen(
                     }
                 }
             } else {
+                val displayedSets = remember(state.filteredSets, logoOrderVersion) {
+                    state.filteredSets.sortedBy { isFallbackSetLogo(it) }
+                }
+
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(items = state.filteredSets, key = { it.id }) { set ->
+                    items(items = displayedSets, key = { it.id }) { set ->
                         SetCard(
                             set = set,
-                            onClick = { onSetClick(set.id) }
+                            onClick = { onSetClick(set.id) },
+                            onLogoMarkedMissing = { logoOrderVersion++ }
                         )
                     }
                 }
@@ -446,7 +454,7 @@ fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: ()
 
 // ── Set Card con logo, nome e data formattata ──
 @Composable
-fun SetCard(set: TcgSet, onClick: () -> Unit) {
+fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoMarkedMissing: () -> Unit = {}) {
     val logoUrl = set.images.logo.trim()
     val shouldLoadLogo = logoUrl.isNotBlank() && !MissingSetLogoRegistry.isMissing(logoUrl)
 
@@ -487,7 +495,9 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
                             )
                         },
                         error = {
-                            MissingSetLogoRegistry.markMissing(logoUrl)
+                            if (MissingSetLogoRegistry.markMissing(logoUrl)) {
+                                onLogoMarkedMissing()
+                            }
                             MissingSetLogoFallback(setName = set.name)
                         }
                     )

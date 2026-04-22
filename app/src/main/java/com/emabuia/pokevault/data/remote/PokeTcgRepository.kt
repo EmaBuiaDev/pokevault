@@ -93,10 +93,6 @@ class PokeTcgRepository {
         private val MEGA_EVOLUTION_SET_CODES = setOf("MEG", "PFL", "ASC", "POR", "CRI")
         private val MEGA_EVOLUTION_CODE_PATTERN = Regex("^ME\\d+$")
         private val SCARLET_VIOLET_SET_CODES = setOf("BLK", "WHT")
-        private val PLAY_POKEMON_CODE_PATTERN = Regex("^(POP\\d+|PPS\\d+)$")
-        private val BASE_ENERGY_SET_CODES = setOf("SVE", "MEE")
-        private val PROMO_SET_CODES = setOf("WP", "NP", "DPP", "HSP", "BWP", "XYP", "SMP", "SVP", "MEP")
-        private val MCDONALD_COLLECTION_CODE_PATTERN = Regex("^M\\d{2}$")
         private val LEGACY_CODE_TO_SERIES = mapOf(
             "BS" to "Base",
             "JU" to "Base",
@@ -109,7 +105,7 @@ class PokeTcgRepository {
             "N2" to "Neo",
             "N3" to "Neo",
             "N4" to "Neo",
-            "LC" to "Legendary Collection",
+            "LC" to "Base",
             "EX" to "e-Card",
             "AQ" to "e-Card",
             "SK" to "e-Card",
@@ -155,7 +151,6 @@ class PokeTcgRepository {
             "PLF" to "Black & White",
             "PLB" to "Black & White",
             "LTR" to "Black & White",
-            "KSS" to "XY",
             "FLF" to "XY",
             "FFI" to "XY",
             "PHF" to "XY",
@@ -194,11 +189,9 @@ class PokeTcgRepository {
             "BST" to "Sword & Shield",
             "CRE" to "Sword & Shield",
             "EVS" to "Sword & Shield",
-            "CEL" to "Sword & Shield",
             "FST" to "Sword & Shield",
             "BRS" to "Sword & Shield",
             "ASR" to "Sword & Shield",
-            "PGO" to "Sword & Shield",
             "LOR" to "Sword & Shield",
             "SIT" to "Sword & Shield",
             "CRZ" to "Sword & Shield"
@@ -953,24 +946,6 @@ class PokeTcgRepository {
                 name.contains("fuoco bianco") ||
                 name.contains("black bolt") ||
                 name.contains("luce nera")
-        val isPlayPokemonByName =
-            name.contains("play pokemon") ||
-                name.contains("play! pokemon") ||
-                name.contains("busta premio") ||
-                name.contains("prize pack") ||
-                name.contains("pop serie")
-        val isTrickOrTreatByName =
-            name.contains("trick or trade") ||
-                name.contains("trick-or-trade") ||
-                name.contains("trick or treat") ||
-                name.contains("trickortreat")
-        val isEvolutionCollectionByName =
-            (name.contains("evolution") && name.contains("collection")) ||
-                name.contains("evolutions collection") ||
-                name.contains("collezione evoluzioni")
-        val isMcDonaldsByName =
-            name.contains("mcdonald") ||
-                name.contains("mcdonald's")
         val isGymByName =
             name.contains("gym heroes") ||
                 name.contains("gym challenge") ||
@@ -985,23 +960,23 @@ class PokeTcgRepository {
             name.contains("expedition") ||
                 name.contains("aquapolis") ||
                 name.contains("skyridge")
+        val isBaseByName =
+            name.contains("base set") ||
+                name == "jungle" ||
+                name == "fossil" ||
+                name.contains("base set 2") ||
+                name.contains("team rocket") ||
+                name.contains("legendary collection")
         val exactLegacySeries = LEGACY_CODE_TO_SERIES[code]
 
         val series = when {
             code in MEGA_EVOLUTION_SET_CODES || MEGA_EVOLUTION_CODE_PATTERN.matches(code) -> "Mega Evolutions"
             isMegaByName -> "Mega Evolutions"
-            name.contains("world championship") -> "World Championships"
             exactLegacySeries != null -> exactLegacySeries
             isGymByName -> "Gym"
             isNeoByName -> "Neo"
-            isLegendaryCollectionByName -> "Legendary Collection"
             isECardByName -> "e-Card"
-            code in BASE_ENERGY_SET_CODES || name.contains("energie base") || name.contains("base energie") || name.contains("basic energy") -> "Base Energy"
-            code in PROMO_SET_CODES || name.contains("black star") || name.contains("promo") -> "Promos"
-            PLAY_POKEMON_CODE_PATTERN.matches(code) || isPlayPokemonByName -> "PlayPokemon"
-            isTrickOrTreatByName -> "TrickOrTreat"
-            isEvolutionCollectionByName -> "EvolutionCollection"
-            MCDONALD_COLLECTION_CODE_PATTERN.matches(code) || isMcDonaldsByName -> "McDonaldsCollection"
+            isLegendaryCollectionByName || isBaseByName -> "Base"
             normalizedCode in SCARLET_VIOLET_SET_CODES -> "Scarlet & Violet"
             isScarletVioletByName -> "Scarlet & Violet"
             normalizedCode.startsWith("SV") -> "Scarlet & Violet"
