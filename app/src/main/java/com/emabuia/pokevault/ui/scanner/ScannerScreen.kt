@@ -57,6 +57,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -74,6 +75,61 @@ import java.util.concurrent.Executors
  * Usato per calcolare la zona di scansione.
  */
 private const val CARD_ASPECT_RATIO = 63f / 88f // ~0.716
+
+private fun safeImageUrl(url: String): String {
+    return url
+        .replace(" ", "%20")
+        .replace("(", "%28")
+        .replace(")", "%29")
+}
+
+@Composable
+private fun ScannerCardImageFallback(
+    card: com.emabuia.pokevault.data.remote.TcgCard,
+    compact: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val titleSize = if (compact) 8.sp else 10.sp
+    val detailSize = if (compact) 7.sp else 8.sp
+    val series = card.set?.series?.takeIf { it.isNotBlank() } ?: "-"
+    val setName = card.set?.name?.takeIf { it.isNotBlank() } ?: "-"
+
+    Box(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+            .padding(if (compact) 4.dp else 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = card.name,
+                color = Color.White,
+                fontSize = titleSize,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = series,
+                color = Color.White.copy(alpha = 0.8f),
+                fontSize = detailSize,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = setName,
+                color = Color.White.copy(alpha = 0.8f),
+                fontSize = detailSize,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -266,13 +322,20 @@ fun ScannerScreen(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AsyncImage(
-                            model = card.images.small,
+                        SubcomposeAsyncImage(
+                            model = safeImageUrl(card.images.small),
                             contentDescription = card.name,
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .height(60.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(8.dp)),
+                            error = {
+                                ScannerCardImageFallback(
+                                    card = card,
+                                    compact = true,
+                                    modifier = Modifier.height(60.dp)
+                                )
+                            }
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -345,13 +408,20 @@ private fun CandidateCardPicker(
                     .padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AsyncImage(
-                    model = card.images.small,
+                SubcomposeAsyncImage(
+                    model = safeImageUrl(card.images.small),
                     contentDescription = card.name,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .height(72.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(8.dp)),
+                    error = {
+                        ScannerCardImageFallback(
+                            card = card,
+                            compact = true,
+                            modifier = Modifier.height(72.dp)
+                        )
+                    }
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -434,13 +504,20 @@ private fun PendingCardConfirmation(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = card.images.small,
+            SubcomposeAsyncImage(
+                model = safeImageUrl(card.images.small),
                 contentDescription = card.name,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .height(100.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(8.dp)),
+                error = {
+                    ScannerCardImageFallback(
+                        card = card,
+                        compact = false,
+                        modifier = Modifier.height(100.dp)
+                    )
+                }
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {

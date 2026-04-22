@@ -227,10 +227,12 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun applyFilters() {
+        val displayableSets = uiState.allSets.filter(::isDisplayableExpansion)
+
         val languageCountByMacro = languageMacros.associateWith { macro ->
-            uiState.allSets.count { it.language == macro }
+            displayableSets.count { it.language == macro }
         }
-        val macroGroups = buildMacroGroups(uiState.allSets)
+        val macroGroups = buildMacroGroups(displayableSets)
         val selectedMacroGroup = macroGroups.firstOrNull { it.macro == uiState.selectedLanguageMacro }
             ?: macroGroups.firstOrNull()
         val selectedMacro = selectedMacroGroup?.macro ?: uiState.selectedLanguageMacro
@@ -333,6 +335,15 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             normalized == "other" || normalized == "altro" -> "Other"
             else -> "Other"
         }
+    }
+
+    private fun isDisplayableExpansion(set: TcgSet): Boolean {
+        val normalizedName = set.name.trim().lowercase(Locale.ROOT)
+        if (normalizedName == "gym yeld" || normalizedName == "gym yield") {
+            return false
+        }
+        // Hide empty expansions: both printed and effective total are zero.
+        return set.printedTotal > 0 || set.total > 0
     }
 
     private fun parseReleaseDate(raw: String): LocalDate {

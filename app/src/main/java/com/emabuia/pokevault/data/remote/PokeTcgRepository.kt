@@ -15,6 +15,8 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.Locale
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
@@ -887,7 +889,13 @@ class PokeTcgRepository {
     }
 
     private fun buildCardImageUrl(cardId: String, size: String): String {
-        return "${PokeWalletRetrofitClient.imageBaseUrl}images/$cardId?size=$size"
+        val encodedCardId = encodeUrlPathSegment(cardId)
+        return "${PokeWalletRetrofitClient.imageBaseUrl}images/$encodedCardId?size=$size"
+    }
+
+    private fun encodeUrlPathSegment(value: String): String {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8.toString())
+            .replace("+", "%20")
     }
 
     private fun buildSetImageUrl(setRef: String): String {

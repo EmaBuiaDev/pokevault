@@ -24,15 +24,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.model.GoalAlbum
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
@@ -41,6 +39,56 @@ import com.emabuia.pokevault.viewmodel.GoalAlbumViewModel
 import com.emabuia.pokevault.viewmodel.GoalProgress
 
 private enum class ChaseTab { ALL, OWNED, MISSING, DUPLICATES }
+
+private fun safeImageUrl(url: String): String {
+    return url
+        .replace(" ", "%20")
+        .replace("(", "%28")
+        .replace(")", "%29")
+}
+
+@Composable
+private fun CardImageFallback(card: TcgCard) {
+    val series = card.set?.series?.takeIf { it.isNotBlank() } ?: "-"
+    val setName = card.set?.name?.takeIf { it.isNotBlank() } ?: "-"
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.72f)
+            .background(DarkSurface)
+            .padding(6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = card.name,
+                color = TextWhite,
+                fontSize = 10.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = series,
+                color = TextMuted,
+                fontSize = 8.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = setName,
+                color = TextMuted,
+                fontSize = 8.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -294,16 +342,14 @@ private fun ChaseCardItem(card: TcgCard, isOwned: Boolean, onAddTap: () -> Unit)
             .clip(RoundedCornerShape(10.dp))
             .clickable(enabled = !isOwned, onClick = onAddTap)
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(card.images.small)
-                .crossfade(true)
-                .build(),
+        SubcomposeAsyncImage(
+            model = safeImageUrl(card.images.small),
             contentDescription = card.name,
             contentScale = ContentScale.FillWidth,
             modifier = Modifier
                 .fillMaxWidth()
-                .alpha(if (isOwned) 1f else 0.35f)
+                .alpha(if (isOwned) 1f else 0.35f),
+            error = { CardImageFallback(card) }
         )
         if (!isOwned) {
             Box(

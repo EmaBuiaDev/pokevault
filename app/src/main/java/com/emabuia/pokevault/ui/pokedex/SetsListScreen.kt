@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -177,8 +178,15 @@ fun SetsListScreen(
     var isSearchingCards by remember { mutableStateOf(false) }
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     var logoOrderVersion by remember { mutableIntStateOf(0) }
+    val setsGridState = rememberLazyGridState()
     val haptic = LocalHapticFeedback.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(isSearchingCards, state.selectedLanguageMacro, state.selectedSeries, state.searchQuery) {
+        if (!isSearchingCards && state.filteredSets.isNotEmpty()) {
+            setsGridState.scrollToItem(0)
+        }
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -376,6 +384,7 @@ fun SetsListScreen(
                 }
 
                 LazyVerticalGrid(
+                    state = setsGridState,
                     columns = GridCells.Fixed(2),
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),

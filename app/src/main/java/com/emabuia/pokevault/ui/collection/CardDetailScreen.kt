@@ -23,9 +23,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -36,6 +39,53 @@ import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
+private fun safeImageUrl(url: String): String {
+    return url
+        .replace(" ", "%20")
+        .replace("(", "%28")
+        .replace(")", "%29")
+}
+
+@Composable
+private fun CollectionDetailImageFallback(card: PokemonCard) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkCard)
+            .padding(12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = card.name,
+                color = TextWhite,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "-",
+                color = TextMuted,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = card.set.ifBlank { "-" },
+                color = TextMuted,
+                fontSize = 12.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -240,16 +290,15 @@ fun CardDetailScreen(
                         .background(DarkCard)
                 ) {
                     if (currentCard.imageUrl.isNotBlank()) {
-                        AsyncImage(
-                            model = currentCard.imageUrl,
+                        SubcomposeAsyncImage(
+                            model = safeImageUrl(currentCard.imageUrl),
                             contentDescription = currentCard.name,
                             contentScale = ContentScale.FillBounds,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            error = { CollectionDetailImageFallback(currentCard) }
                         )
                     } else {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(getTypeEmojiForCollection(currentCard.type), fontSize = 64.sp)
-                        }
+                        CollectionDetailImageFallback(currentCard)
                     }
                     
                     Box(

@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.Wishlist
@@ -65,6 +66,58 @@ fun formatReleaseDate(date: String): String {
     }
 }
 
+@Composable
+private fun CardImageFallback(
+    card: TcgCard,
+    compact: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val titleSize = if (compact) 8.sp else 10.sp
+    val detailSize = if (compact) 7.sp else 8.sp
+    val setSeries = card.set?.series?.takeIf { it.isNotBlank() } ?: "-"
+    val setName = card.set?.name?.takeIf { it.isNotBlank() } ?: "-"
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(DarkSurface)
+            .padding(if (compact) 4.dp else 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = card.name,
+                color = TextWhite,
+                fontSize = titleSize,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = setSeries,
+                color = TextMuted,
+                fontSize = detailSize,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = setName,
+                color = TextMuted,
+                fontSize = detailSize,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
 private fun resolveDisplayPrice(card: TcgCard): Double? {
     return card.cardmarket?.prices?.averageSellPrice
         ?: card.cardmarket?.prices?.lowPrice
@@ -72,6 +125,13 @@ private fun resolveDisplayPrice(card: TcgCard): Double? {
 
 private fun formatPriceEur(price: Double): String {
     return "€ ${String.format(Locale.ITALY, "%.2f", price)}"
+}
+
+private fun safeImageUrl(url: String): String {
+    return url
+        .replace(" ", "%20")
+        .replace("(", "%28")
+        .replace(")", "%29")
 }
 
 private val ITALIAN_TYPE_MAP = mapOf(
@@ -1007,16 +1067,15 @@ fun TcgCardCompactItem(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
         ) {
             if (card.images.small.isNotBlank()) {
-                AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                SubcomposeAsyncImage(
+                    model = safeImageUrl(card.images.small),
+                    contentDescription = card.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    error = { CardImageFallback(card = card, compact = false) }
+                )
             } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(DarkSurface),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No image", color = TextMuted, fontSize = 10.sp)
-                }
+                CardImageFallback(card = card, compact = false)
             }
 
             if (!isOwned && !isSelected && !isAdding) Box(modifier = Modifier
@@ -1261,16 +1320,15 @@ fun TcgCardListRow(
             .height(63.dp)
             .clip(RoundedCornerShape(6.dp))) {
             if (card.images.small.isNotBlank()) {
-                AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                SubcomposeAsyncImage(
+                    model = safeImageUrl(card.images.small),
+                    contentDescription = card.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    error = { CardImageFallback(card = card, compact = true) }
+                )
             } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(DarkSurface),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No image", color = TextMuted, fontSize = 9.sp, textAlign = TextAlign.Center)
-                }
+                CardImageFallback(card = card, compact = true)
             }
             if (!isOwned) Box(modifier = Modifier
                 .fillMaxSize()

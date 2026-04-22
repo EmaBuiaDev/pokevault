@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.home.components.SearchBar
 import com.emabuia.pokevault.ui.theme.*
@@ -50,6 +51,58 @@ import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import com.emabuia.pokevault.viewmodel.CollectionViewModel
 import com.emabuia.pokevault.viewmodel.SortOrder
 import com.emabuia.pokevault.viewmodel.SupertypeFilter
+
+private fun safeImageUrl(url: String): String {
+    return url
+        .replace(" ", "%20")
+        .replace("(", "%28")
+        .replace(")", "%29")
+}
+
+@Composable
+private fun CollectionCardImageFallback(card: PokemonCard, compact: Boolean) {
+    val titleSize = if (compact) 8.sp else 10.sp
+    val detailSize = if (compact) 7.sp else 8.sp
+    val series = "-"
+    val setName = card.set.ifBlank { "-" }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkSurface)
+            .padding(if (compact) 4.dp else 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = card.name,
+                color = TextWhite,
+                fontSize = titleSize,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = series,
+                color = TextMuted,
+                fontSize = detailSize,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = setName,
+                color = TextMuted,
+                fontSize = detailSize,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -580,16 +633,15 @@ fun CollectionCardGridItem(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         if (card.imageUrl.isNotBlank()) {
-            AsyncImage(
-                model = card.imageUrl,
+            SubcomposeAsyncImage(
+                model = safeImageUrl(card.imageUrl),
                 contentDescription = card.name,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                error = { CollectionCardImageFallback(card = card, compact = gridColumns > 4) }
             )
         } else {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(getTypeEmojiForCollection(card.type), fontSize = if (gridColumns > 4) 16.sp else 32.sp)
-            }
+            CollectionCardImageFallback(card = card, compact = gridColumns > 4)
         }
 
         if (isSelected) Box(modifier = Modifier
@@ -667,14 +719,15 @@ fun CollectionCardListItem(
         }
 
         if (card.imageUrl.isNotBlank()) {
-            AsyncImage(
-                model = card.imageUrl,
+            SubcomposeAsyncImage(
+                model = safeImageUrl(card.imageUrl),
                 contentDescription = card.name,
-                modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp))
+                modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp)),
+                error = { CollectionCardImageFallback(card = card, compact = true) }
             )
         } else {
-            Box(modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp)).background(DarkSurface), contentAlignment = Alignment.Center) {
-                Text(getTypeEmojiForCollection(card.type), fontSize = 24.sp)
+            Box(modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp))) {
+                CollectionCardImageFallback(card = card, compact = true)
             }
         }
         Column(modifier = Modifier.weight(1f)) {

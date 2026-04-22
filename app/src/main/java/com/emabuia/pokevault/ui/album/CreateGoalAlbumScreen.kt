@@ -27,11 +27,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.GoalCriteriaType
 import com.emabuia.pokevault.data.remote.TcgCard
@@ -40,6 +42,59 @@ import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.GoalAlbumViewModel
+
+private fun safeImageUrl(url: String): String {
+    return url
+        .replace(" ", "%20")
+        .replace("(", "%28")
+        .replace(")", "%29")
+}
+
+@Composable
+private fun GoalCardImageFallback(card: TcgCard, compact: Boolean) {
+    val titleSize = if (compact) 7.sp else 9.sp
+    val detailSize = if (compact) 6.sp else 7.sp
+    val series = card.set?.series?.takeIf { it.isNotBlank() } ?: "-"
+    val setName = card.set?.name?.takeIf { it.isNotBlank() } ?: "-"
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.72f)
+            .background(DarkSurface)
+            .padding(if (compact) 4.dp else 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = card.name,
+                color = TextWhite,
+                fontSize = titleSize,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = series,
+                color = TextMuted,
+                fontSize = detailSize,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = setName,
+                color = TextMuted,
+                fontSize = detailSize,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -425,14 +480,12 @@ private fun CustomCardSearch(viewModel: GoalAlbumViewModel) {
                                 viewModel.formCriteriaValue = selectedIds.joinToString(",")
                             }
                     ) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(card.images.small)
-                                .crossfade(true)
-                                .build(),
+                        SubcomposeAsyncImage(
+                            model = safeImageUrl(card.images.small),
                             contentDescription = card.name,
                             contentScale = ContentScale.FillWidth,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            error = { GoalCardImageFallback(card = card, compact = false) }
                         )
                     }
                 }
@@ -467,16 +520,14 @@ private fun PreviewSection(cards: List<TcgCard>) {
             userScrollEnabled = false
         ) {
             itemsIndexed(cards.take(12), key = { _, c -> c.id }) { _, card ->
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(card.images.small)
-                        .crossfade(true)
-                        .build(),
+                SubcomposeAsyncImage(
+                    model = safeImageUrl(card.images.small),
                     contentDescription = card.name,
                     contentScale = ContentScale.FillWidth,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(6.dp)),
+                    error = { GoalCardImageFallback(card = card, compact = true) }
                 )
             }
         }

@@ -38,11 +38,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.pokedex.CardDetailBottomSheet
 import com.emabuia.pokevault.ui.theme.DarkBackground
@@ -58,6 +59,55 @@ import com.emabuia.pokevault.viewmodel.WishlistViewModel
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.rememberCoroutineScope
+
+private fun safeImageUrl(url: String): String {
+    return url
+        .replace(" ", "%20")
+        .replace("(", "%28")
+        .replace(")", "%29")
+}
+
+@Composable
+private fun WishlistCardImageFallback(card: TcgCard) {
+    val series = card.set?.series?.takeIf { it.isNotBlank() } ?: "-"
+    val setName = card.set?.name?.takeIf { it.isNotBlank() } ?: "-"
+    Box(
+        modifier = Modifier
+            .size(width = 48.dp, height = 66.dp)
+            .background(DarkSurface, RoundedCornerShape(8.dp))
+            .padding(4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = card.name,
+                color = TextWhite,
+                fontSize = 7.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = series,
+                color = TextMuted,
+                fontSize = 6.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = setName,
+                color = TextMuted,
+                fontSize = 6.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -252,13 +302,14 @@ private fun WishlistCardRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        AsyncImage(
-            model = card.images.small,
+        SubcomposeAsyncImage(
+            model = safeImageUrl(card.images.small),
             contentDescription = card.name,
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(width = 48.dp, height = 66.dp)
-                .background(DarkSurface, RoundedCornerShape(8.dp))
+                .background(DarkSurface, RoundedCornerShape(8.dp)),
+            error = { WishlistCardImageFallback(card) }
         )
 
         Column(modifier = Modifier.weight(1f)) {
