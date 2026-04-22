@@ -10,10 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -31,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -135,13 +134,19 @@ fun CollectionScreen(
         }
     }
 
-    // Compute grouped cards with keys
+    // Compute grouped cards by logical card key and organize them by expansion.
     val groupedCards = remember(state.filteredCards) {
         state.filteredCards
             .groupBy { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }
             .entries
             .map { (key, group) -> key to group }
     }
+    val groupedByExpansion = remember(groupedCards) {
+        groupedCards.groupBy { (_, group) ->
+            group.firstOrNull()?.set?.takeIf { it.isNotBlank() } ?: "Espansione sconosciuta"
+        }
+    }
+    var collapsedExpansions by remember { mutableStateOf(setOf<String>()) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -224,8 +229,16 @@ fun CollectionScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (!isSelectionMode) {
+                    val hasActiveFilters = state.selectedSet != null ||
+                        state.selectedType != null ||
+                        state.selectedRarity != null ||
+                        state.supertypeFilter != SupertypeFilter.ALL ||
+                        state.sortOrder != SortOrder.NEWEST
+
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(modifier = Modifier.weight(1f)) {
@@ -234,14 +247,13 @@ fun CollectionScreen(
                                 onQueryChange = { viewModel.updateSearchQuery(it) }
                             )
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        // Pulsante Filtri
+                        Spacer(modifier = Modifier.width(10.dp))
                         Surface(
                             onClick = { showFilters = true },
-                            color = if (state.selectedSet != null || state.selectedType != null || state.selectedRarity != null || state.supertypeFilter != SupertypeFilter.ALL || state.sortOrder != SortOrder.NEWEST) BlueCard else DarkCard,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.size(48.dp),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                            color = if (hasActiveFilters) BlueCard.copy(alpha = 0.9f) else DarkCard,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.size(50.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
@@ -250,20 +262,25 @@ fun CollectionScreen(
                                     tint = TextWhite,
                                     modifier = Modifier.size(20.dp)
                                 )
-                                // Pallino notifica se filtri attivi
-                                if (state.selectedSet != null || state.selectedType != null || state.selectedRarity != null || state.supertypeFilter != SupertypeFilter.ALL) {
+                                if (hasActiveFilters) {
                                     Box(
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
                                             .padding(8.dp)
-                                            .size(8.dp)
+                                            .size(9.dp)
                                             .clip(CircleShape)
-                                            .background(Color.Red)
+                                            .background(Color(0xFFFF5D5D))
                                     )
                                 }
                             }
                         }
                     }
+
+                    if (hasActiveFilters) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        ActiveFiltersRow(state = state, viewModel = viewModel)
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
@@ -278,69 +295,107 @@ fun CollectionScreen(
                             Text("Nessuna carta trovata", color = TextMuted)
                         }
                     } else {
+                        val expansionSections = groupedByExpansion
+                            .toList()
+                            .sortedBy { it.first }
+
                         LazyColumn(
                             contentPadding = PaddingValues(
-                                start = 16.dp, end = 16.dp, top = 0.dp,
-                                bottom = if (isSelectionMode) 80.dp else 16.dp
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 0.dp,
+                                bottom = if (isSelectionMode) 80.dp else 20.dp
                             ),
-                            verticalArrangement = Arrangement.spacedBy(if (state.gridColumns > 4) 6.dp else 12.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            if (state.isGridView) {
-                                items(groupedCards.chunked(state.gridColumns)) { row ->
-                                    Row(horizontalArrangement = Arrangement.spacedBy(if (state.gridColumns > 4) 6.dp else 10.dp)) {
-                                        row.forEach { (groupKey, group) ->
-                                            val representative = group.first()
-                                            val totalQty = group.sumOf { it.quantity }
-                                            CollectionCardGridItem(
-                                                card = representative.copy(quantity = totalQty),
-                                                isSelected = groupKey in selectedGroupKeys,
-                                                isSelectionMode = isSelectionMode,
-                                                gridColumns = state.gridColumns,
-                                                onClick = {
-                                                    if (isSelectionMode) {
-                                                        selectedGroupKeys = if (groupKey in selectedGroupKeys)
-                                                            selectedGroupKeys - groupKey else selectedGroupKeys + groupKey
-                                                        if (selectedGroupKeys.isEmpty()) isSelectionMode = false
-                                                    } else {
-                                                        onCardClick(representative.apiCardId.ifBlank { representative.id })
-                                                    }
-                                                },
-                                                onLongClick = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                    isSelectionMode = true
-                                                    selectedGroupKeys = selectedGroupKeys + groupKey
-                                                },
-                                                modifier = Modifier.weight(1f)
-                                            )
+                            items(expansionSections, key = { it.first }) { (expansionName, cardsInExpansion) ->
+                                val totalQuantity = cardsInExpansion.sumOf { (_, group) -> group.sumOf { it.quantity } }
+                                val isCollapsed = expansionName in collapsedExpansions
+
+                                ExpansionAccordionSection(
+                                    expansionName = expansionName,
+                                    totalCards = totalQuantity,
+                                    uniqueCards = cardsInExpansion.size,
+                                    isCollapsed = isCollapsed,
+                                    onToggle = {
+                                        collapsedExpansions = if (isCollapsed) {
+                                            collapsedExpansions - expansionName
+                                        } else {
+                                            collapsedExpansions + expansionName
                                         }
-                                        repeat(state.gridColumns - row.size) { Spacer(modifier = Modifier.weight(1f)) }
-                                    }
-                                }
-                            } else {
-                                items(groupedCards) { (groupKey, group) ->
-                                    val representative = group.first()
-                                    val totalQty = group.sumOf { it.quantity }
-                                    CollectionCardListItem(
-                                        card = representative.copy(quantity = totalQty),
-                                        isSelected = groupKey in selectedGroupKeys,
-                                        isSelectionMode = isSelectionMode,
-                                        onClick = {
-                                            if (isSelectionMode) {
-                                                selectedGroupKeys = if (groupKey in selectedGroupKeys)
-                                                    selectedGroupKeys - groupKey else selectedGroupKeys + groupKey
-                                                if (selectedGroupKeys.isEmpty()) isSelectionMode = false
-                                            } else {
-                                                onCardClick(representative.apiCardId.ifBlank { representative.id })
+                                    },
+                                    content = {
+                                        if (state.isGridView) {
+                                            Column(verticalArrangement = Arrangement.spacedBy(if (state.gridColumns > 4) 6.dp else 10.dp)) {
+                                                cardsInExpansion.chunked(state.gridColumns).forEach { row ->
+                                                    Row(horizontalArrangement = Arrangement.spacedBy(if (state.gridColumns > 4) 6.dp else 10.dp)) {
+                                                        row.forEach { (groupKey, group) ->
+                                                            val representative = group.first()
+                                                            val totalQty = group.sumOf { it.quantity }
+                                                            CollectionCardGridItem(
+                                                                card = representative.copy(quantity = totalQty),
+                                                                isSelected = groupKey in selectedGroupKeys,
+                                                                isSelectionMode = isSelectionMode,
+                                                                gridColumns = state.gridColumns,
+                                                                onClick = {
+                                                                    if (isSelectionMode) {
+                                                                        selectedGroupKeys = if (groupKey in selectedGroupKeys) {
+                                                                            selectedGroupKeys - groupKey
+                                                                        } else {
+                                                                            selectedGroupKeys + groupKey
+                                                                        }
+                                                                        if (selectedGroupKeys.isEmpty()) isSelectionMode = false
+                                                                    } else {
+                                                                        onCardClick(representative.apiCardId.ifBlank { representative.id })
+                                                                    }
+                                                                },
+                                                                onLongClick = {
+                                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                    isSelectionMode = true
+                                                                    selectedGroupKeys = selectedGroupKeys + groupKey
+                                                                },
+                                                                modifier = Modifier.weight(1f)
+                                                            )
+                                                        }
+                                                        repeat(state.gridColumns - row.size) {
+                                                            Spacer(modifier = Modifier.weight(1f))
+                                                        }
+                                                    }
+                                                }
                                             }
-                                        },
-                                        onLongClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            isSelectionMode = true
-                                            selectedGroupKeys = selectedGroupKeys + groupKey
-                                        },
-                                        onDelete = { viewModel.deleteCard(representative.id) }
-                                    )
-                                }
+                                        } else {
+                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                cardsInExpansion.forEach { (groupKey, group) ->
+                                                    val representative = group.first()
+                                                    val totalQty = group.sumOf { it.quantity }
+                                                    CollectionCardListItem(
+                                                        card = representative.copy(quantity = totalQty),
+                                                        isSelected = groupKey in selectedGroupKeys,
+                                                        isSelectionMode = isSelectionMode,
+                                                        onClick = {
+                                                            if (isSelectionMode) {
+                                                                selectedGroupKeys = if (groupKey in selectedGroupKeys) {
+                                                                    selectedGroupKeys - groupKey
+                                                                } else {
+                                                                    selectedGroupKeys + groupKey
+                                                                }
+                                                                if (selectedGroupKeys.isEmpty()) isSelectionMode = false
+                                                            } else {
+                                                                onCardClick(representative.apiCardId.ifBlank { representative.id })
+                                                            }
+                                                        },
+                                                        onLongClick = {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            isSelectionMode = true
+                                                            selectedGroupKeys = selectedGroupKeys + groupKey
+                                                        },
+                                                        onDelete = { viewModel.deleteCard(representative.id) }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
                             }
                         }
                     }
@@ -437,10 +492,25 @@ fun FilterBottomSheet(
     viewModel: CollectionViewModel,
     onDismiss: () -> Unit
 ) {
+    val setCounts = remember(state.cards) {
+        state.cards.groupBy { it.set.ifBlank { "Espansione sconosciuta" } }
+            .mapValues { it.value.sumOf { c -> c.quantity } }
+            .toList()
+            .sortedByDescending { it.second }
+    }
+    val rarityCounts = remember(state.cards) {
+        state.cards.filter { it.rarity.isNotBlank() }
+            .groupBy { it.rarity }
+            .mapValues { it.value.sumOf { c -> c.quantity } }
+            .toList()
+            .sortedByDescending { it.second }
+    }
+    val types = AppLocale.getTypes()
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = DarkSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = TextMuted.copy(alpha = 0.4f)) }
+        dragHandle = { BottomSheetDefaults.DragHandle(color = TextMuted.copy(alpha = 0.45f)) }
     ) {
         Column(
             modifier = Modifier
@@ -449,11 +519,16 @@ fun FilterBottomSheet(
                 .padding(bottom = 32.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Filtri e Ordinamento", style = MaterialTheme.typography.headlineSmall, color = TextWhite)
+                Column {
+                    Text("Filtri", style = MaterialTheme.typography.headlineSmall, color = TextWhite)
+                    Text("Organizza le carte senza perdere il contesto", color = TextMuted, fontSize = 12.sp)
+                }
                 TextButton(onClick = {
                     viewModel.filterBySupertype(SupertypeFilter.ALL)
                     viewModel.filterBySet(null)
@@ -461,91 +536,135 @@ fun FilterBottomSheet(
                     viewModel.filterByRarity(null)
                     viewModel.updateSortOrder(SortOrder.NEWEST)
                 }) {
+                    Icon(Icons.Default.RestartAlt, contentDescription = null, tint = BlueCard)
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text("Reset", color = BlueCard)
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // ── ORDINAMENTO ──
-            FilterSectionTitle("Ordina per")
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            FilterSectionCard(
+                title = "Ordinamento",
+                icon = Icons.AutoMirrored.Filled.Sort
             ) {
-                item { FilterChip(label = "Recenti", isSelected = state.sortOrder == SortOrder.NEWEST, onClick = { viewModel.updateSortOrder(SortOrder.NEWEST) }) }
-                item { FilterChip(label = "€ Crescente", isSelected = state.sortOrder == SortOrder.PRICE_ASC, onClick = { viewModel.updateSortOrder(SortOrder.PRICE_ASC) }) }
-                item { FilterChip(label = "€ Decrescente", isSelected = state.sortOrder == SortOrder.PRICE_DESC, onClick = { viewModel.updateSortOrder(SortOrder.PRICE_DESC) }) }
-                item { FilterChip(label = "Nome A-Z", isSelected = state.sortOrder == SortOrder.NAME_ASC, onClick = { viewModel.updateSortOrder(SortOrder.NAME_ASC) }) }
-                item { FilterChip(label = "N° Set", isSelected = state.sortOrder == SortOrder.NUMBER, onClick = { viewModel.updateSortOrder(SortOrder.NUMBER) }) }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // ── CATEGORIA (Supertype) ──
-            FilterSectionTitle("Categoria")
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item { FilterChip(label = "Tutti", isSelected = state.supertypeFilter == SupertypeFilter.ALL, onClick = { viewModel.filterBySupertype(SupertypeFilter.ALL) }) }
-                item { FilterChip(label = "Pokémon", isSelected = state.supertypeFilter == SupertypeFilter.POKEMON, onClick = { viewModel.filterBySupertype(SupertypeFilter.POKEMON) }) }
-                item { FilterChip(label = "Trainer", isSelected = state.supertypeFilter == SupertypeFilter.TRAINER, onClick = { viewModel.filterBySupertype(SupertypeFilter.TRAINER) }) }
-                item { FilterChip(label = "Energy", isSelected = state.supertypeFilter == SupertypeFilter.ENERGY, onClick = { viewModel.filterBySupertype(SupertypeFilter.ENERGY) }) }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // ── TIPOLOGIA (Elemental Type) ──
-            val types = AppLocale.getTypes()
-            FilterSectionTitle("Tipologia")
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item { FilterChip(label = "Tutti", isSelected = state.selectedType == null, onClick = { viewModel.filterByType(null) }) }
-                items(types) { type ->
-                    FilterChip(label = type, isSelected = state.selectedType == type, onClick = { viewModel.filterByType(type) })
+                item {
+                    FilterChip(
+                        label = "Recenti",
+                        isSelected = state.sortOrder == SortOrder.NEWEST,
+                        onClick = { viewModel.updateSortOrder(SortOrder.NEWEST) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        label = "€ Crescente",
+                        isSelected = state.sortOrder == SortOrder.PRICE_ASC,
+                        onClick = { viewModel.updateSortOrder(SortOrder.PRICE_ASC) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        label = "€ Decrescente",
+                        isSelected = state.sortOrder == SortOrder.PRICE_DESC,
+                        onClick = { viewModel.updateSortOrder(SortOrder.PRICE_DESC) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        label = "Nome A-Z",
+                        isSelected = state.sortOrder == SortOrder.NAME_ASC,
+                        onClick = { viewModel.updateSortOrder(SortOrder.NAME_ASC) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        label = "N° Set",
+                        isSelected = state.sortOrder == SortOrder.NUMBER,
+                        onClick = { viewModel.updateSortOrder(SortOrder.NUMBER) }
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // ── ESPANSIONI (Set) ──
-            val setCounts = remember(state.cards) {
-                state.cards.groupBy { it.set }
-                    .mapValues { it.value.sumOf { c -> c.quantity } }
-                    .toList()
-                    .sortedByDescending { it.second }
+            FilterSectionCard(
+                title = "Categoria",
+                icon = Icons.Default.Category
+            ) {
+                item {
+                    FilterChip(
+                        label = "Tutti",
+                        isSelected = state.supertypeFilter == SupertypeFilter.ALL,
+                        onClick = { viewModel.filterBySupertype(SupertypeFilter.ALL) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        label = "Pokémon",
+                        isSelected = state.supertypeFilter == SupertypeFilter.POKEMON,
+                        onClick = { viewModel.filterBySupertype(SupertypeFilter.POKEMON) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        label = "Trainer",
+                        isSelected = state.supertypeFilter == SupertypeFilter.TRAINER,
+                        onClick = { viewModel.filterBySupertype(SupertypeFilter.TRAINER) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        label = "Energy",
+                        isSelected = state.supertypeFilter == SupertypeFilter.ENERGY,
+                        onClick = { viewModel.filterBySupertype(SupertypeFilter.ENERGY) }
+                    )
+                }
             }
+
+            FilterSectionCard(
+                title = "Tipologia",
+                icon = Icons.Default.Bolt
+            ) {
+                item {
+                    FilterChip(
+                        label = "Tutti",
+                        isSelected = state.selectedType == null,
+                        onClick = { viewModel.filterByType(null) }
+                    )
+                }
+                items(types) { type ->
+                    FilterChip(
+                        label = type,
+                        isSelected = state.selectedType == type,
+                        onClick = { viewModel.filterByType(type) }
+                    )
+                }
+            }
+
             if (setCounts.isNotEmpty()) {
-                FilterSectionTitle("Espansione")
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                FilterSectionCard(
+                    title = "Espansione",
+                    icon = Icons.Default.CollectionsBookmark
                 ) {
-                    item { FilterChip(label = "Tutti i set", isSelected = state.selectedSet == null, onClick = { viewModel.filterBySet(null) }) }
+                    item {
+                        FilterChip(
+                            label = "Tutti i set",
+                            isSelected = state.selectedSet == null,
+                            onClick = { viewModel.filterBySet(null) }
+                        )
+                    }
                     items(setCounts) { (setName, count) ->
-                        FilterChip(label = "$setName ($count)", isSelected = state.selectedSet == setName, onClick = { viewModel.filterBySet(setName) })
+                        FilterChip(
+                            label = "$setName ($count)",
+                            isSelected = state.selectedSet == setName,
+                            onClick = { viewModel.filterBySet(setName) }
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // ── RARITÀ ──
-            val rarityCounts = remember(state.cards) {
-                state.cards.filter { it.rarity.isNotBlank() }
-                    .groupBy { it.rarity }
-                    .mapValues { it.value.sumOf { c -> c.quantity } }
-                    .toList()
-                    .sortedByDescending { it.second }
-            }
             if (rarityCounts.isNotEmpty()) {
-                FilterSectionTitle(AppLocale.rarity)
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                FilterSectionCard(
+                    title = AppLocale.rarity,
+                    icon = Icons.Default.AutoAwesome
                 ) {
                     item {
                         FilterChip(
@@ -564,16 +683,211 @@ fun FilterBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Button(
                 onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Text("Mostra Risultati", fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.Done, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Mostra risultati", fontWeight = FontWeight.Bold)
             }
+        }
+    }
+}
+
+@Composable
+fun ActiveFiltersRow(
+    state: com.emabuia.pokevault.viewmodel.CollectionUiState,
+    viewModel: CollectionViewModel
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (state.selectedSet != null) {
+            item {
+                RemovableFilterChip(
+                    label = "Set: ${state.selectedSet}",
+                    onRemove = { viewModel.filterBySet(null) }
+                )
+            }
+        }
+        if (state.selectedType != null) {
+            item {
+                RemovableFilterChip(
+                    label = "Tipo: ${state.selectedType}",
+                    onRemove = { viewModel.filterByType(null) }
+                )
+            }
+        }
+        if (state.selectedRarity != null) {
+            item {
+                RemovableFilterChip(
+                    label = "Rarità: ${AppLocale.translateRarity(state.selectedRarity)}",
+                    onRemove = { viewModel.filterByRarity(null) }
+                )
+            }
+        }
+        if (state.supertypeFilter != SupertypeFilter.ALL) {
+            item {
+                RemovableFilterChip(
+                    label = "Categoria: ${state.supertypeFilter.name}",
+                    onRemove = { viewModel.filterBySupertype(SupertypeFilter.ALL) }
+                )
+            }
+        }
+        if (state.sortOrder != SortOrder.NEWEST) {
+            item {
+                RemovableFilterChip(
+                    label = "Ordine: ${state.sortOrder.name}",
+                    onRemove = { viewModel.updateSortOrder(SortOrder.NEWEST) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun RemovableFilterChip(label: String, onRemove: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = BlueCard.copy(alpha = 0.2f),
+        border = BorderStroke(1.dp, BlueCard.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable(onClick = onRemove)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = label,
+                color = TextWhite,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Icon(Icons.Default.Close, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+@Composable
+fun ExpansionAccordionSection(
+    expansionName: String,
+    totalCards: Int,
+    uniqueCards: Int,
+    isCollapsed: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        color = DarkCard,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+                .padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onToggle)
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = BlueCard.copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, BlueCard.copy(alpha = 0.35f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesomeMosaic,
+                        contentDescription = null,
+                        tint = BlueCard,
+                        modifier = Modifier.padding(8.dp).size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = expansionName,
+                        color = TextWhite,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "$uniqueCards carte uniche · $totalCards totali",
+                        color = TextMuted,
+                        fontSize = 12.sp
+                    )
+                }
+                Icon(
+                    imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                    contentDescription = null,
+                    tint = TextWhite
+                )
+            }
+
+            AnimatedVisibility(
+                visible = !isCollapsed,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                ) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FilterSectionCard(
+    title: String,
+    icon: ImageVector,
+    content: LazyListScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        color = DarkCard,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(vertical = 12.dp)) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(icon, contentDescription = null, tint = BlueCard, modifier = Modifier.size(18.dp))
+                Text(title, color = TextWhite, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                content = content
+            )
         }
     }
 }
