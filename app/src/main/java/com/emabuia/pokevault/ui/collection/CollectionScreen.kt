@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +57,12 @@ private fun safeImageUrl(url: String): String {
         .replace(" ", "%20")
         .replace("(", "%28")
         .replace(")", "%29")
+}
+
+private enum class ExpansionSortOrder {
+    BY_NAME_ASC,
+    BY_TOTAL_CARDS_DESC,
+    BY_TOTAL_CARDS_ASC
 }
 
 @Composable
@@ -119,6 +126,7 @@ fun CollectionScreen(
     var selectedGroupKeys by remember { mutableStateOf(setOf<String>()) }
 
     var showFilters by remember { mutableStateOf(false) }
+    var expansionSortOrder by rememberSaveable { mutableStateOf(ExpansionSortOrder.BY_NAME_ASC) }
 
     BackHandler(enabled = isSelectionMode) {
         isSelectionMode = false
@@ -146,7 +154,11 @@ fun CollectionScreen(
             group.firstOrNull()?.set?.takeIf { it.isNotBlank() } ?: "Espansione sconosciuta"
         }
     }
+    val visibleExpansionNames = remember(groupedByExpansion) { groupedByExpansion.keys.toSet() }
     var collapsedExpansions by remember { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(visibleExpansionNames) {
+        collapsedExpansions = collapsedExpansions.intersect(visibleExpansionNames)
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -277,11 +289,21 @@ fun CollectionScreen(
                     }
 
                     if (hasActiveFilters) {
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         ActiveFiltersRow(state = state, viewModel = viewModel)
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(if (hasActiveFilters) 12.dp else 14.dp))
+                    ExpansionSortRow(
+                        selectedOrder = expansionSortOrder,
+                        onOrderSelected = { expansionSortOrder = it },
+                        onExpandAll = { collapsedExpansions = emptySet() },
+                        onCollapseAll = { collapsedExpansions = visibleExpansionNames },
+                        canExpandAll = visibleExpansionNames.isNotEmpty() && collapsedExpansions.isNotEmpty(),
+                        canCollapseAll = visibleExpansionNames.isNotEmpty() && collapsedExpansions.size < visibleExpansionNames.size
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
 
                 // ── Contenuto ──
@@ -297,7 +319,17 @@ fun CollectionScreen(
                     } else {
                         val expansionSections = groupedByExpansion
                             .toList()
-                            .sortedBy { it.first }
+                            .sortedWith(
+                                when (expansionSortOrder) {
+                                    ExpansionSortOrder.BY_NAME_ASC -> compareBy { it.first.lowercase() }
+                                    ExpansionSortOrder.BY_TOTAL_CARDS_DESC -> compareByDescending<Pair<String, List<Pair<String, List<PokemonCard>>>>> {
+                                        it.second.sumOf { (_, cards) -> cards.sumOf { card -> card.quantity } }
+                                    }.thenBy { it.first.lowercase() }
+                                    ExpansionSortOrder.BY_TOTAL_CARDS_ASC -> compareBy<Pair<String, List<Pair<String, List<PokemonCard>>>>> {
+                                        it.second.sumOf { (_, cards) -> cards.sumOf { card -> card.quantity } }
+                                    }.thenBy { it.first.lowercase() }
+                                }
+                            )
 
                         LazyColumn(
                             contentPadding = PaddingValues(
@@ -481,6 +513,104 @@ fun CollectionScreen(
                 viewModel = viewModel,
                 onDismiss = { showFilters = false }
             )
+        }
+    }
+}
+
+@Composable
+private fun ExpansionSortRow(
+    selectedOrder: ExpansionSortOrder,
+    onOrderSelected: (ExpansionSortOrder) -> Unit,
+    onExpandAll: () -> Unit,
+    onCollapseAll: () -> Unit,
+    canExpandAll: Boolean,
+    canCollapseAll: Boolean
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        item {
+            Surface(
+                color = DarkCard,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Sort,
+                        contentDescription = null,
+                        tint = TextMuted,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Ordine espansioni",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+        item {
+            FilterChip(
+                label = "A-Z",
+                isSelected = selectedOrder == ExpansionSortOrder.BY_NAME_ASC,
+                onClick = { onOrderSelected(ExpansionSortOrder.BY_NAME_ASC) }
+            )
+        }
+        item {
+            FilterChip(
+                label = "Più carte",
+                isSelected = selectedOrder == ExpansionSortOrder.BY_TOTAL_CARDS_DESC,
+                onClick = { onOrderSelected(ExpansionSortOrder.BY_TOTAL_CARDS_DESC) }
+            )
+        }
+        item {
+            FilterChip(
+                label = "Meno carte",
+                isSelected = selectedOrder == ExpansionSortOrder.BY_TOTAL_CARDS_ASC,
+                onClick = { onOrderSelected(ExpansionSortOrder.BY_TOTAL_CARDS_ASC) }
+            )
+        }
+        item {
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(enabled = canExpandAll, onClick = onExpandAll),
+                color = if (canExpandAll) DarkCard else DarkCard.copy(alpha = 0.45f),
+                border = BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f))
+            ) {
+                Text(
+                    text = "Espandi tutte",
+                    color = if (canExpandAll) TextWhite else TextMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
+        }
+        item {
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(enabled = canCollapseAll, onClick = onCollapseAll),
+                color = if (canCollapseAll) DarkCard else DarkCard.copy(alpha = 0.45f),
+                border = BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f))
+            ) {
+                Text(
+                    text = "Chiudi tutte",
+                    color = if (canCollapseAll) TextWhite else TextMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
         }
     }
 }
@@ -822,13 +952,32 @@ fun ExpansionAccordionSection(
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = expansionName,
-                        color = TextWhite,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = expansionName,
+                            color = TextWhite,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = BlueCard.copy(alpha = 0.18f),
+                            border = BorderStroke(1.dp, BlueCard.copy(alpha = 0.45f))
+                        ) {
+                            Text(
+                                text = "x$totalCards",
+                                color = BlueCard,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
                     Text(
                         text = "$uniqueCards carte uniche · $totalCards totali",
                         color = TextMuted,
