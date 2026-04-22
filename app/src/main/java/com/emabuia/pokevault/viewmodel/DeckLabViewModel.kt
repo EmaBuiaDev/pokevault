@@ -645,16 +645,19 @@ class DeckLabViewModel : ViewModel() {
     }
 
     /**
-     * Cerca una carta sulla Pokemon TCG API per nome/numero/set e
-     * restituisce un PokemonCard completo. Fallback su dati minimi se non trovata.
+     * Cerca una carta su PokéWallet per set+numero (strict), con fallback
+     * a ricerca per nome filtrata sullo stesso set+numero.
      */
     private suspend fun lookupAndCreateCard(card: MetaDeckCard): PokemonCard {
-        // Prova ricerca precisa per nome + numero
-        val tcgCard = searchTcgCard(card.name, card.set, card.number)
+        val tcgCard = searchPokewalletCard(card.name, card.set, card.number)
 
         return if (tcgCard != null) {
             val price = tcgCard.cardmarket?.prices?.averageSellPrice
-                ?: tcgCard.cardmarket?.prices?.lowPrice ?: 0.0
+                ?: tcgCard.cardmarket?.prices?.trendPrice
+                ?: tcgCard.cardmarket?.prices?.avg7
+                ?: tcgCard.cardmarket?.prices?.avg30
+                ?: tcgCard.cardmarket?.prices?.lowPrice
+                ?: 0.0
 
             PokemonCard(
                 name = tcgCard.name,
@@ -694,49 +697,19 @@ class DeckLabViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Cerca una carta sulla Pokemon TCG API con strategia a fallback:
-     * 1. Nome + set + numero (più preciso)
-     * 2. Nome + numero
-     * 3. Solo nome (primo risultato)
-     */
-    private suspend fun searchTcgCard(name: String, set: String?, number: String?): TcgCard? {
-        // Cache hit: ritorna immediatamente (anche null cached, per evitare
-        // di ripetere lookup che sappiamo essere falliti).
-        val key = lookupKey(name, set, number)
+    private suspend fun searchPokewalletCard(name: String, setCode: String?, number: String?): TcgCard? {
+        val key = lookupKey(name, setCode, number)
         tcgLookupCache[key]?.let { return it.card }
 
         val found: TcgCard? = try {
-            // 1. Cerca per nome + numero (searchByNameAndNumber ha già fallback interni)
-            val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(set)
-            val result = pokeTcgRepository.searchByNameAndNumber(name, number, normalizedSet)
-            var hit: TcgCard? = null
-            result.onSuccess { cards ->
-                if (cards.isNotEmpty()) {
-                    // Se abbiamo il set, preferiamo la carta dallo stesso set
-                    hit = if (set != null) {
-                        cards.find { card ->
-                            SetCodeMapper.matchesImportedSet(
-                                importedSet = set,
-                                cardSetName = card.set?.name,
-                                cardApiSetId = card.set?.id,
-                                cardApiId = card.id
-                            )
-                        } ?: cards.first()
-                    } else {
-                        cards.first()
-                    }
-                }
-            }
+            val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(setCode)
+            val direct = pokeTcgRepository
+                .searchPokewalletCardByNameSetAndNumber(name, normalizedSet, number)
+                .getOrNull()
 
-            if (hit == null) {
-                // 2. Fallback: ricerca fuzzy per nome
-                val fallback = pokeTcgRepository.searchCardsFuzzy(name)
-                fallback.onSuccess { cards ->
-                    if (cards.isNotEmpty()) hit = cards.first()
-                }
-            }
-            hit
+            direct ?: pokeTcgRepository
+                .getPokewalletCardBySetAndNumber(normalizedSet, number)
+                .getOrNull()
         } catch (_: Exception) {
             null
         }

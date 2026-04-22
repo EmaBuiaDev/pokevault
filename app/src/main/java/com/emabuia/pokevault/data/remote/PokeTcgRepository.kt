@@ -448,6 +448,104 @@ class PokeTcgRepository {
         return Result.success(emptyList())
     }
 
+    suspend fun getPokewalletCardBySetAndNumber(setCode: String?, number: String?): Result<TcgCard?> {
+        val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(setCode)
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+            ?: return Result.success(null)
+        val normalizedNumber = extractCardNumber(number.orEmpty())
+            .takeIf { it.isNotBlank() }
+            ?: return Result.success(null)
+
+        val exactMatches = mutableListOf<PokeWalletCard>()
+        for (query in buildStrictSetNumberQueries(normalizedSet, number)) {
+            val networkResult = guardedApiCall(resourceKey = "cards:strict:$query") {
+                api.search(query = query, page = 1, limit = 30)
+            }
+            if (networkResult.isFailure) {
+                return Result.failure(networkResult.exceptionOrNull()!!)
+            }
+
+            exactMatches += networkResult.getOrThrow().results.filter { card ->
+                matchesExactSetAndNumber(card, normalizedSet, normalizedNumber)
+            }
+        }
+
+        val remoteCard = rankStrictMatches(exactMatches.distinctBy { it.id })
+            .firstOrNull()
+            ?: return Result.success(null)
+
+        return Result.success(remoteCard.toTcgCard())
+    }
+
+    suspend fun searchPokewalletCardByNameSetAndNumber(
+        name: String,
+        setCode: String?,
+        number: String?
+    ): Result<TcgCard?> {
+        val cleanName = sanitizeQuery(name)
+        val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(setCode)
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+            ?: return Result.success(null)
+        val normalizedNumber = extractCardNumber(number.orEmpty())
+            .takeIf { it.isNotBlank() }
+            ?: return Result.success(null)
+        if (cleanName.isBlank()) return Result.success(null)
+
+        val exactMatches = mutableListOf<PokeWalletCard>()
+        for (query in buildStrictNameSetNumberQueries(cleanName, normalizedSet, number)) {
+            val networkResult = guardedApiCall(resourceKey = "cards:search:strict:$query") {
+                api.search(query = query, page = 1, limit = 30)
+            }
+
+            if (networkResult.isFailure) {
+                return Result.failure(networkResult.exceptionOrNull()!!)
+            }
+
+            exactMatches += networkResult.getOrThrow().results.filter { card ->
+                matchesExactNameSetAndNumber(
+                    card = card,
+                    expectedName = cleanName,
+                    expectedSet = normalizedSet,
+                    expectedNumber = normalizedNumber
+                )
+            }
+        }
+
+        if (exactMatches.isNotEmpty()) {
+            return Result.success(rankStrictMatches(exactMatches.distinctBy { it.id }).firstOrNull()?.toTcgCard())
+        }
+
+        val fallbackMatches = mutableListOf<PokeWalletCard>()
+        for (page in 1..3) {
+            val networkResult = guardedApiCall(resourceKey = "search:name:$cleanName:$page") {
+                api.search(query = cleanName, page = page, limit = 50)
+            }
+
+            if (networkResult.isFailure) {
+                val exception = networkResult.exceptionOrNull()
+                if (exception is HttpException && exception.code() == 404) {
+                    break
+                }
+                return Result.failure(exception ?: IllegalStateException("Unknown cards/search error"))
+            }
+
+            val pageMatches = networkResult.getOrThrow().results.filter { card ->
+                matchesExactNameSetAndNumber(
+                    card = card,
+                    expectedName = cleanName,
+                    expectedSet = normalizedSet,
+                    expectedNumber = normalizedNumber
+                )
+            }
+            fallbackMatches += pageMatches
+            if (pageMatches.isNotEmpty()) break
+        }
+
+        return Result.success(rankStrictMatches(fallbackMatches.distinctBy { it.id }).firstOrNull()?.toTcgCard())
+    }
+
     fun getCandidateSetIdsByPrintedTotal(total: String?, tolerance: Int = 1): List<String> {
         return getCandidateSetsByPrintedTotal(total, tolerance).map { it.id }
     }
@@ -705,6 +803,98 @@ class PokeTcgRepository {
             .filter { (_, diff) -> diff in 1..tolerance }
             .sortedWith(compareBy<Pair<TcgSet, Int>> { it.second }.thenByDescending { parseReleaseDateToEpoch(it.first.releaseDate) })
             .map { it.first }
+    }
+
+    private suspend fun buildStrictSetNumberQueries(setCode: String, rawNumber: String?): List<String> {
+        val setTokens = SetCodeMapper.searchTokensForSetQuery(setCode)
+        val numberVariants = buildNumberVariants(rawNumber)
+        val queries = linkedSetOf<String>()
+        setTokens.forEach { token ->
+            numberVariants.forEach { number ->
+                queries += "$token $number"
+            }
+        }
+        return queries.toList()
+    }
+
+    private suspend fun buildStrictNameSetNumberQueries(name: String, setCode: String, rawNumber: String?): List<String> {
+        val setTokens = SetCodeMapper.searchTokensForSetQuery(setCode)
+        val numberVariants = buildNumberVariants(rawNumber)
+        val queries = linkedSetOf<String>()
+        setTokens.forEach { token ->
+            numberVariants.forEach { number ->
+                queries += "$name $token $number"
+                queries += "$token $number $name"
+                queries += "$token $name $number"
+            }
+        }
+        return queries.toList()
+    }
+
+    private fun buildNumberVariants(rawNumber: String?): List<String> {
+        val raw = rawNumber?.substringBefore('/')?.trim().orEmpty()
+        val normalized = extractCardNumber(raw)
+        if (normalized.isBlank()) return emptyList()
+
+        val variants = linkedSetOf<String>()
+        if (raw.isNotBlank()) variants += raw
+        variants += normalized
+        if (normalized.all { it.isDigit() }) {
+            variants += normalized.padStart(2, '0')
+            variants += normalized.padStart(3, '0')
+        }
+        return variants.toList()
+    }
+
+    private fun matchesExactSetAndNumber(card: PokeWalletCard, expectedSet: String, expectedNumber: String): Boolean {
+        if (!isActualCard(card)) return false
+        val cardSet = SetCodeMapper.normalizeDecklistSetCode(card.cardInfo?.setCode)?.lowercase()
+        val cardNumber = extractCardNumber(card.cardInfo?.cardNumber.orEmpty())
+        return cardSet == expectedSet && cardNumber == expectedNumber
+    }
+
+    private fun matchesExactNameSetAndNumber(
+        card: PokeWalletCard,
+        expectedName: String,
+        expectedSet: String,
+        expectedNumber: String
+    ): Boolean {
+        if (!matchesExactSetAndNumber(card, expectedSet, expectedNumber)) return false
+        return sanitizeQuery(card.cardInfo?.name.orEmpty()).equals(expectedName, ignoreCase = true)
+    }
+
+    private suspend fun rankStrictMatches(cards: List<PokeWalletCard>): List<PokeWalletCard> {
+        val releaseBySet = getReleaseEpochByCanonicalSetCode()
+        return cards.sortedWith(
+            compareByDescending<PokeWalletCard> { card ->
+                val setCode = SetCodeMapper.normalizeDecklistSetCode(card.cardInfo?.setCode)?.lowercase()
+                releaseBySet[setCode] ?: Long.MIN_VALUE
+            }.thenBy { card ->
+                extractCardNumber(card.cardInfo?.cardNumber.orEmpty()).toIntOrNull() ?: Int.MAX_VALUE
+            }
+        )
+    }
+
+    private suspend fun getReleaseEpochByCanonicalSetCode(): Map<String, Long> {
+        val sets = memorySets ?: loadSetsFromRoom(ignoreExpiry = true).orEmpty()
+        if (sets.isEmpty()) return emptyMap()
+
+        return sets.groupBy { set ->
+            val imageRef = extractSetRefFromImageUrl(set.images.symbol)
+                ?: extractSetRefFromImageUrl(set.images.logo)
+                ?: set.id
+            SetCodeMapper.normalizeDecklistSetCode(imageRef)?.lowercase() ?: imageRef.lowercase()
+        }.mapValues { (_, values) ->
+            values.maxOfOrNull { set -> parseReleaseDateToEpoch(set.releaseDate) } ?: Long.MIN_VALUE
+        }
+    }
+
+    private fun extractSetRefFromImageUrl(url: String): String? {
+        return Regex("""/sets/([^/?]+)/image(?:\?.*)?$""")
+            .find(url)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.takeIf { it.isNotBlank() }
     }
 
     // ── Room Cache Layer ──────────────────────────────────────────────

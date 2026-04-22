@@ -36,75 +36,83 @@ object SetCodeMapper {
         "CRZ" to "swsh12pt5"
     )
 
+    private val apiIdRegex = Regex("^[a-z0-9]+$")
+
+    private val setNameToApiId: Map<String, String> = mapOf(
+        "scarlet violet" to "sv1",
+        "paldea evolved" to "sv2",
+        "obsidian flames" to "sv3",
+        "pokemon 151" to "sv3pt5",
+        "paradox rift" to "sv4",
+        "paldean fates" to "sv4pt5",
+        "temporal forces" to "sv5",
+        "twilight masquerade" to "sv6",
+        "shrouded fable" to "sv6pt5",
+        "stellar crown" to "sv7",
+        "surging sparks" to "sv8",
+        "prismatic evolutions" to "sv8pt5",
+        "journey together" to "sv9",
+        "destined rivals" to "sv10",
+        "black bolt" to "sv11",
+        "white flare" to "sv11",
+        "rebel clash" to "swsh2",
+        "darkness ablaze" to "swsh3",
+        "champions path" to "swsh35",
+        "vivid voltage" to "swsh4",
+        "battle styles" to "swsh5",
+        "chilling reign" to "swsh6",
+        "evolving skies" to "swsh7",
+        "fusion strike" to "swsh8",
+        "brilliant stars" to "swsh9",
+        "astral radiance" to "swsh10",
+        "lost origin" to "swsh11",
+        "silver tempest" to "swsh12",
+        "crown zenith" to "swsh12pt5"
+    )
+
     fun normalizeDecklistSetCode(raw: String?): String? {
-        val cleaned = raw?.trim()?.uppercase()?.takeIf { it.isNotBlank() } ?: return null
-        return aliasToApiId[cleaned] ?: cleaned
+        val cleaned = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val upper = cleaned.uppercase()
+        aliasToApiId[upper]?.let { return it }
+
+        val normalizedName = normalizeSetName(cleaned)
+        setNameToApiId[normalizedName]?.let { return it }
+
+        val lower = cleaned.lowercase()
+        if (apiIdRegex.matches(lower) && lower.any { it.isDigit() }) {
+            return lower
+        }
+
+        return upper
     }
 
     fun matchesImportedSet(importedSet: String?, cardSetName: String?, cardApiSetId: String?, cardApiId: String?): Boolean {
-        val importedTokens = buildImportedTokens(importedSet)
-        if (importedTokens.isEmpty()) return true
-        val cardTokens = buildCardTokens(cardSetName, cardApiSetId, cardApiId)
-        return importedTokens.any { it in cardTokens }
+        val importedCanonical = normalizeDecklistSetCode(importedSet) ?: return true
+        val cardCanonical = linkedSetOf<String>()
+
+        normalizeDecklistSetCode(cardApiSetId)?.let { cardCanonical += it }
+        normalizeDecklistSetCode(cardApiId?.substringBefore("-"))?.let { cardCanonical += it }
+        normalizeDecklistSetCode(cardSetName)?.let { cardCanonical += it }
+
+        return importedCanonical in cardCanonical
     }
 
-    private fun buildImportedTokens(importedSet: String?): Set<String> {
-        val input = importedSet?.trim()?.takeIf { it.isNotBlank() } ?: return emptySet()
-        val upper = input.uppercase()
+    fun searchTokensForSetQuery(raw: String?): List<String> {
+        val canonical = normalizeDecklistSetCode(raw) ?: return emptyList()
         val tokens = linkedSetOf<String>()
 
-        normalizeToken(input)?.let { tokens += it }
-        acronym(input)?.let { tokens += it }
-
-        aliasToApiId[upper]?.let {
-            normalizeToken(it)?.let { token -> tokens += token }
-        }
-
         aliasToApiId.entries
-            .filter { it.value.equals(upper, ignoreCase = true) }
-            .forEach { entry ->
-                normalizeToken(entry.key)?.let { tokens += it }
-            }
+            .filter { (_, apiId) -> apiId.equals(canonical, ignoreCase = true) }
+            .forEach { (alias, _) -> tokens += alias }
 
-        return tokens
-    }
+        tokens += canonical.uppercase()
 
-    private fun buildCardTokens(cardSetName: String?, cardApiSetId: String?, cardApiId: String?): Set<String> {
-        val tokens = linkedSetOf<String>()
+        raw?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.uppercase()
+            ?.let { tokens += it }
 
-        normalizeToken(cardSetName)?.let { tokens += it }
-        acronym(cardSetName)?.let { tokens += it }
-        normalizeToken(cardApiSetId)?.let { tokens += it }
-
-        val apiPrefix = cardApiId?.substringBefore("-")
-        normalizeToken(apiPrefix)?.let { tokens += it }
-
-        aliasToApiId.entries
-            .filter { (_, apiId) ->
-                cardApiSetId?.equals(apiId, ignoreCase = true) == true ||
-                    apiPrefix?.equals(apiId, ignoreCase = true) == true
-            }
-            .forEach { entry ->
-                normalizeToken(entry.key)?.let { tokens += it }
-            }
-
-        return tokens
-    }
-
-    private fun acronym(value: String?): String? {
-        val normalizedWords = normalizeText(value)
-            .split(" ")
-            .filter { it.isNotBlank() }
-        if (normalizedWords.size < 2) return null
-        val built = normalizedWords.joinToString(separator = "") { it.first().toString() }
-        return built.takeIf { it.length in 2..5 }
-    }
-
-    private fun normalizeToken(value: String?): String? {
-        val normalized = normalizeText(value)
-            .replace(" ", "")
-            .takeIf { it.isNotBlank() }
-        return normalized
+        return tokens.toList()
     }
 
     private fun normalizeText(value: String?): String {
@@ -117,4 +125,6 @@ object SetCodeMapper {
             .trim()
             .replace(Regex("\\s+"), " ")
     }
+
+    private fun normalizeSetName(value: String?): String = normalizeText(value)
 }
