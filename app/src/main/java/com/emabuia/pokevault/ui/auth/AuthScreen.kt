@@ -93,7 +93,7 @@ fun AuthScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Box(
                 modifier = Modifier.graphicsLayer {
@@ -103,7 +103,7 @@ fun AuthScreen(
                 VaultLogo()
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = "CardsVaultTCG",
@@ -119,7 +119,7 @@ fun AuthScreen(
                 color = TextGray
             )
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Toggle Tab
             Surface(
@@ -142,7 +142,48 @@ fun AuthScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Bottone Google subito visibile
+            Button(
+                onClick = onGoogleSignIn,
+                enabled = !isLoading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF2D2D2D)
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = null,
+                    tint = Color(0xFF4285F4),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = AppLocale.googleSignInLabel,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
+                Text(AppLocale.or, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Form
             Column(
@@ -238,47 +279,6 @@ fun AuthScreen(
                 } else {
                     Text(text = if (isLoginMode) AppLocale.loginButton else AppLocale.registerButton, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
-                Text(AppLocale.or, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp))
-                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Bottone Google
-            Button(
-                onClick = onGoogleSignIn,
-                enabled = !isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = Color(0xFF2D2D2D)
-                ),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.AccountCircle,
-                    contentDescription = null,
-                    tint = Color(0xFF4285F4),
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = AppLocale.googleSignInLabel,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
             }
 
             Spacer(modifier = Modifier.height(32.dp))
