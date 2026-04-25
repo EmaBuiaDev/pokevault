@@ -156,8 +156,14 @@ fun CollectionScreen(
     }
     val visibleExpansionNames = remember(groupedByExpansion) { groupedByExpansion.keys.toSet() }
     var collapsedExpansions by remember { mutableStateOf(setOf<String>()) }
+    var didInitializeCollapsedExpansions by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(visibleExpansionNames) {
-        collapsedExpansions = collapsedExpansions.intersect(visibleExpansionNames)
+        collapsedExpansions = if (!didInitializeCollapsedExpansions && visibleExpansionNames.isNotEmpty()) {
+            didInitializeCollapsedExpansions = true
+            visibleExpansionNames
+        } else {
+            collapsedExpansions.intersect(visibleExpansionNames)
+        }
     }
 
     Scaffold(

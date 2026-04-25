@@ -27,7 +27,7 @@ data class CollectionUiState(
     val stats: CollectionStats = CollectionStats(),
     val isLoading: Boolean = true,
     val isGridView: Boolean = true,
-    val gridColumns: Int = 3,
+    val gridColumns: Int = 4,
     val searchQuery: String = "",
     val selectedSet: String? = null,
     val selectedType: String? = null,
