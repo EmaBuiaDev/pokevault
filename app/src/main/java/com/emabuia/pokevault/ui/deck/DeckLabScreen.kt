@@ -4,6 +4,12 @@ import android.content.ClipData
 import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -30,6 +36,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -444,6 +451,26 @@ fun DeckItem(
     onClick: () -> Unit,
     allOwnedCards: List<PokemonCard>
 ) {
+    val deckCardAnimation = rememberInfiniteTransition(label = "deckCardBackgroundAnimation")
+    val sheenOffset by deckCardAnimation.animateFloat(
+        initialValue = -220f,
+        targetValue = 420f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "deckCardSheenOffset"
+    )
+    val glowAlpha by deckCardAnimation.animateFloat(
+        initialValue = 0.06f,
+        targetValue = 0.14f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "deckCardGlowAlpha"
+    )
+
     val coverUrls = remember(deck) { deck.displayCoverImageUrls() }
     val cardCounts = remember(deck.cards) { deck.cards.groupingBy { it }.eachCount() }
     val uniqueDeckCards = remember(deck.cards, allOwnedCards) {
@@ -474,20 +501,80 @@ fun DeckItem(
                 .height(140.dp)
         ) {
             if (coverUrls.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.16f))
+                )
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(coverUrls.first())
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
                 )
             } else {
-                Box(modifier = Modifier.fillMaxSize().background(
-                    Brush.linearGradient(listOf(DarkCard, BlueCard.copy(alpha = 0.2f)))
-                ))
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    Color(0xFF10151F),
+                                    Color(0xFF1C2D44),
+                                    BlueCard.copy(alpha = 0.28f)
+                                )
+                            )
+                        )
+                )
             }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color(0xFF0E1A29).copy(alpha = 0.14f),
+                                BlueCard.copy(alpha = 0.08f),
+                                Color(0xFF0D131E).copy(alpha = 0.16f)
+                            )
+                        )
+                    )
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(translationX = sheenOffset)
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.White.copy(alpha = 0.08f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(130.dp)
+                    .align(Alignment.TopStart)
+                    .graphicsLayer(
+                        translationX = sheenOffset * 0.45f,
+                        translationY = 12f
+                    )
+                    .background(
+                        color = BlueCard.copy(alpha = glowAlpha),
+                        shape = CircleShape
+                    )
+            )
 
             Box(
                 modifier = Modifier
@@ -495,9 +582,9 @@ fun DeckItem(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.1f),
-                                Color.Black.copy(alpha = 0.4f),
-                                Color.Black.copy(alpha = 0.9f)
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.16f),
+                                Color.Black.copy(alpha = 0.62f)
                             )
                         )
                     )
@@ -517,12 +604,26 @@ fun DeckItem(
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(16.dp)
+                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.18f),
+                                Color.Black.copy(alpha = 0.46f)
+                            )
+                        )
+                    )
+                    .border(
+                        BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
                 if (coverUrls.isNotEmpty()) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(bottom = 6.dp)
                     ) {
                         coverUrls.forEach { coverUrl ->
                             AsyncImage(
@@ -535,7 +636,7 @@ fun DeckItem(
                                 modifier = Modifier
                                     .size(30.dp, 42.dp)
                                     .clip(RoundedCornerShape(4.dp))
-                                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.45f)), RoundedCornerShape(4.dp))
+                                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.65f)), RoundedCornerShape(4.dp))
                             )
                         }
                     }
