@@ -144,47 +144,6 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Bottone Google subito visibile
-            Button(
-                onClick = onGoogleSignIn,
-                enabled = !isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = Color(0xFF2D2D2D)
-                ),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.AccountCircle,
-                    contentDescription = null,
-                    tint = Color(0xFF4285F4),
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = AppLocale.googleSignInLabel,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
-                Text(AppLocale.or, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp))
-                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             // Form
             Column(
                 modifier = Modifier
@@ -281,8 +240,79 @@ fun AuthScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
+                Text(AppLocale.or, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Bottone Google compatto
+            OutlinedButton(
+                onClick = onGoogleSignIn,
+                enabled = !isLoading,
+                modifier = Modifier.height(44.dp),
+                shape = RoundedCornerShape(22.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF3C4043)
+                ),
+                border = BorderStroke(1.dp, Color(0xFFDADCE0)),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+            ) {
+                GoogleColorIcon(modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = AppLocale.googleSignInLabel,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    color = Color(0xFF3C4043)
+                )
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+}
+
+@Composable
+fun GoogleColorIcon(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cx = w / 2f
+        val cy = h / 2f
+        val r = minOf(w, h) / 2f
+
+        // Clip to circle - draw G shape using colored arcs/rectangles
+        // Blue top-right arc
+        drawArc(color = Color(0xFF4285F4), startAngle = -90f, sweepAngle = 90f, useCenter = true,
+            topLeft = androidx.compose.ui.geometry.Offset(cx - r, cy - r), size = androidx.compose.ui.geometry.Size(r * 2, r * 2))
+        // Red bottom-right arc
+        drawArc(color = Color(0xFFEA4335), startAngle = 0f, sweepAngle = 90f, useCenter = true,
+            topLeft = androidx.compose.ui.geometry.Offset(cx - r, cy - r), size = androidx.compose.ui.geometry.Size(r * 2, r * 2))
+        // Yellow bottom-left arc
+        drawArc(color = Color(0xFFFBBC05), startAngle = 90f, sweepAngle = 90f, useCenter = true,
+            topLeft = androidx.compose.ui.geometry.Offset(cx - r, cy - r), size = androidx.compose.ui.geometry.Size(r * 2, r * 2))
+        // Green top-left arc
+        drawArc(color = Color(0xFF34A853), startAngle = 180f, sweepAngle = 90f, useCenter = true,
+            topLeft = androidx.compose.ui.geometry.Offset(cx - r, cy - r), size = androidx.compose.ui.geometry.Size(r * 2, r * 2))
+        // White inner circle
+        drawCircle(color = Color.White, radius = r * 0.65f, center = androidx.compose.ui.geometry.Offset(cx, cy))
+        // Blue horizontal bar (right side of G)
+        drawRect(color = Color(0xFF4285F4),
+            topLeft = androidx.compose.ui.geometry.Offset(cx, cy - r * 0.18f),
+            size = androidx.compose.ui.geometry.Size(r * 0.9f, r * 0.36f))
+        // White mask to round the right edge slightly
+        drawRect(color = Color.White,
+            topLeft = androidx.compose.ui.geometry.Offset(cx + r * 0.9f - 2f, cy - r * 0.18f),
+            size = androidx.compose.ui.geometry.Size(r * 0.2f, r * 0.36f))
     }
 }
 

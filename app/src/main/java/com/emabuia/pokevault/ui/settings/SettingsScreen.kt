@@ -93,6 +93,19 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // TikTok promo compact (sempre in cima, evidenziata)
+            SocialPromoCard(
+                title = AppLocale.tikTokLabel,
+                subtitle = AppLocale.tikTokSubtitle,
+                compact = true,
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppLocale.tikTokUrl))
+                    context.startActivity(intent)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             // Lingua
             SettingsItem(
                 icon = Icons.Default.Language,
@@ -126,17 +139,6 @@ fun SettingsScreen(
             )
 
             Spacer(modifier = Modifier.height(14.dp))
-
-            SocialPromoCard(
-                title = AppLocale.tikTokLabel,
-                subtitle = AppLocale.tikTokSubtitle,
-                onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppLocale.tikTokUrl))
-                    context.startActivity(intent)
-                }
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
 
             // Premium section
             SettingsItem(
@@ -402,8 +404,14 @@ fun SettingsScreen(
 private fun SocialPromoCard(
     title: String,
     subtitle: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    compact: Boolean = false
 ) {
+    val vertPad = if (compact) 10.dp else 16.dp
+    val iconSize = if (compact) 34.dp else 44.dp
+    val titleSize = if (compact) 13.sp else 15.sp
+    val subtitleSize = if (compact) 11.sp else 12.sp
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -412,59 +420,63 @@ private fun SocialPromoCard(
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        DarkCard.copy(alpha = 0.96f),
-                        BlueCard.copy(alpha = 0.22f)
+                        Color(0xFF1A0030),
+                        Color(0xFF0D1B4B)
                     )
                 )
             )
             .border(
-                BorderStroke(1.dp, BlueCard.copy(alpha = 0.30f)),
+                BorderStroke(1.5.dp, Color(0xFFEE1D52).copy(alpha = 0.85f)),
                 RoundedCornerShape(18.dp)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+            .padding(horizontal = 14.dp, vertical = vertPad),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.Black.copy(alpha = 0.30f)),
+                .size(iconSize)
+                .clip(RoundedCornerShape(10.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFFEE1D52), Color(0xFF010101))
+                    )
+                ),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "TikTok",
-                color = TextWhite,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(modifier = Modifier.width(14.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextWhite
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                fontSize = 12.sp,
-                color = TextMuted,
-                lineHeight = 17.sp
+                text = "TT",
+                color = Color.White,
+                fontSize = if (compact) 11.sp else 13.sp,
+                fontWeight = FontWeight.ExtraBold
             )
         }
 
         Spacer(modifier = Modifier.width(12.dp))
 
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = titleSize,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            if (!compact) Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                fontSize = subtitleSize,
+                color = Color(0xFFEE1D52).copy(alpha = 0.85f),
+                lineHeight = 15.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
         Icon(
             imageVector = Icons.AutoMirrored.Filled.OpenInNew,
             contentDescription = null,
-            tint = BlueCard,
-            modifier = Modifier.size(22.dp)
+            tint = Color(0xFFEE1D52),
+            modifier = Modifier.size(if (compact) 18.dp else 22.dp)
         )
     }
 }
