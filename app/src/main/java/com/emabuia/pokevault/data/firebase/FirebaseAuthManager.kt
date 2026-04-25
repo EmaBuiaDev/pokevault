@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.data.firebase
 
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
@@ -10,6 +11,12 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class FirebaseAuthManager {
+
+    enum class ReauthProvider {
+        PASSWORD,
+        GOOGLE,
+        UNKNOWN
+    }
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
@@ -107,28 +114,65 @@ class FirebaseAuthManager {
         }
     }
 
+    fun getReauthProvider(): ReauthProvider {
+        val user = currentUser ?: return ReauthProvider.UNKNOWN
+        val providers = user.providerData
+            .mapNotNull { it.providerId }
+            .filter { it != "firebase" }
+
+        return when {
+            providers.contains("password") -> ReauthProvider.PASSWORD
+            providers.contains("google.com") -> ReauthProvider.GOOGLE
+            else -> ReauthProvider.UNKNOWN
+        }
+    }
+
+    suspend fun reauthenticateWithPassword(password: String): Result<Unit> {
+        return try {
+            val user = currentUser ?: throw Exception("Nessun utente autenticato")
+            val email = user.email ?: throw Exception("Email utente non disponibile")
+            val credential = EmailAuthProvider.getCredential(email, password)
+            user.reauthenticate(credential).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun reauthenticateWithGoogle(idToken: String): Result<Unit> {
+        return try {
+            val user = currentUser ?: throw Exception("Nessun utente autenticato")
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            user.reauthenticate(credential).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ── Eliminazione account e dati ──
     suspend fun deleteAccount(): Result<Unit> {
         return try {
             val user = currentUser ?: throw Exception("Nessun utente autenticato")
             val uid = user.uid
 
-            // Elimina sotto-collezione cards
-            val cardsSnapshot = firestore.collection("users").document(uid)
-                .collection("cards").get().await()
-            for (doc in cardsSnapshot.documents) {
-                doc.reference.delete().await()
-            }
+            val userDoc = firestore.collection("users").document(uid)
+            val subcollections = listOf(
+                "cards",
+                "decks",
+                "albums",
+                "wishlists",
+                "match_logs",
+                "tournaments",
+                "goal_albums"
+            )
 
-            // Elimina sotto-collezione decks
-            val decksSnapshot = firestore.collection("users").document(uid)
-                .collection("decks").get().await()
-            for (doc in decksSnapshot.documents) {
-                doc.reference.delete().await()
+            for (collectionName in subcollections) {
+                deleteSubcollection(userDoc, collectionName)
             }
 
             // Elimina documento utente
-            firestore.collection("users").document(uid).delete().await()
+            userDoc.delete().await()
 
             // Elimina account Firebase Auth
             user.delete().await()
@@ -136,6 +180,16 @@ class FirebaseAuthManager {
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    private suspend fun deleteSubcollection(
+        userDoc: com.google.firebase.firestore.DocumentReference,
+        collectionName: String
+    ) {
+        val snapshot = userDoc.collection(collectionName).get().await()
+        for (doc in snapshot.documents) {
+            doc.reference.delete().await()
         }
     }
 

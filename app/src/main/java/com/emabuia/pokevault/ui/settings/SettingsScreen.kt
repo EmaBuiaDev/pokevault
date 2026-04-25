@@ -39,6 +39,7 @@ import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.viewmodel.DeleteReauthMethod
 import com.emabuia.pokevault.viewmodel.AuthViewModel
 
 @Composable
@@ -60,6 +61,9 @@ fun SettingsScreen(
     var showCreatorSection by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    var showReauthDialog by remember { mutableStateOf(false) }
+    var reauthMethod by remember { mutableStateOf(DeleteReauthMethod.UNKNOWN) }
+    var reauthPassword by remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -367,6 +371,14 @@ fun SettingsScreen(
                         showDeleteDialog = false
                         onAccountDeleted()
                     },
+                    onRequiresRecentLogin = { method ->
+                        isDeleting = false
+                        showDeleteDialog = false
+                        deleteError = null
+                        reauthMethod = method
+                        reauthPassword = ""
+                        showReauthDialog = true
+                    },
                     onError = { error ->
                         isDeleting = false
                         deleteError = error
@@ -375,6 +387,52 @@ fun SettingsScreen(
                 )
             },
             onDismiss = { showDeleteDialog = false }
+        )
+    }
+
+    if (showReauthDialog) {
+        ReauthenticateDeleteDialog(
+            method = reauthMethod,
+            password = reauthPassword,
+            isBusy = isDeleting,
+            onPasswordChange = { reauthPassword = it },
+            onConfirmPassword = {
+                isDeleting = true
+                deleteError = null
+                authViewModel.reauthenticateAndDeleteWithPassword(
+                    password = reauthPassword,
+                    onSuccess = {
+                        isDeleting = false
+                        showReauthDialog = false
+                        onAccountDeleted()
+                    },
+                    onError = { error ->
+                        isDeleting = false
+                        deleteError = error
+                    }
+                )
+            },
+            onConfirmGoogle = {
+                isDeleting = true
+                deleteError = null
+                authViewModel.reauthenticateAndDeleteWithGoogle(
+                    context = context,
+                    onSuccess = {
+                        isDeleting = false
+                        showReauthDialog = false
+                        onAccountDeleted()
+                    },
+                    onError = { error ->
+                        isDeleting = false
+                        deleteError = error
+                    }
+                )
+            },
+            onDismiss = {
+                if (!isDeleting) {
+                    showReauthDialog = false
+                }
+            }
         )
     }
 
@@ -664,6 +722,146 @@ private fun DeleteAccountDialog(
                         fontSize = 15.sp
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReauthenticateDeleteDialog(
+    method: DeleteReauthMethod,
+    password: String,
+    isBusy: Boolean,
+    onPasswordChange: (String) -> Unit,
+    onConfirmPassword: () -> Unit,
+    onConfirmGoogle: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isItalian = AppLocale.isItalian
+    val title = if (isItalian) "Conferma identita" else "Confirm identity"
+    val body = if (isItalian)
+        "Per motivi di sicurezza, Google richiede un accesso recente prima di eliminare l'account."
+    else
+        "For security reasons, Google requires a recent login before deleting your account."
+
+    Dialog(
+        onDismissRequest = { if (!isBusy) onDismiss() },
+        properties = DialogProperties(dismissOnBackPress = !isBusy, dismissOnClickOutside = !isBusy)
+    ) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(24.dp))
+                .background(DarkSurface)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(Icons.Default.Lock, null, tint = BlueCard, modifier = Modifier.size(44.dp))
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Text(
+                text = title,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextWhite,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = body,
+                fontSize = 14.sp,
+                color = TextGray,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            when (method) {
+                DeleteReauthMethod.PASSWORD -> {
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = onPasswordChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isBusy,
+                        singleLine = true,
+                        label = { Text(if (isItalian) "Password" else "Password") }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = onConfirmPassword,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isBusy,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = RedCard)
+                    ) {
+                        Text(if (isItalian) "Conferma e elimina" else "Confirm and delete")
+                    }
+                }
+
+                DeleteReauthMethod.GOOGLE -> {
+                    Button(
+                        onClick = onConfirmGoogle,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isBusy,
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text(if (isItalian) "Accedi con Google e elimina" else "Sign in with Google and delete")
+                    }
+                }
+
+                DeleteReauthMethod.UNKNOWN -> {
+                    Button(
+                        onClick = onConfirmGoogle,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isBusy,
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text(if (isItalian) "Prova con Google" else "Try with Google")
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = onPasswordChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isBusy,
+                        singleLine = true,
+                        label = { Text(if (isItalian) "Password (opzionale)" else "Password (optional)") }
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedButton(
+                        onClick = onConfirmPassword,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isBusy
+                    ) {
+                        Text(if (isItalian) "Conferma con password" else "Confirm with password")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isBusy,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextGray)
+            ) {
+                Text(AppLocale.cancel)
+            }
+
+            if (isBusy) {
+                Spacer(modifier = Modifier.height(12.dp))
+                CircularProgressIndicator(color = BlueCard, modifier = Modifier.size(26.dp))
             }
         }
     }

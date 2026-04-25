@@ -26,6 +26,12 @@ data class AuthUiState(
     val userName: String = ""
 )
 
+enum class DeleteReauthMethod {
+    PASSWORD,
+    GOOGLE,
+    UNKNOWN
+}
+
 class AuthViewModel : ViewModel() {
 
     private val authManager = FirebaseAuthManager()
@@ -248,6 +254,24 @@ class AuthViewModel : ViewModel() {
     }
 
     fun deleteAccount(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        deleteAccount(
+            onSuccess = onSuccess,
+            onRequiresRecentLogin = { _ ->
+                val fallback = if (AppLocale.isItalian)
+                    "Sessione scaduta. Conferma di nuovo la tua identita per eliminare l'account."
+                else
+                    "Session expired. Please confirm your identity again to delete the account."
+                onError(fallback)
+            },
+            onError = onError
+        )
+    }
+
+    fun deleteAccount(
+        onSuccess: () -> Unit,
+        onRequiresRecentLogin: (DeleteReauthMethod) -> Unit,
+        onError: (String) -> Unit
+    ) {
         viewModelScope.launch {
             authManager.deleteAccount()
                 .onSuccess {
@@ -255,18 +279,91 @@ class AuthViewModel : ViewModel() {
                     onSuccess()
                 }
                 .onFailure { error ->
+                    if (isRecentLoginRequired(error)) {
+                        onRequiresRecentLogin(currentDeleteReauthMethod())
+                        return@onFailure
+                    }
+                    val message = error.message ?: "Errore sconosciuto"
+                    onError(message)
+                }
+        }
+    }
+
+    fun reauthenticateAndDeleteWithPassword(
+        password: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        if (password.isBlank()) {
+            onError(if (AppLocale.isItalian) "Inserisci la password" else "Enter your password")
+            return
+        }
+
+        viewModelScope.launch {
+            authManager.reauthenticateWithPassword(password)
+                .onSuccess {
+                    deleteAccount(onSuccess = onSuccess, onError = onError)
+                }
+                .onFailure { error ->
                     val message = when {
-                        error.message?.contains("requires-recent-login", ignoreCase = true) == true ||
-                        error.message?.contains("re-authenticate", ignoreCase = true) == true ->
-                            if (AppLocale.isItalian)
-                                "Per sicurezza, esegui il logout e accedi di nuovo prima di eliminare l'account."
-                            else
-                                "For security, please log out and log in again before deleting your account."
-                        else -> error.message ?: "Errore sconosciuto"
+                        error.message?.contains("wrong-password", ignoreCase = true) == true ||
+                        error.message?.contains("invalid-credential", ignoreCase = true) == true ->
+                            if (AppLocale.isItalian) "Password non corretta" else "Wrong password"
+                        else -> error.message ?: if (AppLocale.isItalian) "Re-login non riuscito" else "Re-login failed"
                     }
                     onError(message)
                 }
         }
+    }
+
+    fun reauthenticateAndDeleteWithGoogle(
+        context: Context,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+            if (resId == 0) {
+                onError(
+                    if (AppLocale.isItalian) "Google Sign-In non configurato correttamente."
+                    else "Google Sign-In is not configured correctly."
+                )
+                return@launch
+            }
+
+            val webClientId = context.getString(resId)
+            val idToken = tryGetGoogleIdToken(context, webClientId)
+                ?: tryGetSignInWithGoogleToken(context, webClientId)
+
+            if (idToken == null) {
+                onError(
+                    if (AppLocale.isItalian) "Re-login Google annullato o non disponibile."
+                    else "Google re-login canceled or unavailable."
+                )
+                return@launch
+            }
+
+            authManager.reauthenticateWithGoogle(idToken)
+                .onSuccess {
+                    deleteAccount(onSuccess = onSuccess, onError = onError)
+                }
+                .onFailure { error ->
+                    onError(error.message ?: if (AppLocale.isItalian) "Re-login Google non riuscito" else "Google re-login failed")
+                }
+        }
+    }
+
+    fun currentDeleteReauthMethod(): DeleteReauthMethod {
+        return when (authManager.getReauthProvider()) {
+            FirebaseAuthManager.ReauthProvider.PASSWORD -> DeleteReauthMethod.PASSWORD
+            FirebaseAuthManager.ReauthProvider.GOOGLE -> DeleteReauthMethod.GOOGLE
+            FirebaseAuthManager.ReauthProvider.UNKNOWN -> DeleteReauthMethod.UNKNOWN
+        }
+    }
+
+    private fun isRecentLoginRequired(error: Throwable): Boolean {
+        return error.message?.contains("requires-recent-login", ignoreCase = true) == true ||
+            error.message?.contains("re-authenticate", ignoreCase = true) == true
     }
 
     fun clearError() {
