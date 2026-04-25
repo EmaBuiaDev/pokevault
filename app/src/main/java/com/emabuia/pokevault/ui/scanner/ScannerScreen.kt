@@ -268,12 +268,7 @@ fun ScannerScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        buildString {
-                            append("Riconoscimento")
-                            if (state.detectedName.isNotBlank()) append(" \"${state.detectedName}\"")
-                            if (state.detectedNumber.isNotBlank()) append(" #${state.detectedNumber}")
-                            append("...")
-                        },
+                        "Ricerca carta in corso...",
                         color = Color.White,
                         fontSize = 14.sp
                     )
