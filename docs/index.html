@@ -41,6 +41,54 @@
             font-size: 16px;
             margin-bottom: 40px;
         }
+        .social-cta {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            background: linear-gradient(135deg, #232342, #2C2C52);
+            border: 1px solid #34345C;
+            border-radius: 18px;
+            padding: 14px 18px;
+            margin-bottom: 28px;
+            text-decoration: none;
+            transition: transform 0.2s, background 0.2s, border-color 0.2s;
+        }
+        .social-cta:hover {
+            background: linear-gradient(135deg, #2A2A4A, #34345C);
+            border-color: #4A6CF7;
+            transform: translateY(-1px);
+        }
+        .social-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            background: #111122;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .social-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+        .social-copy {
+            text-align: left;
+        }
+        .social-label {
+            display: block;
+            color: #FFFFFF;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+        .social-handle {
+            display: block;
+            color: #8EA2FF;
+            font-size: 13px;
+            margin-top: 2px;
+        }
         .links {
             display: flex;
             gap: 16px;
@@ -81,6 +129,18 @@
 
     <h1>PokeVault</h1>
     <p class="tagline">La tua collezione di carte, al sicuro.</p>
+
+    <a class="social-cta" href="https://www.tiktok.com/@pokemondo22?_r=1&amp;_t=ZN-95pJ7LLQ7eh" target="_blank" rel="noopener noreferrer">
+        <span class="social-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14.5 3C14.83 5.1 16.1 6.53 18 7.05V9.72C16.75 9.68 15.67 9.35 14.7 8.76V14.1C14.7 17.49 12.64 20 9.34 20C6.16 20 4 17.67 4 14.72C4 11.58 6.41 9.37 9.52 9.37C9.89 9.37 10.2 9.4 10.54 9.48V12.09C10.23 11.99 9.93 11.95 9.61 11.95C7.88 11.95 6.67 13.11 6.67 14.7C6.67 16.35 7.84 17.42 9.37 17.42C11.18 17.42 12.03 16.08 12.03 14.11V3H14.5Z" fill="#FFFFFF"/>
+            </svg>
+        </span>
+        <span class="social-copy">
+            <span class="social-label">Se vuoi essere aggiornato nel mondo Pokemon, seguici su TikTok</span>
+            <span class="social-handle">@pokemondo22</span>
+        </span>
+    </a>
 
     <div class="links">
         <a href="/pokevault/privacy-policy">Privacy Policy</a>

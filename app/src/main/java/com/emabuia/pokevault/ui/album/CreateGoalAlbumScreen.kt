@@ -8,6 +8,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -23,6 +25,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -35,7 +38,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
-import com.emabuia.pokevault.data.model.GoalCriteriaType
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
@@ -109,6 +111,7 @@ fun CreateGoalAlbumScreen(
 
     LaunchedEffect(Unit) {
         viewModel.loadAvailableSets()
+        viewModel.formCriteriaType = com.emabuia.pokevault.data.model.GoalCriteriaType.SET
         if (!viewModel.canCreate()) {
             showPremiumDialog = true
         }
@@ -165,59 +168,15 @@ fun CreateGoalAlbumScreen(
                 )
             )
 
-            // ── Tipo criterio ─────────────────────────────────────────────
-            Text(AppLocale.chaseCriteriaTypeLabel, color = TextGray, fontSize = 13.sp)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                GoalCriteriaType.entries.forEach { type ->
-                    FilterChip(
-                        selected = viewModel.formCriteriaType == type,
-                        onClick = {
-                            viewModel.formCriteriaType = type
-                            viewModel.formCriteriaValue = ""
-                        },
-                        label = {
-                            Text(
-                                text = type.toLabel(),
-                                fontSize = 12.sp,
-                                maxLines = 1
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = OrangeCard,
-                            selectedLabelColor = TextWhite,
-                            containerColor = DarkSurface,
-                            labelColor = TextGray
-                        )
-                    )
-                }
-            }
-
             // ── Valore criterio ───────────────────────────────────────────
-            when (viewModel.formCriteriaType) {
-                GoalCriteriaType.SET -> SetPicker(
-                    sets = viewModel.availableSets,
-                    selectedValue = viewModel.formCriteriaValue,
-                    searchQuery = setSearchQuery,
-                    onSearchChange = { setSearchQuery = it },
-                    onSelect = { viewModel.formCriteriaValue = it }
-                )
-                GoalCriteriaType.RARITY -> RarityPicker(
-                    selected = viewModel.formCriteriaValue,
-                    onSelect = { viewModel.formCriteriaValue = it }
-                )
-                GoalCriteriaType.SUPERTYPE -> SupertypePicker(
-                    selected = viewModel.formCriteriaValue,
-                    onSelect = { viewModel.formCriteriaValue = it }
-                )
-                GoalCriteriaType.TYPE -> TypePicker(
-                    selected = viewModel.formCriteriaValue,
-                    onSelect = { viewModel.formCriteriaValue = it }
-                )
-                GoalCriteriaType.CUSTOM -> CustomCardSearch(viewModel)
-            }
+            Text(AppLocale.set, color = TextGray, fontSize = 13.sp)
+            SetPicker(
+                sets = viewModel.availableSets,
+                selectedValue = viewModel.formCriteriaValue,
+                searchQuery = setSearchQuery,
+                onSearchChange = { setSearchQuery = it },
+                onSelect = { viewModel.formCriteriaValue = it }
+            )
 
             // ── Preview ───────────────────────────────────────────────────
             if (viewModel.isPreviewLoading) {
@@ -282,12 +241,27 @@ private fun SetPicker(
     onSearchChange: (String) -> Unit,
     onSelect: (String) -> Unit
 ) {
+    val selectedSet = remember(selectedValue, sets) {
+        sets.firstOrNull { it.id == selectedValue }
+    }
     val filtered = remember(searchQuery, sets) {
-        if (searchQuery.isBlank()) sets
-        else sets.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        val trimmedQuery = searchQuery.trim()
+        val matches = if (trimmedQuery.isBlank()) {
+            sets
+        } else {
+            sets.filter { set ->
+                listOf(set.name, set.series, set.id)
+                    .any { candidate -> candidate.contains(trimmedQuery, ignoreCase = true) }
+            }
+        }
+        matches.sortedWith(
+            compareByDescending<TcgSet> { it.id == selectedValue }
+                .thenByDescending { it.releaseDate }
+                .thenBy { it.name }
+        )
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchChange,
@@ -303,56 +277,207 @@ private fun SetPicker(
                 cursorColor = OrangeCard
             )
         )
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier.heightIn(max = 240.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            itemsIndexed(filtered, key = { _, s -> s.id }) { idx, set ->
-                AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn() + slideInVertically(initialOffsetY = { it / 3 })
+
+        if (selectedSet != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(OrangeCard.copy(alpha = 0.24f), BlueCard.copy(alpha = 0.18f))
+                        )
+                    )
+                    .border(1.dp, OrangeCard.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    val isSelected = set.id == selectedValue
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) OrangeCard.copy(alpha = 0.2f) else DarkSurface)
-                            .border(
-                                width = if (isSelected) 1.5.dp else 0.dp,
-                                color = if (isSelected) OrangeCard else Color.Transparent,
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                            .clickable { onSelect(set.id) }
-                            .padding(10.dp)
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(selectedSet.images.logo.ifBlank { selectedSet.images.symbol })
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = selectedSet.name,
+                        modifier = Modifier.size(width = 82.dp, height = 36.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = if (AppLocale.isItalian) "Set selezionato" else "Selected set",
+                            color = TextMuted,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = selectedSet.name,
+                            color = TextWhite,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = formatSetMeta(selectedSet),
+                            color = TextGray,
+                            fontSize = 12.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (searchQuery.isBlank()) {
+                    if (AppLocale.isItalian) "Set disponibili" else "Available sets"
+                } else {
+                    if (AppLocale.isItalian) "Risultati" else "Results"
+                },
+                color = TextGray,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = filtered.size.toString(),
+                color = OrangeCard,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(OrangeCard.copy(alpha = 0.14f))
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+        }
+
+        if (filtered.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(DarkSurface)
+                    .border(1.dp, TextMuted.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
+                    .padding(18.dp)
+            ) {
+                Text(
+                    text = if (AppLocale.isItalian) {
+                        "Nessun set trovato. Prova con nome, serie o codice set."
+                    } else {
+                        "No set found. Try name, series, or set code."
+                    },
+                    color = TextGray,
+                    fontSize = 13.sp
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filtered, key = { it.id }) { set ->
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 3 })
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        val isSelected = set.id == selectedValue
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(if (isSelected) OrangeCard.copy(alpha = 0.14f) else DarkSurface)
+                                .border(
+                                    width = if (isSelected) 1.4.dp else 1.dp,
+                                    color = if (isSelected) OrangeCard else TextMuted.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(18.dp)
+                                )
+                                .clickable { onSelect(set.id) }
+                                .padding(14.dp)
                         ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(set.images.symbol)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = set.name,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Text(
-                                text = set.name,
-                                color = if (isSelected) OrangeCard else TextWhite,
-                                fontSize = 12.sp,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(Color.White.copy(alpha = 0.96f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(set.images.symbol)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = set.name,
+                                        modifier = Modifier.size(28.dp),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = set.name,
+                                        color = if (isSelected) OrangeCard else TextWhite,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = formatSetMeta(set),
+                                        color = TextGray,
+                                        fontSize = 12.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Text(
+                                    text = if (isSelected) {
+                                        if (AppLocale.isItalian) "Scelto" else "Selected"
+                                    } else {
+                                        set.id.uppercase()
+                                    },
+                                    color = if (isSelected) TextWhite else TextMuted,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(
+                                            if (isSelected) OrangeCard else Color.White.copy(alpha = 0.06f)
+                                        )
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
+}
+
+private fun formatSetMeta(set: TcgSet): String {
+    val pieces = buildList {
+        if (set.series.isNotBlank()) add(set.series)
+        if (set.total > 0) add("${set.total} carte")
+        if (set.releaseDate.isNotBlank()) add(formatSetReleaseDate(set.releaseDate))
+    }
+    return pieces.joinToString(" • ")
+}
+
+private fun formatSetReleaseDate(value: String): String {
+    val parts = value.split("-")
+    return if (parts.size == 3) "${parts[2]}/${parts[1]}/${parts[0]}" else value
 }
 
 @Composable
@@ -535,12 +660,4 @@ private fun PreviewSection(cards: List<TcgCard>) {
             Text("+ ${cards.size - 12} altre carte", color = TextMuted, fontSize = 12.sp)
         }
     }
-}
-
-private fun GoalCriteriaType.toLabel(): String = when (this) {
-    GoalCriteriaType.SET -> "Set"
-    GoalCriteriaType.RARITY -> "Rarità"
-    GoalCriteriaType.SUPERTYPE -> "Categoria"
-    GoalCriteriaType.TYPE -> "Tipo"
-    GoalCriteriaType.CUSTOM -> "Personalizz."
 }

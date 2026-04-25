@@ -110,7 +110,7 @@ class GoalAlbumViewModel : ViewModel() {
         }
         viewModelScope.launch {
             isPreviewLoading = true
-            previewCards = fetchTargetCards(formCriteriaType, formCriteriaValue)
+            previewCards = fetchTargetCards(GoalCriteriaType.SET, formCriteriaValue)
             isPreviewLoading = false
         }
     }
@@ -159,10 +159,11 @@ class GoalAlbumViewModel : ViewModel() {
         if (formName.isBlank() || formCriteriaValue.isBlank()) return
         viewModelScope.launch {
             isSaving = true
-            val targetApiIds = fetchTargetCards(formCriteriaType, formCriteriaValue).map { it.id }
+            val criteriaType = GoalCriteriaType.SET
+            val targetApiIds = fetchTargetCards(criteriaType, formCriteriaValue).map { it.id }
             val album = GoalAlbum(
                 name = formName.trim(),
-                criteriaType = formCriteriaType,
+                criteriaType = criteriaType,
                 criteriaValue = formCriteriaValue.trim(),
                 targetCardApiIds = targetApiIds
             )
