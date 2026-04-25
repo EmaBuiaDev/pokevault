@@ -52,7 +52,8 @@ class PremiumManager private constructor(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    private val _isPremium = MutableStateFlow(prefs.getBoolean(KEY_IS_PREMIUM, false))
+    // All'avvio, la fonte di verità è sempre BillingClient/server, non SharedPreferences
+    private val _isPremium = MutableStateFlow(false)
     val isPremium: StateFlow<Boolean> = _isPremium.asStateFlow()
 
     private val _metaDeckViewsUsed = MutableStateFlow(prefs.getInt(KEY_META_DECK_VIEWS, 0))
@@ -81,6 +82,8 @@ class PremiumManager private constructor(private val context: Context) {
 
     init {
         initTrial()
+        // Svuota la cache locale all'avvio per evitare che venga usata come fonte di verità
+        prefs.edit().remove(KEY_IS_PREMIUM).apply()
         connectAndQueryPurchases()
     }
 
@@ -227,6 +230,7 @@ class PremiumManager private constructor(private val context: Context) {
 
     private fun updatePremiumStatus(isPremium: Boolean) {
         _isPremium.value = isPremium
+        // Aggiorna la cache locale solo dopo verifica server/acquisto
         prefs.edit().putBoolean(KEY_IS_PREMIUM, isPremium).apply()
         syncToFirestore(isPremium)
     }
