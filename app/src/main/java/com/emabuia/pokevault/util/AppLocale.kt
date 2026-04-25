@@ -611,6 +611,7 @@ object AppLocale {
     // Privacy Policy
     val privacyPolicyUrl: String get() = "https://emabuiadev.github.io/pokevault/privacy-policy"
     val termsUrl: String get() = "https://emabuiadev.github.io/pokevault/terms"
+    val tikTokUrl: String get() = "https://www.tiktok.com/@pokemondo22?_r=1&_t=ZN-95pJ7LLQ7eh"
 
     val privacyConsentTitle: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
     val privacyConsentSummary: String get() = if (isItalian)
@@ -661,6 +662,11 @@ object AppLocale {
     val privacyPolicySubtitle: String get() = if (isItalian) "Come gestiamo i tuoi dati" else "How we handle your data"
     val termsLabel: String get() = if (isItalian) "Termini di Servizio" else "Terms of Service"
     val termsSubtitle: String get() = if (isItalian) "Condizioni d'uso dell'app" else "App usage conditions"
+    val tikTokLabel: String get() = if (isItalian) "Seguici su TikTok" else "Follow us on TikTok"
+    val tikTokSubtitle: String get() = if (isItalian)
+        "Se vuoi essere aggiornato nel mondo Pokemon, seguici su @pokemondo22"
+    else
+        "Stay updated on the Pokemon world with @pokemondo22"
     val dangerZone: String get() = if (isItalian) "Zona Pericolosa" else "Danger Zone"
     val deleteAccountButton: String get() = if (isItalian) "Elimina Account" else "Delete Account"
     val deleteAccountTitle: String get() = if (isItalian) "Eliminare l'account?" else "Delete account?"

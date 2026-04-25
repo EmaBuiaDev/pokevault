@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -120,6 +121,17 @@ fun SettingsScreen(
                 subtitle = AppLocale.termsSubtitle,
                 onClick = {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppLocale.termsUrl))
+                    context.startActivity(intent)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            SocialPromoCard(
+                title = AppLocale.tikTokLabel,
+                subtitle = AppLocale.tikTokSubtitle,
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppLocale.tikTokUrl))
                     context.startActivity(intent)
                 }
             )
@@ -382,6 +394,77 @@ fun SettingsScreen(
                 showPremiumHomeSpriteDialog = false
                 onNavigateToPremium()
             }
+        )
+    }
+}
+
+@Composable
+private fun SocialPromoCard(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        DarkCard.copy(alpha = 0.96f),
+                        BlueCard.copy(alpha = 0.22f)
+                    )
+                )
+            )
+            .border(
+                BorderStroke(1.dp, BlueCard.copy(alpha = 0.30f)),
+                RoundedCornerShape(18.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.Black.copy(alpha = 0.30f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "TikTok",
+                color = TextWhite,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.width(14.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextWhite
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                fontSize = 12.sp,
+                color = TextMuted,
+                lineHeight = 17.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+            contentDescription = null,
+            tint = BlueCard,
+            modifier = Modifier.size(22.dp)
         )
     }
 }
