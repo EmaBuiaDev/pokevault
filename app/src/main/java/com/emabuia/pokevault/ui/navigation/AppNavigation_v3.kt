@@ -1,12 +1,48 @@
 package com.emabuia.pokevault.ui.navigation
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.ui.auth.AuthScreen
 import com.emabuia.pokevault.ui.collection.AddCardScreen
 import com.emabuia.pokevault.ui.collection.CardDetailScreen
@@ -38,6 +74,7 @@ import com.emabuia.pokevault.viewmodel.AuthViewModel
 import androidx.compose.ui.platform.LocalContext
 import java.net.URLDecoder
 import java.net.URLEncoder
+import kotlinx.coroutines.delay
 
 object Routes {
     const val AUTH = "auth"
@@ -89,7 +126,188 @@ fun AppNavigation(
     navController: NavHostController,
     authViewModel: AuthViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    val engagementPrefs = remember {
+        context.getSharedPreferences("engagement_prompt", android.content.Context.MODE_PRIVATE)
+    }
+
     val startDestination = if (authViewModel.uiState.isLoggedIn) Routes.HOME else Routes.AUTH
+    var showReviewPrompt by remember { mutableStateOf(false) }
+    var navigationCount by remember { mutableIntStateOf(0) }
+    var lastTrackedRoute by remember { mutableStateOf<String?>(null) }
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = currentBackStackEntry?.destination?.route
+
+    LaunchedEffect(currentRoute, authViewModel.uiState.isLoggedIn) {
+        if (!authViewModel.uiState.isLoggedIn) return@LaunchedEffect
+        if (engagementPrefs.getBoolean("review_prompt_shown", false)) return@LaunchedEffect
+
+        val route = currentRoute ?: return@LaunchedEffect
+        if (route == lastTrackedRoute || route == Routes.AUTH) return@LaunchedEffect
+
+        lastTrackedRoute = route
+        navigationCount += 1
+
+        if (navigationCount >= 10) {
+            engagementPrefs.edit().putBoolean("review_prompt_shown", true).apply()
+            showReviewPrompt = true
+        }
+    }
+
+    if (showReviewPrompt) {
+        val transition = rememberInfiniteTransition(label = "reviewPromptAnimation")
+        val fullTagline = AppLocale.ratingPromptTagline
+        val fullBody = AppLocale.ratingPromptBody
+        var typedTagline by remember(fullTagline, showReviewPrompt) { mutableStateOf("") }
+        var typedBody by remember(fullBody, showReviewPrompt) { mutableStateOf("") }
+
+        LaunchedEffect(showReviewPrompt, fullTagline, fullBody) {
+            if (!showReviewPrompt) return@LaunchedEffect
+            typedTagline = ""
+            typedBody = ""
+            for (char in fullTagline) {
+                typedTagline += char
+                delay(14)
+            }
+            delay(90)
+            for (char in fullBody) {
+                typedBody += char
+                delay(9)
+            }
+        }
+
+        val jumpScale by transition.animateFloat(
+            initialValue = 0.92f,
+            targetValue = 1.12f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 520),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "reviewPromptJumpScale"
+        )
+        val jumpY by transition.animateFloat(
+            initialValue = 3f,
+            targetValue = -10f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 520),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "reviewPromptJumpY"
+        )
+        val shakeX by transition.animateFloat(
+            initialValue = -3f,
+            targetValue = 3f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 120),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "reviewPromptShakeX"
+        )
+        val sparkAlpha by transition.animateFloat(
+            initialValue = 0.35f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 360),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "reviewPromptSparkAlpha"
+        )
+        val flashAlpha by transition.animateFloat(
+            initialValue = 0.08f,
+            targetValue = 0.24f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 240),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "reviewPromptFlash"
+        )
+
+        AlertDialog(
+            onDismissRequest = { showReviewPrompt = false },
+            title = { Text(AppLocale.ratingPromptTitle) },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = typedTagline,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                color = Color(0xFFFFE082).copy(alpha = flashAlpha),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+                        ) {
+                            Text(
+                                text = "⚡",
+                                fontSize = 20.sp,
+                                modifier = Modifier.graphicsLayer(alpha = sparkAlpha),
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = "Pika!",
+                                fontSize = 24.sp,
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .graphicsLayer(
+                                        scaleX = jumpScale,
+                                        scaleY = jumpScale,
+                                        translationY = jumpY,
+                                        translationX = shakeX
+                                    ),
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = "✨",
+                                fontSize = 20.sp,
+                                modifier = Modifier.graphicsLayer(alpha = 1f - sparkAlpha),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = typedBody,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showReviewPrompt = false
+                        val packageName = context.packageName
+                        val appStoreIntent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("market://details?id=$packageName")
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        val webStoreIntent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+                        try {
+                            context.startActivity(appStoreIntent)
+                        } catch (_: ActivityNotFoundException) {
+                            context.startActivity(webStoreIntent)
+                        }
+                    }
+                ) {
+                    Text(AppLocale.ratingPromptReviewCta)
+                }
+            }
+        )
+    }
 
     NavHost(
         navController = navController,

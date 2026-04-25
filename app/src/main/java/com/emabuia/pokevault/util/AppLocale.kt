@@ -613,6 +613,19 @@ object AppLocale {
     val termsUrl: String get() = "https://emabuiadev.github.io/pokevault/terms"
     val tikTokUrl: String get() = "https://www.tiktok.com/@pokemondo22?_r=1&_t=ZN-95pJ7LLQ7eh"
 
+    val ratingPromptTitle: String get() = if (isItalian) "Un Poké-messaggio per te" else "A Poké message for you"
+    val ratingPromptTagline: String get() = if (isItalian)
+        "Se PokéVault ti piace, una recensione ci dà energia per continuare."
+    else
+        "If you're enjoying PokéVault, a review gives us energy to keep building."
+    val ratingPromptBody: String get() = if (isItalian)
+        "Nella recensione puoi scriverci anche idee e feedback: leggiamo tutto e " +
+        "ci aiuta a far evolvere il progetto con nuove funzionalità utili."
+    else
+        "In your review, you can also share ideas and feedback: we read everything and " +
+        "it helps this project evolve with useful new features."
+    val ratingPromptReviewCta: String get() = if (isItalian) "Vai alla recensione" else "Go to review"
+
     val privacyConsentTitle: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
     val privacyConsentSummary: String get() = if (isItalian)
         "Per utilizzare PokéVault, raccogliamo e conserviamo i seguenti dati:\n\n" +
