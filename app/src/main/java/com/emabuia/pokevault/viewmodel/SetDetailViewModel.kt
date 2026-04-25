@@ -20,6 +20,8 @@ import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.hasPositiveEurPrice
+import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -183,8 +185,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             uiState = uiState.copy(isAddingCard = tcgCard.id)
             val variantKey = CardOptions.getVariantApiKey(variant)
-            val price = tcgCard.cardmarket?.prices?.averageSellPrice
-                ?: tcgCard.cardmarket?.prices?.lowPrice ?: 0.0
+            val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero()
 
             val card = PokemonCard(
                 name = tcgCard.name, imageUrl = tcgCard.images.small,
@@ -225,8 +226,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                     else availableVariants.firstOrNull() ?: "Holo"
 
                 val variantKey = CardOptions.getVariantApiKey(actualVariant)
-                val price = tcgCard.cardmarket?.prices?.averageSellPrice
-                    ?: tcgCard.cardmarket?.prices?.lowPrice ?: 0.0
+                val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero()
 
                 val card = PokemonCard(
                     name = tcgCard.name, imageUrl = tcgCard.images.small,
@@ -287,7 +287,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun ensureCardPrice(card: TcgCard) {
         val current = uiState.cards.firstOrNull { it.id == card.id } ?: card
         val cm = current.cardmarket?.prices
-        val hasApiEurPrice = (cm?.averageSellPrice ?: 0.0) > 0.0 || (cm?.lowPrice ?: 0.0) > 0.0
+        val hasApiEurPrice = cm.hasPositiveEurPrice()
         if (hasApiEurPrice) return
         if (!requestedCardPriceIds.add(card.id)) return
 
@@ -338,7 +338,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun enrichMissingCardPrices(setId: String, cards: List<TcgCard>) {
         val needingPrices = cards.filter { card ->
             val cm = card.cardmarket?.prices
-            val hasApiEurPrice = (cm?.averageSellPrice ?: 0.0) > 0.0 || (cm?.lowPrice ?: 0.0) > 0.0
+            val hasApiEurPrice = cm.hasPositiveEurPrice()
             !hasApiEurPrice
         }.take(MAX_PRICE_HYDRATION_REQUESTS_PER_SET)
 

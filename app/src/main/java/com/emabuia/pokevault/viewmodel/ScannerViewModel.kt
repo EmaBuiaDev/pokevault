@@ -17,6 +17,7 @@ import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ocr.CardOCRResult
 import com.emabuia.pokevault.ocr.CardSupertype
 import com.emabuia.pokevault.ocr.OCRManager
+import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -610,21 +611,21 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     // ═══════════════════════════════════════════
 
     private suspend fun addToFirestore(tcgCard: TcgCard) {
-        val price = tcgCard.cardmarket?.prices?.averageSellPrice
-            ?: tcgCard.cardmarket?.prices?.lowPrice ?: 0.0
+        val resolvedCard = repository.getCard(tcgCard.id, preferNetwork = true).getOrNull() ?: tcgCard
+        val price = resolvedCard.cardmarket?.prices.minimumEurPriceOrZero()
 
         val pokemonCard = PokemonCard(
-            name = tcgCard.name,
-            imageUrl = tcgCard.images.large.ifBlank { tcgCard.images.small },
-            set = tcgCard.set?.name ?: "",
-            rarity = tcgCard.rarity ?: "",
-            type = tcgCard.types?.firstOrNull() ?: tcgCard.supertype,
-            hp = tcgCard.hp?.toIntOrNull() ?: 0,
+            name = resolvedCard.name,
+            imageUrl = resolvedCard.images.large.ifBlank { resolvedCard.images.small },
+            set = resolvedCard.set?.name ?: "",
+            rarity = resolvedCard.rarity ?: "",
+            type = resolvedCard.types?.firstOrNull() ?: resolvedCard.supertype,
+            hp = resolvedCard.hp?.toIntOrNull() ?: 0,
             estimatedValue = price,
             quantity = 1,
             condition = "Near Mint",
-            apiCardId = tcgCard.id,
-            cardNumber = tcgCard.number
+            apiCardId = resolvedCard.id,
+            cardNumber = resolvedCard.number
         )
 
         firestoreRepository.addCard(pokemonCard)

@@ -599,26 +599,22 @@ class PokeTcgRepository {
         return memorySets?.firstOrNull { it.id == safeSetId }?.printedTotal
     }
 
-    suspend fun getCard(cardId: String): Result<TcgCard> = cardByIdMutex.withLock {
-        val memoryCard = memoryCards.values
-            .asSequence()
-            .flatMap { it.asSequence() }
-            .firstOrNull { it.id == cardId }
-        if (memoryCard != null) {
-            recordCacheHit("getCard:memory:$cardId")
-            return Result.success(memoryCard)
+    suspend fun getCard(cardId: String, preferNetwork: Boolean = false): Result<TcgCard> = cardByIdMutex.withLock {
+        fun findMemoryCard(): TcgCard? {
+            return memoryCards.values
+                .asSequence()
+                .flatMap { it.asSequence() }
+                .firstOrNull { it.id == cardId }
         }
 
-        val roomCard = runCatching { db.cardDao().getById(cardId) }
-            .onFailure { Timber.w(it, "getCard: errore lettura Room per id=%s", cardId) }
-            .getOrNull()
-            ?.toTcgCard()
-        if (roomCard != null) {
-            recordCacheHit("getCard:room:$cardId")
-            return Result.success(roomCard)
+        suspend fun findRoomCard(): TcgCard? {
+            return runCatching { db.cardDao().getById(cardId) }
+                .onFailure { Timber.w(it, "getCard: errore lettura Room per id=%s", cardId) }
+                .getOrNull()
+                ?.toTcgCard()
         }
 
-        val networkResult = guardedApiCall(resourceKey = "card:$cardId") {
+        suspend fun loadFromNetwork(): Result<TcgCard> = guardedApiCall(resourceKey = "card:$cardId") {
             when {
                 isPokeWalletCardId(cardId) -> api.getCard(cardId).toTcgCard()
                 else -> {
@@ -634,7 +630,35 @@ class PokeTcgRepository {
             }
         }
 
+        if (!preferNetwork) {
+            val memoryCard = findMemoryCard()
+            if (memoryCard != null) {
+                recordCacheHit("getCard:memory:$cardId")
+                return Result.success(memoryCard)
+            }
+
+            val roomCard = findRoomCard()
+            if (roomCard != null) {
+                recordCacheHit("getCard:room:$cardId")
+                return Result.success(roomCard)
+            }
+        }
+
+        val networkResult = loadFromNetwork()
+
         if (networkResult.isSuccess) return networkResult
+
+        val memoryCard = findMemoryCard()
+        if (memoryCard != null) {
+            recordCacheHit("getCard:memory:$cardId")
+            return Result.success(memoryCard)
+        }
+
+        val roomCard = findRoomCard()
+        if (roomCard != null) {
+            recordCacheHit("getCard:room:$cardId")
+            return Result.success(roomCard)
+        }
 
         val fallback = memorySearch.values
             .asSequence()

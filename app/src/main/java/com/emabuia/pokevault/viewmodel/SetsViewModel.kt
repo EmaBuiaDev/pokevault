@@ -15,6 +15,7 @@ import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
+import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -204,8 +205,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {
         viewModelScope.launch {
             uiState = uiState.copy(isAddingCard = tcgCard.id)
-            val price = tcgCard.cardmarket?.prices?.averageSellPrice
-                ?: tcgCard.cardmarket?.prices?.lowPrice ?: 0.0
+            val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero()
 
             val card = PokemonCard(
                 name = tcgCard.name, imageUrl = tcgCard.images.small,

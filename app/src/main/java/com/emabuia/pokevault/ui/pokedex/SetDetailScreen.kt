@@ -119,8 +119,8 @@ private fun CardImageFallback(
 }
 
 private fun resolveDisplayPrice(card: TcgCard): Double? {
-    return card.cardmarket?.prices?.averageSellPrice
-        ?: card.cardmarket?.prices?.lowPrice
+    return card.cardmarket?.prices?.lowPrice
+        ?: card.cardmarket?.prices?.averageSellPrice
 }
 
 private fun formatPriceEur(price: Double): String {

@@ -10,6 +10,7 @@ import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 
@@ -98,9 +99,7 @@ class CollectionViewModel : ViewModel() {
                 hydratingPriceCardIds += card.id
                 try {
                     val remoteCard = tcgRepository.getCard(card.apiCardId).getOrNull()
-                    val eurPrice = remoteCard?.cardmarket?.prices?.averageSellPrice
-                        ?: remoteCard?.cardmarket?.prices?.lowPrice
-                        ?: 0.0
+                    val eurPrice = remoteCard?.cardmarket?.prices.minimumEurPriceOrZero()
 
                     if (eurPrice > 0.0) {
                         repository.updateCard(card.id, card.copy(estimatedValue = eurPrice))

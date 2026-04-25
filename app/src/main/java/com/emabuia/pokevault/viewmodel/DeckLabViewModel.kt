@@ -16,6 +16,7 @@ import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.SetCodeMapper
 import com.emabuia.pokevault.data.remote.TcgCard
+import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -658,11 +659,10 @@ class DeckLabViewModel : ViewModel() {
         val tcgCard = searchPokewalletCard(card.name, card.set, card.number)
 
         return if (tcgCard != null) {
-            val price = tcgCard.cardmarket?.prices?.averageSellPrice
+            val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero().takeIf { it > 0.0 }
                 ?: tcgCard.cardmarket?.prices?.trendPrice
                 ?: tcgCard.cardmarket?.prices?.avg7
                 ?: tcgCard.cardmarket?.prices?.avg30
-                ?: tcgCard.cardmarket?.prices?.lowPrice
                 ?: 0.0
 
             PokemonCard(

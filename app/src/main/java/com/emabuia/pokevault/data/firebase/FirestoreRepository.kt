@@ -14,6 +14,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.Source
+import kotlin.math.abs
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -93,6 +94,8 @@ class FirestoreRepository {
      */
     suspend fun addCard(card: PokemonCard): Result<String> {
         return try {
+            var effectiveEstimatedValue = card.estimatedValue
+
             val data = hashMapOf<String, Any?>(
                 "name" to card.name,
                 "imageUrl" to card.imageUrl,
@@ -128,12 +131,16 @@ class FirestoreRepository {
                     val doc = existing.documents.first()
                     val docRef = doc.reference
                     val currentQty = doc.getLong("quantity")?.toInt() ?: 1
+                    val currentEstimatedValue = doc.getDouble("estimatedValue") ?: 0.0
+                    if (effectiveEstimatedValue <= 0.0) {
+                        effectiveEstimatedValue = currentEstimatedValue
+                    }
                     // Fire-and-forget: la scrittura colpisce la cache locale
                     // all'istante; lo snapshot listener emette subito l'update.
                     docRef.update(
                         mapOf(
                             "quantity" to (currentQty + card.quantity),
-                            "estimatedValue" to card.estimatedValue
+                            "estimatedValue" to effectiveEstimatedValue
                         )
                     )
                     doc.id
@@ -154,7 +161,7 @@ class FirestoreRepository {
             // comunque ricalcolati client-side dalla lista delle carte).
             userDoc.update(
                 "totalCards", FieldValue.increment(card.quantity.toLong()),
-                "totalValue", FieldValue.increment(card.estimatedValue * card.quantity)
+                "totalValue", FieldValue.increment(effectiveEstimatedValue * card.quantity)
             )
 
             Result.success(docId)
@@ -271,11 +278,11 @@ class FirestoreRepository {
                 c.apiCardId.ifBlank { "${c.name}_${c.set}_${c.cardNumber}" }
             }
 
-            val totalCards = if (cachedTotal > 0) cachedTotal else cards.sumOf { it.quantity }
-            val totalValue = if (cachedTotal > 0) cachedValue else cards.sumOf { it.estimatedValue * it.quantity }
+            val totalCards = cards.sumOf { it.quantity }
+            val totalValue = cards.sumOf { it.estimatedValue * it.quantity }
 
-            // Aggiorna il profilo se i totali aggregati mancavano (vecchio utente / primo accesso)
-            if (cachedTotal == 0 && cards.isNotEmpty()) {
+            // Aggiorna il profilo quando i totali cache risultano disallineati dal dato reale.
+            if (cachedTotal != totalCards || abs(cachedValue - totalValue) > 0.0001) {
                 userDoc.update(mapOf("totalCards" to totalCards, "totalValue" to totalValue))
             }
 
