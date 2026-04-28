@@ -152,6 +152,19 @@ fun CollectionScreen(
     val groupedByExpansion = remember(groupedCards) {
         groupedCards.groupBy { (_, group) ->
             group.firstOrNull()?.set?.takeIf { it.isNotBlank() } ?: "Espansione sconosciuta"
+        }.mapValues { entry ->
+            entry.value.sortedWith { a, b ->
+                val cardA = a.second.firstOrNull()
+                val cardB = b.second.firstOrNull()
+                val numA = cardA?.cardNumber ?: ""
+                val numB = cardB?.cardNumber ?: ""
+                
+                val digitA = numA.filter { it.isDigit() }.toIntOrNull() ?: Int.MAX_VALUE
+                val digitB = numB.filter { it.isDigit() }.toIntOrNull() ?: Int.MAX_VALUE
+                
+                if (digitA != digitB) digitA.compareTo(digitB)
+                else numA.compareTo(numB)
+            }
         }
     }
     val visibleExpansionNames = remember(groupedByExpansion) { groupedByExpansion.keys.toSet() }
@@ -927,73 +940,75 @@ fun ExpansionAccordionSection(
 ) {
     Surface(
         color = DarkCard,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp), // Angoli leggermente meno arrotondati per un look più pulito
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .animateContentSize()
-                .padding(12.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp) // Padding ridotto
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .clickable(onClick = onToggle)
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = BlueCard.copy(alpha = 0.18f),
-                    border = BorderStroke(1.dp, BlueCard.copy(alpha = 0.35f))
+                    color = BlueCard.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, BlueCard.copy(alpha = 0.25f))
                 ) {
                     Icon(
                         imageVector = Icons.Default.AutoAwesomeMosaic,
                         contentDescription = null,
                         tint = BlueCard,
-                        modifier = Modifier.padding(8.dp).size(16.dp)
+                        modifier = Modifier.padding(6.dp).size(14.dp) // Icona e contenitore più piccoli
                     )
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
                             text = expansionName,
                             color = TextWhite,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp, // Leggermente più piccolo
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
                         )
                         Surface(
                             shape = RoundedCornerShape(999.dp),
-                            color = BlueCard.copy(alpha = 0.18f),
-                            border = BorderStroke(1.dp, BlueCard.copy(alpha = 0.45f))
+                            color = BlueCard.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, BlueCard.copy(alpha = 0.3f))
                         ) {
                             Text(
                                 text = "x$totalCards",
                                 color = BlueCard,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
                     }
                     Text(
-                        text = "$uniqueCards carte uniche · $totalCards totali",
+                        text = "$uniqueCards uniche · $totalCards tot.", // Testo abbreviato per restare su una riga
                         color = TextMuted,
-                        fontSize = 12.sp
+                        fontSize = 11.sp
                     )
                 }
                 Icon(
                     imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
                     contentDescription = null,
-                    tint = TextWhite
+                    tint = TextMuted,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
