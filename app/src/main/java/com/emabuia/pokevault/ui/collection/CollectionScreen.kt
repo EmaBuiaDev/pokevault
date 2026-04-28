@@ -168,16 +168,9 @@ fun CollectionScreen(
         }
     }
     val visibleExpansionNames = remember(groupedByExpansion) { groupedByExpansion.keys.toSet() }
-    var collapsedExpansions by remember { mutableStateOf(setOf<String>()) }
-    var didInitializeCollapsedExpansions by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(visibleExpansionNames) {
-        collapsedExpansions = if (!didInitializeCollapsedExpansions && visibleExpansionNames.isNotEmpty()) {
-            didInitializeCollapsedExpansions = true
-            visibleExpansionNames
-        } else {
-            collapsedExpansions.intersect(visibleExpansionNames)
-        }
-    }
+    
+    // Gestione espansioni aperte (inizialmente vuoto = tutte chiuse)
+    var expandedExpansions by remember { mutableStateOf(setOf<String>()) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -316,10 +309,10 @@ fun CollectionScreen(
                     ExpansionSortRow(
                         selectedOrder = expansionSortOrder,
                         onOrderSelected = { expansionSortOrder = it },
-                        onExpandAll = { collapsedExpansions = emptySet() },
-                        onCollapseAll = { collapsedExpansions = visibleExpansionNames },
-                        canExpandAll = visibleExpansionNames.isNotEmpty() && collapsedExpansions.isNotEmpty(),
-                        canCollapseAll = visibleExpansionNames.isNotEmpty() && collapsedExpansions.size < visibleExpansionNames.size
+                        onExpandAll = { expandedExpansions = visibleExpansionNames },
+                        onCollapseAll = { expandedExpansions = emptySet() },
+                        canExpandAll = visibleExpansionNames.isNotEmpty() && (visibleExpansionNames.size > expandedExpansions.size),
+                        canCollapseAll = expandedExpansions.isNotEmpty()
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -361,18 +354,18 @@ fun CollectionScreen(
                         ) {
                             items(expansionSections, key = { it.first }) { (expansionName, cardsInExpansion) ->
                                 val totalQuantity = cardsInExpansion.sumOf { (_, group) -> group.sumOf { it.quantity } }
-                                val isCollapsed = expansionName in collapsedExpansions
+                                val isExpanded = expansionName in expandedExpansions
 
                                 ExpansionAccordionSection(
                                     expansionName = expansionName,
                                     totalCards = totalQuantity,
                                     uniqueCards = cardsInExpansion.size,
-                                    isCollapsed = isCollapsed,
+                                    isCollapsed = !isExpanded,
                                     onToggle = {
-                                        collapsedExpansions = if (isCollapsed) {
-                                            collapsedExpansions - expansionName
+                                        expandedExpansions = if (isExpanded) {
+                                            expandedExpansions - expansionName
                                         } else {
-                                            collapsedExpansions + expansionName
+                                            expandedExpansions + expansionName
                                         }
                                     },
                                     content = {
