@@ -237,7 +237,7 @@ fun PremiumScreen(
                     // Monthly plan
                     val monthlyProduct = premiumManager.getMonthlyProduct()
                     val monthlyPrice = premiumManager.getBasePlanFormattedPrice(monthlyProduct)
-                        ?: "2,00 €"
+                        ?: "3,00 €"
 
                     PlanCard(
                         title = AppLocale.premiumMonthly,
