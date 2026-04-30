@@ -75,6 +75,12 @@ android {
         noCompress += "tflite"
     }
 
+    // Escludi le architetture x86 e x86_64 dal bundle per evitare errori sulle librerie native troppo piccole
+    packagingOptions {
+        exclude("lib/x86/**")
+        exclude("lib/x86_64/**")
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = false
