@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.home.components.SearchBar
 import com.emabuia.pokevault.ui.theme.*
@@ -329,19 +328,21 @@ fun CollectionScreen(
                             Text("Nessuna carta trovata", color = TextMuted)
                         }
                     } else {
-                        val expansionSections = groupedByExpansion
-                            .toList()
-                            .sortedWith(
-                                when (expansionSortOrder) {
-                                    ExpansionSortOrder.BY_NAME_ASC -> compareBy { it.first.lowercase() }
-                                    ExpansionSortOrder.BY_TOTAL_CARDS_DESC -> compareByDescending<Pair<String, List<Pair<String, List<PokemonCard>>>>> {
-                                        it.second.sumOf { (_, cards) -> cards.sumOf { card -> card.quantity } }
-                                    }.thenBy { it.first.lowercase() }
-                                    ExpansionSortOrder.BY_TOTAL_CARDS_ASC -> compareBy<Pair<String, List<Pair<String, List<PokemonCard>>>>> {
-                                        it.second.sumOf { (_, cards) -> cards.sumOf { card -> card.quantity } }
-                                    }.thenBy { it.first.lowercase() }
-                                }
-                            )
+                        val expansionSections = remember(groupedByExpansion, expansionSortOrder) {
+                            groupedByExpansion
+                                .toList()
+                                .sortedWith(
+                                    when (expansionSortOrder) {
+                                        ExpansionSortOrder.BY_NAME_ASC -> compareBy { it.first.lowercase() }
+                                        ExpansionSortOrder.BY_TOTAL_CARDS_DESC -> compareByDescending<Pair<String, List<Pair<String, List<PokemonCard>>>>> {
+                                            it.second.sumOf { (_, cards) -> cards.sumOf { card -> card.quantity } }
+                                        }.thenBy { it.first.lowercase() }
+                                        ExpansionSortOrder.BY_TOTAL_CARDS_ASC -> compareBy<Pair<String, List<Pair<String, List<PokemonCard>>>>> {
+                                            it.second.sumOf { (_, cards) -> cards.sumOf { card -> card.quantity } }
+                                        }.thenBy { it.first.lowercase() }
+                                    }
+                                )
+                        }
 
                         LazyColumn(
                             contentPadding = PaddingValues(
@@ -370,8 +371,11 @@ fun CollectionScreen(
                                     },
                                     content = {
                                         if (state.isGridView) {
+                                            val rows = remember(cardsInExpansion, state.gridColumns) {
+                                                cardsInExpansion.chunked(state.gridColumns)
+                                            }
                                             Column(verticalArrangement = Arrangement.spacedBy(if (state.gridColumns > 4) 6.dp else 10.dp)) {
-                                                cardsInExpansion.chunked(state.gridColumns).forEach { row ->
+                                                rows.forEach { row ->
                                                     Row(horizontalArrangement = Arrangement.spacedBy(if (state.gridColumns > 4) 6.dp else 10.dp)) {
                                                         row.forEach { (groupKey, group) ->
                                                             val representative = group.first()
@@ -933,14 +937,13 @@ fun ExpansionAccordionSection(
 ) {
     Surface(
         color = DarkCard,
-        shape = RoundedCornerShape(12.dp), // Angoli leggermente meno arrotondati per un look più pulito
+        shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .animateContentSize()
-                .padding(horizontal = 10.dp, vertical = 8.dp) // Padding ridotto
+                .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -959,7 +962,7 @@ fun ExpansionAccordionSection(
                         imageVector = Icons.Default.AutoAwesomeMosaic,
                         contentDescription = null,
                         tint = BlueCard,
-                        modifier = Modifier.padding(6.dp).size(14.dp) // Icona e contenitore più piccoli
+                        modifier = Modifier.padding(6.dp).size(14.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(10.dp))
@@ -972,7 +975,7 @@ fun ExpansionAccordionSection(
                             text = expansionName,
                             color = TextWhite,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp, // Leggermente più piccolo
+                            fontSize = 14.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
@@ -992,7 +995,7 @@ fun ExpansionAccordionSection(
                         }
                     }
                     Text(
-                        text = "$uniqueCards uniche · $totalCards tot.", // Testo abbreviato per restare su una riga
+                        text = "$uniqueCards uniche · $totalCards tot.",
                         color = TextMuted,
                         fontSize = 11.sp
                     )
@@ -1007,8 +1010,8 @@ fun ExpansionAccordionSection(
 
             AnimatedVisibility(
                 visible = !isCollapsed,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+                enter = expandVertically(),
+                exit = shrinkVertically()
             ) {
                 Column(
                     modifier = Modifier
@@ -1109,17 +1112,13 @@ fun CollectionCardGridItem(
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
-        if (card.imageUrl.isNotBlank()) {
-            SubcomposeAsyncImage(
-                model = safeImageUrl(card.imageUrl),
-                contentDescription = card.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-                error = { CollectionCardImageFallback(card = card, compact = gridColumns > 4) }
-            )
-        } else {
-            CollectionCardImageFallback(card = card, compact = gridColumns > 4)
-        }
+        AsyncImage(
+            model = safeImageUrl(card.imageUrl),
+            contentDescription = card.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+            error = painterResource(id = android.R.drawable.ic_menu_report_image) // Fallback invisibile o icona standard
+        )
 
         if (isSelected) Box(modifier = Modifier
             .fillMaxSize()
@@ -1195,18 +1194,13 @@ fun CollectionCardListItem(
             }
         }
 
-        if (card.imageUrl.isNotBlank()) {
-            SubcomposeAsyncImage(
-                model = safeImageUrl(card.imageUrl),
-                contentDescription = card.name,
-                modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp)),
-                error = { CollectionCardImageFallback(card = card, compact = true) }
-            )
-        } else {
-            Box(modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp))) {
-                CollectionCardImageFallback(card = card, compact = true)
-            }
-        }
+        AsyncImage(
+            model = safeImageUrl(card.imageUrl),
+            contentDescription = card.name,
+            modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp)),
+            contentScale = ContentScale.Crop
+        )
+        
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(card.name, color = TextWhite, fontWeight = FontWeight.Bold)
