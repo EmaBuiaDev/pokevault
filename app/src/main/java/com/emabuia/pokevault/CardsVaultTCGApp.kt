@@ -28,7 +28,7 @@ import okhttp3.OkHttpClient
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
-class CardsVaultTCGApp : Application(), ImageLoaderFactory {
+class PokeVaultApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()

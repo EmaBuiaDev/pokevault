@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.CardsVaultTCG" parent="Theme.AppCompat.DayNight.NoActionBar">
+    <style name="Theme.PokeVault" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:windowTranslucentStatus">false</item>
         <item name="android:windowTranslucentNavigation">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
@@ -10,7 +10,7 @@
     </style>
 
     <!-- Splash screen theme -->
-    <style name="Theme.CardsVaultTCG.Splash" parent="Theme.CardsVaultTCG">
+    <style name="Theme.PokeVault.Splash" parent="Theme.PokeVault">
         <item name="android:windowBackground">@color/splash_background</item>
     </style>
 </resources>

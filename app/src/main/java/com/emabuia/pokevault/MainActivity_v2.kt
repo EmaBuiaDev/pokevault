@@ -12,7 +12,7 @@ import com.emabuia.pokevault.ui.legal.FirstLaunchLegalFlow
 import com.emabuia.pokevault.ui.legal.hasCompletedLegalChecks
 import com.emabuia.pokevault.ui.legal.markLegalChecksCompleted
 import com.emabuia.pokevault.ui.navigation.AppNavigation
-import com.emabuia.pokevault.ui.theme.CardsVaultTCGTheme
+import com.emabuia.pokevault.ui.theme.PokeVaultTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            CardsVaultTCGTheme {
+            PokeVaultTheme {
                 var legalCompleted by mutableStateOf(hasCompletedLegalChecks(this@MainActivity))
 
                 if (!legalCompleted) {
