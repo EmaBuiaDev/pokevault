@@ -87,7 +87,9 @@ android {
                 "**/libmlkit_google_ocr_pipeline.so",
                 "**/libsurface_util_jni.so",
                 "**/libtensorflowlite_gpu_jni.so",
-                "**/libtensorflowlite_jni.so"
+                "**/libtensorflowlite_jni.so",
+                "**/liblitert_gpu_jni.so",
+                "**/liblitert_jni.so"
             )
         }
     }
