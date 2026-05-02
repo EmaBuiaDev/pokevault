@@ -34,7 +34,7 @@ data class CollectionUiState(
     val selectedType: String? = null,
     val selectedRarity: String? = null,
     val supertypeFilter: SupertypeFilter = SupertypeFilter.ALL,
-    val sortOrder: SortOrder = SortOrder.NEWEST,
+    val sortOrder: SortOrder = SortOrder.NUMBER,
     val errorMessage: String? = null,
     val successMessage: String? = null
 )
@@ -128,7 +128,11 @@ class CollectionViewModel : ViewModel() {
     }
 
     fun filterBySupertype(filter: SupertypeFilter) {
-        uiState = uiState.copy(supertypeFilter = filter)
+        uiState = uiState.copy(
+            supertypeFilter = filter,
+            // I tipi (Fuoco/Acqua/...) valgono solo per i Pokémon.
+            selectedType = if (filter == SupertypeFilter.POKEMON || filter == SupertypeFilter.ALL) uiState.selectedType else null
+        )
         refreshFilteredCards()
     }
 
@@ -201,20 +205,37 @@ class CollectionViewModel : ViewModel() {
                 card.set.contains(uiState.searchQuery, ignoreCase = true) ||
                 card.rarity.contains(uiState.searchQuery, ignoreCase = true)
             
-            val matchesSet = uiState.selectedSet == null || card.set == uiState.selectedSet
+            val matchesSet = uiState.selectedSet == null ||
+                card.set == uiState.selectedSet ||
+                (uiState.selectedSet == "Espansione sconosciuta" && card.set.isBlank())
             
-            // Corretto il filtraggio per tipo: traduciamo il tipo della carta prima del confronto
-            val matchesType = uiState.selectedType == null || 
-                AppLocale.translateType(card.type).equals(uiState.selectedType, ignoreCase = true)
+            // Il filtro tipo si applica solo nel contesto Pokémon.
+            val matchesType = when {
+                uiState.selectedType == null -> true
+                uiState.supertypeFilter == SupertypeFilter.TRAINER || uiState.supertypeFilter == SupertypeFilter.ENERGY -> true
+                else -> AppLocale.translateType(card.type).equals(uiState.selectedType, ignoreCase = true)
+            }
             
             val matchesRarity = uiState.selectedRarity == null ||
                 card.rarity.equals(uiState.selectedRarity, ignoreCase = true)
 
+            val supertypeLower = card.supertype.lowercase()
+            val typeLower = card.type.lowercase()
+            val subtypeLower = card.subtypes.map { it.lowercase() }
+            val trainerMarkers = listOf("trainer", "allenat", "supporter", "item", "stadium", "stadio", "tool", "strumento", "aiuto")
+            val energyMarkers = listOf("energy", "energia", "energ")
+            val hasTrainerMarkers = trainerMarkers.any { marker ->
+                supertypeLower.contains(marker) || typeLower.contains(marker) || subtypeLower.any { it.contains(marker) }
+            }
+            val hasEnergyMarkers = energyMarkers.any { marker ->
+                supertypeLower.contains(marker) || typeLower.contains(marker) || subtypeLower.any { it.contains(marker) }
+            }
+
             val matchesSupertype = when (uiState.supertypeFilter) {
                 SupertypeFilter.ALL -> true
-                SupertypeFilter.POKEMON -> card.classify() == "Pokémon"
-                SupertypeFilter.TRAINER -> card.classify() == "Trainer"
-                SupertypeFilter.ENERGY -> card.classify() == "Energy"
+                SupertypeFilter.POKEMON -> !hasTrainerMarkers && !hasEnergyMarkers && card.classify() == "Pokémon"
+                SupertypeFilter.TRAINER -> hasTrainerMarkers || card.classify() == "Trainer"
+                SupertypeFilter.ENERGY -> hasEnergyMarkers || card.classify() == "Energy"
             }
 
             matchesQuery && matchesSet && matchesType && matchesRarity && matchesSupertype

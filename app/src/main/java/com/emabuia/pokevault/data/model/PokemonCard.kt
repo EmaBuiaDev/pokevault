@@ -32,17 +32,55 @@ data class PokemonCard(
 ) {
     fun classify(): String {
         val s = supertype.lowercase()
+        val t = type.lowercase()
         val n = name.lowercase()
         val sub = subtypes.map { it.lowercase() }
-        val hasHp = hp > 0
 
-        if (s.contains("energy") || sub.contains("energy") || n.contains("energy") || n.contains("energia")) {
+        // Energy ha priorità massima
+        if (
+            s.contains("energy") ||
+            s.contains("energ") ||
+            t.contains("energy") ||
+            t.contains("energia") ||
+            t.contains("energ") ||
+            sub.any { it.contains("energy") || it.contains("energia") } ||
+            n.contains("energy") ||
+            n.contains("energia")
+        ) {
             return "Energy"
         }
-        if (s.contains("trainer") || sub.contains("item") || sub.contains("stadium") || sub.contains("supporter") || s.contains("aiuto") || !hasHp) {
+        // Trainer rilevato esplicitamente da supertype o subtype (non da hp=0)
+        if (
+            s.contains("trainer") ||
+            s.contains("allenat") ||
+            s.contains("aiuto") ||
+            t.contains("trainer") ||
+            t.contains("supporter") ||
+            t.contains("item") ||
+            t.contains("stadium") ||
+            t.contains("tool") ||
+            t.contains("allenat") ||
+            t.contains("aiuto") ||
+            t.contains("stadio") ||
+            t.contains("strumento") ||
+            sub.any {
+                it == "item" ||
+                    it == "stadium" ||
+                    it == "supporter" ||
+                    it == "tool" ||
+                    it == "strumento" ||
+                    it == "stadio" ||
+                    it == "aiuto"
+            }
+        ) {
             return "Trainer"
         }
-        return "Pokémon"
+        // Pokémon rilevato esplicitamente
+        if (s.contains("pok")) {
+            return "Pokémon"
+        }
+        // Fallback quando il supertype non è esplicitamente valorizzato: usa hp come euristica
+        return if (hp > 0) "Pokémon" else "Trainer"
     }
 }
 

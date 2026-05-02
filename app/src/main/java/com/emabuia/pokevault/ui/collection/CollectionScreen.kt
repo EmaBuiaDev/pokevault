@@ -148,21 +148,26 @@ fun CollectionScreen(
             .entries
             .map { (key, group) -> key to group }
     }
-    val groupedByExpansion = remember(groupedCards) {
+    val groupedByExpansion = remember(groupedCards, state.sortOrder) {
         groupedCards.groupBy { (_, group) ->
             group.firstOrNull()?.set?.takeIf { it.isNotBlank() } ?: "Espansione sconosciuta"
         }.mapValues { entry ->
             entry.value.sortedWith { a, b ->
                 val cardA = a.second.firstOrNull()
                 val cardB = b.second.firstOrNull()
-                val numA = cardA?.cardNumber ?: ""
-                val numB = cardB?.cardNumber ?: ""
-                
-                val digitA = numA.filter { it.isDigit() }.toIntOrNull() ?: Int.MAX_VALUE
-                val digitB = numB.filter { it.isDigit() }.toIntOrNull() ?: Int.MAX_VALUE
-                
-                if (digitA != digitB) digitA.compareTo(digitB)
-                else numA.compareTo(numB)
+                when (state.sortOrder) {
+                    SortOrder.NEWEST -> 0
+                    SortOrder.PRICE_ASC -> (cardA?.estimatedValue ?: 0.0).compareTo(cardB?.estimatedValue ?: 0.0)
+                    SortOrder.PRICE_DESC -> (cardB?.estimatedValue ?: 0.0).compareTo(cardA?.estimatedValue ?: 0.0)
+                    SortOrder.NAME_ASC -> (cardA?.name ?: "").lowercase().compareTo((cardB?.name ?: "").lowercase())
+                    SortOrder.NUMBER -> {
+                        val numA = cardA?.cardNumber ?: ""
+                        val numB = cardB?.cardNumber ?: ""
+                        val digitA = numA.filter { it.isDigit() }.toIntOrNull() ?: Int.MAX_VALUE
+                        val digitB = numB.filter { it.isDigit() }.toIntOrNull() ?: Int.MAX_VALUE
+                        if (digitA != digitB) digitA.compareTo(digitB) else numA.compareTo(numB)
+                    }
+                }
             }
         }
     }
@@ -170,6 +175,21 @@ fun CollectionScreen(
     
     // Gestione espansioni aperte (inizialmente vuoto = tutte chiuse)
     var expandedExpansions by remember { mutableStateOf(setOf<String>()) }
+
+    // Auto-espandi le sezioni al primo caricamento e ogni volta che cambiano i filtri attivi,
+    // così i risultati sono sempre visibili indipendentemente dallo stato collapse/expand.
+    LaunchedEffect(
+        visibleExpansionNames,
+        state.selectedSet,
+        state.selectedType,
+        state.selectedRarity,
+        state.supertypeFilter,
+        state.searchQuery
+    ) {
+        if (visibleExpansionNames.isNotEmpty()) {
+            expandedExpansions = expandedExpansions + visibleExpansionNames
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -256,7 +276,7 @@ fun CollectionScreen(
                         state.selectedType != null ||
                         state.selectedRarity != null ||
                         state.supertypeFilter != SupertypeFilter.ALL ||
-                        state.sortOrder != SortOrder.NEWEST
+                        state.sortOrder != SortOrder.NUMBER
 
                     Row(
                         modifier = Modifier
@@ -680,7 +700,7 @@ fun FilterBottomSheet(
                     viewModel.filterBySet(null)
                     viewModel.filterByType(null)
                     viewModel.filterByRarity(null)
-                    viewModel.updateSortOrder(SortOrder.NEWEST)
+                    viewModel.updateSortOrder(SortOrder.NUMBER)
                 }) {
                     Icon(Icons.Default.RestartAlt, contentDescription = null, tint = BlueCard)
                     Spacer(modifier = Modifier.width(4.dp))
@@ -888,11 +908,11 @@ fun ActiveFiltersRow(
                 )
             }
         }
-        if (state.sortOrder != SortOrder.NEWEST) {
+        if (state.sortOrder != SortOrder.NUMBER) {
             item {
                 RemovableFilterChip(
                     label = "Ordine: ${state.sortOrder.name}",
-                    onRemove = { viewModel.updateSortOrder(SortOrder.NEWEST) }
+                    onRemove = { viewModel.updateSortOrder(SortOrder.NUMBER) }
                 )
             }
         }
