@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -509,7 +510,7 @@ fun CardDetailBottomSheet(
                                         modifier = Modifier.size(22.dp)
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.OpenInNew,
+                                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                                             contentDescription = "Apri su CardMarket",
                                             tint = TextGray,
                                             modifier = Modifier.size(15.dp)

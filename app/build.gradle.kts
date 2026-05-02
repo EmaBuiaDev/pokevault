@@ -75,15 +75,20 @@ android {
         noCompress += "tflite"
     }
 
-    // Escludi le architetture x86 e x86_64 dal bundle per evitare errori sulle librerie native troppo piccole
-    packagingOptions {
-        exclude("lib/x86/**")
-        exclude("lib/x86_64/**")
-    }
-
+    // Escludi le architetture x86/x86_64 e non tentare strip su librerie terze parti
+    // che arrivano gia' non strip-pabili (evita warning ripetuti in fase assemble).
     packaging {
         jniLibs {
             useLegacyPackaging = false
+            excludes += setOf("lib/x86/**", "lib/x86_64/**")
+            keepDebugSymbols += setOf(
+                "**/libandroidx.graphics.path.so",
+                "**/libimage_processing_util_jni.so",
+                "**/libmlkit_google_ocr_pipeline.so",
+                "**/libsurface_util_jni.so",
+                "**/libtensorflowlite_gpu_jni.so",
+                "**/libtensorflowlite_jni.so"
+            )
         }
     }
 }
@@ -148,7 +153,6 @@ dependencies {
     // ── TensorFlow Lite (PaddleOCR engine) ──
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.gpu)
-    implementation(libs.tensorflow.lite.support)
 
     // ── Accompanist Permissions ──
     implementation(libs.accompanist.permissions)

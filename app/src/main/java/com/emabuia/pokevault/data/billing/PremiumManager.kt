@@ -77,7 +77,7 @@ class PremiumManager private constructor(private val context: Context) {
         .setListener { billingResult, purchases ->
             scope.launch { handlePurchasesUpdated(billingResult, purchases) }
         }
-        .enablePendingPurchases()
+        .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
         .build()
 
     init {
