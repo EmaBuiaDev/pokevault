@@ -595,7 +595,7 @@ object AppLocale {
         "proprietà di Nintendo, The Pokémon Company e The Pokémon Company International. " +
         "Questa app non è affiliata, sponsorizzata o approvata da Nintendo, " +
         "The Pokémon Company o The Pokémon Company International.\n\n" +
-        "Le immagini e i dati delle carte sono forniti tramite API di terze parti (PokéTCG.io) " +
+        "Le immagini e i dati delle carte sono forniti tramite API di terze parti (Pokewallet.io, api.pokewallet.io) " +
         "e sono utilizzati esclusivamente a scopo informativo e di gestione della collezione personale.\n\n" +
         "Tutti gli altri marchi appartengono ai rispettivi proprietari."
     else
@@ -603,7 +603,7 @@ object AppLocale {
         "of Nintendo, The Pokémon Company, and The Pokémon Company International. " +
         "This app is not affiliated with, sponsored by, or endorsed by Nintendo, " +
         "The Pokémon Company, or The Pokémon Company International.\n\n" +
-        "Card images and data are provided through third-party APIs (PokéTCG.io) " +
+        "Card images and data are provided through third-party APIs (Pokewallet.io, api.pokewallet.io) " +
         "and are used solely for informational and personal collection management purposes.\n\n" +
         "All other trademarks belong to their respective owners."
     val disclaimerAccept: String get() = if (isItalian) "Ho capito, continua" else "I understand, continue"
@@ -615,9 +615,9 @@ object AppLocale {
 
     val ratingPromptTitle: String get() = if (isItalian) "Un Poké-messaggio per te" else "A Poké message for you"
     val ratingPromptTagline: String get() = if (isItalian)
-        "Se PokéVault ti piace, una recensione ci dà energia per continuare."
+        "Se PokeVault ti piace, una recensione ci dà energia per continuare."
     else
-        "If you're enjoying PokéVault, a review gives us energy to keep building."
+        "If you're enjoying PokeVault, a review gives us energy to keep building."
     val ratingPromptBody: String get() = if (isItalian)
         "Nella recensione puoi scriverci anche idee e feedback: leggiamo tutto e " +
         "ci aiuta a far evolvere il progetto con nuove funzionalità utili."
@@ -628,7 +628,7 @@ object AppLocale {
 
     val privacyConsentTitle: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
     val privacyConsentSummary: String get() = if (isItalian)
-        "Per utilizzare PokéVault, raccogliamo e conserviamo i seguenti dati:\n\n" +
+        "Per utilizzare PokeVault, raccogliamo e conserviamo i seguenti dati:\n\n" +
         "• Email e nome — per l'autenticazione e il profilo\n" +
         "• Dati della collezione — carte, mazzi, valutazioni\n" +
         "• Dati della fotocamera — solo per la scansione OCR (elaborati sul dispositivo, non inviati a server esterni)\n\n" +
@@ -636,7 +636,7 @@ object AppLocale {
         "Non vendiamo né condividiamo i tuoi dati personali con terze parti per scopi pubblicitari. " +
         "Puoi eliminare il tuo account e tutti i dati associati in qualsiasi momento dalle Impostazioni."
     else
-        "To use PokéVault, we collect and store the following data:\n\n" +
+        "To use PokeVault, we collect and store the following data:\n\n" +
         "• Email and name — for authentication and profile\n" +
         "• Collection data — cards, decks, valuations\n" +
         "• Camera data — only for OCR scanning (processed on-device, not sent to external servers)\n\n" +
