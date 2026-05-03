@@ -88,6 +88,7 @@ class PokeTcgRepository {
         private val LEGACY_ID_REGEX = Regex("^([A-Za-z0-9]+)-(.+)$")
         private val HASH_ID_REGEX = Regex("^[a-f0-9]{32,}$", RegexOption.IGNORE_CASE)
         private val FULL_NUMBER_REGEX = Regex("""^(\\d+)/(\\d+)$""")
+        private val FLEX_FULL_NUMBER_REGEX = Regex("""^\s*0*(\d+)\s*/\s*0*(\d+)\s*$""")
 
         private val ISO_DATE = DateTimeFormatter.ISO_LOCAL_DATE
         private val HUMAN_DATE_LONG = DateTimeFormatter.ofPattern("d MMMM, uuuu", Locale.ENGLISH)
@@ -350,6 +351,7 @@ class PokeTcgRepository {
         if (query.isBlank()) return Result.success(emptyList())
 
         val normalized = sanitizeQuery(query)
+        val fullNumber = parseFullNumberQuery(normalized)
         val cacheKey = "search::$normalized::$page"
         memorySearch[cacheKey]?.let { (cards, timestamp) ->
             if (System.currentTimeMillis() - timestamp < SEARCH_CACHE_DURATION) {
@@ -361,32 +363,22 @@ class PokeTcgRepository {
         if (page == 1) {
             val localCards = searchCardsFromLocalCache(normalized)
             if (localCards.isNotEmpty()) {
-                memorySearch[cacheKey] = localCards to System.currentTimeMillis()
+                val rankedLocal = rankSearchResults(normalized, localCards, fullNumber)
+                memorySearch[cacheKey] = rankedLocal to System.currentTimeMillis()
                 recordCacheHit("search:local:$normalized:$page")
-                return Result.success(localCards)
+                return Result.success(rankedLocal)
             }
         }
 
         recordCacheMiss("search:$normalized:$page")
 
         val networkResult = guardedApiCall(resourceKey = "search:$normalized:$page") {
-            val cards = when (val match = FULL_NUMBER_REGEX.matchEntire(normalized)) {
+            val cards = when (fullNumber) {
                 null -> performGenericSearch(normalized, page)
-                else -> {
-                    val number = match.groupValues[1].trimStart('0').ifEmpty { "0" }
-                    val total = match.groupValues[2].trimStart('0').ifEmpty { "0" }
-                    val candidateSetIds = getCandidateSetIdsByPrintedTotal(total, tolerance = 1).toSet()
-                    val broad = performAdaptiveApiSearch(number, page = 1)
-                    if (candidateSetIds.isEmpty()) {
-                        broad.filter { extractCardNumber(it.number) == number }
-                    } else {
-                        broad.filter {
-                            extractCardNumber(it.number) == number && it.set?.id in candidateSetIds
-                        }
-                    }
-                }
+                else -> performPreciseNumberSearch(number = fullNumber.first, total = fullNumber.second)
             }
-            cards.distinctBy { it.id }
+            val deduped = cards.distinctBy { it.id }
+            rankSearchResults(normalized, deduped, fullNumber)
         }
 
         networkResult.onSuccess { cards ->
@@ -749,6 +741,52 @@ class PokeTcgRepository {
         return performAdaptiveApiSearch(translated, page = page)
     }
 
+    private suspend fun performPreciseNumberSearch(number: String, total: String): List<TcgCard> {
+        val exactSetIds = getCandidateSetIdsByPrintedTotal(total, tolerance = 0).toSet()
+        val nearSetIds = getCandidateSetIdsByPrintedTotal(total, tolerance = 1).toSet()
+
+        val totalVariants = linkedSetOf(total, total.padStart(3, '0'))
+
+        val numberVariants = linkedSetOf(
+            "$number/$total",
+            "${number.padStart(3, '0')}/$total",
+            "$number/${total.padStart(3, '0')}",
+            "${number.padStart(3, '0')}/${total.padStart(3, '0')}",
+            number,
+            number.padStart(3, '0')
+        )
+
+        val fetched = linkedSetOf<TcgCard>()
+        numberVariants.forEach { variant ->
+            fetched += performApiSearch(query = variant, page = 1, limit = 30)
+        }
+
+        val filteredByNumber = fetched.filter { card -> extractCardNumber(card.number) == number }
+        val candidates = if (filteredByNumber.isNotEmpty()) {
+            filteredByNumber
+        } else {
+            performAdaptiveApiSearch(number, page = 1)
+                .filter { card -> extractCardNumber(card.number) == number }
+        }
+
+        return candidates.distinctBy { it.id }.sortedWith(
+            compareByDescending<TcgCard> { card ->
+                val setId = card.set?.id.orEmpty()
+                when {
+                    setId in exactSetIds -> 3
+                    setId in nearSetIds -> 2
+                    else -> 0
+                }
+            }.thenByDescending { card ->
+                if (extractPrintedTotalForSearch(card.number) in totalVariants) 1 else 0
+            }.thenByDescending { card ->
+                parseReleaseDateToEpoch(setReleaseDateById(card.set?.id).orEmpty())
+            }.thenBy { card ->
+                card.name.lowercase(Locale.ROOT)
+            }
+        )
+    }
+
     private suspend fun performApiSearch(query: String, page: Int, limit: Int): List<TcgCard> {
         ensureSetLanguageMapReady()
         val response = api.search(query = query, page = page, limit = limit)
@@ -783,17 +821,35 @@ class PokeTcgRepository {
             .flatMap { it.asSequence() }
             .toList()
 
-        val fullNumberMatch = FULL_NUMBER_REGEX.matchEntire(query)
-        if (fullNumberMatch != null) {
-            val normalizedNumber = fullNumberMatch.groupValues[1].trimStart('0').ifEmpty { "0" }
-            val total = fullNumberMatch.groupValues[2].trimStart('0').ifEmpty { "0" }
-            val candidateSetIds = getCandidateSetIdsByPrintedTotal(total, tolerance = 1).toSet()
+        val fullNumber = parseFullNumberQuery(query)
+        if (fullNumber != null) {
+            val normalizedNumber = fullNumber.first
+            val total = fullNumber.second
+            val totalVariants = linkedSetOf(total, total.padStart(3, '0'))
+            val exactSetIds = getCandidateSetIdsByPrintedTotal(total, tolerance = 0).toSet()
+            val nearSetIds = getCandidateSetIdsByPrintedTotal(total, tolerance = 1).toSet()
 
             val memoryMatches = memoryPool.filter { card ->
-                extractCardNumber(card.number) == normalizedNumber &&
-                    (candidateSetIds.isEmpty() || card.set?.id in candidateSetIds)
+                extractCardNumber(card.number) == normalizedNumber
             }
-            if (memoryMatches.isNotEmpty()) return memoryMatches.distinctBy { it.id }
+            if (memoryMatches.isNotEmpty()) {
+                return memoryMatches
+                    .distinctBy { it.id }
+                    .sortedWith(
+                        compareByDescending<TcgCard> { card ->
+                            val setId = card.set?.id.orEmpty()
+                            when {
+                                setId in exactSetIds -> 3
+                                setId in nearSetIds -> 2
+                                else -> 0
+                            }
+                        }.thenByDescending { card ->
+                            if (extractPrintedTotalForSearch(card.number) in totalVariants) 1 else 0
+                        }.thenByDescending { card ->
+                            parseReleaseDateToEpoch(setReleaseDateById(card.set?.id).orEmpty())
+                        }
+                    )
+            }
 
             val roomMatches = runCatching {
                 db.cardDao().getByNumber(normalizedNumber)
@@ -801,9 +857,23 @@ class PokeTcgRepository {
                 Timber.w(err, "searchCardsFromLocalCache: errore Room numero=%s", normalizedNumber)
             }.getOrDefault(emptyList())
                 .map { it.toTcgCard() }
-                .filter { card -> candidateSetIds.isEmpty() || card.set?.id in candidateSetIds }
 
-            return roomMatches.distinctBy { it.id }
+            return roomMatches
+                .distinctBy { it.id }
+                .sortedWith(
+                    compareByDescending<TcgCard> { card ->
+                        val setId = card.set?.id.orEmpty()
+                        when {
+                            setId in exactSetIds -> 3
+                            setId in nearSetIds -> 2
+                            else -> 0
+                        }
+                    }.thenByDescending { card ->
+                        if (extractPrintedTotalForSearch(card.number) in totalVariants) 1 else 0
+                    }.thenByDescending { card ->
+                        parseReleaseDateToEpoch(setReleaseDateById(card.set?.id).orEmpty())
+                    }
+                )
         }
 
         val parts = query.split(" ").filter { it.isNotBlank() }
@@ -856,6 +926,68 @@ class PokeTcgRepository {
         }.onFailure { err ->
             Timber.w(err, "searchCardsFromLocalCache: errore Room nome=%s", query)
         }.getOrDefault(emptyList())
+    }
+
+    private suspend fun rankSearchResults(
+        query: String,
+        cards: List<TcgCard>,
+        fullNumber: Pair<String, String>?
+    ): List<TcgCard> {
+        if (cards.isEmpty()) return cards
+        if (fullNumber != null) {
+            // Number searches are already sorted by precision in performPreciseNumberSearch.
+            return cards
+        }
+
+        val normalizedQuery = normalizeNameForLookup(query)
+        if (normalizedQuery.isBlank()) return cards
+        val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
+
+        return cards.sortedWith(
+            compareByDescending<TcgCard> { card -> scoreNameMatch(card.name, normalizedQuery, queryTokens) }
+                .thenByDescending { card -> parseReleaseDateToEpoch(setReleaseDateById(card.set?.id).orEmpty()) }
+                .thenBy { card -> extractCardNumber(card.number).toIntOrNull() ?: Int.MAX_VALUE }
+                .thenBy { card -> card.name.lowercase(Locale.ROOT) }
+        )
+    }
+
+    private fun scoreNameMatch(cardName: String, normalizedQuery: String, queryTokens: List<String>): Int {
+        val normalizedName = normalizeNameForLookup(cardName)
+        return when {
+            normalizedName == normalizedQuery -> 500
+            normalizedName.startsWith(normalizedQuery) -> 420
+            " $normalizedName ".contains(" $normalizedQuery ") -> 350
+            queryTokens.isNotEmpty() && queryTokens.all { token -> normalizedName.contains(token) } -> 280
+            queryTokens.isNotEmpty() && queryTokens.any { token -> normalizedName.contains(token) } -> 180
+            else -> 0
+        }
+    }
+
+    private fun setReleaseDateById(setId: String?): String? {
+        val safeSetId = setId?.takeIf { it.isNotBlank() } ?: return null
+        return memorySets?.firstOrNull { it.id == safeSetId }?.releaseDate
+    }
+
+    private fun extractPrintedTotalForSearch(number: String): String {
+        val total = number.substringAfter("/", "").trim()
+        if (total.isBlank()) return ""
+        return total.trimStart('0').ifEmpty { "0" }
+    }
+
+    private fun parseFullNumberQuery(raw: String): Pair<String, String>? {
+        val strict = FULL_NUMBER_REGEX.matchEntire(raw)
+        if (strict != null) {
+            val number = strict.groupValues[1].trimStart('0').ifEmpty { "0" }
+            val total = strict.groupValues[2].trimStart('0').ifEmpty { "0" }
+            return number to total
+        }
+        val flex = FLEX_FULL_NUMBER_REGEX.matchEntire(raw)
+        if (flex != null) {
+            val number = flex.groupValues[1].trimStart('0').ifEmpty { "0" }
+            val total = flex.groupValues[2].trimStart('0').ifEmpty { "0" }
+            return number to total
+        }
+        return null
     }
 
     private fun getCandidateSetsByPrintedTotal(total: String?, tolerance: Int): List<TcgSet> {

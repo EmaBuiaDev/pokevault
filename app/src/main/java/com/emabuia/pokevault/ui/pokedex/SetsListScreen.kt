@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,23 +50,7 @@ import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.SetsViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import java.util.concurrent.ConcurrentHashMap
-
-private object MissingSetLogoRegistry {
-    private val missingUrls = ConcurrentHashMap.newKeySet<String>()
-
-    fun isMissing(url: String): Boolean = missingUrls.contains(url)
-
-    fun markMissing(url: String): Boolean {
-        if (url.isBlank()) return false
-        return missingUrls.add(url)
-    }
-}
-
-private fun isFallbackSetLogo(set: TcgSet): Boolean {
-    val logoUrl = set.images.logo.trim()
-    return logoUrl.isBlank() || MissingSetLogoRegistry.isMissing(logoUrl)
-}
+import kotlinx.coroutines.launch
 
 // Formatta data
 fun formatDate(date: String): String {
@@ -177,12 +162,19 @@ fun SetsListScreen(
     val state = viewModel.uiState
     var isSearchingCards by remember { mutableStateOf(false) }
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
-    var logoOrderVersion by remember { mutableIntStateOf(0) }
     val setsGridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    LaunchedEffect(isSearchingCards, state.selectedLanguageMacro, state.selectedSeries, state.searchQuery) {
+    LaunchedEffect(
+        isSearchingCards,
+        state.selectedLanguageMacro,
+        state.selectedSeries,
+        state.searchQuery,
+        state.filteredSets.size,
+        state.filteredSets.firstOrNull()?.id
+    ) {
         if (!isSearchingCards && state.filteredSets.isNotEmpty()) {
             setsGridState.scrollToItem(0)
         }
@@ -298,6 +290,37 @@ fun SetsListScreen(
                     }
                 }
             }
+
+            if (isSearchingCards) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                    FilterChip(
+                        selected = state.isExactCardSearch,
+                        onClick = { viewModel.setExactCardSearch(!state.isExactCardSearch) },
+                        label = {
+                            Text(
+                                text = if (state.isExactCardSearch) "Match esatto: ON" else "Match esatto",
+                                fontSize = 12.sp
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (state.isExactCardSearch) Icons.Default.Check else Icons.Default.Tune,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = BlueCard,
+                            selectedLabelColor = TextWhite,
+                            selectedLeadingIconColor = TextWhite,
+                            containerColor = DarkCard,
+                            labelColor = TextMuted,
+                            iconColor = TextMuted
+                        )
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -317,7 +340,10 @@ fun SetsListScreen(
                         label = macro,
                         count = count,
                         isSelected = state.selectedLanguageMacro == macro,
-                        onClick = { viewModel.filterByLanguageMacro(macro) }
+                        onClick = {
+                            scope.launch { setsGridState.scrollToItem(0) }
+                            viewModel.filterByLanguageMacro(macro)
+                        }
                     )
                 }
             }
@@ -335,7 +361,10 @@ fun SetsListScreen(
                         label = AppLocale.all,
                         count = languageCount,
                         isSelected = state.selectedSeries == null,
-                        onClick = { viewModel.filterBySeries(null) }
+                        onClick = {
+                            scope.launch { setsGridState.scrollToItem(0) }
+                            viewModel.filterBySeries(null)
+                        }
                     )
                 }
                 items(state.seriesList) { series ->
@@ -344,7 +373,10 @@ fun SetsListScreen(
                         label = series,
                         count = count,
                         isSelected = state.selectedSeries == series,
-                        onClick = { viewModel.filterBySeries(series) }
+                        onClick = {
+                            scope.launch { setsGridState.scrollToItem(0) }
+                            viewModel.filterBySeries(series)
+                        }
                     )
                 }
             }
@@ -379,9 +411,7 @@ fun SetsListScreen(
                     }
                 }
             } else {
-                val displayedSets = remember(state.filteredSets, logoOrderVersion) {
-                    state.filteredSets.sortedBy { isFallbackSetLogo(it) }
-                }
+                val displayedSets = remember(state.filteredSets) { state.filteredSets }
 
                 LazyVerticalGrid(
                     state = setsGridState,
@@ -394,7 +424,7 @@ fun SetsListScreen(
                         SetCard(
                             set = set,
                             onClick = { onSetClick(set.id) },
-                            onLogoMarkedMissing = { logoOrderVersion++ }
+                            onLogoLoadError = { viewModel.onSetLogoLoadFailed(it) }
                         )
                     }
                 }
@@ -463,9 +493,9 @@ fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: ()
 
 // ── Set Card con logo, nome e data formattata ──
 @Composable
-fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoMarkedMissing: () -> Unit = {}) {
+fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoLoadError: (String) -> Unit = {}) {
     val logoUrl = set.images.logo.trim()
-    val shouldLoadLogo = logoUrl.isNotBlank() && !MissingSetLogoRegistry.isMissing(logoUrl)
+    val shouldLoadLogo = logoUrl.isNotBlank()
 
     Box(
         modifier = Modifier
@@ -504,9 +534,7 @@ fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoMarkedMissing: () -> Unit = 
                             )
                         },
                         error = {
-                            if (MissingSetLogoRegistry.markMissing(logoUrl)) {
-                                onLogoMarkedMissing()
-                            }
+                            onLogoLoadError(logoUrl)
                             MissingSetLogoFallback(setName = set.name)
                         }
                     )
