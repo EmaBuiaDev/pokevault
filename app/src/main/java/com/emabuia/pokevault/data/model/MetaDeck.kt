@@ -22,6 +22,18 @@ data class MetaDeckCard(
 )
 
 /**
+ * Rappresenta i risultati di un torneo competitivo con i top 3 piazzati.
+ * Usato nella sezione "Win Tournament" per mostrare i vincitori per torneo.
+ */
+data class TournamentResult(
+    val tournamentId: String,
+    val tournamentName: String,
+    val date: String?,
+    val players: Int,
+    val top3: List<MetaDeck>  // Ordinati per placement (1, 2, 3)
+)
+
+/**
  * Rappresenta un archetipo del meta competitivo,
  * aggregato da più tornei (come limitlesstcg.com/decks).
  */

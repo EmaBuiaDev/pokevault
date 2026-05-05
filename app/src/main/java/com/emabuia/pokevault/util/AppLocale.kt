@@ -460,6 +460,18 @@ object AppLocale {
         "Top 8 piazzamenti degli ultimi 10 tornei competitivi su LimitlessTCG, ordinati per piazzamento e data del torneo."
     else
         "Top 8 finishes from the last 10 competitive tournaments on LimitlessTCG, sorted by placement and event date."
+    val winTournamentInfoTitle: String get() =
+        if (isItalian) "Ultimi 10 tornei competitivi" else "Last 10 competitive tournaments"
+    val winTournamentInfoBody: String get() = if (isItalian)
+        "I top 3 piazzati (con decklist) degli ultimi tornei competitivi su LimitlessTCG, ordinati per data. Tocca un piazzamento per vedere la decklist completa e importarla."
+    else
+        "Top 3 finishers (with decklists) from the latest competitive tournaments on LimitlessTCG, sorted by date. Tap a placement to view the full decklist and import it."
+    val winTournamentLoading: String get() =
+        if (isItalian) "Caricamento tornei..." else "Loading tournaments..."
+    val winTournamentNoResults: String get() =
+        if (isItalian) "Nessun torneo trovato" else "No tournaments found"
+    fun winTournamentPlayers(count: Int): String =
+        if (isItalian) "$count giocatori" else "$count players"
     val metaLastUpdatedNow: String get() = if (isItalian) "Aggiornato ora" else "Updated now"
     fun metaLastUpdatedMinutes(minutes: Long): String =
         if (isItalian) "Aggiornato $minutes min fa" else "Updated $minutes min ago"

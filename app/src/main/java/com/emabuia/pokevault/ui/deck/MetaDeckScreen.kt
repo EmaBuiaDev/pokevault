@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.MetaDeck
 import com.emabuia.pokevault.data.model.MetaDeckCard
+import com.emabuia.pokevault.data.model.TournamentResult
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
@@ -902,6 +903,428 @@ fun DeckCardRow(
                 fontSize = 11.sp
             )
         }
+    }
+}
+
+// ══════════════════════════════════════
+// WIN TOURNAMENT SECTION
+// ══════════════════════════════════════
+
+@Composable
+fun WinTournamentSection(
+    viewModel: MetaDeckViewModel,
+    onImportDeck: ((MetaDeck) -> Unit)? = null,
+    onPremiumRequired: () -> Unit = {}
+) {
+    val premiumManager = remember { PremiumManager.getInstance() }
+    val selectedDeck = viewModel.selectedDeck
+
+    if (selectedDeck != null) {
+        BackHandler { viewModel.selectDeck(null) }
+        MetaDeckDetailView(
+            deck = selectedDeck,
+            onBack = { viewModel.selectDeck(null) },
+            onImport = if (onImportDeck != null) {
+                { onImportDeck(selectedDeck) }
+            } else null
+        )
+    } else {
+        WinTournamentListView(
+            viewModel = viewModel,
+            onDeckClick = { deck ->
+                if (premiumManager.canViewMetaDeck()) {
+                    premiumManager.consumeMetaDeckView()
+                    viewModel.selectDeck(deck)
+                } else {
+                    onPremiumRequired()
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun WinTournamentListView(
+    viewModel: MetaDeckViewModel,
+    onDeckClick: (MetaDeck) -> Unit
+) {
+    var tick by remember { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            tick++
+        }
+    }
+    var rateLimitedMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(rateLimitedMessage) {
+        if (rateLimitedMessage != null) {
+            delay(3_000)
+            rateLimitedMessage = null
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Banner informativo
+        MetaInfoBanner(
+            title = AppLocale.winTournamentInfoTitle,
+            body = AppLocale.winTournamentInfoBody,
+            lastUpdated = viewModel.lastUpdated,
+            rateLimitMessage = rateLimitedMessage,
+            tick = tick
+        )
+
+        // Format selector + refresh
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FormatChip(
+                label = "Standard",
+                selected = viewModel.selectedFormat == "standard",
+                onClick = { viewModel.selectFormat("standard") }
+            )
+            FormatChip(
+                label = "Expanded",
+                selected = viewModel.selectedFormat == "expanded",
+                onClick = { viewModel.selectFormat("expanded") }
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            IconButton(
+                onClick = {
+                    val started = viewModel.refresh()
+                    if (!started) {
+                        rateLimitedMessage = AppLocale.metaRefreshCooldown(
+                            viewModel.refreshCooldownSeconds
+                        )
+                    } else {
+                        rateLimitedMessage = null
+                    }
+                },
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(DarkCard)
+            ) {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = "Aggiorna",
+                    tint = TextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        when {
+            viewModel.isLoadingTournaments -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = BlueCard, modifier = Modifier.size(40.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = AppLocale.winTournamentLoading,
+                            color = TextMuted,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+
+            viewModel.tournamentsError != null -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.CloudOff,
+                            contentDescription = null,
+                            tint = RedCard,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Errore di connessione",
+                            color = TextWhite,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = viewModel.tournamentsError ?: "",
+                            color = TextMuted,
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { viewModel.refresh() },
+                            colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Riprova")
+                        }
+                    }
+                }
+            }
+
+            viewModel.tournamentResults.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.SearchOff,
+                            contentDescription = null,
+                            tint = LavenderCard,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = AppLocale.winTournamentNoResults,
+                            color = TextWhite,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Prova a cambiare formato o riprova pi\u00f9 tardi.",
+                            color = TextMuted,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
+            else -> {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(viewModel.tournamentResults, key = { it.tournamentId }) { result ->
+                        TournamentResultCard(
+                            result = result,
+                            onDeckClick = onDeckClick
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(80.dp)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TournamentResultCard(
+    result: TournamentResult,
+    onDeckClick: (MetaDeck) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+
+            // ── Header torneo ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(YellowCard.copy(alpha = 0.12f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.EmojiEvents,
+                        contentDescription = null,
+                        tint = YellowCard,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = result.tournamentName,
+                        color = TextWhite,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (result.date != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.CalendarToday,
+                                    contentDescription = null,
+                                    tint = TextMuted,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = formatDate(result.date),
+                                    color = TextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        if (result.players > 0) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Group,
+                                    contentDescription = null,
+                                    tint = TextMuted,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = AppLocale.winTournamentPlayers(result.players),
+                                    color = TextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = DarkBackground.copy(alpha = 0.6f), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // ── Top 3 rows ──
+            if (result.top3.isEmpty()) {
+                Text(
+                    text = "Nessuna decklist disponibile",
+                    color = TextMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            } else {
+                result.top3.forEachIndexed { index, deck ->
+                    if (index > 0) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(
+                            color = DarkBackground.copy(alpha = 0.4f),
+                            thickness = 0.5.dp,
+                            modifier = Modifier.padding(start = 40.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    Top3PlacementRow(
+                        deck = deck,
+                        rank = index + 1,
+                        onClick = { onDeckClick(deck) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun Top3PlacementRow(
+    deck: MetaDeck,
+    rank: Int,
+    onClick: () -> Unit
+) {
+    val medalEmoji = when (rank) {
+        1 -> "\uD83E\uDD47" // 🥇
+        2 -> "\uD83E\uDD48" // 🥈
+        3 -> "\uD83E\uDD49" // 🥉
+        else -> "#$rank"
+    }
+    val accentColor = when (rank) {
+        1 -> YellowCard
+        2 -> Color(0xFFC0C0C0)
+        3 -> Color(0xFFCD7F32)
+        else -> TextMuted
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Medal
+        Text(
+            text = medalEmoji,
+            fontSize = 22.sp,
+            modifier = Modifier.width(36.dp)
+        )
+
+        // Archetype + player
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = deck.archetype ?: "Deck Sconosciuto",
+                color = TextWhite,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (deck.player != null) {
+                Text(
+                    text = deck.player,
+                    color = LavenderCard,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Win rate badge
+        deck.winrate?.let { wr ->
+            Surface(
+                color = accentColor.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(
+                    text = "${(wr * 100).toInt()}% WR",
+                    color = accentColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+
+        // Arrow icon
+        Icon(
+            Icons.Default.ChevronRight,
+            contentDescription = "Vedi deck",
+            tint = TextMuted.copy(alpha = 0.5f),
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 

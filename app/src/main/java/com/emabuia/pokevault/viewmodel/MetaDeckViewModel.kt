@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.model.MetaArchetype
 import com.emabuia.pokevault.data.model.MetaDeck
+import com.emabuia.pokevault.data.model.TournamentResult
 import com.emabuia.pokevault.data.remote.LimitlessTcgRepository
 import kotlinx.coroutines.launch
 
@@ -18,6 +19,10 @@ class MetaDeckViewModel : ViewModel() {
     var metaDecks by mutableStateOf<List<MetaDeck>>(emptyList())
         private set
 
+    // Risultati strutturati per torneo (Win Tournament section)
+    var tournamentResults by mutableStateOf<List<TournamentResult>>(emptyList())
+        private set
+
     // Meta Deck (NEW) - archetype standings
     var archetypes by mutableStateOf<List<MetaArchetype>>(emptyList())
         private set
@@ -25,10 +30,16 @@ class MetaDeckViewModel : ViewModel() {
     var isLoading by mutableStateOf(false)
         private set
 
+    var isLoadingTournaments by mutableStateOf(false)
+        private set
+
     var isLoadingArchetypes by mutableStateOf(false)
         private set
 
     var errorMessage by mutableStateOf<String?>(null)
+        private set
+
+    var tournamentsError by mutableStateOf<String?>(null)
         private set
 
     var archetypeError by mutableStateOf<String?>(null)
@@ -64,6 +75,26 @@ class MetaDeckViewModel : ViewModel() {
     init {
         loadMetaDecks()
         loadArchetypes()
+        loadTournamentResults()
+    }
+
+    fun loadTournamentResults(format: String = selectedFormat, limit: Int = 10) {
+        isLoadingTournaments = true
+        tournamentsError = null
+
+        viewModelScope.launch {
+            repository.getTournamentResults(format = format, limit = limit)
+                .onSuccess { results ->
+                    tournamentResults = results
+                    isLoadingTournaments = false
+                    lastUpdated = LimitlessTcgRepository.lastCacheTimestamp(format)
+                        ?: System.currentTimeMillis()
+                }
+                .onFailure { e ->
+                    tournamentsError = e.localizedMessage ?: "Errore nel caricamento dei tornei"
+                    isLoadingTournaments = false
+                }
+        }
     }
 
     fun loadMetaDecks(format: String = selectedFormat, limit: Int = 50) {
@@ -110,6 +141,7 @@ class MetaDeckViewModel : ViewModel() {
             selectedFormat = format
             loadMetaDecks(format = format)
             loadArchetypes(format = format)
+            loadTournamentResults(format = format)
             lastUpdated = LimitlessTcgRepository.lastCacheTimestamp(format)
         }
     }
@@ -132,6 +164,7 @@ class MetaDeckViewModel : ViewModel() {
         repository.clearCache()
         loadMetaDecks()
         loadArchetypes()
+        loadTournamentResults()
         return true
     }
 

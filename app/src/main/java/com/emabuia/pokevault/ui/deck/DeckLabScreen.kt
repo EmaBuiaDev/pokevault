@@ -89,16 +89,18 @@ fun DeckLabScreen(
 
     // Se siamo nella vista dettaglio di un Win Tournament deck, mostriamola a tutto schermo
     if (selectedTabIndex == 2 && metaDeckViewModel.selectedDeck != null) {
-        MetaDeckSection(
-            viewModel = metaDeckViewModel,
-            onImportDeck = { metaDeck ->
+        val selectedWinDeck = metaDeckViewModel.selectedDeck!!
+        BackHandler { metaDeckViewModel.selectDeck(null) }
+        MetaDeckDetailView(
+            deck = selectedWinDeck,
+            onBack = { metaDeckViewModel.selectDeck(null) },
+            onImport = {
                 if (premiumManager.canCreateDeck(viewModel.decks.size)) {
-                    val result = viewModel.importFromMetaDeck(metaDeck)
+                    val result = viewModel.importFromMetaDeck(selectedWinDeck)
                     metaDeckViewModel.selectDeck(null)
                     if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
                         showSheet = true
                     }
-                    // If missing cards exist, ImportResultDialog handles the flow
                 } else {
                     metaDeckViewModel.selectDeck(null)
                     showPremiumDeckDialog = true
@@ -319,8 +321,8 @@ fun DeckLabScreen(
                 }
 
                 selectedTabIndex == 2 -> {
-                    // Tab: Win Tournament (ex Meta Deck)
-                    MetaDeckSection(
+                    // Tab: Win Tournament – tornei con top 3 vincitori per evento
+                    WinTournamentSection(
                         viewModel = metaDeckViewModel,
                         onImportDeck = { metaDeck ->
                             if (premiumManager.canCreateDeck(viewModel.decks.size)) {

@@ -5,6 +5,7 @@ import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.model.MetaArchetype
 import com.emabuia.pokevault.data.model.MetaDeck
 import com.emabuia.pokevault.data.model.MetaDeckCard
+import com.emabuia.pokevault.data.model.TournamentResult
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +64,12 @@ class LimitlessTcgRepository {
         // oppure esplicitamente via [clearCache] o [refresh].
         private val metaDecksCache = mutableMapOf<String, CachedResult>()
         private val archetypeCache = mutableMapOf<String, CachedArchetypes>()
+
+        private data class CachedTournamentResults(
+            val results: List<TournamentResult>,
+            val timestamp: Long
+        )
+        private val tournamentResultsCache = mutableMapOf<String, CachedTournamentResults>()
 
         /**
          * Restituisce il timestamp più recente di una voce valida in cache
@@ -499,8 +506,87 @@ class LimitlessTcgRepository {
         }
     }
 
+    /**
+     * Recupera gli ultimi [limit] tornei competitivi con i top 3 piazzati per ciascuno.
+     * Usato nella sezione "Win Tournament" del Deck Lab.
+     */
+    suspend fun getTournamentResults(
+        format: String = "standard",
+        limit: Int = 10
+    ): Result<List<TournamentResult>> {
+        val cacheKey = "results_${format}_$limit"
+        tournamentResultsCache[cacheKey]?.let { cached ->
+            if (System.currentTimeMillis() - cached.timestamp < CACHE_DURATION) {
+                return Result.success(cached.results)
+            }
+        }
+
+        return try {
+            val apiFormat = when (format.lowercase()) {
+                "expanded" -> "expanded"
+                else -> "standard"
+            }
+
+            val tournaments = api.getTournaments(game = "PTCG", format = apiFormat, limit = limit)
+            if (BuildConfig.DEBUG) Log.d(TAG, "TournamentResults: trovati ${tournaments.size} tornei")
+            if (tournaments.isEmpty()) return Result.success(emptyList())
+
+            val results = coroutineScope {
+                tournaments.map { tournament ->
+                    async(Dispatchers.IO) {
+                        try {
+                            val standings = api.getTournamentStandings(tournament.id)
+
+                            // Prendi i top piazzati con decklist, filtrando placement 1-3
+                            val withDecklist = standings
+                                .filter { it.decklist != null }
+                                .sortedBy { it.placing }
+
+                            // Prima tenta esattamente top 3 (placing 1, 2, 3)
+                            val top3Exact = withDecklist.filter { it.placing in 1..3 }.take(3)
+
+                            // Fallback: prendi i primi 3 con decklist (potrebbero partire da placing > 3)
+                            val top3 = if (top3Exact.isNotEmpty()) top3Exact
+                            else withDecklist.take(3)
+
+                            val mappedDecks = top3
+                                .map { mapToMetaDeck(it, tournament) }
+                                .filter { it.cards.isNotEmpty() }
+
+                            if (BuildConfig.DEBUG) Log.d(TAG, "TournamentResults ${tournament.name}: ${mappedDecks.size} top placings")
+
+                            TournamentResult(
+                                tournamentId = tournament.id,
+                                tournamentName = tournament.name.ifEmpty { tournament.id },
+                                date = tournament.date.ifEmpty { null },
+                                players = tournament.players,
+                                top3 = mappedDecks
+                            )
+                        } catch (e: Exception) {
+                            if (BuildConfig.DEBUG) Log.w(TAG, "Errore standings torneo ${tournament.id}: ${e.message}")
+                            null
+                        }
+                    }
+                }.awaitAll().filterNotNull()
+                    // Esclude tornei senza risultati utili
+                    .filter { it.top3.isNotEmpty() }
+            }
+
+            // Ordina per data discendente (più recente prima)
+            val sorted = results.sortedByDescending { it.date }
+
+            tournamentResultsCache[cacheKey] = CachedTournamentResults(sorted, System.currentTimeMillis())
+            Result.success(sorted)
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.e(TAG, "Errore fetch tournament results: ${e.message}", e)
+            tournamentResultsCache[cacheKey]?.let { return Result.success(it.results) }
+            Result.failure(e)
+        }
+    }
+
     fun clearCache() {
         metaDecksCache.clear()
         archetypeCache.clear()
+        tournamentResultsCache.clear()
     }
 }
