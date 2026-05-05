@@ -15,7 +15,7 @@ class SeriesDerivationTest {
             setName = "Fiamme Spettrali"
         )
 
-        assertEquals("Mega Evoluzione", series)
+        assertEquals("Mega Evoluzioni", series)
     }
 
     @Test
@@ -26,7 +26,7 @@ class SeriesDerivationTest {
             setName = "Ascesa Eroica"
         )
 
-        assertEquals("Mega Evoluzione", series)
+        assertEquals("Mega Evoluzioni", series)
     }
 
     @Test
@@ -37,7 +37,7 @@ class SeriesDerivationTest {
             setName = "Perfect Order"
         )
 
-        assertEquals("Mega Evoluzione", series)
+        assertEquals("Mega Evoluzioni", series)
     }
 
     @Test
