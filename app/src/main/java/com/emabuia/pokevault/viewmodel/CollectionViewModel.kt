@@ -207,6 +207,7 @@ class CollectionViewModel : ViewModel() {
             
             val matchesSet = uiState.selectedSet == null ||
                 card.set == uiState.selectedSet ||
+                AppLocale.displaySetName(card.set) == uiState.selectedSet ||
                 (uiState.selectedSet == "Espansione sconosciuta" && card.set.isBlank())
             
             // Il filtro tipo si applica solo nel contesto Pokémon.

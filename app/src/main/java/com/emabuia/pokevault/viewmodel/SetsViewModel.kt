@@ -515,7 +515,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             .trim()
 
         return when {
-            normalized in setOf("mega evolution", "mega evolutions", "mega evoluzione") -> "Mega Evolutions"
+            normalized in setOf("mega evolution", "mega evolutions", "mega evoluzione", "mega evoluzioni") -> "Mega Evolutions"
             normalized in setOf("scarlet and violet", "scarlatto e violetto", "scarlatto e violetto") -> "Scarlet & Violet"
             normalized in setOf("sword and shield", "spada e scudo") -> "Sword & Shield"
             normalized in setOf("sun and moon", "sole e luna") -> "Sun & Moon"

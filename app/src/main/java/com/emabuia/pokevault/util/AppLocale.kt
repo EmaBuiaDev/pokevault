@@ -128,6 +128,23 @@ object AppLocale {
         }
     }
 
+    // ══════════════════════════════════════
+    // TRADUZIONI NOMI SET / ESPANSIONI
+    // ══════════════════════════════════════
+
+    /**
+     * Restituisce il nome del set nella lingua corrente.
+     * Traduce sempre in italiano se la lingua è IT; altrimenti restituisce il valore originale.
+     */
+    fun displaySetName(setName: String): String {
+        if (setName.isBlank()) return setName
+        return if (isItalian) {
+            com.emabuia.pokevault.data.local.ItalianTranslations.translateExpansionName(setName)
+        } else {
+            setName
+        }
+    }
+
     /** Normalizza un tipo (italiano o inglese) alla versione inglese */
     fun typeToEnglish(type: String): String {
         if (type.isBlank()) return type

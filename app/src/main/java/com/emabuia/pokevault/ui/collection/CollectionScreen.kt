@@ -69,7 +69,7 @@ private fun CollectionCardImageFallback(card: PokemonCard, compact: Boolean) {
     val titleSize = if (compact) 8.sp else 10.sp
     val detailSize = if (compact) 7.sp else 8.sp
     val series = "-"
-    val setName = card.set.ifBlank { "-" }
+    val setName = AppLocale.displaySetName(card.set).ifBlank { "-" }
 
     Box(
         modifier = Modifier
@@ -150,7 +150,7 @@ fun CollectionScreen(
     }
     val groupedByExpansion = remember(groupedCards, state.sortOrder) {
         groupedCards.groupBy { (_, group) ->
-            group.firstOrNull()?.set?.takeIf { it.isNotBlank() } ?: "Espansione sconosciuta"
+            group.firstOrNull()?.set?.takeIf { it.isNotBlank() } ?: if (AppLocale.isItalian) "Espansione sconosciuta" else "Unknown Expansion"
         }.mapValues { entry ->
             entry.value.sortedWith { a, b ->
                 val cardA = a.second.firstOrNull()
@@ -384,7 +384,7 @@ fun CollectionScreen(
                                 // Header sezione (sempre visibile)
                                 item(key = "hdr_$expansionName") {
                                     ExpansionAccordionHeader(
-                                        expansionName = expansionName,
+                                        expansionName = AppLocale.displaySetName(expansionName),
                                         totalCards = totalQuantity,
                                         uniqueCards = cardsInExpansion.size,
                                         isExpanded = isExpanded,
@@ -692,7 +692,7 @@ fun FilterBottomSheet(
     onDismiss: () -> Unit
 ) {
     val setCounts = remember(state.cards) {
-        state.cards.groupBy { it.set.ifBlank { "Espansione sconosciuta" } }
+        state.cards.groupBy { it.set.ifBlank { if (AppLocale.isItalian) "Espansione sconosciuta" else "Unknown Expansion" } }
             .mapValues { it.value.sumOf { c -> c.quantity } }
             .toList()
             .sortedByDescending { it.second }
@@ -850,11 +850,11 @@ fun FilterBottomSheet(
                             onClick = { viewModel.filterBySet(null) }
                         )
                     }
-                    items(setCounts) { (setName, count) ->
+                    items(setCounts) { (rawSetName, count) ->
                         FilterChip(
-                            label = "$setName ($count)",
-                            isSelected = state.selectedSet == setName,
-                            onClick = { viewModel.filterBySet(setName) }
+                            label = "${AppLocale.displaySetName(rawSetName)} ($count)",
+                            isSelected = state.selectedSet == rawSetName,
+                            onClick = { viewModel.filterBySet(rawSetName) }
                         )
                     }
                 }
@@ -1343,7 +1343,7 @@ fun CollectionCardListItem(
                     Text("\u20AC${"%.2f".format(card.estimatedValue)}", color = GreenCard, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                 }
             }
-            Text("${card.set} \u00B7 x${card.quantity}", color = TextMuted, fontSize = 12.sp)
+            Text("${AppLocale.displaySetName(card.set)} \u00B7 x${card.quantity}", color = TextMuted, fontSize = 12.sp)
         }
         if (!isSelectionMode) {
             Icon(Icons.Default.ChevronRight, null, tint = TextMuted)

@@ -61,7 +61,7 @@ class StatsViewModel : ViewModel() {
                     val stats = repository.getCollectionStats()
                     val totalCards = cards.sumOf { it.quantity }
 
-                    val bySet = cards.groupBy { it.set.ifBlank { AppLocale.unknown } }
+                    val bySet = cards.groupBy { AppLocale.displaySetName(it.set).ifBlank { AppLocale.unknown } }
                         .mapValues { (_, v) -> v.sumOf { it.quantity } }
                         .entries.sortedByDescending { it.value }
                         .map { it.key to it.value }
@@ -72,11 +72,13 @@ class StatsViewModel : ViewModel() {
                     
                     val completions = cards.filter { it.set.isNotBlank() }
                         .groupBy { it.set }
-                        .map { (setName, setCards) ->
+                        .map { (rawSetName, setCards) ->
+                            val displayName = AppLocale.displaySetName(rawSetName)
                             val uniqueOwned = setCards.map { it.apiCardId }.distinct().count { it.isNotBlank() }
-                            val tcgSet = allSets.find { it.name == setName }
+                            val tcgSet = allSets.find { it.name == rawSetName }
+                                ?: allSets.find { it.name == displayName }
                             val totalInSet = tcgSet?.total ?: 0
-                            SetCompletion(setName, uniqueOwned, totalInSet, tcgSet?.images?.symbol)
+                            SetCompletion(displayName, uniqueOwned, totalInSet, tcgSet?.images?.symbol)
                         }
                         .filter { it.totalCards > 0 }
                         .sortedByDescending { it.percentage }

@@ -37,6 +37,7 @@ import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.ui.pokedex.PriceSparkline
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -77,7 +78,7 @@ private fun CollectionDetailImageFallback(card: PokemonCard) {
                 textAlign = TextAlign.Center
             )
             Text(
-                text = card.set.ifBlank { "-" },
+                text = AppLocale.displaySetName(card.set).ifBlank { "-" },
                 color = TextMuted,
                 fontSize = 12.sp,
                 maxLines = 2,

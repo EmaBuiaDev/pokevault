@@ -27,6 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.GradedCardsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -254,7 +255,7 @@ fun GradedCardItem(card: PokemonCard, onClick: () -> Unit) {
                 }
             }
             Text(
-                card.set.ifBlank { "-" },
+                AppLocale.displaySetName(card.set).ifBlank { "-" },
                 color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
         }

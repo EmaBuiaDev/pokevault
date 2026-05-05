@@ -19,7 +19,7 @@ object ItalianTranslations {
         "HeartGold & SoulSilver" to "HeartGold & SoulSilver",
         "Diamond & Pearl" to "Diamante e Perla",
         "EX" to "EX",
-        "Mega Evolutions" to "Mega Evoluzione",
+        "Mega Evolutions" to "Mega Evoluzioni",
         "World Championships" to "Campionati Mondiali",
         "Promos" to "Promo",
         "Base Energy" to "Energie Base",
@@ -41,6 +41,13 @@ object ItalianTranslations {
 
     private val EXPANSIONS_IT = mapOf(
         // ── Scarlet & Violet ──
+        "Ascended Heroes" to "Ascesa Eroica",
+        "Destined Rivals" to "Rivali Predestinati",
+        "Perfect Order" to "Equilibrio Perfetto",
+        "Phantasmal Flame" to "Fiamme Spettrali",
+        "Phantasmal Flames" to "Fiamme Spettrali",
+        "Mega Evolution" to "Mega Evoluzioni",
+        "Mega Evolutions" to "Mega Evoluzioni",
         "Prismatic Evolutions" to "Evoluzioni Prismatiche",
         "Surging Sparks" to "Scintille Folgoranti",
         "Stellar Crown" to "Corona Astrale",
@@ -55,6 +62,7 @@ object ItalianTranslations {
         "Scarlet & Violet" to "Scarlatto e Violetto",
         "Scarlet & Violet—Energies" to "Scarlatto e Violetto—Energie",
         "Journey Together" to "Avventura Insieme",
+        "Road to Unova" to "Via di Unova",
 
         // ── Sword & Shield ──
         "Crown Zenith" to "Zenit Regale",
@@ -138,6 +146,12 @@ object ItalianTranslations {
     fun translateSeriesName(english: String): String =
         SERIES_IT[english] ?: english
 
-    fun translateExpansionName(english: String): String =
-        EXPANSIONS_IT[english] ?: english
+    fun translateExpansionName(english: String): String {
+        if (english.isBlank()) return english
+        // Exact match first
+        EXPANSIONS_IT[english]?.let { return it }
+        // Case-insensitive fallback
+        val lower = english.trim().lowercase()
+        return EXPANSIONS_IT.entries.firstOrNull { it.key.lowercase() == lower }?.value ?: english
+    }
 }
