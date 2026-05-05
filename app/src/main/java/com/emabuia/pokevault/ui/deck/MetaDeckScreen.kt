@@ -1,6 +1,9 @@
 package com.emabuia.pokevault.ui.deck
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -299,6 +302,8 @@ fun MetaInfoBanner(
     rateLimitMessage: String?,
     tick: Long = 0L
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
     val updatedLabel = remember(lastUpdated, tick) {
         if (lastUpdated == null) null
         else {
@@ -315,74 +320,86 @@ fun MetaInfoBanner(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .clickable { expanded = !expanded },
         color = BlueCard.copy(alpha = 0.08f),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Icon(
-                Icons.Default.Info,
-                contentDescription = null,
-                tint = BlueCard,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            // Header sempre visibile
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = null,
+                    tint = BlueCard,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = title,
                     color = TextWhite,
                     fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = body,
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Nascondi" else "Espandi",
+                    tint = TextMuted,
+                    modifier = Modifier.size(18.dp)
                 )
-                if (updatedLabel != null || rateLimitMessage != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (updatedLabel != null) {
-                            Icon(
-                                Icons.Default.Schedule,
-                                contentDescription = null,
-                                tint = TextMuted,
-                                modifier = Modifier.size(11.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = updatedLabel,
-                                color = TextMuted,
-                                fontSize = 10.sp
-                            )
-                        }
-                        if (rateLimitMessage != null) {
-                            if (updatedLabel != null) {
-                                Spacer(modifier = Modifier.width(10.dp))
-                            }
-                            Icon(
-                                Icons.Default.HourglassEmpty,
-                                contentDescription = null,
-                                tint = YellowCard,
-                                modifier = Modifier.size(11.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = rateLimitMessage,
-                                color = YellowCard,
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
-                }
             }
-        }
-    }
+
+            // Contenuto collassabile
+            AnimatedVisibility(visible = expanded, enter = expandVertically(), exit = shrinkVertically()) {
+                Column {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = body,
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                    if (updatedLabel != null || rateLimitMessage != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (updatedLabel != null) {
+                                Icon(
+                                    Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    tint = TextMuted,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = updatedLabel,
+                                    color = TextMuted,
+                                    fontSize = 10.sp
+                                )
+                            }
+                            if (rateLimitMessage != null) {
+                                if (updatedLabel != null) {
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                }
+                                Icon(
+                                    Icons.Default.HourglassEmpty,
+                                    contentDescription = null,
+                                    tint = YellowCard,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = rateLimitMessage,
+                                    color = YellowCard,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        } // end Row
+                    } // end if updatedLabel/rateLimitMessage
+                } // end inner Column (AnimatedVisibility)
+            } // end AnimatedVisibility
+        } // end outer Column
+    } // end Surface
 }
 
 @Composable
