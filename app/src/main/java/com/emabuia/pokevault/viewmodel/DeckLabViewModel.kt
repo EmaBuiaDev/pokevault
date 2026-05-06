@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 class DeckLabViewModel : ViewModel() {
     private val repository = FirestoreRepository()
     private val pokeTcgRepository = RepositoryProvider.tcgRepository
+    private val pokeWalletRepository = RepositoryProvider.pokeWalletRepository
 
     companion object {
         // Cache di processo per i risultati della ricerca Pokemon TCG API.
@@ -732,6 +733,10 @@ class DeckLabViewModel : ViewModel() {
                 }
             }
 
+            // Se alcune carte entrano a 0, prova una hydration immediata del prezzo
+            // per riallineare anche il totalValue della collezione.
+            hydrateImportedCardPrices(newIds.toSet())
+
             // Aggiungi al deck corrente
             if (newIds.isNotEmpty()) {
                 selectedCardsIds = (selectedCardsIds + newIds).take(60)
@@ -752,11 +757,12 @@ class DeckLabViewModel : ViewModel() {
         val tcgCard = searchPokewalletCard(card.name, card.set, card.number)
 
         return if (tcgCard != null) {
-            val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero().takeIf { it > 0.0 }
-                ?: tcgCard.cardmarket?.prices?.trendPrice
-                ?: tcgCard.cardmarket?.prices?.avg7
-                ?: tcgCard.cardmarket?.prices?.avg30
-                ?: 0.0
+            val price = resolveBestPrice(
+                card = tcgCard,
+                fallbackSet = card.set,
+                fallbackNumber = card.number,
+                fallbackName = card.name
+            )
 
             PokemonCard(
                 name = tcgCard.name,
@@ -788,6 +794,7 @@ class DeckLabViewModel : ViewModel() {
                 set = card.set ?: "",
                 cardNumber = card.number ?: "",
                 quantity = card.qty,
+                estimatedValue = 0.0,
                 supertype = supertype,
                 hp = if (supertype == "Pokémon") 100 else 0,
                 condition = "Near Mint",
@@ -831,7 +838,12 @@ class DeckLabViewModel : ViewModel() {
 
     fun addTcgCardToDeck(card: TcgCard, qty: Int, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
-            val price = card.cardmarket?.prices.minimumEurPriceOrZero().takeIf { it > 0.0 } ?: 0.0
+            val price = resolveBestPrice(
+                card = card,
+                fallbackSet = card.set?.id ?: card.set?.name,
+                fallbackNumber = card.number,
+                fallbackName = card.name
+            )
             val pokemonCard = PokemonCard(
                 name = card.name,
                 imageUrl = card.images.small,
@@ -858,6 +870,26 @@ class DeckLabViewModel : ViewModel() {
         }
     }
 
+    private suspend fun hydrateImportedCardPrices(cardDocIds: Set<String>) {
+        if (cardDocIds.isEmpty()) return
+
+        for (docId in cardDocIds) {
+            val stored = repository.getCard(docId).getOrNull() ?: continue
+            if (stored.estimatedValue > 0.0 || stored.apiCardId.isBlank()) continue
+
+            val resolved = pokeTcgRepository.getCard(stored.apiCardId).getOrNull() ?: continue
+            val hydratedPrice = resolveBestPrice(
+                card = resolved,
+                fallbackSet = stored.set,
+                fallbackNumber = stored.cardNumber,
+                fallbackName = stored.name
+            )
+            if (hydratedPrice <= 0.0) continue
+
+            repository.updateCard(docId, stored.copy(estimatedValue = hydratedPrice))
+        }
+    }
+
     private suspend fun searchPokewalletCard(name: String, setCode: String?, number: String?): TcgCard? {
         val key = lookupKey(name, setCode, number)
         tcgLookupCache[key]?.let { return it.card }
@@ -872,14 +904,89 @@ class DeckLabViewModel : ViewModel() {
                 .searchPokewalletCardByNameSetAndNumber(name, normalizedSet, number)
                 .getOrNull()
 
-            direct ?: pokeTcgRepository
+            val strictSetNumber = direct ?: pokeTcgRepository
                 .getPokewalletCardBySetAndNumber(normalizedSet, number)
                 .getOrNull()
+
+            strictSetNumber ?: run {
+                val candidates = pokeTcgRepository
+                    .searchByNameAndNumber(name, number, normalizedSet)
+                    .getOrDefault(emptyList())
+
+                if (candidates.isEmpty()) {
+                    null
+                } else {
+                    val scoped = if (setCode.isNullOrBlank()) {
+                        candidates
+                    } else {
+                        candidates.filter { card ->
+                            SetCodeMapper.matchesImportedSet(
+                                importedSet = setCode,
+                                cardSetName = card.set?.name,
+                                cardApiSetId = card.set?.id,
+                                cardApiId = card.id
+                            )
+                        }
+                    }
+
+                    scoped.firstOrNull() ?: candidates.firstOrNull()
+                }
+            }
         } catch (_: Exception) {
             null
         }
 
         tcgLookupCache[key] = CachedLookup(found)
         return found
+    }
+
+    private suspend fun resolveBestPrice(
+        card: TcgCard,
+        fallbackSet: String? = null,
+        fallbackNumber: String? = null,
+        fallbackName: String? = null
+    ): Double {
+        val cardmarket = card.cardmarket?.prices
+        val cm = cardmarket.minimumEurPriceOrZero().takeIf { it > 0.0 }
+            ?: cardmarket?.trendPrice?.takeIf { it > 0.0 }
+            ?: cardmarket?.avg7?.takeIf { it > 0.0 }
+            ?: cardmarket?.avg30?.takeIf { it > 0.0 }
+
+        if (cm != null) return cm
+
+        val tcg = card.tcgplayer?.prices.orEmpty().values.asSequence()
+            .mapNotNull { priceInfo ->
+                listOf(priceInfo.market, priceInfo.mid, priceInfo.low)
+                    .firstOrNull { value -> (value ?: 0.0) > 0.0 }
+            }
+            .firstOrNull { it > 0.0 }
+
+        if (tcg != null) return tcg
+
+        val setCode = sequenceOf(
+            card.set?.id,
+            SetCodeMapper.normalizeDecklistSetCode(card.set?.id),
+            SetCodeMapper.normalizeDecklistSetCode(card.set?.name),
+            SetCodeMapper.normalizeDecklistSetCode(fallbackSet),
+            fallbackSet
+        ).firstOrNull { !it.isNullOrBlank() }
+
+        val number = fallbackNumber?.takeIf { it.isNotBlank() } ?: card.number
+        val name = fallbackName?.takeIf { it.isNotBlank() } ?: card.name
+
+        if (!setCode.isNullOrBlank() && number.isNotBlank() && name.isNotBlank()) {
+            val pw = pokeWalletRepository.getCardPrices(name, setCode, number).getOrNull()
+            val pwPrice = sequenceOf(
+                pw?.eurLow,
+                pw?.eurAvg,
+                pw?.eurTrend,
+                pw?.eurAvg7,
+                pw?.eurAvg30
+            ).firstOrNull { (it ?: 0.0) > 0.0 }
+
+            if ((pwPrice ?: 0.0) > 0.0) return pwPrice ?: 0.0
+        }
+
+        return 0.0
     }
 }
