@@ -255,17 +255,43 @@ class FirestoreRepository {
                     val docRef = doc.reference
                     val currentQty = doc.getLong("quantity")?.toInt() ?: 1
                     val currentEstimatedValue = doc.getDouble("estimatedValue") ?: 0.0
+                    val currentSupertype = normalizeCategory(doc.getString("supertype").orEmpty())
+                    val incomingSupertype = normalizeCategory(card.supertype)
+                    val currentType = doc.getString("type").orEmpty()
+                    val currentHp = doc.getLong("hp")?.toInt() ?: 0
+                    val currentSubtypes = (doc.get("subtypes") as? List<*>)
                     if (effectiveEstimatedValue <= 0.0) {
                         effectiveEstimatedValue = currentEstimatedValue
                     }
+
+                    val updates = mutableMapOf<String, Any>(
+                        "quantity" to (currentQty + card.quantity),
+                        "estimatedValue" to effectiveEstimatedValue
+                    )
+
+                    // Heal legacy docs that were saved without proper classification fields.
+                    if (incomingSupertype != null &&
+                        (currentSupertype == null ||
+                            (currentSupertype == "Pokémon" && incomingSupertype != "Pokémon"))
+                    ) {
+                        updates["supertype"] = card.supertype
+                    }
+                    if ((currentSubtypes == null || currentSubtypes.isEmpty()) && card.subtypes.isNotEmpty()) {
+                        updates["subtypes"] = card.subtypes
+                    }
+                    if ((currentType.isBlank() || currentType.equals("Colorless", ignoreCase = true)) &&
+                        card.type.isNotBlank() &&
+                        !card.type.equals("Colorless", ignoreCase = true)
+                    ) {
+                        updates["type"] = card.type
+                    }
+                    if (currentHp <= 0 && card.hp > 0) {
+                        updates["hp"] = card.hp
+                    }
+
                     // Fire-and-forget: la scrittura colpisce la cache locale
                     // all'istante; lo snapshot listener emette subito l'update.
-                    docRef.update(
-                        mapOf(
-                            "quantity" to (currentQty + card.quantity),
-                            "estimatedValue" to effectiveEstimatedValue
-                        )
-                    )
+                    docRef.update(updates)
                     doc.id
                 } else {
                     // Usiamo un DocumentReference generato localmente così
