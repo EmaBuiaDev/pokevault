@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.Constants
 import com.emabuia.pokevault.viewmodel.AddCardViewModel
 
@@ -58,14 +59,14 @@ fun AddCardScreen(
         TopAppBar(
             title = {
                 Text(
-                    if (state.isEditMode) "Modifica carta" else "Aggiungi carta",
+                    if (state.isEditMode) AppLocale.editCard else AppLocale.addCard,
                     fontWeight = FontWeight.SemiBold,
                     color = TextWhite
                 )
             },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro", tint = TextWhite)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
                 }
             },
             actions = {
@@ -81,7 +82,7 @@ fun AddCardScreen(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Salva", color = BlueCard, fontWeight = FontWeight.SemiBold)
+                        Text(AppLocale.save, color = BlueCard, fontWeight = FontWeight.SemiBold)
                     }
                 }
             },
@@ -112,18 +113,18 @@ fun AddCardScreen(
         ) {
             // Nome (obbligatorio)
             FormField(
-                label = "Nome carta *",
+                label = AppLocale.cardNameRequiredLabel,
                 value = state.name,
                 onValueChange = { viewModel.updateName(it) },
-                placeholder = "es. Charizard VMAX"
+                placeholder = AppLocale.cardNamePlaceholder
             )
 
             // Set
             FormField(
-                label = "Set / Espansione",
+                label = AppLocale.setExpansionLabel,
                 value = state.set,
                 onValueChange = { viewModel.updateSet(it) },
-                placeholder = "es. Base Set, Evolving Skies"
+                placeholder = AppLocale.setPlaceholder
             )
 
             // Tipo (dropdown)
@@ -148,15 +149,15 @@ fun AddCardScreen(
                     label = "HP",
                     value = state.hp,
                     onValueChange = { viewModel.updateHp(it) },
-                    placeholder = "es. 180",
+                    placeholder = AppLocale.hpPlaceholder,
                     keyboardType = KeyboardType.Number,
                     modifier = Modifier.weight(1f)
                 )
                 FormField(
-                    label = "Valore (€)",
+                    label = AppLocale.valueLabel,
                     value = state.estimatedValue,
                     onValueChange = { viewModel.updateEstimatedValue(it) },
-                    placeholder = "es. 25.50",
+                    placeholder = AppLocale.valuePlaceholder,
                     keyboardType = KeyboardType.Decimal,
                     modifier = Modifier.weight(1f)
                 )
@@ -192,8 +193,8 @@ fun AddCardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Carta gradata", color = TextWhite, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                    Text("PSA, BGS, CGC", color = TextMuted, fontSize = 12.sp)
+                    Text(AppLocale.gradedCard, color = TextWhite, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                    Text(AppLocale.gradedHint, color = TextMuted, fontSize = 12.sp)
                 }
                 Switch(
                     checked = state.isGraded,
@@ -214,10 +215,10 @@ fun AddCardScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         FormField(
-                            label = "Voto (Grade)",
+                            label = AppLocale.gradeFieldLabel,
                             value = state.grade,
                             onValueChange = { viewModel.updateGrade(it) },
-                            placeholder = "es. 9.5",
+                            placeholder = AppLocale.gradePlaceholder,
                             keyboardType = KeyboardType.Decimal,
                             modifier = Modifier.weight(1f)
                         )
@@ -234,17 +235,17 @@ fun AddCardScreen(
 
             // Note
             FormField(
-                label = "Note",
+                label = AppLocale.notes,
                 value = state.notes,
                 onValueChange = { viewModel.updateNotes(it) },
-                placeholder = "Note aggiuntive...",
+                placeholder = AppLocale.additionalNotesPlaceholder,
                 singleLine = false,
                 minHeight = 80.dp
             )
 
             // URL immagine
             FormField(
-                label = "URL immagine (opzionale)",
+                label = AppLocale.imageUrlOptionalLabel,
                 value = state.imageUrl,
                 onValueChange = { viewModel.updateImageUrl(it) },
                 placeholder = "https://..."

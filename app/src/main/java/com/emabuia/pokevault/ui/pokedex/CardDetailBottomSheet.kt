@@ -40,6 +40,7 @@ import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.RarityUtils.getRarityInfo
 
 @Composable
@@ -285,8 +286,8 @@ fun CardDetailBottomSheet(
                                         Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(20.dp))
                                     }
                                     Column {
-                                        Text("Nella tua collezione", color = GreenCard, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                                        Text("Tocca per aggiungere un'altra copia", color = TextMuted, fontSize = 12.sp)
+                                        Text(AppLocale.inCollection, color = GreenCard, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                        Text(AppLocale.tapToAddCopy, color = TextMuted, fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -304,7 +305,7 @@ fun CardDetailBottomSheet(
                             ) {
                                 Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Aggiungi copia", fontSize = 13.sp)
+                                Text(AppLocale.addCopy, fontSize = 13.sp)
                             }
                             // Rimuovi
                             OutlinedButton(
@@ -336,7 +337,7 @@ fun CardDetailBottomSheet(
                         ) {
                             // Quantità
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Quantità", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                                Text(AppLocale.quantity, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -375,7 +376,7 @@ fun CardDetailBottomSheet(
 
                             // Condizione
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Condizione", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                                Text(AppLocale.condition, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
                                 OptionSelector(
                                     options = CardOptions.CONDITIONS,
                                     selected = selectedCondition,
@@ -393,7 +394,7 @@ fun CardDetailBottomSheet(
                         ) {
                             // Lingua
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Lingua", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                                Text(AppLocale.languageLabel, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
                                 OptionSelector(
                                     options = CardOptions.LANGUAGES,
                                     selected = selectedLanguage,
@@ -403,7 +404,7 @@ fun CardDetailBottomSheet(
 
                             // Versione/Variante
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Versione", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                                Text(AppLocale.version, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
                                 OptionSelector(
                                     options = availableVariants,
                                     selected = selectedVariant,
@@ -415,7 +416,7 @@ fun CardDetailBottomSheet(
                     }
 
                     // ── Dettagli carta ──
-                    Text("Dettagli", color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text(AppLocale.details, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Column(
@@ -441,7 +442,7 @@ fun CardDetailBottomSheet(
                         val variants = card.tcgplayer?.prices
                         if (variants != null && variants.isNotEmpty()) {
                             HorizontalDivider(color = TextMuted.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 4.dp))
-                            Text("Prezzi per variante", color = TextWhite, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                            Text(AppLocale.pricesByVariant, color = TextWhite, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                             variants.forEach { (key, priceInfo) ->
                                 val variantName = when (key) {
                                     "normal" -> "Normal"
@@ -470,11 +471,11 @@ fun CardDetailBottomSheet(
                                 strokeWidth = 1.5.dp,
                                 color = BlueCard
                             )
-                            Text("Caricamento prezzi...", color = TextMuted, fontSize = 12.sp)
+                            Text(AppLocale.loadingPrices, color = TextMuted, fontSize = 12.sp)
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                     } else if (pokeWalletPrices != null && pokeWalletPrices.hasEurPrices) {
-                        Text("Prezzi Live", color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Text(AppLocale.livePrices, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                         Spacer(modifier = Modifier.height(10.dp))
 
                         val cardMarketUrl = pokeWalletPrices.cardMarketUrl
@@ -499,7 +500,7 @@ fun CardDetailBottomSheet(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Text("\uD83C\uDDEA\uD83C\uDDFA", fontSize = 14.sp)
-                                    Text("CardMarket", color = TextGray, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                    Text(AppLocale.cardMarket, color = TextGray, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                                 }
 
                                 if (cardMarketUrl != null) {
@@ -511,7 +512,7 @@ fun CardDetailBottomSheet(
                                     ) {
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                            contentDescription = "Apri su CardMarket",
+                                            contentDescription = AppLocale.openOnCardMarket,
                                             tint = TextGray,
                                             modifier = Modifier.size(15.dp)
                                         )
@@ -527,7 +528,7 @@ fun CardDetailBottomSheet(
                             ) {
                                 if (mainEurPrice != null) {
                                     Column {
-                                        Text("Prezzo medio", color = TextMuted, fontSize = 11.sp)
+                                        Text(AppLocale.averagePrice, color = TextMuted, fontSize = 11.sp)
                                         Text(
                                             "\u20AC${".2f".format(mainEurPrice).let { String.format("%.2f", mainEurPrice) }}",
                                             color = GreenCard,
@@ -538,7 +539,7 @@ fun CardDetailBottomSheet(
                                 }
                                 if (pokeWalletPrices.eurTrend != null) {
                                     Column(horizontalAlignment = Alignment.End) {
-                                        Text("Trend", color = TextMuted, fontSize = 11.sp)
+                                        Text(AppLocale.trend, color = TextMuted, fontSize = 11.sp)
                                         Text(
                                             "\u20AC${String.format("%.2f", pokeWalletPrices.eurTrend)}",
                                             color = TextWhite,
@@ -560,7 +561,7 @@ fun CardDetailBottomSheet(
 
                             if (pokeWalletPrices.eurLow != null) {
                                 HorizontalDivider(color = TextMuted.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 2.dp))
-                                DetailInfoRow("Prezzo minimo", "\u20AC${String.format("%.2f", pokeWalletPrices.eurLow)}")
+                                DetailInfoRow(AppLocale.minPrice, "\u20AC${String.format("%.2f", pokeWalletPrices.eurLow)}")
                             }
                         }
 

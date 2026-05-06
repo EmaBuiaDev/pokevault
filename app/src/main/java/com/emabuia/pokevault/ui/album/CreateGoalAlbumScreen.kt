@@ -657,7 +657,7 @@ private fun PreviewSection(cards: List<TcgCard>) {
             }
         }
         if (cards.size > 12) {
-            Text("+ ${cards.size - 12} altre carte", color = TextMuted, fontSize = 12.sp)
+            Text(AppLocale.otherCardsCount(cards.size - 12), color = TextMuted, fontSize = 12.sp)
         }
     }
 }

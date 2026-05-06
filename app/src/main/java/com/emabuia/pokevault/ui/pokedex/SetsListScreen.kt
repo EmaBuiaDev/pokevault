@@ -230,7 +230,7 @@ fun SetsListScreen(
             actions = {
                 if (!state.isLoading) {
                     IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(Icons.Default.Refresh, "Aggiorna", tint = TextMuted)
+                        Icon(Icons.Default.Refresh, AppLocale.refresh, tint = TextMuted)
                     }
                 }
             },
@@ -650,7 +650,7 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
                                     .background(DarkSurface),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("No image", color = TextMuted, fontSize = 10.sp)
+                                Text(AppLocale.noImage, color = TextMuted, fontSize = 10.sp)
                             }
                         }
                     }

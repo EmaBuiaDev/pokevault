@@ -65,6 +65,7 @@ import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.viewmodel.ScannerViewModel
 import java.io.ByteArrayOutputStream
@@ -463,7 +464,7 @@ private fun CandidateCardPicker(
         ) {
             Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("Nessuna di queste", fontSize = 14.sp)
+            Text(AppLocale.noneOfThese, fontSize = 14.sp)
         }
     }
 }
@@ -487,7 +488,7 @@ private fun PendingCardConfirmation(
     ) {
         // Header
         Text(
-            "Carta riconosciuta",
+            AppLocale.recognizedCard,
             color = BlueCard,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp
@@ -565,7 +566,7 @@ private fun PendingCardConfirmation(
             ) {
                 Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Scarta", fontSize = 14.sp)
+                Text(AppLocale.discard, fontSize = 14.sp)
             }
 
             // Aggiungi
@@ -579,7 +580,7 @@ private fun PendingCardConfirmation(
             ) {
                 Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Aggiungi", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(AppLocale.add, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -696,11 +697,11 @@ private fun PermissionRequest(
             onClick = onRequestPermission,
             colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
         ) {
-            Text("Concedi permesso")
+            Text(AppLocale.grantPermission)
         }
         Spacer(modifier = Modifier.height(12.dp))
         TextButton(onClick = onBack) {
-            Text("Torna indietro", color = TextMuted)
+            Text(AppLocale.goBack, color = TextMuted)
         }
     }
 }

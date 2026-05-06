@@ -151,7 +151,7 @@ fun DeckLabScreen(
                                 .clip(CircleShape)
                                 .background(DarkCard)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro", tint = TextWhite)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppLocale.back, tint = TextWhite)
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
@@ -220,7 +220,7 @@ fun DeckLabScreen(
                         contentColor = TextWhite,
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Default.FileDownload, contentDescription = "Importa deck")
+                        Icon(Icons.Default.FileDownload, contentDescription = AppLocale.importDeck)
                     }
                     // Bottone Crea
                     ExtendedFloatingActionButton(
@@ -236,7 +236,7 @@ fun DeckLabScreen(
                         contentColor = TextWhite,
                         shape = RoundedCornerShape(16.dp),
                         icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                        text = { Text("Crea un nuovo deck") }
+                        text = { Text(AppLocale.createNewDeck) }
                     )
                 }
             }
@@ -1145,7 +1145,7 @@ fun NewDeckBottomSheetContent(
                     TextField(
                         value = viewModel.newDeckName,
                         onValueChange = { viewModel.newDeckName = it },
-                        placeholder = { Text("Nome deck...", color = TextMuted, fontSize = 13.sp) },
+                        placeholder = { Text(AppLocale.deckNamePlaceholder, color = TextMuted, fontSize = 13.sp) },
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = androidx.compose.foundation.text.KeyboardActions(
@@ -1188,7 +1188,7 @@ fun NewDeckBottomSheetContent(
                                 if (!url.isNullOrBlank()) {
                                     AsyncImage(
                                         model = url,
-                                        contentDescription = "Copertina deck ${index + 1}",
+                                        contentDescription = AppLocale.deckCover(index + 1),
                                         contentScale = ContentScale.Fit,
                                         modifier = Modifier.fillMaxSize()
                                     )
@@ -1279,7 +1279,7 @@ fun NewDeckBottomSheetContent(
                         }, modifier = Modifier.size(24.dp)) {
                             Icon(
                                 Icons.Default.Close,
-                                contentDescription = "Cancella ricerca",
+                                contentDescription = AppLocale.clearSearch,
                                 tint = TextMuted,
                                 modifier = Modifier.size(14.dp)
                             )
@@ -1501,7 +1501,7 @@ fun NewDeckBottomSheetContent(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Quante copie vuoi aggiungere?",
+                        text = AppLocale.howManyCopiesToAdd,
                         color = TextWhite,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold
@@ -1518,7 +1518,7 @@ fun NewDeckBottomSheetContent(
                                 .clip(CircleShape)
                                 .background(DarkBackground)
                         ) {
-                            Icon(Icons.Default.Remove, contentDescription = "Meno", tint = TextWhite)
+                            Icon(Icons.Default.Remove, contentDescription = AppLocale.minus, tint = TextWhite)
                         }
                         Text(
                             text = "$tcgAddQty",
@@ -1533,12 +1533,12 @@ fun NewDeckBottomSheetContent(
                                 .clip(CircleShape)
                                 .background(DarkBackground)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Piu", tint = TextWhite)
+                            Icon(Icons.Default.Add, contentDescription = AppLocale.plus, tint = TextWhite)
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Verranno aggiunte alla tua collezione e al deck",
+                        text = AppLocale.addedToCollectionAndDeck,
                         color = TextMuted,
                         fontSize = 10.sp,
                         textAlign = TextAlign.Center
@@ -1556,12 +1556,12 @@ fun NewDeckBottomSheetContent(
                     colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Aggiungi $tcgAddQty al deck", color = TextWhite, fontWeight = FontWeight.Bold)
+                    Text(AppLocale.addCopiesToDeck(tcgAddQty), color = TextWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { tcgCardToAdd = null }) {
-                    Text("Annulla", color = TextMuted)
+                    Text(AppLocale.cancel, color = TextMuted)
                 }
             }
         )
@@ -1573,14 +1573,14 @@ fun NewDeckBottomSheetContent(
             containerColor = DarkCard,
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Scegli 2 Copertine", color = TextWhite, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text(AppLocale.choose2Covers, color = TextWhite, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text("${viewModel.coverImageUrls.size}/2", color = TextMuted, fontSize = 12.sp)
                 }
             },
             text = {
                 Column {
                     Text(
-                        text = "Solo le carte gia presenti nel deck possono diventare copertina.",
+                        text = AppLocale.onlyDeckCardsCanBeCover,
                         color = TextMuted,
                         fontSize = 10.sp
                     )
@@ -1604,7 +1604,7 @@ fun NewDeckBottomSheetContent(
                                         .data(card.imageUrl)
                                         .size(140, 200)
                                         .build(),
-                                    contentDescription = "Seleziona copertina ${card.name}",
+                                    contentDescription = AppLocale.selectCover(card.name),
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -1619,7 +1619,7 @@ fun NewDeckBottomSheetContent(
                                             .size(18.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.Check, contentDescription = "Copertina selezionata", tint = TextWhite, modifier = Modifier.size(12.dp))
+                                            Icon(Icons.Default.Check, contentDescription = AppLocale.selectedCover, tint = TextWhite, modifier = Modifier.size(12.dp))
                                         }
                                     }
                                 }
@@ -1634,12 +1634,12 @@ fun NewDeckBottomSheetContent(
                     colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Chiudi", color = TextWhite, fontWeight = FontWeight.Bold)
+                    Text(AppLocale.close, color = TextWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCoverPicker = false }) {
-                    Text("Annulla", color = TextMuted)
+                    Text(AppLocale.cancel, color = TextMuted)
                 }
             }
         )
@@ -1797,7 +1797,7 @@ fun TcgCardSearchItem(
                 .size(20.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Add, contentDescription = "Aggiungi", tint = TextWhite, modifier = Modifier.size(12.dp))
+                Icon(Icons.Default.Add, contentDescription = AppLocale.add, tint = TextWhite, modifier = Modifier.size(12.dp))
             }
         }
     }
@@ -1863,7 +1863,7 @@ fun DeckImportDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.FileDownload, contentDescription = null, tint = PurpleCard, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Importa Deck", color = TextWhite, fontWeight = FontWeight.Bold)
+                Text(AppLocale.importDeck, color = TextWhite, fontWeight = FontWeight.Bold)
             }
         },
         text = {
@@ -1916,12 +1916,12 @@ fun DeckImportDialog(
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Importa")
+                Text(AppLocale.import)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Annulla", color = TextMuted)
+                Text(AppLocale.cancel, color = TextMuted)
             }
         }
     )
@@ -2090,7 +2090,7 @@ fun ImportResultDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("OK")
+                    Text(AppLocale.ok)
                 }
             }
         },

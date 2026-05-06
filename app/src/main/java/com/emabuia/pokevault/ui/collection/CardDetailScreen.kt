@@ -246,7 +246,7 @@ fun CardDetailScreen(
                 title = { Text(variants.firstOrNull()?.name ?: "Dettaglio", fontWeight = FontWeight.Bold, color = TextWhite) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro", tint = TextWhite)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
@@ -260,7 +260,7 @@ fun CardDetailScreen(
             }
         } else if (variants.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Carta non trovata", color = TextGray)
+                Text(AppLocale.noCardFound, color = TextGray)
             }
         } else {
             val currentCard = variants.getOrNull(selectedVariantIndex) ?: variants.first()
@@ -319,7 +319,7 @@ fun CardDetailScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    "Varianti in tuo possesso:",
+                    AppLocale.myVariantsLabel,
                     color = TextWhite,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -355,8 +355,8 @@ fun CardDetailScreen(
                             Icon(Icons.Default.Stars, contentDescription = null, tint = StarGold, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
-                                Text("Carta Gradata", color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                Text("Inserisci nelle carte gradate", color = TextMuted, fontSize = 11.sp)
+                                Text(AppLocale.gradedCardSection, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(AppLocale.insertInGradedCards, color = TextMuted, fontSize = 11.sp)
                             }
                         }
                         
@@ -413,7 +413,7 @@ fun CardDetailScreen(
                                         tempGrade = 10f
                                     }
                                 },
-                                label = { Text("Voto (1-10)", fontSize = 10.sp) },
+                                label = { Text(AppLocale.gradeLabel, fontSize = 10.sp) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true,
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -436,7 +436,7 @@ fun CardDetailScreen(
                                     value = tempCompany.ifBlank { "PSA" },
                                     onValueChange = {},
                                     readOnly = true,
-                                    label = { Text("Ente", fontSize = 10.sp) },
+                                    label = { Text(AppLocale.gradingAgency, fontSize = 10.sp) },
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedGrading) },
                                     modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                                     colors = OutlinedTextFieldDefaults.colors(
@@ -468,10 +468,10 @@ fun CardDetailScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                DetailSection(title = "Dettagli ${currentCard.variant}") {
-                    DetailRow("Condizione", currentCard.condition)
-                    DetailRow("Lingua", currentCard.language)
-                    DetailRow("Valore stimato", "€${"%.2f".format(currentCard.estimatedValue)}")
+                DetailSection(title = "${AppLocale.details} ${currentCard.variant}") {
+                    DetailRow(AppLocale.condition, currentCard.condition)
+                    DetailRow(AppLocale.languageLabel, currentCard.language)
+                    DetailRow(AppLocale.estimatedValue, "€${"%.2f".format(currentCard.estimatedValue)}")
                     if (currentCard.notes.isNotBlank()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(currentCard.notes, color = TextGray, fontSize = 13.sp)
@@ -481,7 +481,7 @@ fun CardDetailScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 val cardMarketUrl = livePrices?.cardMarketUrl?.takeIf { it.isNotBlank() }
-                DetailSection(title = "Prezzi Live") {
+                DetailSection(title = AppLocale.livePrices) {
                     if (isLoadingLivePrices) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -492,7 +492,7 @@ fun CardDetailScreen(
                                 strokeWidth = 1.5.dp,
                                 color = BlueCard
                             )
-                            Text("Caricamento prezzi...", color = TextMuted, fontSize = 12.sp)
+                            Text(AppLocale.loadingPrices, color = TextMuted, fontSize = 12.sp)
                         }
                     } else if (livePrices != null && livePrices?.hasEurPrices == true) {
                         Row(
@@ -505,7 +505,7 @@ fun CardDetailScreen(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text("\uD83C\uDDEA\uD83C\uDDFA", fontSize = 14.sp)
-                                Text("CardMarket", color = TextGray, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                Text(AppLocale.cardMarket, color = TextGray, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                             }
                             if (cardMarketUrl != null) {
                                 IconButton(
@@ -516,7 +516,7 @@ fun CardDetailScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                        contentDescription = "Apri su CardMarket",
+                                        contentDescription = AppLocale.openOnCardMarket,
                                         tint = TextGray,
                                         modifier = Modifier.size(15.dp)
                                     )
@@ -534,7 +534,7 @@ fun CardDetailScreen(
                         ) {
                             if (mainEurPrice != null) {
                                 Column {
-                                    Text("Prezzo medio", color = TextMuted, fontSize = 11.sp)
+                                    Text(AppLocale.averagePrice, color = TextMuted, fontSize = 11.sp)
                                     Text(
                                         "€${String.format("%.2f", mainEurPrice)}",
                                         color = GreenCard,
@@ -545,7 +545,7 @@ fun CardDetailScreen(
                             }
                             if (livePrices?.eurTrend != null) {
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text("Trend", color = TextMuted, fontSize = 11.sp)
+                                    Text(AppLocale.trend, color = TextMuted, fontSize = 11.sp)
                                     Text(
                                         "€${String.format("%.2f", livePrices?.eurTrend)}",
                                         color = TextWhite,
@@ -568,7 +568,7 @@ fun CardDetailScreen(
                         if (livePrices?.eurLow != null) {
                             Spacer(modifier = Modifier.height(6.dp))
                             HorizontalDivider(color = TextMuted.copy(alpha = 0.15f))
-                            DetailRow("Prezzo minimo", "€${String.format("%.2f", livePrices?.eurLow)}")
+                            DetailRow(AppLocale.minPrice, "€${String.format("%.2f", livePrices?.eurLow)}")
                         }
 
                         if (livePrices?.usdMarket != null) {
@@ -576,7 +576,7 @@ fun CardDetailScreen(
                             DetailRow("TCGPlayer", "$${String.format("%.2f", livePrices?.usdMarket)}")
                         }
                     } else {
-                        Text("Prezzi live non disponibili per questa carta", color = TextMuted, fontSize = 12.sp)
+                        Text(AppLocale.livePricesUnavailable, color = TextMuted, fontSize = 12.sp)
                     }
                 }
 
@@ -696,7 +696,7 @@ fun VariantRow(
                 ) {
                     Icon(
                         imageVector = if (editedQuantity == 0) Icons.Default.DeleteForever else Icons.Default.Check,
-                        contentDescription = "Conferma",
+                        contentDescription = AppLocale.confirm,
                         tint = Color.White,
                         modifier = Modifier.size(16.dp)
                     )

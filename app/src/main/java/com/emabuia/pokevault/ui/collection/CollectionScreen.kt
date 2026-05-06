@@ -199,19 +199,19 @@ fun CollectionScreen(
             TopAppBar(
                 title = {
                     if (isSelectionMode) {
-                        Text("${selectedGroupKeys.size} selezionate", fontWeight = FontWeight.Bold, color = TextWhite)
+                        Text(AppLocale.selectedCount(selectedGroupKeys.size), fontWeight = FontWeight.Bold, color = TextWhite)
                     } else {
-                        Text("Le mie carte", fontWeight = FontWeight.Bold, color = TextWhite)
+                        Text(AppLocale.myCardsSingleLine, fontWeight = FontWeight.Bold, color = TextWhite)
                     }
                 },
                 navigationIcon = {
                     if (isSelectionMode) {
                         IconButton(onClick = { isSelectionMode = false; selectedGroupKeys = emptySet() }) {
-                            Icon(Icons.Default.Close, "Annulla", tint = TextWhite)
+                            Icon(Icons.Default.Close, AppLocale.cancel, tint = TextWhite)
                         }
                     } else {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro", tint = TextWhite)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
                         }
                     }
                 },
@@ -226,7 +226,7 @@ fun CollectionScreen(
                         }) {
                             Icon(
                                 imageVector = if (selectedGroupKeys.size == groupedCards.size) Icons.Default.Deselect else Icons.Default.SelectAll,
-                                contentDescription = "Seleziona tutto",
+                                contentDescription = AppLocale.selectAll,
                                 tint = TextWhite
                             )
                         }
@@ -240,7 +240,7 @@ fun CollectionScreen(
                                         4 -> Icons.Default.Apps
                                         else -> Icons.Default.ViewComfy
                                     },
-                                    contentDescription = "Cambia densità griglia",
+                                    contentDescription = AppLocale.changeGridDensity,
                                     tint = TextWhite
                                 )
                             }
@@ -248,7 +248,7 @@ fun CollectionScreen(
                         IconButton(onClick = { viewModel.toggleViewMode() }) {
                             Icon(
                                 imageVector = if (state.isGridView) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
-                                contentDescription = "Cambia vista",
+                                contentDescription = AppLocale.changeView,
                                 tint = TextWhite
                             )
                         }
@@ -296,7 +296,7 @@ fun CollectionScreen(
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Default.Tune,
-                                    contentDescription = "Filtri",
+                                    contentDescription = AppLocale.filters,
                                     tint = TextWhite,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -340,7 +340,7 @@ fun CollectionScreen(
                 } else {
                     if (groupedCards.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Nessuna carta trovata", color = TextMuted)
+                            Text(AppLocale.emptyCollectionTitle, color = TextMuted)
                         }
                     } else {
                         val expansionSections = remember(groupedByExpansion, expansionSortOrder) {
@@ -530,7 +530,7 @@ fun CollectionScreen(
                         }
 
                         Text(
-                            text = "${selectedGroupKeys.size} selezionate",
+                            text = AppLocale.selectedCount(selectedGroupKeys.size),
                             color = TextWhite,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
@@ -549,7 +549,7 @@ fun CollectionScreen(
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.height(36.dp)
                             ) {
-                                Text("Conferma", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(AppLocale.confirm, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                             OutlinedButton(
                                 onClick = { showConfirm = false },
@@ -557,7 +557,7 @@ fun CollectionScreen(
                                 border = BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f)),
                                 modifier = Modifier.height(36.dp)
                             ) {
-                                Text("Annulla", color = TextMuted, fontSize = 13.sp)
+                                Text(AppLocale.cancel, color = TextMuted, fontSize = 13.sp)
                             }
                         } else {
                             Button(
@@ -568,7 +568,7 @@ fun CollectionScreen(
                             ) {
                                 Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Elimina", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(AppLocale.delete, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
                     }
@@ -618,7 +618,7 @@ private fun ExpansionSortRow(
                         modifier = Modifier.size(14.dp)
                     )
                     Text(
-                        text = "Ordine espansioni",
+                        text = AppLocale.expansionOrder,
                         color = TextMuted,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
@@ -635,14 +635,14 @@ private fun ExpansionSortRow(
         }
         item {
             FilterChip(
-                label = "Più carte",
+                label = AppLocale.moreCards,
                 isSelected = selectedOrder == ExpansionSortOrder.BY_TOTAL_CARDS_DESC,
                 onClick = { onOrderSelected(ExpansionSortOrder.BY_TOTAL_CARDS_DESC) }
             )
         }
         item {
             FilterChip(
-                label = "Meno carte",
+                label = AppLocale.fewerCards,
                 isSelected = selectedOrder == ExpansionSortOrder.BY_TOTAL_CARDS_ASC,
                 onClick = { onOrderSelected(ExpansionSortOrder.BY_TOTAL_CARDS_ASC) }
             )
@@ -656,7 +656,7 @@ private fun ExpansionSortRow(
                 border = BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f))
             ) {
                 Text(
-                    text = "Espandi tutte",
+                    text = AppLocale.expandAll,
                     color = if (canExpandAll) TextWhite else TextMuted,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
@@ -673,7 +673,7 @@ private fun ExpansionSortRow(
                 border = BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f))
             ) {
                 Text(
-                    text = "Chiudi tutte",
+                    text = AppLocale.collapseAll,
                     color = if (canCollapseAll) TextWhite else TextMuted,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
@@ -725,8 +725,8 @@ fun FilterBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Filtri", style = MaterialTheme.typography.headlineSmall, color = TextWhite)
-                    Text("Organizza le carte senza perdere il contesto", color = TextMuted, fontSize = 12.sp)
+                    Text(AppLocale.filters, style = MaterialTheme.typography.headlineSmall, color = TextWhite)
+                    Text(AppLocale.organizeCardsHint, color = TextMuted, fontSize = 12.sp)
                 }
                 TextButton(onClick = {
                     viewModel.filterBySupertype(SupertypeFilter.ALL)
@@ -737,7 +737,7 @@ fun FilterBottomSheet(
                 }) {
                     Icon(Icons.Default.RestartAlt, contentDescription = null, tint = BlueCard)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Reset", color = BlueCard)
+                    Text(AppLocale.resetFilters, color = BlueCard)
                 }
             }
 
@@ -894,7 +894,7 @@ fun FilterBottomSheet(
             ) {
                 Icon(Icons.Default.Done, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Mostra risultati", fontWeight = FontWeight.Bold)
+                Text(AppLocale.showResults, fontWeight = FontWeight.Bold)
             }
         }
     }

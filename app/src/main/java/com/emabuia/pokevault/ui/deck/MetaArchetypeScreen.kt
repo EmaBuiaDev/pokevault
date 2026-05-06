@@ -461,7 +461,7 @@ private fun ArchetypeCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("${archetype.count} deck", color = TextMuted, fontSize = 11.sp)
+                        Text(AppLocale.deckCountLabel(archetype.count), color = TextMuted, fontSize = 11.sp)
 
                         if (archetype.topPlacement <= 3) {
                             val trophyColor = when (archetype.topPlacement) {
@@ -578,7 +578,7 @@ private fun ArchetypeCard(
                         ) {
                             Icon(Icons.Default.FileDownload, null, tint = PurpleCard, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Import", color = PurpleCard, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(AppLocale.import, color = PurpleCard, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

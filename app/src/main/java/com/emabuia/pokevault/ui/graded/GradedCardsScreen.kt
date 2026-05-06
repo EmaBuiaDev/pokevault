@@ -46,10 +46,10 @@ fun GradedCardsScreen(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         TopAppBar(
-            title = { Text("Carte Graduate", fontWeight = FontWeight.SemiBold, color = TextWhite) },
+            title = { Text(AppLocale.gradedCardsTitle.replace("\n", " "), fontWeight = FontWeight.SemiBold, color = TextWhite) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro", tint = TextWhite)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
@@ -68,7 +68,7 @@ fun GradedCardsScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("⭐", fontSize = 48.sp)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Nessuna carta gradata", color = TextWhite, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(AppLocale.emptyCollectionTitle, color = TextWhite, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "Aggiungi carte con certificazione PSA, BGS o CGC dalla sezione Collezione.",
@@ -172,13 +172,13 @@ fun SearchField(query: String, onQueryChange: (String) -> Unit) {
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(BlueCard),
                 modifier = Modifier.weight(1f),
                 decorationBox = { innerTextField ->
-                    if (query.isEmpty()) Text("Cerca carta gradata...", color = TextMuted, fontSize = 14.sp)
+                    if (query.isEmpty()) Text("${AppLocale.searchCard}...", color = TextMuted, fontSize = 14.sp)
                     innerTextField()
                 }
             )
             if (query.isNotEmpty()) {
                 Icon(
-                    Icons.Default.Close, contentDescription = "Cancella",
+                    Icons.Default.Close, contentDescription = AppLocale.clearSearch,
                     tint = TextMuted, modifier = Modifier.size(18.dp).clickable { onQueryChange("") }
                 )
             }

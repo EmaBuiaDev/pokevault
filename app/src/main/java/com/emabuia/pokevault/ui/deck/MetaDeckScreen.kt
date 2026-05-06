@@ -137,7 +137,7 @@ fun MetaDeckListView(
             ) {
                 Icon(
                     Icons.Default.Refresh,
-                    contentDescription = "Aggiorna",
+                    contentDescription = AppLocale.refresh,
                     tint = TextMuted,
                     modifier = Modifier.size(16.dp)
                 )
@@ -206,7 +206,7 @@ fun MetaDeckListView(
                             colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Riprova")
+                            Text(AppLocale.retry)
                         }
                     }
                 }
@@ -229,13 +229,13 @@ fun MetaDeckListView(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Nessun meta deck trovato",
+                            text = AppLocale.noMetaDeckFound,
                             color = TextWhite,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Prova a cambiare formato o riprova pi\u00f9 tardi.",
+                            text = AppLocale.tryChangeFormat,
                             color = TextMuted,
                             fontSize = 12.sp
                         )
@@ -344,7 +344,7 @@ fun MetaInfoBanner(
                 )
                 Icon(
                     if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (expanded) "Nascondi" else "Espandi",
+                    contentDescription = if (expanded) AppLocale.close else AppLocale.expandAll,
                     tint = TextMuted,
                     modifier = Modifier.size(18.dp)
                 )
@@ -449,7 +449,7 @@ fun MetaDeckItem(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = deck.archetype ?: "Deck Sconosciuto",
+                        text = deck.archetype ?: AppLocale.unknownDeck,
                         color = TextWhite,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
@@ -642,7 +642,7 @@ fun MetaDeckDetailView(
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Indietro",
+                            contentDescription = AppLocale.back,
                             tint = TextWhite,
                             modifier = Modifier.size(20.dp)
                         )
@@ -661,7 +661,7 @@ fun MetaDeckDetailView(
                             ) {
                                 Icon(
                                     Icons.Default.FileDownload,
-                                    contentDescription = "Importa in DeckLab",
+                                    contentDescription = AppLocale.importInDeckLab,
                                     tint = PurpleCard,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -673,7 +673,7 @@ fun MetaDeckDetailView(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = deck.archetype ?: "Deck Sconosciuto",
+                    text = deck.archetype ?: AppLocale.unknownDeck,
                     color = TextWhite,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Black
@@ -802,7 +802,7 @@ fun MetaDeckDetailView(
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Importa in DeckLab", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(AppLocale.importInDeckLab, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
             }
@@ -1030,7 +1030,7 @@ fun WinTournamentListView(
             ) {
                 Icon(
                     Icons.Default.Refresh,
-                    contentDescription = "Aggiorna",
+                    contentDescription = AppLocale.refresh,
                     tint = TextMuted,
                     modifier = Modifier.size(16.dp)
                 )
@@ -1072,7 +1072,7 @@ fun WinTournamentListView(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Errore di connessione",
+                            text = AppLocale.connectionError,
                             color = TextWhite,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
@@ -1088,7 +1088,7 @@ fun WinTournamentListView(
                             colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Riprova")
+                            Text(AppLocale.retry)
                         }
                     }
                 }
@@ -1117,7 +1117,7 @@ fun WinTournamentListView(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Prova a cambiare formato o riprova pi\u00f9 tardi.",
+                            text = AppLocale.tryChangeFormat,
                             color = TextMuted,
                             fontSize = 12.sp
                         )
@@ -1234,7 +1234,7 @@ fun TournamentResultCard(
             // ── Top 3 rows ──
             if (result.top3.isEmpty()) {
                 Text(
-                    text = "Nessuna decklist disponibile",
+                    text = AppLocale.noDecklistAvailable,
                     color = TextMuted,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -1338,7 +1338,7 @@ fun Top3PlacementRow(
         // Arrow icon
         Icon(
             Icons.Default.ChevronRight,
-            contentDescription = "Vedi deck",
+            contentDescription = AppLocale.viewDeck,
             tint = TextMuted.copy(alpha = 0.5f),
             modifier = Modifier.size(16.dp)
         )

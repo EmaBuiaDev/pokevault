@@ -284,7 +284,7 @@ private fun TournamentCard(
                     )
                     if (tournament.participants > 0) {
                         Text("•", color = TextMuted, fontSize = 11.sp)
-                        Text("${tournament.participants} players", color = TextGray, fontSize = 11.sp)
+                        Text(AppLocale.playersCount(tournament.participants), color = TextGray, fontSize = 11.sp)
                     }
                 }
             }
