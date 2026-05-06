@@ -198,6 +198,14 @@ class CollectionViewModel : ViewModel() {
         uiState = uiState.copy(errorMessage = null, successMessage = null)
     }
 
+    private fun normalizeSetForFilter(value: String?): String {
+        val displayed = AppLocale.displaySetName(value?.trim().orEmpty())
+        return displayed
+            .trim()
+            .lowercase()
+            .replace(Regex("\\s+"), " ")
+    }
+
     private fun applyFilters(cards: List<PokemonCard>): List<PokemonCard> {
         val filtered = cards.filter { card ->
             val matchesQuery = uiState.searchQuery.isBlank() ||
@@ -205,10 +213,11 @@ class CollectionViewModel : ViewModel() {
                 card.set.contains(uiState.searchQuery, ignoreCase = true) ||
                 card.rarity.contains(uiState.searchQuery, ignoreCase = true)
             
+            val selectedSetNormalized = normalizeSetForFilter(uiState.selectedSet)
+            val cardRawSetNormalized = normalizeSetForFilter(card.set)
             val matchesSet = uiState.selectedSet == null ||
-                card.set == uiState.selectedSet ||
-                AppLocale.displaySetName(card.set) == uiState.selectedSet ||
-                (uiState.selectedSet == "Espansione sconosciuta" && card.set.isBlank())
+                selectedSetNormalized == cardRawSetNormalized ||
+                (selectedSetNormalized == normalizeSetForFilter("Espansione sconosciuta") && card.set.isBlank())
             
             // Il filtro tipo si applica solo nel contesto Pokémon.
             val matchesType = when {

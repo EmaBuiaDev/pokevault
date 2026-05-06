@@ -691,8 +691,15 @@ fun FilterBottomSheet(
     viewModel: CollectionViewModel,
     onDismiss: () -> Unit
 ) {
+    fun canonicalSetLabel(rawSet: String): String {
+        return AppLocale.displaySetName(rawSet)
+            .ifBlank { if (AppLocale.isItalian) "Espansione sconosciuta" else "Unknown Expansion" }
+            .trim()
+    }
+
     val setCounts = remember(state.cards) {
-        state.cards.groupBy { it.set.ifBlank { if (AppLocale.isItalian) "Espansione sconosciuta" else "Unknown Expansion" } }
+        state.cards
+            .groupBy { canonicalSetLabel(it.set) }
             .mapValues { it.value.sumOf { c -> c.quantity } }
             .toList()
             .sortedByDescending { it.second }
@@ -850,11 +857,11 @@ fun FilterBottomSheet(
                             onClick = { viewModel.filterBySet(null) }
                         )
                     }
-                    items(setCounts) { (rawSetName, count) ->
+                    items(setCounts) { (setLabel, count) ->
                         FilterChip(
-                            label = "${AppLocale.displaySetName(rawSetName)} ($count)",
-                            isSelected = state.selectedSet == rawSetName,
-                            onClick = { viewModel.filterBySet(rawSetName) }
+                            label = "$setLabel ($count)",
+                            isSelected = state.selectedSet == setLabel,
+                            onClick = { viewModel.filterBySet(setLabel) }
                         )
                     }
                 }

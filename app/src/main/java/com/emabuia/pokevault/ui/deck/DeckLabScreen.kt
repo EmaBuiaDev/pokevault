@@ -479,15 +479,82 @@ fun DeckItem(
     val uniqueDeckCards = remember(deck.cards, allOwnedCards) {
         allOwnedCards.filter { it.id in cardCounts.keys }
     }
+
+    fun classifyForDeckSections(card: PokemonCard): String {
+        val supertype = card.supertype.lowercase()
+        val type = card.type.lowercase()
+        val name = card.name.lowercase()
+        val subtypes = card.subtypes.map { it.lowercase() }
+
+        val hasEnergyMarker =
+            supertype.contains("energy") ||
+                supertype.contains("energ") ||
+                type.contains("energy") ||
+                type.contains("energia") ||
+                subtypes.any { it.contains("energy") || it.contains("energia") } ||
+                name.contains("energy") ||
+                name.contains("energia")
+        if (hasEnergyMarker) return "Energy"
+
+        val hasTrainerMarker =
+            supertype.contains("trainer") ||
+                supertype.contains("allenat") ||
+                supertype.contains("aiuto") ||
+                type.contains("trainer") ||
+                type.contains("supporter") ||
+                type.contains("item") ||
+                type.contains("stadium") ||
+                type.contains("tool") ||
+                type.contains("allenat") ||
+                type.contains("aiuto") ||
+                type.contains("stadio") ||
+                type.contains("strumento") ||
+                subtypes.any {
+                    it == "item" ||
+                        it == "stadium" ||
+                        it == "supporter" ||
+                        it == "tool" ||
+                        it == "strumento" ||
+                        it == "stadio" ||
+                        it == "aiuto"
+                }
+
+        val hasPokemonSubtypeMarker = subtypes.any {
+            it == "basic" ||
+                it == "stage 1" ||
+                it == "stage 2" ||
+                it == "baby" ||
+                it == "ex" ||
+                it == "v" ||
+                it == "vmax" ||
+                it == "vstar"
+        }
+        val hasPokemonTypeMarker =
+            type in listOf(
+                "grass", "fire", "water", "lightning", "electric", "fighting",
+                "psychic", "darkness", "metal", "dragon", "fairy"
+            )
+        val hasStrongPokemonMarker =
+            card.hp > 0 ||
+                hasPokemonSubtypeMarker ||
+                hasPokemonTypeMarker
+        val hasExplicitPokemonSupertype = supertype.contains("pok")
+
+        if (hasTrainerMarker && !hasStrongPokemonMarker) return "Trainer"
+        if (hasStrongPokemonMarker) return "Pokémon"
+        if (hasExplicitPokemonSupertype && !hasTrainerMarker && type != "colorless") return "Pokémon"
+
+        return "Trainer"
+    }
     
     val pokemonCount = remember(uniqueDeckCards, cardCounts) { 
-        uniqueDeckCards.filter { it.classify() == "Pokémon" }.sumOf { cardCounts[it.id] ?: 0 } 
+        uniqueDeckCards.filter { classifyForDeckSections(it) == "Pokémon" }.sumOf { cardCounts[it.id] ?: 0 } 
     }
     val trainerCount = remember(uniqueDeckCards, cardCounts) { 
-        uniqueDeckCards.filter { it.classify() == "Trainer" }.sumOf { cardCounts[it.id] ?: 0 } 
+        uniqueDeckCards.filter { classifyForDeckSections(it) == "Trainer" }.sumOf { cardCounts[it.id] ?: 0 } 
     }
     val energyCount = remember(uniqueDeckCards, cardCounts) { 
-        uniqueDeckCards.filter { it.classify() == "Energy" }.sumOf { cardCounts[it.id] ?: 0 } 
+        uniqueDeckCards.filter { classifyForDeckSections(it) == "Energy" }.sumOf { cardCounts[it.id] ?: 0 } 
     }
 
     Card(
@@ -677,6 +744,73 @@ fun DeckDetailView(
     fun getCardKey(card: PokemonCard): String =
         card.apiCardId.ifEmpty { "${card.name}-${card.set}-${card.cardNumber}-${card.variant}" }
 
+    fun classifyForDeckSections(card: PokemonCard): String {
+        val supertype = card.supertype.lowercase()
+        val type = card.type.lowercase()
+        val name = card.name.lowercase()
+        val subtypes = card.subtypes.map { it.lowercase() }
+
+        val hasEnergyMarker =
+            supertype.contains("energy") ||
+                supertype.contains("energ") ||
+                type.contains("energy") ||
+                type.contains("energia") ||
+                subtypes.any { it.contains("energy") || it.contains("energia") } ||
+                name.contains("energy") ||
+                name.contains("energia")
+        if (hasEnergyMarker) return "Energy"
+
+        val hasTrainerMarker =
+            supertype.contains("trainer") ||
+                supertype.contains("allenat") ||
+                supertype.contains("aiuto") ||
+                type.contains("trainer") ||
+                type.contains("supporter") ||
+                type.contains("item") ||
+                type.contains("stadium") ||
+                type.contains("tool") ||
+                type.contains("allenat") ||
+                type.contains("aiuto") ||
+                type.contains("stadio") ||
+                type.contains("strumento") ||
+                subtypes.any {
+                    it == "item" ||
+                        it == "stadium" ||
+                        it == "supporter" ||
+                        it == "tool" ||
+                        it == "strumento" ||
+                        it == "stadio" ||
+                        it == "aiuto"
+                }
+
+        val hasPokemonSubtypeMarker = subtypes.any {
+            it == "basic" ||
+                it == "stage 1" ||
+                it == "stage 2" ||
+                it == "baby" ||
+                it == "ex" ||
+                it == "v" ||
+                it == "vmax" ||
+                it == "vstar"
+        }
+        val hasPokemonTypeMarker =
+            type in listOf(
+                "grass", "fire", "water", "lightning", "electric", "fighting",
+                "psychic", "darkness", "metal", "dragon", "fairy"
+            )
+        val hasStrongPokemonMarker =
+            card.hp > 0 ||
+                hasPokemonSubtypeMarker ||
+                hasPokemonTypeMarker
+        val hasExplicitPokemonSupertype = supertype.contains("pok")
+
+        if (hasTrainerMarker && !hasStrongPokemonMarker) return "Trainer"
+        if (hasStrongPokemonMarker) return "Pokémon"
+        if (hasExplicitPokemonSupertype && !hasTrainerMarker && type != "colorless") return "Pokémon"
+
+        return "Trainer"
+    }
+
     val idToCard = remember(allOwnedCards) { allOwnedCards.associateBy { it.id } }
     
     val groupedCards = remember(deck.cards, idToCard) {
@@ -688,7 +822,7 @@ fun DeckDetailView(
     val cardsByCategory = remember(groupedCards) {
         listOf("Pokémon", "Trainer", "Energy").map { cat ->
             val filtered = groupedCards.filter { (card, _) ->
-                card.classify() == cat
+                classifyForDeckSections(card) == cat
             }
             cat to filtered
         }.filter { it.second.isNotEmpty() }
