@@ -522,8 +522,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
         return name
             .lowercase()
-            .replace(Regex("""[^a-z0-9à-ÿ\s'-]"""), " ")
-            .split(Regex("""\s+"""))
+            .replace(NAME_INVALID_CHARS_REGEX, " ")
+            .split(WHITESPACE_REGEX)
             .filter { token -> token.length >= 2 && token !in stopWords }
             .joinToString(" ")
             .trim()
@@ -534,7 +534,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         if (normalized.isBlank()) return null
 
         val tokens = normalized
-            .split(Regex("""\s+"""))
+            .split(WHITESPACE_REGEX)
             .filter { it.length >= 3 }
 
         if (tokens.isEmpty()) return null
@@ -707,5 +707,10 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         private const val MIN_CANDIDATE_NAME_SIMILARITY = 0.18
         private const val SEARCH_MIN_INTERVAL_MS = 1500L
         private const val SEARCH_KEY_COOLDOWN_MS = 6000L
+
+        // Regex pre-compilati: erano ricreati ad ogni chiamata di normalize(),
+        // sprecando GC durante il live preview dello scanner.
+        private val NAME_INVALID_CHARS_REGEX = Regex("""[^a-z0-9à-ÿ\s'-]""")
+        private val WHITESPACE_REGEX = Regex("""\s+""")
     }
 }

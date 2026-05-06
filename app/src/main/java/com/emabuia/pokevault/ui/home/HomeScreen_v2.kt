@@ -12,6 +12,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -36,8 +37,8 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel()
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
-    val isPremium by premiumManager.isPremium.collectAsState()
-    val selectedHomeSpriteId by premiumManager.selectedHomeSpriteId.collectAsState()
+    val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
+    val selectedHomeSpriteId by premiumManager.selectedHomeSpriteId.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
 
     Box(

@@ -43,6 +43,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,7 +93,7 @@ fun HandSimulatorScreen(
 ) {
     val context = LocalContext.current
     val premiumManager = remember { PremiumManager.getInstance() }
-    val isPremium by premiumManager.isPremium.collectAsState()
+    val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
     val localStore = remember { HandSimulatorLocalStore(context) }
 
     var selectedDeckId by remember { mutableStateOf<String?>(null) }

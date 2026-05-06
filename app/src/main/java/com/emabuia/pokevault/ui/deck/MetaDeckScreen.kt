@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,7 +76,7 @@ fun MetaDeckListView(
     onSelectDeck: (MetaDeck) -> Unit = { viewModel.selectDeck(it) }
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
-    val isPremium by premiumManager.isPremium.collectAsState()
+    val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
     val viewsRemaining = premiumManager.metaDeckViewsRemaining
 
     // Tick ogni 30s così l'indicatore "aggiornato Xm fa" si aggiorna da solo.

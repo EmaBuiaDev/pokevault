@@ -836,7 +836,7 @@ fun FilterBottomSheet(
                         onClick = { viewModel.filterByType(null) }
                     )
                 }
-                items(types) { type ->
+                items(types, key = { it }) { type ->
                     FilterChip(
                         label = type,
                         isSelected = state.selectedType == type,
@@ -857,7 +857,7 @@ fun FilterBottomSheet(
                             onClick = { viewModel.filterBySet(null) }
                         )
                     }
-                    items(setCounts) { (setLabel, count) ->
+                    items(setCounts, key = { it.first }) { (setLabel, count) ->
                         FilterChip(
                             label = "$setLabel ($count)",
                             isSelected = state.selectedSet == setLabel,
@@ -879,7 +879,7 @@ fun FilterBottomSheet(
                             onClick = { viewModel.filterByRarity(null) }
                         )
                     }
-                    items(rarityCounts) { (rarity, count) ->
+                    items(rarityCounts, key = { it.first }) { (rarity, count) ->
                         FilterChip(
                             label = "${AppLocale.translateRarity(rarity)} ($count)",
                             isSelected = state.selectedRarity == rarity,

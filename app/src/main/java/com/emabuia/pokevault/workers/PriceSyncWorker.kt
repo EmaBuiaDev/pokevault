@@ -24,10 +24,19 @@ class PriceSyncWorker(
 
             var successCount = 0
             for (price in stalePrices) {
+                // I cardId hanno formato "{setCode}_{number}" ma alcune entry
+                // legacy potrebbero non avere il separatore: in quel caso
+                // facciamo fallback sull'intero id come numero per evitare
+                // di passare una stringa vuota a getCardPrices.
+                val cardNumber = price.cardId.substringAfter('_', missingDelimiterValue = price.cardId)
+                if (cardNumber.isBlank()) {
+                    Timber.w("PriceSyncWorker: skip cardId malformato '%s'", price.cardId)
+                    continue
+                }
                 val result = repo.getCardPrices(
                     cardName = "",
                     setCode = price.setCode,
-                    cardNumber = price.cardId.substringAfter("_")
+                    cardNumber = cardNumber
                 )
                 if (result.isSuccess) successCount++
             }

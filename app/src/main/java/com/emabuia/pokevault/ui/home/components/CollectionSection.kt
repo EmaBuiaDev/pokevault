@@ -71,7 +71,7 @@ fun CollectionSection(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(cards.take(20)) { card ->
+                items(cards.take(20), key = { it.id }) { card ->
                     PokemonCardItem(
                         card = card,
                         onClick = { onCardClick(card.id) }

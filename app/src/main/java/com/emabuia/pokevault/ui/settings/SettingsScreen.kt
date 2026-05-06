@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,8 +53,8 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val premiumManager = remember { PremiumManager.getInstance() }
-    val isPremium by premiumManager.isPremium.collectAsState()
-    val selectedHomeSpriteId by premiumManager.selectedHomeSpriteId.collectAsState()
+    val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
+    val selectedHomeSpriteId by premiumManager.selectedHomeSpriteId.collectAsStateWithLifecycle()
     val homeSpriteIds = remember { premiumManager.homeSpriteIds }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showHomeSpriteDialog by remember { mutableStateOf(false) }
@@ -582,7 +583,7 @@ private fun HomeSpritePickerDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(spriteIds) { spriteId ->
+                        items(spriteIds, key = { it }) { spriteId ->
                             val spriteUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/$spriteId.png"
                             Box(
                                 modifier = Modifier

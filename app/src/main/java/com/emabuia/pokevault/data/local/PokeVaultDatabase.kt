@@ -29,7 +29,10 @@ abstract class PokeVaultDatabase : RoomDatabase() {
                     PokeVaultDatabase::class.java,
                     "pokevault_cache.db"
                 )
-                    .fallbackToDestructiveMigration(true)
+                    // Allow rebuilding the local cache only on downgrade to avoid silently
+                    // wiping user data when the schema is bumped without an explicit Migration.
+                    // Any future schema change MUST add a real Migration here.
+                    .fallbackToDestructiveMigrationOnDowngrade(false)
                     .build()
                     .also { INSTANCE = it }
             }

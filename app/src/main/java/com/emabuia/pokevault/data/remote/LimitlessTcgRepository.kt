@@ -62,14 +62,15 @@ class LimitlessTcgRepository {
         // navigazione tra le schermate, così tornando su DeckLab non rifacciamo
         // decine di richieste. Viene invalidata solo dopo CACHE_DURATION
         // oppure esplicitamente via [clearCache] o [refresh].
-        private val metaDecksCache = mutableMapOf<String, CachedResult>()
-        private val archetypeCache = mutableMapOf<String, CachedArchetypes>()
+        // ConcurrentHashMap perché letto/scritto da più coroutine su Dispatchers.IO.
+        private val metaDecksCache = java.util.concurrent.ConcurrentHashMap<String, CachedResult>()
+        private val archetypeCache = java.util.concurrent.ConcurrentHashMap<String, CachedArchetypes>()
 
         private data class CachedTournamentResults(
             val results: List<TournamentResult>,
             val timestamp: Long
         )
-        private val tournamentResultsCache = mutableMapOf<String, CachedTournamentResults>()
+        private val tournamentResultsCache = java.util.concurrent.ConcurrentHashMap<String, CachedTournamentResults>()
 
         /**
          * Restituisce il timestamp più recente di una voce valida in cache

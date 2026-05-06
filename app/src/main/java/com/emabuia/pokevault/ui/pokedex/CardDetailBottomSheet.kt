@@ -553,9 +553,9 @@ fun CardDetailBottomSheet(
                             if (pokeWalletPrices.hasSparklineData) {
                                 Spacer(modifier = Modifier.height(4.dp))
                                 PriceSparkline(
-                                    avg30 = pokeWalletPrices.eurAvg30!!,
-                                    avg7 = pokeWalletPrices.eurAvg7!!,
-                                    avg1 = pokeWalletPrices.eurAvg1!!
+                                    avg30 = pokeWalletPrices.eurAvg30 ?: 0.0,
+                                    avg7 = pokeWalletPrices.eurAvg7 ?: 0.0,
+                                    avg1 = pokeWalletPrices.eurAvg1 ?: 0.0
                                 )
                             }
 

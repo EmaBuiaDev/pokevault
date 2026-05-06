@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -69,7 +70,7 @@ fun DeckLabScreen(
     metaDeckViewModel: MetaDeckViewModel = viewModel()
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
-    val isPremium by premiumManager.isPremium.collectAsState()
+    val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSheet by remember { mutableStateOf(false) }
@@ -89,15 +90,15 @@ fun DeckLabScreen(
     }
 
     // Se siamo nella vista dettaglio di un Win Tournament deck, mostriamola a tutto schermo
-    if (selectedTabIndex == 2 && metaDeckViewModel.selectedDeck != null) {
-        val selectedWinDeck = metaDeckViewModel.selectedDeck!!
+    val winTournamentDeck = metaDeckViewModel.selectedDeck.takeIf { selectedTabIndex == 2 }
+    if (winTournamentDeck != null) {
         BackHandler { metaDeckViewModel.selectDeck(null) }
         MetaDeckDetailView(
-            deck = selectedWinDeck,
+            deck = winTournamentDeck,
             onBack = { metaDeckViewModel.selectDeck(null) },
             onImport = {
                 if (premiumManager.canCreateDeck(viewModel.decks.size)) {
-                    val result = viewModel.importFromMetaDeck(selectedWinDeck)
+                    val result = viewModel.importFromMetaDeck(winTournamentDeck)
                     metaDeckViewModel.selectDeck(null)
                     if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
                         showSheet = true
@@ -112,14 +113,14 @@ fun DeckLabScreen(
     }
 
     // Se siamo nella vista dettaglio di un Meta Deck archetype, mostriamola a tutto schermo
-    if (selectedTabIndex == 1 && metaDeckViewModel.selectedDeck != null) {
+    val metaArchetypeDeck = metaDeckViewModel.selectedDeck.takeIf { selectedTabIndex == 1 }
+    if (metaArchetypeDeck != null) {
         MetaDeckDetailView(
-            deck = metaDeckViewModel.selectedDeck!!,
+            deck = metaArchetypeDeck,
             onBack = { metaDeckViewModel.selectDeck(null) },
             onImport = {
-                val metaDeck = metaDeckViewModel.selectedDeck!!
                 if (premiumManager.canCreateDeck(viewModel.decks.size)) {
-                    val result = viewModel.importFromMetaDeck(metaDeck)
+                    val result = viewModel.importFromMetaDeck(metaArchetypeDeck)
                     metaDeckViewModel.selectDeck(null)
                     if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
                         showSheet = true
@@ -923,7 +924,7 @@ fun DeckDetailView(
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            items(cardsByCategory) { (category, cardsList) ->
+            items(cardsByCategory, key = { (category, _) -> category }) { (category, cardsList) ->
                 Column {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1608,13 +1609,13 @@ fun NewDeckBottomSheetContent(
         Spacer(modifier = Modifier.height(12.dp))
     }
 
-    if (tcgCardToAdd != null) {
+    tcgCardToAdd?.let { dialogCard ->
         AlertDialog(
             onDismissRequest = { tcgCardToAdd = null },
             containerColor = DarkCard,
             title = {
                 Text(
-                    text = tcgCardToAdd!!.name,
+                    text = dialogCard.name,
                     color = TextWhite,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
@@ -1623,14 +1624,14 @@ fun NewDeckBottomSheetContent(
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     AsyncImage(
-                        model = tcgCardToAdd!!.images.small,
-                        contentDescription = tcgCardToAdd!!.name,
+                        model = dialogCard.images.small,
+                        contentDescription = dialogCard.name,
                         modifier = Modifier
                             .height(160.dp)
                             .clip(RoundedCornerShape(8.dp))
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    tcgCardToAdd!!.set?.name?.let { setName ->
+                    dialogCard.set?.name?.let { setName ->
                         Text(text = setName, color = TextMuted, fontSize = 11.sp)
                     }
                     Spacer(modifier = Modifier.height(16.dp))

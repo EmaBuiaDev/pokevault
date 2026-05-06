@@ -334,7 +334,7 @@ fun SetsListScreen(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(languageMacros) { macro ->
+                items(languageMacros, key = { it }) { macro ->
                     val count = state.languageCountByMacro[macro] ?: 0
                     SeriesFilterChip(
                         label = macro,

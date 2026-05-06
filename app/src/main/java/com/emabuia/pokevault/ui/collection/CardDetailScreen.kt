@@ -559,9 +559,9 @@ fun CardDetailScreen(
                         if (livePrices?.hasSparklineData == true) {
                             Spacer(modifier = Modifier.height(8.dp))
                             PriceSparkline(
-                                avg30 = livePrices!!.eurAvg30!!,
-                                avg7 = livePrices!!.eurAvg7!!,
-                                avg1 = livePrices!!.eurAvg1!!
+                                avg30 = livePrices?.eurAvg30 ?: 0.0,
+                                avg7 = livePrices?.eurAvg7 ?: 0.0,
+                                avg1 = livePrices?.eurAvg1 ?: 0.0
                             )
                         }
 

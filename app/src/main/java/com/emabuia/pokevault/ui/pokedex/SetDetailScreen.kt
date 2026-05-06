@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -207,7 +208,7 @@ fun SetDetailScreen(
     val state = viewModel.uiState
     val haptic = LocalHapticFeedback.current
     val premiumManager = remember { PremiumManager.getInstance() }
-    val isPremium by premiumManager.isPremium.collectAsState()
+    val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     var quickAddCard by remember { mutableStateOf<TcgCard?>(null) }
     var selectedRarityFilter by remember { mutableStateOf<String?>(null) }
@@ -278,18 +279,18 @@ fun SetDetailScreen(
             .sortedBy { RarityUtils.getRarityInfo(it).sortOrder }
     }
 
-    if (selectedCard != null) {
+    selectedCard?.let { sheetCard ->
         CardDetailBottomSheet(
-            card = selectedCard!!,
-            isOwned = selectedCard!!.id in state.ownedCardIds,
-            isLoading = state.isAddingCard == selectedCard!!.id,
+            card = sheetCard,
+            isOwned = sheetCard.id in state.ownedCardIds,
+            isLoading = state.isAddingCard == sheetCard.id,
             pokeWalletPrices = state.selectedCardPokeWalletPrices,
             isLoadingPokeWalletPrices = state.isLoadingPokeWalletPrices,
-            onAddCard = { v, q, c, l -> 
+            onAddCard = { v, q, c, l ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                viewModel.addCardWithDetails(selectedCard!!, v, q, c, l) 
+                viewModel.addCardWithDetails(sheetCard, v, q, c, l)
             },
-            onRemoveCard = { viewModel.removeCard(selectedCard!!); selectedCard = null },
+            onRemoveCard = { viewModel.removeCard(sheetCard); selectedCard = null },
             onDismiss = { selectedCard = null },
             cardList = sortedCards,
             onCardChange = { selectedCard = it }
@@ -611,7 +612,7 @@ fun SetDetailScreen(
                                                 selectedRarityFilter = null
                                             }
                                         }
-                                        items(distinctRarities) { rarity ->
+                                        items(distinctRarities, key = { it }) { rarity ->
                                             val info = RarityUtils.getRarityInfo(rarity)
                                             val count = state.cards.count { it.rarity == rarity }
                                             RarityFilterChip(

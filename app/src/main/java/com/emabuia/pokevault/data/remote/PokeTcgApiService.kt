@@ -1,8 +1,11 @@
 package com.emabuia.pokevault.data.remote
 
+import androidx.compose.runtime.Immutable
+
 // Shared domain models used across ViewModels/UI.
 // Data is now sourced from PokeWallet and mapped into these models.
 
+@Immutable
 data class TcgSet(
     val id: String = "",
     val name: String = "",
@@ -14,11 +17,13 @@ data class TcgSet(
     val images: SetImages = SetImages()
 )
 
+@Immutable
 data class SetImages(
     val symbol: String = "",
     val logo: String = ""
 )
 
+@Immutable
 data class TcgCard(
     val id: String = "",
     val name: String = "",
@@ -34,22 +39,26 @@ data class TcgCard(
     val cardmarket: CardMarket? = null
 )
 
+@Immutable
 data class TcgCardSet(
     val id: String = "",
     val name: String = "",
     val series: String = ""
 )
 
+@Immutable
 data class CardImages(
     val small: String = "",
     val large: String = ""
 )
 
+@Immutable
 data class TcgPlayer(
     val url: String = "",
     val prices: Map<String, TcgPriceInfo>? = null
 )
 
+@Immutable
 data class TcgPriceInfo(
     val low: Double? = null,
     val mid: Double? = null,
@@ -57,6 +66,7 @@ data class TcgPriceInfo(
     val market: Double? = null
 )
 
+@Immutable
 data class CardMarket(
     val url: String = "",
     val prices: CardMarketPrices? = null

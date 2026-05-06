@@ -87,7 +87,7 @@ class PokeTcgRepository {
         private val SANITIZE_MULTI_SPACE = Regex("\\s+")
         private val LEGACY_ID_REGEX = Regex("^([A-Za-z0-9]+)-(.+)$")
         private val HASH_ID_REGEX = Regex("^[a-f0-9]{32,}$", RegexOption.IGNORE_CASE)
-        private val FULL_NUMBER_REGEX = Regex("""^(\\d+)/(\\d+)$""")
+        private val FULL_NUMBER_REGEX = Regex("""^(\d+)/(\d+)$""")
         private val FLEX_FULL_NUMBER_REGEX = Regex("""^\s*0*(\d+)\s*/\s*0*(\d+)\s*$""")
         private val FLEX_SET_NUMBER_REGEX = Regex("""^\s*([A-Za-z0-9]{2,16})\s*[-/\s]\s*([A-Za-z0-9]+)\s*$""")
 

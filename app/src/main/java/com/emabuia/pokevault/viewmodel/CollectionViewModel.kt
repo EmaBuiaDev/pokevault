@@ -43,8 +43,10 @@ class CollectionViewModel : ViewModel() {
 
     private val repository = FirestoreRepository()
     private val tcgRepository = PokeTcgRepository()
-    private val hydratedPriceCardIds = mutableSetOf<String>()
-    private val hydratingPriceCardIds = mutableSetOf<String>()
+    // Synchronized perché emissioni rapide del Flow possono lanciare hydration concorrenti
+    // e questi insiemi tracciano lo stato condiviso fra di esse.
+    private val hydratedPriceCardIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val hydratingPriceCardIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     var uiState by mutableStateOf(CollectionUiState())
         private set
