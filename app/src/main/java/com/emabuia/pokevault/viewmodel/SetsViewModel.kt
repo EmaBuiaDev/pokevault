@@ -251,7 +251,10 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                 set = tcgCard.set?.name ?: "",
                 rarity = tcgCard.rarity ?: "Unknown",
                 type = tcgCard.types?.firstOrNull() ?: "Colorless",
-                hp = tcgCard.hp?.toIntOrNull() ?: 0, estimatedValue = price,
+                hp = tcgCard.hp?.toIntOrNull() ?: 0,
+                supertype = tcgCard.supertype.ifBlank { "Pokémon" },
+                subtypes = tcgCard.subtypes ?: emptyList(),
+                estimatedValue = price,
                 apiCardId = tcgCard.id, cardNumber = tcgCard.number,
                 variant = variant, quantity = quantity, condition = condition, language = language
             )

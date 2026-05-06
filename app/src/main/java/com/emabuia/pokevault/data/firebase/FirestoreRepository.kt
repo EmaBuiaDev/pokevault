@@ -82,6 +82,127 @@ class FirestoreRepository {
     }
 
     /**
+     * Backfill one-shot dei metadati di classificazione per carte legacy.
+     * Aggiorna SOLO `supertype`/`subtypes` su documenti mancanti o incoerenti.
+     * Non usa API esterne, quindi non impatta proxy o cache remote.
+     */
+    suspend fun backfillLegacyCardClassificationMetadata(): Result<Int> {
+        return try {
+            val snapshot = cardsCollection.get().await()
+            var updated = 0
+
+            for (doc in snapshot.documents) {
+                val card = doc.toObject(PokemonCard::class.java) ?: continue
+                val updates = mutableMapOf<String, Any>()
+
+                val inferredSupertype = inferSupertype(card)
+                val currentSupertype = card.supertype.trim()
+                val normalizedCurrent = normalizeCategory(currentSupertype)
+
+                val shouldUpdateSupertype =
+                    currentSupertype.isBlank() ||
+                        normalizedCurrent == null ||
+                        (normalizedCurrent == "Pokémon" && inferredSupertype != "Pokémon")
+
+                if (shouldUpdateSupertype) {
+                    updates["supertype"] = inferredSupertype
+                }
+
+                // Assicura il campo esistente nei documenti legacy senza sovrascrivere valori reali.
+                if (doc.get("subtypes") == null) {
+                    updates["subtypes"] = card.subtypes
+                }
+
+                if (updates.isNotEmpty()) {
+                    doc.reference.update(updates).await()
+                    updated++
+                }
+            }
+
+            Result.success(updated)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun inferSupertype(card: PokemonCard): String {
+        val supertype = card.supertype.lowercase()
+        val type = card.type.lowercase()
+        val name = card.name.lowercase()
+        val subtypes = card.subtypes.map { it.lowercase() }
+
+        val hasEnergyMarker =
+            supertype.contains("energy") ||
+                supertype.contains("energ") ||
+                type.contains("energy") ||
+                type.contains("energia") ||
+                subtypes.any { it.contains("energy") || it.contains("energia") } ||
+                name.contains("energy") ||
+                name.contains("energia")
+        if (hasEnergyMarker) return "Energy"
+
+        val hasTrainerMarker =
+            supertype.contains("trainer") ||
+                supertype.contains("allenat") ||
+                supertype.contains("aiuto") ||
+                type.contains("trainer") ||
+                type.contains("supporter") ||
+                type.contains("item") ||
+                type.contains("stadium") ||
+                type.contains("tool") ||
+                type.contains("allenat") ||
+                type.contains("aiuto") ||
+                type.contains("stadio") ||
+                type.contains("strumento") ||
+                subtypes.any {
+                    it == "item" ||
+                        it == "stadium" ||
+                        it == "supporter" ||
+                        it == "tool" ||
+                        it == "strumento" ||
+                        it == "stadio" ||
+                        it == "aiuto"
+                }
+
+        val hasPokemonSubtypeMarker = subtypes.any {
+            it == "basic" ||
+                it == "stage 1" ||
+                it == "stage 2" ||
+                it == "baby" ||
+                it == "ex" ||
+                it == "v" ||
+                it == "vmax" ||
+                it == "vstar"
+        }
+        val hasPokemonTypeMarker =
+            type in listOf(
+                "grass", "fire", "water", "lightning", "electric", "fighting",
+                "psychic", "darkness", "metal", "dragon", "fairy"
+            )
+        val hasStrongPokemonMarker =
+            card.hp > 0 ||
+                hasPokemonSubtypeMarker ||
+                hasPokemonTypeMarker
+        val hasExplicitPokemonSupertype = supertype.contains("pok")
+
+        if (hasTrainerMarker && !hasStrongPokemonMarker) return "Trainer"
+        if (hasStrongPokemonMarker) return "Pokémon"
+        if (hasExplicitPokemonSupertype && !hasTrainerMarker && type != "colorless") return "Pokémon"
+
+        return "Trainer"
+    }
+
+    private fun normalizeCategory(raw: String): String? {
+        val v = raw.lowercase().trim()
+        return when {
+            v.contains("pok") -> "Pokémon"
+            v.contains("train") || v.contains("allenat") || v.contains("aiuto") -> "Trainer"
+            v.contains("energ") -> "Energy"
+            else -> null
+        }
+    }
+
+    /**
      * Aggiunge una carta in modo local-first:
      * - la verifica di esistenza (per incrementare la quantità di una carta già
      *   posseduta) colpisce la cache locale, quindi è istantanea
@@ -103,6 +224,8 @@ class FirestoreRepository {
                 "rarity" to card.rarity,
                 "type" to card.type,
                 "hp" to card.hp,
+                "supertype" to card.supertype,
+                "subtypes" to card.subtypes,
                 "isGraded" to card.isGraded,
                 "grade" to card.grade,
                 "gradingCompany" to card.gradingCompany,

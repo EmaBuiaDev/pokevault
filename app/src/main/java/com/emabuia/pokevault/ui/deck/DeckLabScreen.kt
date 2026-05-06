@@ -53,6 +53,7 @@ import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
+import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.DeckLabViewModel
@@ -1024,15 +1025,26 @@ fun NewDeckBottomSheetContent(
     onSave: () -> Unit
 ) {
     var showCoverPicker by remember { mutableStateOf(false) }
+    var showSetupSection by remember { mutableStateOf(false) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val focusManager = LocalFocusManager.current
     val tabs = listOf("Pokémon", "Trainer", "Energia")
+
+    var cardSearchQuery by remember { mutableStateOf("") }
+    var tcgCardToAdd by remember { mutableStateOf<TcgCard?>(null) }
+    var tcgAddQty by remember { mutableIntStateOf(1) }
+    var pendingSelectedCounts by remember { mutableStateOf(mapOf<String, Int>()) }
+
+    LaunchedEffect(selectedTabIndex, cardSearchQuery) {
+        pendingSelectedCounts = emptyMap()
+    }
 
     val filteredCards = remember(
         selectedTabIndex,
         viewModel.ownedCards,
         viewModel.selectedCardsIds,
-        viewModel.isImportReviewMode
+        viewModel.isImportReviewMode,
+        cardSearchQuery
     ) {
         val ownedById = viewModel.ownedCards.associateBy { it.id }
         val deckCardKeys = if (viewModel.isImportReviewMode) {
@@ -1052,32 +1064,42 @@ fun NewDeckBottomSheetContent(
 
         sourceCards
             .filter { card ->
-                val category = card.classify()
-                when (selectedTabIndex) {
+                val category = viewModel.classifyCard(card)
+                val tabMatch = when (selectedTabIndex) {
                     0 -> category == "Pokémon"
                     1 -> category == "Trainer"
                     2 -> category == "Energy"
                     else -> true
                 }
+                val queryMatch = cardSearchQuery.isBlank() ||
+                    card.name.contains(cardSearchQuery, ignoreCase = true) ||
+                    card.cardNumber.contains(cardSearchQuery, ignoreCase = true) ||
+                    card.set.contains(cardSearchQuery, ignoreCase = true)
+                tabMatch && queryMatch
             }
             .distinctBy { viewModel.getCardKey(it) }
     }
+
+    val noCollectionMatch = cardSearchQuery.isNotBlank() && filteredCards.isEmpty()
+    val canSave = viewModel.newDeckName.isNotBlank() && viewModel.selectedCardsIds.isNotEmpty()
+    val pendingSelectionTotal = pendingSelectedCounts.values.sum()
+    val hasPendingSelection = pendingSelectionTotal > 0
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(0.92f)
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = 16.dp)
             .imePadding()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp)
+                .padding(vertical = 6.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(DarkCard)
-                .padding(14.dp)
+                .padding(10.dp)
         ) {
             Column {
                 Row(
@@ -1085,13 +1107,24 @@ fun NewDeckBottomSheetContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (isEditing) "Modifica Deck" else "Nuovo Deck",
-                        color = TextWhite,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (isEditing) "Modifica Deck" else "Nuovo Deck",
+                            color = TextWhite,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(onClick = { showSetupSection = !showSetupSection }, modifier = Modifier.size(24.dp)) {
+                            Icon(
+                                imageVector = if (showSetupSection) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (showSetupSection) "Chiudi impostazioni" else "Apri impostazioni",
+                                tint = TextMuted,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
                     Surface(
                         color = Color.Black.copy(alpha = 0.3f),
                         shape = RoundedCornerShape(10.dp)
@@ -1099,97 +1132,21 @@ fun NewDeckBottomSheetContent(
                         Text(
                             text = "${viewModel.selectedCardsIds.size} / 60",
                             color = TextWhite,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    val coverPickerEnabled = viewModel.selectedCardsIds.isNotEmpty()
-                    Column(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.Black.copy(alpha = 0.25f))
-                            .clickable(enabled = coverPickerEnabled) {
-                                showCoverPicker = !showCoverPicker
-                            }
-                            .padding(8.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            repeat(2) { index ->
-                                val url = viewModel.coverImageUrls.getOrNull(index)
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp, 68.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(DarkBackground)
-                                        .border(
-                                            BorderStroke(1.dp, BlueCard.copy(alpha = if (coverPickerEnabled) 0.8f else 0.3f)),
-                                            RoundedCornerShape(4.dp)
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (!url.isNullOrBlank()) {
-                                        AsyncImage(
-                                            model = url,
-                                            contentDescription = "Copertina deck ${index + 1}",
-                                            contentScale = ContentScale.Fit,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    } else {
-                                        Icon(
-                                            Icons.Default.AddPhotoAlternate,
-                                            contentDescription = null,
-                                            tint = TextMuted,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Surface(
-                                color = BlueCard.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(
-                                    text = "${viewModel.coverImageUrls.size}/2",
-                                    color = TextWhite,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-
-                            Icon(
-                                imageVector = if (showCoverPicker) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = if (showCoverPicker) "Chiudi selezione copertine" else "Apri selezione copertine",
-                                tint = if (coverPickerEnabled) BlueCard else TextMuted,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        Text(
-                            text = if (coverPickerEnabled) "Tocca per scegliere 2 copertine" else "Aggiungi carte per scegliere le copertine",
-                            color = if (coverPickerEnabled) TextWhite else TextMuted,
-                            fontSize = 10.sp,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
+                if (showSetupSection) {
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     TextField(
                         value = viewModel.newDeckName,
                         onValueChange = { viewModel.newDeckName = it },
-                        placeholder = { Text("Nome deck...", color = TextMuted, fontSize = 14.sp) },
-                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Nome deck...", color = TextMuted, fontSize = 13.sp) },
+                        modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = androidx.compose.foundation.text.KeyboardActions(
                             onDone = { focusManager.clearFocus() }
@@ -1203,78 +1160,65 @@ fun NewDeckBottomSheetContent(
                             focusedTextColor = TextWhite,
                             unfocusedTextColor = TextWhite
                         ),
-                        singleLine = true
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp)
                     )
-                }
-            }
-        }
 
-        if (showCoverPicker && viewModel.selectedCardsIds.isNotEmpty()) {
-            Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = "Scegli 2 Copertine", color = LavenderCard, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(
-                        text = "${viewModel.coverImageUrls.size}/2",
-                        color = TextMuted,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(end = 6.dp)
-                    )
-                    IconButton(onClick = { showCoverPicker = false }, modifier = Modifier.size(20.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val selectedCards = viewModel.ownedCards.filter { it.id in viewModel.selectedCardsIds }.distinctBy { it.imageUrl }
-                    items(selectedCards) { card ->
-                        val isSelectedCover = viewModel.coverImageUrls.contains(card.imageUrl)
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp, 68.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .border(
-                                    BorderStroke(if (isSelectedCover) 2.dp else 1.dp, if (isSelectedCover) BlueCard else TextMuted.copy(alpha = 0.4f)),
-                                    RoundedCornerShape(4.dp)
-                                )
-                                .clickable { viewModel.toggleCoverCard(card.imageUrl) }
-                        ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(card.imageUrl)
-                                    .size(120, 168)
-                                    .build(),
-                                contentDescription = "Seleziona copertina ${card.name}",
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                            if (isSelectedCover) {
-                                Surface(
-                                    color = BlueCard,
-                                    shape = CircleShape,
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(3.dp)
-                                        .size(16.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Copertina selezionata",
-                                        tint = TextWhite,
-                                        modifier = Modifier.padding(2.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        repeat(2) { index ->
+                            val url = viewModel.coverImageUrls.getOrNull(index)
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp, 46.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(DarkBackground)
+                                    .border(
+                                        BorderStroke(1.dp, BlueCard.copy(alpha = 0.5f)),
+                                        RoundedCornerShape(6.dp)
                                     )
+                                    .clickable(enabled = !url.isNullOrBlank()) { viewModel.toggleCoverCard(url.orEmpty()) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (!url.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = url,
+                                        contentDescription = "Copertina deck ${index + 1}",
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
                                 }
                             }
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        OutlinedButton(
+                            onClick = { showCoverPicker = true },
+                            enabled = viewModel.selectedCardsIds.isNotEmpty(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BlueCard),
+                            border = BorderStroke(1.dp, if (viewModel.selectedCardsIds.isNotEmpty()) BlueCard.copy(alpha = 0.5f) else TextMuted.copy(alpha = 0.3f)),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("${viewModel.coverImageUrls.size}/2", fontSize = 11.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-        
+        Spacer(modifier = Modifier.height(8.dp))
+
         SecondaryTabRow(
             selectedTabIndex = selectedTabIndex,
             containerColor = Color.Transparent,
@@ -1285,12 +1229,12 @@ fun NewDeckBottomSheetContent(
                 Tab(
                     selected = selectedTabIndex == index,
                     onClick = { selectedTabIndex = index },
-                    text = { 
+                    text = {
                         Text(
-                            text = title, 
-                            fontSize = 12.sp, 
-                            fontWeight = if(selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal 
-                        ) 
+                            text = title,
+                            fontSize = 12.sp,
+                            fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal
+                        )
                     },
                     selectedContentColor = BlueCard,
                     unselectedContentColor = TextMuted
@@ -1298,40 +1242,219 @@ fun NewDeckBottomSheetContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(4),
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(filteredCards, key = { viewModel.getCardKey(it) }) { card ->
-                val inDeckCount = viewModel.getQuantityInDeck(card)
-                val totalOwned = viewModel.getTotalOwnedQuantity(card)
-                CardSelectionItem(
-                    card = card,
-                    inDeckCount = inDeckCount,
-                    totalOwned = totalOwned,
-                    isEditable = true,
-                    onAdd = { viewModel.addCardToDeck(card) },
-                    onRemove = { viewModel.removeCardFromDeck(card) }
+            TextField(
+                value = cardSearchQuery,
+                onValueChange = {
+                    cardSearchQuery = it
+                    if (it.isBlank()) viewModel.clearTcgSearch()
+                },
+                placeholder = {
+                    Text(
+                        text = "Cerca carte",
+                        color = TextMuted,
+                        fontSize = 12.sp
+                    )
+                },
+                singleLine = true,
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        tint = TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                trailingIcon = {
+                    if (cardSearchQuery.isNotBlank()) {
+                        IconButton(onClick = {
+                            cardSearchQuery = ""
+                            viewModel.clearTcgSearch()
+                        }, modifier = Modifier.size(24.dp)) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Cancella ricerca",
+                                tint = TextMuted,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = DarkCard,
+                    unfocusedContainerColor = DarkCard,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    cursorColor = BlueCard,
+                    focusedTextColor = TextWhite,
+                    unfocusedTextColor = TextWhite
+                ),
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
+            )
+
+            Button(
+                onClick = {
+                    if (hasPendingSelection) {
+                        filteredCards
+                            .forEach { card ->
+                                val qty = pendingSelectedCounts[viewModel.getCardKey(card)] ?: 0
+                                repeat(qty) { viewModel.addCardToDeck(card) }
+                            }
+                        pendingSelectedCounts = emptyMap()
+                    }
+                },
+                enabled = hasPendingSelection,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = BlueCard,
+                    disabledContainerColor = DarkCard,
+                    disabledContentColor = TextMuted
+                ),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = if (hasPendingSelection) "Aggiungi $pendingSelectionTotal" else "Aggiungi",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
+        }
+
+        if (cardSearchQuery.isNotBlank() || hasPendingSelection) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = when {
+                    hasPendingSelection -> "$pendingSelectionTotal carte selezionate"
+                    filteredCards.isNotEmpty() -> "${filteredCards.size} risultati"
+                    else -> "Nessun risultato locale"
+                },
+                color = if (hasPendingSelection) YellowCard else TextMuted,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (filteredCards.isNotEmpty()) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(5),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filteredCards, key = { viewModel.getCardKey(it) }) { card ->
+                    val key = viewModel.getCardKey(card)
+                    val inDeckCount = viewModel.getQuantityInDeck(card)
+                    val totalOwned = viewModel.getTotalOwnedQuantity(card)
+                    val availableToAdd = (totalOwned - inDeckCount).coerceAtLeast(0)
+                    val pendingCount = pendingSelectedCounts[key] ?: 0
+                    CardSelectionItem(
+                        card = card,
+                        inDeckCount = inDeckCount,
+                        totalOwned = totalOwned,
+                        isEditable = true,
+                        pendingSelectionCount = pendingCount,
+                        onAdd = {
+                            if (availableToAdd <= 0) return@CardSelectionItem
+                            if (pendingCount < availableToAdd) {
+                                pendingSelectedCounts = pendingSelectedCounts + (key to (pendingCount + 1))
+                            }
+                        },
+                        onRemove = { viewModel.removeCardFromDeck(card) }
+                    )
+                }
+            }
+        } else if (noCollectionMatch) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Nessuna carta trovata nella tua collezione.",
+                    color = TextMuted,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { viewModel.searchCardsInSets(cardSearchQuery) },
+                    colors = ButtonDefaults.buttonColors(containerColor = PurpleCard),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !viewModel.isSearchingCards
+                ) {
+                    if (viewModel.isSearchingCards) {
+                        CircularProgressIndicator(color = TextWhite, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                    } else {
+                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(text = "Cerca nei set TCG", fontWeight = FontWeight.Bold)
+                }
+                if (viewModel.tcgSearchError != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = viewModel.tcgSearchError!!, color = YellowCard, fontSize = 12.sp)
+                }
+                if (viewModel.tcgSearchResults.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Risultati (${viewModel.tcgSearchResults.size}) - tocca per aggiungere al deck",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(5),
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(viewModel.tcgSearchResults, key = { it.id }) { tcgCard ->
+                            TcgCardSearchItem(
+                                card = tcgCard,
+                                onClick = {
+                                    tcgCardToAdd = tcgCard
+                                    tcgAddQty = 1
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "Nessuna carta in questa categoria.\nAggiungi carte alla tua collezione o cerca nei set.",
+                    color = TextMuted,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(32.dp)
                 )
             }
         }
 
         if (viewModel.validationError != null) {
-            Text(text = viewModel.validationError!!, color = RedCard, fontSize = 11.sp, modifier = Modifier.padding(vertical = 4.dp))
-        }
-
-        if (viewModel.selectedCardsIds.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            AnalysisSection(viewModel)
+            Text(
+                text = viewModel.validationError!!,
+                color = RedCard,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        val canSave = viewModel.newDeckName.isNotBlank() && viewModel.selectedCardsIds.isNotEmpty()
         Button(
             onClick = {
                 focusManager.clearFocus()
@@ -1350,6 +1473,177 @@ fun NewDeckBottomSheetContent(
         }
         Spacer(modifier = Modifier.height(12.dp))
     }
+
+    if (tcgCardToAdd != null) {
+        AlertDialog(
+            onDismissRequest = { tcgCardToAdd = null },
+            containerColor = DarkCard,
+            title = {
+                Text(
+                    text = tcgCardToAdd!!.name,
+                    color = TextWhite,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    AsyncImage(
+                        model = tcgCardToAdd!!.images.small,
+                        contentDescription = tcgCardToAdd!!.name,
+                        modifier = Modifier
+                            .height(160.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    tcgCardToAdd!!.set?.name?.let { setName ->
+                        Text(text = setName, color = TextMuted, fontSize = 11.sp)
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Quante copie vuoi aggiungere?",
+                        color = TextWhite,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        IconButton(
+                            onClick = { if (tcgAddQty > 1) tcgAddQty-- },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(DarkBackground)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Meno", tint = TextWhite)
+                        }
+                        Text(
+                            text = "$tcgAddQty",
+                            color = TextWhite,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        IconButton(
+                            onClick = { if (tcgAddQty < 4) tcgAddQty++ },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(DarkBackground)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Piu", tint = TextWhite)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Verranno aggiunte alla tua collezione e al deck",
+                        color = TextMuted,
+                        fontSize = 10.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val card = tcgCardToAdd ?: return@Button
+                        val qty = tcgAddQty
+                        tcgCardToAdd = null
+                        viewModel.addTcgCardToDeck(card, qty)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Aggiungi $tcgAddQty al deck", color = TextWhite, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { tcgCardToAdd = null }) {
+                    Text("Annulla", color = TextMuted)
+                }
+            }
+        )
+    }
+
+    if (showCoverPicker && viewModel.selectedCardsIds.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { showCoverPicker = false },
+            containerColor = DarkCard,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Scegli 2 Copertine", color = TextWhite, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("${viewModel.coverImageUrls.size}/2", color = TextMuted, fontSize = 12.sp)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Solo le carte gia presenti nel deck possono diventare copertina.",
+                        color = TextMuted,
+                        fontSize = 10.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val selectedCards = viewModel.ownedCards.filter { it.id in viewModel.selectedCardsIds }.distinctBy { it.imageUrl }
+                        items(selectedCards) { card ->
+                            val isSelectedCover = viewModel.coverImageUrls.contains(card.imageUrl)
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp, 80.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .border(
+                                        BorderStroke(if (isSelectedCover) 2.dp else 1.dp, if (isSelectedCover) BlueCard else TextMuted.copy(alpha = 0.35f)),
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable { viewModel.toggleCoverCard(card.imageUrl) }
+                            ) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(card.imageUrl)
+                                        .size(140, 200)
+                                        .build(),
+                                    contentDescription = "Seleziona copertina ${card.name}",
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+
+                                if (isSelectedCover) {
+                                    Surface(
+                                        color = BlueCard,
+                                        shape = CircleShape,
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(4.dp)
+                                            .size(18.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.Check, contentDescription = "Copertina selezionata", tint = TextWhite, modifier = Modifier.size(12.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showCoverPicker = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Chiudi", color = TextWhite, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCoverPicker = false }) {
+                    Text("Annulla", color = TextMuted)
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1359,6 +1653,7 @@ fun CardSelectionItem(
     inDeckCount: Int,
     totalOwned: Int,
     isEditable: Boolean = false,
+    pendingSelectionCount: Int = 0,
     onAdd: () -> Unit = {},
     onRemove: () -> Unit = {}
 ) {
@@ -1370,16 +1665,12 @@ fun CardSelectionItem(
             .clip(RoundedCornerShape(8.dp))
             .border(
                 BorderStroke(
-                    if (inDeckCount > 0 && isEditable) 2.dp else 1.dp, 
-                    if (inDeckCount > 0 && isEditable) BlueCard else Color.White.copy(alpha = 0.1f)
+                    if (pendingSelectionCount > 0) 2.dp else if (inDeckCount > 0 && isEditable) 2.dp else 1.dp,
+                    if (pendingSelectionCount > 0) YellowCard else if (inDeckCount > 0 && isEditable) BlueCard else Color.White.copy(alpha = 0.1f)
                 ),
                 RoundedCornerShape(8.dp)
             )
-            .combinedClickable(
-                enabled = isEditable,
-                onClick = onAdd,
-                onLongClick = { if(inDeckCount > 0) onRemove() }
-            )
+            .clickable(enabled = isEditable, onClick = onAdd)
     ) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
@@ -1395,6 +1686,28 @@ fun CardSelectionItem(
         
         if (isEditable && !canAddMore) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+        }
+
+        if (pendingSelectionCount > 0) {
+            Box(modifier = Modifier.fillMaxSize().background(YellowCard.copy(alpha = 0.18f)))
+            Surface(
+                color = YellowCard,
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(4.dp)
+                    .size(20.dp),
+                shadowElevation = 4.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = pendingSelectionCount.toString(),
+                        color = TextWhite,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
         }
 
         if (inDeckCount > 0 && isEditable) {
@@ -1431,6 +1744,60 @@ fun CardSelectionItem(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun TcgCardSearchItem(
+    card: TcgCard,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .aspectRatio(0.71f)
+            .clip(RoundedCornerShape(8.dp))
+            .border(BorderStroke(1.dp, PurpleCard.copy(alpha = 0.5f)), RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(card.images.small)
+                .crossfade(true)
+                .size(200, 280)
+                .build(),
+            contentDescription = card.name,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+        )
+        card.set?.name?.let { setName ->
+            Surface(
+                color = Color.Black.copy(alpha = 0.65f),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+            ) {
+                Text(
+                    text = setName,
+                    color = TextWhite,
+                    fontSize = 8.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+        }
+        Surface(
+            color = PurpleCard,
+            shape = CircleShape,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(4.dp)
+                .size(20.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Add, contentDescription = "Aggiungi", tint = TextWhite, modifier = Modifier.size(12.dp))
             }
         }
     }

@@ -140,13 +140,30 @@ class AddCardViewModel : ViewModel() {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true, errorMessage = null)
 
+            val normalizedType = uiState.type.lowercase().trim()
+            val parsedHp = uiState.hp.toIntOrNull() ?: 0
+            val inferredSupertype = when {
+                normalizedType.contains("energy") || normalizedType.contains("energia") -> "Energy"
+                normalizedType.contains("trainer") ||
+                    normalizedType.contains("supporter") ||
+                    normalizedType.contains("item") ||
+                    normalizedType.contains("stadium") ||
+                    normalizedType.contains("tool") ||
+                    normalizedType.contains("allenatore") ||
+                    normalizedType.contains("aiuto") -> "Trainer"
+                parsedHp > 0 -> "Pokémon"
+                else -> "Trainer"
+            }
+
             val card = PokemonCard(
                 name = uiState.name.trim(),
                 imageUrl = uiState.imageUrl.trim(),
                 set = uiState.set.trim(),
                 rarity = uiState.rarity,
                 type = uiState.type,
-                hp = uiState.hp.toIntOrNull() ?: 0,
+                hp = parsedHp,
+                supertype = inferredSupertype,
+                subtypes = emptyList(),
                 isGraded = uiState.isGraded,
                 grade = if (uiState.isGraded) uiState.grade.toFloatOrNull() else null,
                 gradingCompany = if (uiState.isGraded) uiState.gradingCompany else "",

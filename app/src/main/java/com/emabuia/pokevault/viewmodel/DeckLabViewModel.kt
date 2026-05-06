@@ -40,6 +40,8 @@ class DeckLabViewModel : ViewModel() {
         private val tcgLookupCache =
             java.util.concurrent.ConcurrentHashMap<String, CachedLookup>()
 
+        private val legacyClassificationBackfillStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+
         private data class CachedLookup(val card: TcgCard?)
 
         private fun lookupKey(name: String, set: String?, number: String?): String =
@@ -71,6 +73,14 @@ class DeckLabViewModel : ViewModel() {
     var isImportReviewMode by mutableStateOf(false)
         private set
 
+    // Card search in TCG sets (for "Cerca nei set")
+    var isSearchingCards by mutableStateOf(false)
+        private set
+    var tcgSearchResults by mutableStateOf<List<TcgCard>>(emptyList())
+        private set
+    var tcgSearchError by mutableStateOf<String?>(null)
+        private set
+
     // Optimized map for quick lookups during UI rendering
     private val cardIdToKeyMap by derivedStateOf {
         ownedCards.associate { it.id to getCardKey(it) }
@@ -84,8 +94,16 @@ class DeckLabViewModel : ViewModel() {
     }
 
     init {
+        runLegacyClassificationBackfillOnce()
         loadDecks()
         loadOwnedCards()
+    }
+
+    private fun runLegacyClassificationBackfillOnce() {
+        if (!legacyClassificationBackfillStarted.compareAndSet(false, true)) return
+        viewModelScope.launch {
+            repository.backfillLegacyCardClassificationMetadata()
+        }
     }
 
     private fun loadDecks() {
@@ -127,18 +145,73 @@ class DeckLabViewModel : ViewModel() {
     }
 
     fun classifyCard(card: PokemonCard): String {
-        val s = card.supertype.lowercase()
-        val n = card.name.lowercase()
-        val sub = card.subtypes.map { it.lowercase() }
-        val hasHp = card.hp > 0
+        val supertype = card.supertype.lowercase()
+        val type = card.type.lowercase()
+        val name = card.name.lowercase()
+        val subtypes = card.subtypes.map { it.lowercase() }
 
-        if (s.contains("energy") || sub.contains("energy") || n.contains("energy") || n.contains("energia")) {
-            return "Energy"
+        val hasEnergyMarker =
+            supertype.contains("energy") ||
+                supertype.contains("energ") ||
+                type.contains("energy") ||
+                type.contains("energia") ||
+                subtypes.any { it.contains("energy") || it.contains("energia") } ||
+                name.contains("energy") ||
+                name.contains("energia")
+        if (hasEnergyMarker) return "Energy"
+
+        val hasTrainerMarker =
+            supertype.contains("trainer") ||
+                supertype.contains("allenat") ||
+                supertype.contains("aiuto") ||
+                type.contains("trainer") ||
+                type.contains("supporter") ||
+                type.contains("item") ||
+                type.contains("stadium") ||
+                type.contains("tool") ||
+                type.contains("allenat") ||
+                type.contains("aiuto") ||
+                type.contains("stadio") ||
+                type.contains("strumento") ||
+                subtypes.any {
+                    it == "item" ||
+                        it == "stadium" ||
+                        it == "supporter" ||
+                        it == "tool" ||
+                        it == "strumento" ||
+                        it == "stadio" ||
+                        it == "aiuto"
+                }
+
+        val hasPokemonSubtypeMarker = subtypes.any {
+            it == "basic" ||
+                it == "stage 1" ||
+                it == "stage 2" ||
+                it == "baby" ||
+                it == "ex" ||
+                it == "v" ||
+                it == "vmax" ||
+                it == "vstar"
         }
-        if (s.contains("trainer") || sub.contains("item") || sub.contains("stadium") || sub.contains("supporter") || s.contains("aiuto") || !hasHp) {
-            return "Trainer"
-        }
-        return "Pokémon"
+        val hasPokemonTypeMarker =
+            type in listOf(
+                "grass", "fire", "water", "lightning", "electric", "fighting",
+                "psychic", "darkness", "metal", "dragon", "fairy"
+            )
+        val hasExplicitPokemonSupertype = supertype.contains("pok")
+        val hasStrongPokemonMarker =
+            card.hp > 0 ||
+                hasPokemonSubtypeMarker ||
+                hasPokemonTypeMarker
+
+        if (hasTrainerMarker && !hasStrongPokemonMarker) return "Trainer"
+        if (hasStrongPokemonMarker) return "Pokémon"
+
+        // Legacy fallback: molte carte erano salvate con supertype=Pokémon di default.
+        // Consideriamo Pokémon solo se supertype è esplicito e non ci sono segnali da Trainer.
+        if (hasExplicitPokemonSupertype && !hasTrainerMarker && type != "colorless") return "Pokémon"
+
+        return "Trainer"
     }
 
     private fun isEnergy(card: PokemonCard): Boolean {
@@ -179,9 +252,6 @@ class DeckLabViewModel : ViewModel() {
 
         if (availableId != null) {
             selectedCardsIds = selectedCardsIds + availableId
-            if (coverImageUrls.isEmpty()) {
-                coverImageUrls = listOf(card.imageUrl)
-            }
             syncCoverImagesWithSelectedCards()
             validationError = null
             analyzeDeck()
@@ -196,6 +266,29 @@ class DeckLabViewModel : ViewModel() {
         
         if (idToRemove != null) {
             selectedCardsIds = selectedCardsIds - idToRemove
+            syncCoverImagesWithSelectedCards()
+            validationError = null
+            analyzeDeck()
+        }
+    }
+
+    fun addAllCopiesToDeck(card: PokemonCard) {
+        val before = selectedCardsIds.size
+        while (selectedCardsIds.size < 60) {
+            val previousSize = selectedCardsIds.size
+            addCardToDeck(card)
+            if (selectedCardsIds.size == previousSize) break
+        }
+        if (selectedCardsIds.size > before) {
+            validationError = null
+        }
+    }
+
+    fun removeAllCopiesFromDeck(card: PokemonCard) {
+        val key = getCardKey(card)
+        val remainingIds = selectedCardsIds.filterNot { id -> cardIdToKeyMap[id] == key }
+        if (remainingIds.size != selectedCardsIds.size) {
+            selectedCardsIds = remainingIds
             syncCoverImagesWithSelectedCards()
             validationError = null
             analyzeDeck()
@@ -700,6 +793,68 @@ class DeckLabViewModel : ViewModel() {
                 condition = "Near Mint",
                 variant = "Normal"
             )
+        }
+    }
+
+    // ── Card search in TCG sets ────────────────────────────────────────────
+
+    fun searchCardsInSets(query: String) {
+        if (query.isBlank()) {
+            tcgSearchResults = emptyList()
+            tcgSearchError = null
+            isSearchingCards = false
+            return
+        }
+        isSearchingCards = true
+        tcgSearchError = null
+        viewModelScope.launch {
+            pokeTcgRepository.searchCardsFuzzy(query)
+                .onSuccess { cards ->
+                    tcgSearchResults = cards.take(20)
+                    if (cards.isEmpty()) tcgSearchError = if (query.length >= 2)
+                        "Nessuna carta trovata per \"$query\"" else null
+                    isSearchingCards = false
+                }
+                .onFailure {
+                    tcgSearchError = "Errore durante la ricerca"
+                    tcgSearchResults = emptyList()
+                    isSearchingCards = false
+                }
+        }
+    }
+
+    fun clearTcgSearch() {
+        tcgSearchResults = emptyList()
+        tcgSearchError = null
+        isSearchingCards = false
+    }
+
+    fun addTcgCardToDeck(card: TcgCard, qty: Int, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val price = card.cardmarket?.prices.minimumEurPriceOrZero().takeIf { it > 0.0 } ?: 0.0
+            val pokemonCard = PokemonCard(
+                name = card.name,
+                imageUrl = card.images.small,
+                set = card.set?.name ?: "",
+                rarity = card.rarity ?: "Unknown",
+                type = card.types?.firstOrNull() ?: "Colorless",
+                hp = card.hp?.toIntOrNull() ?: 0,
+                supertype = card.supertype.ifBlank { "Pokémon" },
+                subtypes = card.subtypes ?: emptyList(),
+                apiCardId = card.id,
+                cardNumber = card.number,
+                estimatedValue = price,
+                quantity = qty,
+                condition = "Near Mint",
+                variant = "Normal"
+            )
+            val result = repository.addCard(pokemonCard)
+            result.onSuccess { docId ->
+                val newIds = List(qty) { docId }
+                selectedCardsIds = (selectedCardsIds + newIds).take(60)
+                analyzeDeck()
+            }
+            onComplete()
         }
     }
 
