@@ -798,7 +798,7 @@ class DeckLabViewModel : ViewModel() {
 
     // ── Card search in TCG sets ────────────────────────────────────────────
 
-    fun searchCardsInSets(query: String) {
+    fun searchCardsInSets(query: String, targetSetId: String? = null) {
         if (query.isBlank()) {
             tcgSearchResults = emptyList()
             tcgSearchError = null
@@ -808,7 +808,7 @@ class DeckLabViewModel : ViewModel() {
         isSearchingCards = true
         tcgSearchError = null
         viewModelScope.launch {
-            pokeTcgRepository.searchCardsFuzzy(query)
+            pokeTcgRepository.searchCardsFuzzy(query, targetSetId = targetSetId)
                 .onSuccess { cards ->
                     tcgSearchResults = cards.take(20)
                     if (cards.isEmpty()) tcgSearchError = if (query.length >= 2)

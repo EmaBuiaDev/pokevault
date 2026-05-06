@@ -89,6 +89,7 @@ class PokeTcgRepository {
         private val HASH_ID_REGEX = Regex("^[a-f0-9]{32,}$", RegexOption.IGNORE_CASE)
         private val FULL_NUMBER_REGEX = Regex("""^(\\d+)/(\\d+)$""")
         private val FLEX_FULL_NUMBER_REGEX = Regex("""^\s*0*(\d+)\s*/\s*0*(\d+)\s*$""")
+        private val FLEX_SET_NUMBER_REGEX = Regex("""^\s*([A-Za-z0-9]{2,16})\s*[-/\s]\s*([A-Za-z0-9]+)\s*$""")
 
         private val ISO_DATE = DateTimeFormatter.ISO_LOCAL_DATE
         private val HUMAN_DATE_LONG = DateTimeFormatter.ofPattern("d MMMM, uuuu", Locale.ENGLISH)
@@ -351,34 +352,42 @@ class PokeTcgRepository {
         if (query.isBlank()) return Result.success(emptyList())
 
         val normalized = sanitizeQuery(query)
-        val fullNumber = parseFullNumberQuery(normalized)
-        val cacheKey = "search::$normalized::$page"
+        val setAndNumber = parseSetNumberQuery(normalized)
+        val normalizedQuery = setAndNumber?.let { (setId, number) -> "$setId $number" } ?: normalized
+        val fullNumber = parseFullNumberQuery(normalizedQuery)
+        val cacheKey = "search::$normalizedQuery::$page"
         memorySearch[cacheKey]?.let { (cards, timestamp) ->
             if (System.currentTimeMillis() - timestamp < SEARCH_CACHE_DURATION) {
-                recordCacheHit("search:$normalized:$page")
+                recordCacheHit("search:$normalizedQuery:$page")
                 return Result.success(cards)
             }
         }
 
         if (page == 1) {
-            val localCards = searchCardsFromLocalCache(normalized)
+            val localCards = searchCardsFromLocalCache(normalizedQuery)
             if (localCards.isNotEmpty()) {
-                val rankedLocal = rankSearchResults(normalized, localCards, fullNumber)
+                val rankedLocal = rankSearchResults(normalizedQuery, localCards, fullNumber)
                 memorySearch[cacheKey] = rankedLocal to System.currentTimeMillis()
-                recordCacheHit("search:local:$normalized:$page")
+                recordCacheHit("search:local:$normalizedQuery:$page")
                 return Result.success(rankedLocal)
             }
         }
 
-        recordCacheMiss("search:$normalized:$page")
+        recordCacheMiss("search:$normalizedQuery:$page")
 
-        val networkResult = guardedApiCall(resourceKey = "search:$normalized:$page") {
+        val networkResult = guardedApiCall(resourceKey = "search:$normalizedQuery:$page") {
             val cards = when (fullNumber) {
-                null -> performGenericSearch(normalized, page)
+                null -> {
+                    if (setAndNumber != null) {
+                        performSetNumberSearch(setAndNumber.first, setAndNumber.second, page)
+                    } else {
+                        performGenericSearch(normalizedQuery, page)
+                    }
+                }
                 else -> performPreciseNumberSearch(number = fullNumber.first, total = fullNumber.second)
             }
             val deduped = cards.distinctBy { it.id }
-            rankSearchResults(normalized, deduped, fullNumber)
+            rankSearchResults(normalizedQuery, deduped, fullNumber)
         }
 
         networkResult.onSuccess { cards ->
@@ -389,16 +398,50 @@ class PokeTcgRepository {
     }
 
     suspend fun searchCardsFuzzy(name: String, page: Int = 1): Result<List<TcgCard>> {
+        return searchCardsFuzzy(name = name, page = page, targetSetId = null)
+    }
+
+    suspend fun searchCardsFuzzy(name: String, page: Int = 1, targetSetId: String? = null): Result<List<TcgCard>> {
         val clean = sanitizeQuery(name)
         if (clean.isBlank()) return Result.success(emptyList())
 
-        val direct = searchCards(clean, page).getOrDefault(emptyList())
-        if (direct.isNotEmpty()) return Result.success(direct)
+        val normalizedTargetSet = targetSetId
+            ?.let(SetCodeMapper::normalizeDecklistSetCode)
+            ?.lowercase(Locale.ROOT)
+            ?.takeIf { it.isNotBlank() }
 
-        val firstWord = clean.split(" ").firstOrNull().orEmpty()
-        if (firstWord.length >= 3 && firstWord != clean) {
-            return searchCards(firstWord, page)
+        fun applyStrictSetScope(cards: List<TcgCard>): List<TcgCard> {
+            val scoped = if (normalizedTargetSet == null) {
+                cards
+            } else {
+                cards.filter { matchesSearchSet(it.set?.id, normalizedTargetSet) }
+            }
+            return scoped.distinctBy { it.id }
         }
+
+        val direct = searchCards(clean, page).getOrDefault(emptyList())
+        val directScoped = applyStrictSetScope(direct)
+        if (directScoped.isNotEmpty()) return Result.success(directScoped)
+
+        val parsedSetNumber = parseSetNumberQuery(clean)
+        if (parsedSetNumber != null) {
+            val setScoped = performSetNumberSearch(parsedSetNumber.first, parsedSetNumber.second, page)
+            val scoped = applyStrictSetScope(setScoped)
+            if (scoped.isNotEmpty()) return Result.success(scoped)
+        }
+
+        val tokens = normalizeNameForLookup(clean)
+            .split(" ")
+            .filter { it.length >= 4 }
+            .distinct()
+
+        for (token in tokens) {
+            if (token == clean) continue
+            val tokenResults = searchCards(token, page).getOrDefault(emptyList())
+            val scoped = applyStrictSetScope(tokenResults)
+            if (scoped.isNotEmpty()) return Result.success(scoped)
+        }
+
         return Result.success(emptyList())
     }
 
@@ -747,18 +790,22 @@ class PokeTcgRepository {
 
         val totalVariants = linkedSetOf(total, total.padStart(3, '0'))
 
-        val numberVariants = linkedSetOf(
+        val primaryNumberVariants = linkedSetOf(
             "$number/$total",
             "${number.padStart(3, '0')}/$total",
             "$number/${total.padStart(3, '0')}",
-            "${number.padStart(3, '0')}/${total.padStart(3, '0')}",
-            number,
-            number.padStart(3, '0')
+            "${number.padStart(3, '0')}/${total.padStart(3, '0')}"
         )
 
         val fetched = linkedSetOf<TcgCard>()
-        numberVariants.forEach { variant ->
+        for (variant in primaryNumberVariants) {
             fetched += performApiSearch(query = variant, page = 1, limit = 30)
+            if (fetched.count { card -> extractCardNumber(card.number) == number } >= 12) break
+        }
+
+        if (fetched.none { card -> extractCardNumber(card.number) == number }) {
+            fetched += performApiSearch(query = number, page = 1, limit = 30)
+            fetched += performApiSearch(query = number.padStart(3, '0'), page = 1, limit = 30)
         }
 
         val filteredByNumber = fetched.filter { card -> extractCardNumber(card.number) == number }
@@ -782,9 +829,47 @@ class PokeTcgRepository {
             }.thenByDescending { card ->
                 parseReleaseDateToEpoch(setReleaseDateById(card.set?.id).orEmpty())
             }.thenBy { card ->
-                card.name.lowercase(Locale.ROOT)
+                normalizeNameForLookup(card.name)
+            }.thenBy { card ->
+                card.id
             }
         )
+    }
+
+    private suspend fun performSetNumberSearch(setId: String, number: String, page: Int): List<TcgCard> {
+        val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(setId)
+            ?.lowercase(Locale.ROOT)
+            ?: return emptyList()
+        val normalizedNumber = extractCardNumber(number)
+        if (normalizedNumber.isBlank()) return emptyList()
+
+        val setTokens = SetCodeMapper.searchTokensForSetQuery(normalizedSet)
+        val numberVariants = buildNumberVariants(normalizedNumber)
+        val queries = linkedSetOf<String>()
+        setTokens.forEach { token ->
+            numberVariants.forEach { variant ->
+                queries += "$token $variant"
+            }
+        }
+
+        val candidates = linkedSetOf<TcgCard>()
+        for (searchQuery in queries) {
+            candidates += performApiSearch(query = searchQuery, page = page, limit = 30)
+            if (candidates.size >= 30) break
+        }
+
+        return candidates
+            .filter { card ->
+                matchesSearchSet(card.set?.id, normalizedSet) &&
+                    extractCardNumber(card.number) == normalizedNumber
+            }
+            .distinctBy { it.id }
+            .sortedWith(
+                compareByDescending<TcgCard> { card -> parseReleaseDateToEpoch(setReleaseDateById(card.set?.id).orEmpty()) }
+                    .thenBy { card -> extractCardNumber(card.number).toIntOrNull() ?: Int.MAX_VALUE }
+                    .thenBy { card -> normalizeNameForLookup(card.name) }
+                    .thenBy { card -> card.id }
+            )
     }
 
     private suspend fun performApiSearch(query: String, page: Int, limit: Int): List<TcgCard> {
@@ -810,7 +895,18 @@ class PokeTcgRepository {
 
     private fun filterByName(cards: List<TcgCard>, expectedName: String?): List<TcgCard> {
         if (expectedName == null) return cards.distinctBy { it.id }
-        return cards.filter { it.name.contains(expectedName, ignoreCase = true) }.distinctBy { it.id }
+        val normalizedQuery = normalizeNameForLookup(expectedName)
+        if (normalizedQuery.isBlank()) return cards.distinctBy { it.id }
+        val queryTokens = normalizedQuery.split(" ").filter { it.length >= 2 }
+
+        return cards.filter { card ->
+            val normalizedName = normalizeNameForLookup(card.name)
+            normalizedName == normalizedQuery ||
+                normalizedName.startsWith("$normalizedQuery ") ||
+                (queryTokens.isNotEmpty() && queryTokens.all { token ->
+                    " $normalizedName ".contains(" $token ")
+                })
+        }.distinctBy { it.id }
     }
 
     private suspend fun searchCardsFromLocalCache(query: String): List<TcgCard> {
@@ -947,7 +1043,8 @@ class PokeTcgRepository {
             compareByDescending<TcgCard> { card -> scoreNameMatch(card.name, normalizedQuery, queryTokens) }
                 .thenByDescending { card -> parseReleaseDateToEpoch(setReleaseDateById(card.set?.id).orEmpty()) }
                 .thenBy { card -> extractCardNumber(card.number).toIntOrNull() ?: Int.MAX_VALUE }
-                .thenBy { card -> card.name.lowercase(Locale.ROOT) }
+                .thenBy { card -> normalizeNameForLookup(card.name) }
+                .thenBy { card -> card.id }
         )
     }
 
@@ -958,7 +1055,10 @@ class PokeTcgRepository {
             normalizedName.startsWith(normalizedQuery) -> 420
             " $normalizedName ".contains(" $normalizedQuery ") -> 350
             queryTokens.isNotEmpty() && queryTokens.all { token -> normalizedName.contains(token) } -> 280
-            queryTokens.isNotEmpty() && queryTokens.any { token -> normalizedName.contains(token) } -> 180
+            queryTokens.any { token -> token.length >= 4 } &&
+                queryTokens.filter { it.length >= 4 }.any { token ->
+                    " $normalizedName ".contains(" $token ")
+                } -> 140
             else -> 0
         }
     }
@@ -988,6 +1088,31 @@ class PokeTcgRepository {
             return number to total
         }
         return null
+    }
+
+    private fun parseSetNumberQuery(raw: String): Pair<String, String>? {
+        val match = FLEX_SET_NUMBER_REGEX.matchEntire(raw) ?: return null
+        val rawSet = match.groupValues[1]
+        val rawNumber = match.groupValues[2]
+
+        if (rawSet.all { it.isDigit() }) return null
+        if (rawNumber.contains("/")) return null
+
+        val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(rawSet)
+            ?.lowercase(Locale.ROOT)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        val normalizedNumber = extractCardNumber(rawNumber)
+        if (normalizedNumber.isBlank()) return null
+
+        return normalizedSet to normalizedNumber
+    }
+
+    private fun matchesSearchSet(cardSetId: String?, expectedSetId: String): Boolean {
+        val normalizedCardSet = SetCodeMapper.normalizeDecklistSetCode(cardSetId)
+            ?.lowercase(Locale.ROOT)
+            ?: return false
+        return normalizedCardSet == expectedSetId
     }
 
     private fun getCandidateSetsByPrintedTotal(total: String?, tolerance: Int): List<TcgSet> {
@@ -1128,12 +1253,33 @@ class PokeTcgRepository {
 
     private fun selectCatalogMatch(cards: List<TcgCard>, normalizedName: String?): TcgCard? {
         if (cards.isEmpty()) return null
-        return if (normalizedName != null) {
-            cards.firstOrNull { normalizeNameForLookup(it.name) == normalizedName }
-                ?: cards.firstOrNull { normalizeNameForLookup(it.name).contains(normalizedName) }
-        } else {
-            cards.firstOrNull()
-        }
+        if (normalizedName == null) return cards.firstOrNull()
+
+        val queryTokens = normalizedName.split(" ").filter { it.length >= 2 }
+        return cards
+            .sortedWith(
+                compareByDescending<TcgCard> { card ->
+                    val normalizedCardName = normalizeNameForLookup(card.name)
+                    when {
+                        normalizedCardName == normalizedName -> 3
+                        normalizedCardName.startsWith("$normalizedName ") -> 2
+                        queryTokens.isNotEmpty() && queryTokens.all { token ->
+                            " $normalizedCardName ".contains(" $token ")
+                        } -> 1
+                        else -> 0
+                    }
+                }.thenByDescending { card -> parseReleaseDateToEpoch(setReleaseDateById(card.set?.id).orEmpty()) }
+                    .thenBy { card -> normalizeNameForLookup(card.name) }
+                    .thenBy { card -> card.id }
+            )
+            .firstOrNull { card ->
+                val normalizedCardName = normalizeNameForLookup(card.name)
+                normalizedCardName == normalizedName ||
+                    normalizedCardName.startsWith("$normalizedName ") ||
+                    (queryTokens.isNotEmpty() && queryTokens.all { token ->
+                        " $normalizedCardName ".contains(" $token ")
+                    })
+            }
     }
 
     private fun preferredNameQuery(rawName: String): String {

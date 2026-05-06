@@ -22,6 +22,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import java.text.Normalizer
 import java.time.LocalDate
 import java.util.Locale
 
@@ -578,18 +579,13 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                             extractPrintedTotalForSearch(card.number) in totalVariants
                     }
                 val numberOnly = cards.filter { card -> extractCardNumberForSearch(card.number) == number }
-                val candidates = if (strictByCardNumberAndTotal.isNotEmpty()) strictByCardNumberAndTotal else numberOnly
-
-                return candidates
-                    .sortedWith(
-                        compareByDescending<TcgCard> { card ->
-                            val setId = card.set?.id.orEmpty()
-                            if (setId in exactSetIds) 1 else 0
-                        }.thenByDescending { card ->
-                            val set = uiState.allSets.firstOrNull { it.id == card.set?.id }
-                            parseReleaseDate(set?.releaseDate.orEmpty())
-                        }
-                    )
+                if (strictByCardNumberAndTotal.isNotEmpty()) {
+                    val exactSetScoped = strictByCardNumberAndTotal.filter { card ->
+                        card.set?.id.orEmpty() in exactSetIds
+                    }
+                    return if (exactSetScoped.isNotEmpty()) exactSetScoped else strictByCardNumberAndTotal
+                }
+                return numberOnly
             }
         }
 
@@ -597,9 +593,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         if (normalizedQuery.isBlank()) return cards
 
         val exact = cards.filter { normalizeSearchName(it.name) == normalizedQuery }
-        if (exact.isNotEmpty()) {
-            return exact.sortedBy { extractCardNumberForSearch(it.number).toIntOrNull() ?: Int.MAX_VALUE }
-        }
+        if (exact.isNotEmpty()) return exact
 
         val prefix = cards.filter { normalizeSearchName(it.name).startsWith("$normalizedQuery ") }
         if (prefix.isNotEmpty()) return prefix
@@ -607,13 +601,18 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
         return cards.filter { card ->
             val normalizedName = normalizeSearchName(card.name)
-            queryTokens.isNotEmpty() && queryTokens.all { token -> normalizedName.contains(token) }
+            queryTokens.isNotEmpty() && queryTokens.all { token ->
+                " $normalizedName ".contains(" $token ")
+            }
         }
     }
 
     private fun normalizeSearchName(raw: String?): String {
         if (raw.isNullOrBlank()) return ""
-        return raw
+        val deCamel = raw.replace(Regex("([a-z])([A-Z])"), "$1 $2")
+        val normalized = Normalizer.normalize(deCamel, Normalizer.Form.NFD)
+            .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+        return normalized
             .trim()
             .lowercase(Locale.ROOT)
             .replace(Regex("[^a-z0-9]+"), " ")
