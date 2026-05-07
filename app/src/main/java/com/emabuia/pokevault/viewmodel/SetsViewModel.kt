@@ -423,7 +423,10 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             val officialSeriesGroups = officialSeriesOrder
                 .filterNot { it == OTHER_SERIES_KEY }
                 .map { canonicalSeries ->
-                    val orderedSets = sortSetsForDisplay(groupedByCanonicalSeries[canonicalSeries].orEmpty())
+                    val orderedSets = sortSetsForDisplay(
+                        sets = groupedByCanonicalSeries[canonicalSeries].orEmpty(),
+                        seriesKey = canonicalSeries
+                    )
                     SeriesSetsGroup(
                         seriesKey = canonicalSeries,
                         seriesLabel = ItalianTranslations.translateSeriesName(canonicalSeries),
@@ -453,8 +456,32 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun sortSetsForDisplay(sets: List<TcgSet>): List<TcgSet> {
+    private fun sortSetsForDisplay(sets: List<TcgSet>, seriesKey: String? = null): List<TcgSet> {
+        if (seriesKey == "Mega Evolutions") {
+            val filtered = sets.filter { set ->
+                megaEvolutionPriorityBucket(set) in 0..2
+            }
+
+            return filtered.sortedWith(
+                compareBy<TcgSet> { megaEvolutionPriorityBucket(it) }
+                    .then(setDisplayComparator)
+            )
+        }
+
         return sets.sortedWith(setDisplayComparator)
+    }
+
+    private fun megaEvolutionPriorityBucket(set: TcgSet): Int {
+        val normalizedName = set.name.trim().lowercase(Locale.ROOT)
+        val isPromo = normalizedName.contains("promo")
+        val isEnergy = normalizedName.contains("energie") || normalizedName.contains("energies") || normalizedName.contains("energy")
+
+        return when {
+            hasPrioritizedLogo(set) -> 0
+            isPromo -> 1
+            isEnergy -> 2
+            else -> 3
+        }
     }
 
     /**
