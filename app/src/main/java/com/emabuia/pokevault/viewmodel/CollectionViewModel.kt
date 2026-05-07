@@ -162,7 +162,8 @@ class CollectionViewModel : ViewModel() {
         val nextColumns = when (uiState.gridColumns) {
             2 -> 3
             3 -> 4
-            4 -> 6
+            4 -> 5
+            5 -> 6
             else -> 2
         }
         uiState = uiState.copy(gridColumns = nextColumns)

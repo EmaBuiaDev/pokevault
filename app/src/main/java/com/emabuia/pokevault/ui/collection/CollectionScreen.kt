@@ -35,6 +35,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -1292,7 +1294,19 @@ fun CollectionCardGridItem(
                 .clip(CircleShape).background(BlueCard),
             contentAlignment = Alignment.Center
         ) {
-            Text("x${card.quantity}", color = Color.White, fontSize = if (gridColumns > 4) 7.sp else 10.sp, fontWeight = FontWeight.Bold)
+            val compact = gridColumns > 4
+            val quantityFontSize = if (compact) 7.sp else 10.sp
+            Text(
+                text = "x${card.quantity}",
+                color = Color.White,
+                fontSize = quantityFontSize,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                style = TextStyle(
+                    lineHeight = quantityFontSize,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                )
+            )
         }
     }
 }
