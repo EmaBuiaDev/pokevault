@@ -455,7 +455,8 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         "gym special" to "JAP",
         "vmax climax" to "JAP",
         "eevee heroes" to "JAP",
-        "25th anniversary collection" to "JAP"
+        "25th anniversary collection" to "JAP",
+        "mega evolution deck" to "JAP"
     )
 
     /**
@@ -667,6 +668,8 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         val logoUrl = set.images.logo.trim()
         return logoUrl.isNotBlank() && !knownMissingLogoUrls.contains(logoUrl)
     }
+
+
 
     /**
      * Parses a release date string to a LocalDate, trying multiple formats in order:
