@@ -1,12 +1,10 @@
 package com.emabuia.pokevault.ui.album
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,7 +43,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.DarkBackground
 import com.emabuia.pokevault.ui.theme.DarkCard
-import com.emabuia.pokevault.ui.theme.DarkSurface
 import com.emabuia.pokevault.ui.theme.OrangeCard
 import com.emabuia.pokevault.ui.theme.TextMuted
 import com.emabuia.pokevault.ui.theme.TextWhite
