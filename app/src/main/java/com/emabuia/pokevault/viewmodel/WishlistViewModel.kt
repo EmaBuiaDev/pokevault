@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
 
 class WishlistViewModel : ViewModel() {
 
@@ -86,6 +87,13 @@ class WishlistViewModel : ViewModel() {
         return wishlists.firstOrNull { it.id == wishlistId }
     }
 
+    fun getWishlistIdsForCard(cardId: String): Set<String> {
+        return wishlists.asSequence()
+            .filter { cardId in it.cardIds }
+            .map { it.id }
+            .toSet()
+    }
+
     fun removeCardFromWishlist(wishlistId: String, cardId: String, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             repository.removeCardFromWishlist(wishlistId, cardId)
@@ -128,6 +136,41 @@ class WishlistViewModel : ViewModel() {
         }
     }
 
+    fun updateCardWishlists(cardId: String, targetWishlistIds: Set<String>, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val currentWishlistIds = getWishlistIdsForCard(cardId)
+            val toAdd = targetWishlistIds - currentWishlistIds
+            val toRemove = currentWishlistIds - targetWishlistIds
+
+            if (toAdd.isEmpty() && toRemove.isEmpty()) {
+                onResult(true)
+                return@launch
+            }
+
+            val failures = supervisorScope {
+                val addResults = toAdd.map { wishlistId ->
+                    async { repository.addCardToWishlist(wishlistId, cardId).isFailure }
+                }
+                val removeResults = toRemove.map { wishlistId ->
+                    async { repository.removeCardFromWishlist(wishlistId, cardId).isFailure }
+                }
+                (addResults + removeResults).awaitAll().count { it }
+            }
+
+            if (failures == 0) {
+                successMessage = if (AppLocale.isItalian) "Wishlist aggiornate" else "Wishlists updated"
+                onResult(true)
+            } else {
+                errorMessage = if (AppLocale.isItalian) {
+                    "Alcune wishlist non sono state aggiornate"
+                } else {
+                    "Some wishlists could not be updated"
+                }
+                onResult(false)
+            }
+        }
+    }
+
     fun removeCardFromAllWishlists(cardId: String, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             repository.removeCardFromAllWishlists(cardId)
@@ -146,8 +189,15 @@ class WishlistViewModel : ViewModel() {
         name: String,
         iconKey: String,
         cardId: String,
+        isPremium: Boolean,
         onResult: (Boolean) -> Unit = {}
     ) {
+        if (!canCreateWishlistCount(isPremium, wishlists.size)) {
+            errorMessage = AppLocale.premiumWishlistLimitMessage
+            onResult(false)
+            return
+        }
+
         val normalizedName = name.trim()
         if (!isValidWishlistName(normalizedName)) {
             errorMessage = if (AppLocale.isItalian) "Nome lista non valido" else "Invalid list name"
@@ -183,7 +233,13 @@ class WishlistViewModel : ViewModel() {
         }
     }
 
-    fun createWishlist(name: String, iconKey: String, onResult: (Boolean) -> Unit = {}) {
+    fun createWishlist(name: String, iconKey: String, isPremium: Boolean, onResult: (Boolean) -> Unit = {}) {
+        if (!canCreateWishlistCount(isPremium, wishlists.size)) {
+            errorMessage = AppLocale.premiumWishlistLimitMessage
+            onResult(false)
+            return
+        }
+
         val normalizedName = name.trim()
         if (!isValidWishlistName(normalizedName)) {
             errorMessage = if (AppLocale.isItalian) "Nome lista non valido" else "Invalid list name"
@@ -204,6 +260,45 @@ class WishlistViewModel : ViewModel() {
                 }
                 .onFailure {
                     errorMessage = if (AppLocale.isItalian) "Impossibile creare wishlist" else "Could not create wishlist"
+                    onResult(false)
+                }
+            isSaving = false
+        }
+    }
+
+    fun updateWishlistDetails(
+        wishlistId: String,
+        name: String,
+        iconKey: String,
+        onResult: (Boolean) -> Unit = {}
+    ) {
+        val normalizedName = name.trim()
+        if (!isValidWishlistName(normalizedName)) {
+            errorMessage = if (AppLocale.isItalian) "Nome lista non valido" else "Invalid list name"
+            onResult(false)
+            return
+        }
+
+        val existing = getWishlistById(wishlistId)
+        if (existing == null) {
+            errorMessage = AppLocale.wishlistNotFound
+            onResult(false)
+            return
+        }
+
+        viewModelScope.launch {
+            isSaving = true
+            val updated = existing.copy(
+                name = normalizedName,
+                iconKey = normalizeIconKey(iconKey)
+            )
+            repository.saveWishlist(updated)
+                .onSuccess {
+                    successMessage = AppLocale.wishlistUpdated
+                    onResult(true)
+                }
+                .onFailure {
+                    errorMessage = AppLocale.wishlistUpdateFailed
                     onResult(false)
                 }
             isSaving = false

@@ -658,6 +658,7 @@ object AppLocale {
     // Wishlist
     val wishlistTitle: String get() = if (isItalian) "Wishlist" else "Wishlist"
     val wishlistCreate: String get() = if (isItalian) "Crea Wishlist" else "Create Wishlist"
+    val wishlistEdit: String get() = if (isItalian) "Modifica Wishlist" else "Edit Wishlist"
     val wishlistName: String get() = if (isItalian) "Nome lista" else "List name"
     val wishlistNamePlaceholder: String get() = if (isItalian) "Es. Chase cards Kanto" else "E.g. Kanto chase cards"
     val wishlistChooseIcon: String get() = if (isItalian) "Scegli un'icona" else "Choose an icon"
@@ -672,6 +673,8 @@ object AppLocale {
     val wishlistCardsEmpty: String get() = if (isItalian) "Nessuna carta in questa wishlist" else "No cards in this wishlist"
     val wishlistCardsEmptySubtitle: String get() = if (isItalian) "Aggiungi carte dal Pokédex con il cuore" else "Add cards from Pokédex using the heart"
     val wishlistRemoveCardTitle: String get() = if (isItalian) "Rimuovere carta dalla wishlist?" else "Remove card from wishlist?"
+    val wishlistUpdated: String get() = if (isItalian) "Wishlist aggiornata" else "Wishlist updated"
+    val wishlistUpdateFailed: String get() = if (isItalian) "Impossibile aggiornare la wishlist" else "Could not update wishlist"
     fun wishlistCardsCount(count: Int) = if (isItalian) "$count carte" else "$count cards"
 
     // Auth

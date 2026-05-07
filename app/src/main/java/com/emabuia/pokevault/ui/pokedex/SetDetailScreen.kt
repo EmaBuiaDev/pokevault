@@ -49,6 +49,7 @@ import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.remote.TcgCard
+import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.ui.wishlist.CreateWishlistDialog
 import com.emabuia.pokevault.util.AppLocale
@@ -202,6 +203,7 @@ fun SetDetailScreen(
     setId: String,
     setName: String,
     onBack: () -> Unit,
+    onPremiumRequired: () -> Unit,
     viewModel: SetDetailViewModel = viewModel(),
     wishlistViewModel: WishlistViewModel = viewModel()
 ) {
@@ -215,6 +217,7 @@ fun SetDetailScreen(
     var filtersExpanded by rememberSaveable { mutableStateOf(false) }
     var pickerCard by remember { mutableStateOf<TcgCard?>(null) }
     var createDialogCard by remember { mutableStateOf<TcgCard?>(null) }
+    var showWishlistPremiumDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedCard?.id) {
         val card = selectedCard
@@ -298,19 +301,24 @@ fun SetDetailScreen(
     }
 
     if (pickerCard != null) {
+        val card = pickerCard
         WishlistPickerDialog(
             wishlists = wishlistViewModel.wishlists,
+            selectedWishlistIds = card?.let { wishlistViewModel.getWishlistIdsForCard(it.id) } ?: emptySet(),
             canCreateNew = premiumManager.canCreateWishlist(wishlistViewModel.wishlists.size),
             onDismiss = { pickerCard = null },
-            onCreateNew = {
-                createDialogCard = pickerCard
-                pickerCard = null
+            onCreateNewRequested = {
+                if (premiumManager.canCreateWishlist(wishlistViewModel.wishlists.size)) {
+                    createDialogCard = pickerCard
+                    pickerCard = null
+                } else {
+                    showWishlistPremiumDialog = true
+                }
             },
-            onConfirmWishlist = { wishlistId ->
-                val card = pickerCard
+            onConfirmSelection = { selectedIds ->
                 if (card != null) {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    wishlistViewModel.addCardToWishlist(wishlistId, card.id)
+                    wishlistViewModel.updateCardWishlists(card.id, selectedIds)
                 }
                 pickerCard = null
             }
@@ -323,7 +331,7 @@ fun SetDetailScreen(
             onConfirm = { name, iconKey ->
                 val card = createDialogCard
                 if (card != null) {
-                    wishlistViewModel.createWishlistAndAddCard(name, iconKey, card.id) { success ->
+                    wishlistViewModel.createWishlistAndAddCard(name, iconKey, card.id, isPremium) { success ->
                         if (success) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             createDialogCard = null
@@ -708,18 +716,9 @@ fun SetDetailScreen(
                                         if (isSelectionMode) return@TcgCardCompactItem
 
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        if (wishlistViewModel.isCardWishlisted(card.id)) {
-                                            wishlistViewModel.removeCardFromAllWishlists(card.id)
-                                            return@TcgCardCompactItem
-                                        }
-
                                         val wishlists = wishlistViewModel.wishlists
                                         when {
                                             wishlists.isEmpty() -> createDialogCard = card
-                                            wishlists.size == 1 && !isPremium -> wishlistViewModel.addCardToWishlist(
-                                                wishlists.first().id,
-                                                card.id
-                                            )
                                             else -> pickerCard = card
                                         }
                                     },
@@ -747,18 +746,10 @@ fun SetDetailScreen(
                                     canViewPrices = premiumManager.canViewPrices(),
                                     onClick = { selectedCard = card },
                                     onWishlistClick = {
-                                        if (wishlistViewModel.isCardWishlisted(card.id)) {
-                                            wishlistViewModel.removeCardFromAllWishlists(card.id)
-                                        } else {
-                                            val wishlists = wishlistViewModel.wishlists
-                                            when {
-                                                wishlists.isEmpty() -> createDialogCard = card
-                                                wishlists.size == 1 && !isPremium -> wishlistViewModel.addCardToWishlist(
-                                                    wishlists.first().id,
-                                                    card.id
-                                                )
-                                                else -> pickerCard = card
-                                            }
+                                        val wishlists = wishlistViewModel.wishlists
+                                        when {
+                                            wishlists.isEmpty() -> createDialogCard = card
+                                            else -> pickerCard = card
                                         }
                                     }
                                 )
@@ -792,6 +783,18 @@ fun SetDetailScreen(
                 } // close else (have data)
             } // close outer Box
         }
+    }
+
+    if (showWishlistPremiumDialog) {
+        PremiumRequiredDialog(
+            title = AppLocale.premiumWishlistLimitTitle,
+            message = AppLocale.premiumWishlistLimitMessage,
+            onDismiss = { showWishlistPremiumDialog = false },
+            onUpgrade = {
+                showWishlistPremiumDialog = false
+                onPremiumRequired()
+            }
+        )
     }
 }
 
@@ -1396,12 +1399,17 @@ fun TcgCardListRow(
 @Composable
 private fun WishlistPickerDialog(
     wishlists: List<Wishlist>,
+    selectedWishlistIds: Set<String>,
     canCreateNew: Boolean,
     onDismiss: () -> Unit,
-    onCreateNew: () -> Unit,
-    onConfirmWishlist: (String) -> Unit
+    onCreateNewRequested: () -> Unit,
+    onConfirmSelection: (Set<String>) -> Unit
 ) {
-    var selectedWishlistId by remember(wishlists) { mutableStateOf(wishlists.firstOrNull()?.id.orEmpty()) }
+    var selectedIds by remember(wishlists, selectedWishlistIds) {
+        mutableStateOf(selectedWishlistIds.filterTo(mutableSetOf()) { id ->
+            wishlists.any { wishlist -> wishlist.id == id }
+        })
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1418,7 +1426,7 @@ private fun WishlistPickerDialog(
                 Text(AppLocale.wishlistChooseList, color = TextMuted, fontSize = 13.sp)
 
                 wishlists.forEach { wishlist ->
-                    val selected = selectedWishlistId == wishlist.id
+                    val selected = wishlist.id in selectedIds
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1429,12 +1437,16 @@ private fun WishlistPickerDialog(
                                 if (selected) BlueCard else TextMuted.copy(alpha = 0.2f),
                                 RoundedCornerShape(12.dp)
                             )
-                            .clickable { selectedWishlistId = wishlist.id }
+                            .clickable {
+                                selectedIds = selectedIds.toMutableSet().apply {
+                                    if (!add(wishlist.id)) remove(wishlist.id)
+                                }
+                            }
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = if (selected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                            imageVector = if (selected) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
                             contentDescription = null,
                             tint = if (selected) BlueCard else TextMuted,
                             modifier = Modifier.size(16.dp)
@@ -1453,8 +1465,7 @@ private fun WishlistPickerDialog(
         },
         confirmButton = {
             Button(
-                onClick = { if (selectedWishlistId.isNotBlank()) onConfirmWishlist(selectedWishlistId) },
-                enabled = selectedWishlistId.isNotBlank(),
+                onClick = { onConfirmSelection(selectedIds) },
                 colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
             ) {
                 Text(AppLocale.addCard, color = TextWhite)
@@ -1462,10 +1473,15 @@ private fun WishlistPickerDialog(
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (canCreateNew) {
-                    TextButton(onClick = onCreateNew) {
-                        Text(AppLocale.wishlistCreateNewList, color = PurpleCard)
-                    }
+                TextButton(onClick = onCreateNewRequested) {
+                    Text(
+                        text = if (canCreateNew) {
+                            AppLocale.wishlistCreateNewList
+                        } else {
+                            "${AppLocale.wishlistCreateNewList} • Premium"
+                        },
+                        color = if (canCreateNew) PurpleCard else StarGold
+                    )
                 }
                 TextButton(onClick = onDismiss) {
                     Text(AppLocale.cancel, color = TextMuted)

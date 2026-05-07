@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CatchingPokemon
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Pets
@@ -111,6 +112,7 @@ fun WishlistListScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var showPremiumDialog by remember { mutableStateOf(false) }
     var wishlistToDelete by remember { mutableStateOf<Wishlist?>(null) }
+    var wishlistToEdit by remember { mutableStateOf<Wishlist?>(null) }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -207,6 +209,7 @@ fun WishlistListScreen(
                         WishlistRow(
                             wishlist = wishlist,
                             onClick = { onWishlistClick(wishlist.id) },
+                            onEdit = { wishlistToEdit = wishlist },
                             onDelete = { wishlistToDelete = wishlist }
                         )
                     }
@@ -219,11 +222,27 @@ fun WishlistListScreen(
         CreateWishlistDialog(
             onDismiss = { showCreateDialog = false },
             onConfirm = { name, iconKey ->
-                viewModel.createWishlist(name, iconKey) { success ->
+                viewModel.createWishlist(name, iconKey, isPremium) { success ->
                     if (success) showCreateDialog = false
                 }
             },
             isSaving = viewModel.isSaving
+        )
+    }
+
+    wishlistToEdit?.let { wishlist ->
+        CreateWishlistDialog(
+            onDismiss = { wishlistToEdit = null },
+            onConfirm = { name, iconKey ->
+                viewModel.updateWishlistDetails(wishlist.id, name, iconKey) { success ->
+                    if (success) wishlistToEdit = null
+                }
+            },
+            isSaving = viewModel.isSaving,
+            initialName = wishlist.name,
+            initialIconKey = wishlist.iconKey,
+            titleText = AppLocale.wishlistEdit,
+            confirmText = AppLocale.save
         )
     }
 
@@ -274,6 +293,7 @@ fun WishlistListScreen(
 private fun WishlistRow(
     wishlist: Wishlist,
     onClick: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     val option = iconForKey(wishlist.iconKey)
@@ -315,6 +335,10 @@ private fun WishlistRow(
             )
         }
 
+        IconButton(onClick = onEdit) {
+            Icon(Icons.Default.Edit, contentDescription = AppLocale.wishlistEdit, tint = TextMuted)
+        }
+
         IconButton(onClick = onDelete) {
             Icon(Icons.Default.DeleteOutline, contentDescription = AppLocale.delete, tint = TextMuted)
         }
@@ -327,10 +351,14 @@ fun CreateWishlistDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit,
     isSaving: Boolean,
-    canDismiss: Boolean = true
+    canDismiss: Boolean = true,
+    initialName: String = "",
+    initialIconKey: String = WishlistIcons.POKEBALL,
+    titleText: String = AppLocale.wishlistCreate,
+    confirmText: String = AppLocale.wishlistCreate
 ) {
-    var name by remember { mutableStateOf("") }
-    var selectedIconKey by remember { mutableStateOf(WishlistIcons.POKEBALL) }
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    var selectedIconKey by remember(initialIconKey) { mutableStateOf(initialIconKey) }
     val options = remember { wishlistIconOptions() }
 
     AlertDialog(
@@ -338,7 +366,7 @@ fun CreateWishlistDialog(
         containerColor = DarkSurface,
         title = {
             Text(
-                text = AppLocale.wishlistCreate,
+                text = titleText,
                 color = TextWhite,
                 fontWeight = FontWeight.Bold
             )
@@ -394,7 +422,7 @@ fun CreateWishlistDialog(
                 if (isSaving) {
                     CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.6.dp, color = TextWhite)
                 } else {
-                    Text(AppLocale.addCard, color = TextWhite)
+                    Text(confirmText, color = TextWhite)
                 }
             }
         },

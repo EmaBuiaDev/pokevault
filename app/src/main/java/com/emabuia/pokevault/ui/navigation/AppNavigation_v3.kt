@@ -407,7 +407,8 @@ fun AppNavigation(
             SetDetailScreen(
                 setId = setId,
                 setName = setName,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
             )
         }
 
