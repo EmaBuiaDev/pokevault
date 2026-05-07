@@ -12,7 +12,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -37,6 +36,7 @@ import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.GoalAlbumViewModel
 import com.emabuia.pokevault.viewmodel.GoalProgress
+import kotlinx.coroutines.launch
 
 private enum class ChaseTab { ALL, OWNED, MISSING, DUPLICATES }
 
@@ -95,12 +95,13 @@ private fun CardImageFallback(card: TcgCard) {
 fun GoalAlbumDetailScreen(
     goalAlbumId: String,
     onBack: () -> Unit,
-    onNavigateToAddCard: (apiCardId: String) -> Unit,
     viewModel: GoalAlbumViewModel = viewModel()
 ) {
     val album = viewModel.getGoalAlbumById(goalAlbumId)
     var selectedTab by remember { mutableStateOf(ChaseTab.ALL) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     // Carichiamo le TcgCard per il dettaglio (da cache/api progressivamente)
     var targetCards by remember { mutableStateOf<List<TcgCard>>(emptyList()) }
@@ -138,6 +139,7 @@ fun GoalAlbumDetailScreen(
 
     Scaffold(
         containerColor = DarkBackground,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(album.name, color = TextWhite, fontWeight = FontWeight.Bold) },
@@ -153,15 +155,6 @@ fun GoalAlbumDetailScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { onNavigateToAddCard("") },
-                containerColor = OrangeCard,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = AppLocale.addCard, tint = TextWhite)
-            }
         }
     ) { padding ->
         Column(
@@ -244,7 +237,18 @@ fun GoalAlbumDetailScreen(
                             ChaseCardItem(
                                 card = card,
                                 isOwned = isOwned,
-                                onAddTap = { onNavigateToAddCard(card.id) }
+                                onAddTap = {
+                                    viewModel.addMissingCardToCollection(card) { success ->
+                                        scope.launch {
+                                            val message = if (success) {
+                                                if (AppLocale.isItalian) "Carta aggiunta alla collezione" else "Card added to collection"
+                                            } else {
+                                                if (AppLocale.isItalian) "Errore durante l'aggiunta" else "Error while adding card"
+                                            }
+                                            snackbarHostState.showSnackbar(message)
+                                        }
+                                    }
+                                }
                             )
                         }
                     }

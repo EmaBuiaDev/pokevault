@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,6 +55,7 @@ fun CreateAlbumScreen(
     val categories = listOf("", "Pokémon", "Trainer", "Energy")
     val sizes = listOf(9, 18, 36, 72, 120)
     val themes = listOf("classic", "fire", "water", "grass", "electric", "dark", "psychic")
+    val isCustomSizeSelected = viewModel.albumSize !in sizes
 
     var showTypeDropdown by remember { mutableStateOf(false) }
     var showExpansionDropdown by remember { mutableStateOf(false) }
@@ -280,16 +283,15 @@ fun CreateAlbumScreen(
 
             // Grandezza Album
             SectionLabel(AppLocale.albumSize)
-            Row(
+            LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                sizes.forEach { size ->
+                items(sizes) { size ->
                     val isSelected = viewModel.albumSize == size
                     Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
+                            .height(40.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (isSelected) OrangeCard else DarkCard)
                             .border(
@@ -297,7 +299,8 @@ fun CreateAlbumScreen(
                                 color = if (isSelected) Color.Transparent else TextMuted,
                                 shape = RoundedCornerShape(10.dp)
                             )
-                            .clickable { viewModel.albumSize = size },
+                            .clickable { viewModel.albumSize = size }
+                            .padding(horizontal = 14.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -308,6 +311,58 @@ fun CreateAlbumScreen(
                         )
                     }
                 }
+
+                item {
+                    val customSelected = isCustomSizeSelected
+                    Box(
+                        modifier = Modifier
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (customSelected) OrangeCard else DarkCard)
+                            .border(
+                                width = if (customSelected) 0.dp else 1.dp,
+                                color = if (customSelected) Color.Transparent else TextMuted,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable {
+                                if (!customSelected) viewModel.albumSize = 150
+                            }
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = AppLocale.albumSizeCustom,
+                            color = if (customSelected) Color.White else TextGray,
+                            fontSize = 14.sp,
+                            fontWeight = if (customSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+
+            if (isCustomSizeSelected) {
+                OutlinedTextField(
+                    value = viewModel.albumSize.toString(),
+                    onValueChange = { raw ->
+                        val parsed = raw.filter { it.isDigit() }.toIntOrNull()
+                        if (parsed != null) {
+                            viewModel.albumSize = parsed.coerceIn(1, 999)
+                        }
+                    },
+                    label = { Text(AppLocale.albumCustomSizeLabel) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = OrangeCard,
+                        unfocusedBorderColor = TextMuted,
+                        cursorColor = OrangeCard,
+                        focusedLabelColor = OrangeCard,
+                        unfocusedLabelColor = TextMuted,
+                        focusedTextColor = TextWhite,
+                        unfocusedTextColor = TextWhite
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
             }
 
             // Tematica

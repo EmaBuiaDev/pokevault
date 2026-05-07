@@ -257,6 +257,16 @@ private fun AddCardsBottomSheet(
     onCardClick: (String) -> Unit
 ) {
     val filteredCards = viewModel.getFilteredCardsForAlbum(album)
+    var searchQuery by remember(album.id) { mutableStateOf("") }
+    val visibleCards = remember(filteredCards, searchQuery) {
+        val query = searchQuery.trim().lowercase()
+        if (query.isBlank()) filteredCards
+        else filteredCards.filter { card ->
+            card.name.lowercase().contains(query) ||
+                card.set.lowercase().contains(query) ||
+                card.cardNumber.lowercase().contains(query)
+        }
+    }
     val isFull = album.cardIds.size >= album.size
 
     ModalBottomSheet(
@@ -294,6 +304,32 @@ private fun AddCardsBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text(AppLocale.albumSearchInCollection) },
+                placeholder = { Text(AppLocale.albumSearchPlaceholder) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = OrangeCard,
+                    unfocusedBorderColor = TextMuted,
+                    cursorColor = OrangeCard,
+                    focusedLabelColor = OrangeCard,
+                    unfocusedLabelColor = TextMuted,
+                    focusedTextColor = TextWhite,
+                    unfocusedTextColor = TextWhite,
+                    focusedPlaceholderColor = TextMuted,
+                    unfocusedPlaceholderColor = TextMuted,
+                    focusedLeadingIconColor = OrangeCard,
+                    unfocusedLeadingIconColor = TextMuted
+                ),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             if (isFull) {
                 Text(
                     text = AppLocale.albumFull,
@@ -302,7 +338,7 @@ private fun AddCardsBottomSheet(
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
-            } else if (filteredCards.isEmpty()) {
+            } else if (visibleCards.isEmpty()) {
                 Text(
                     text = AppLocale.albumNoMatchingCards,
                     color = TextMuted,
@@ -316,7 +352,7 @@ private fun AddCardsBottomSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.heightIn(max = 400.dp)
                 ) {
-                    items(filteredCards, key = { it.id }) { card ->
+                    items(visibleCards, key = { it.id }) { card ->
                         Box(
                             modifier = Modifier
                                 .aspectRatio(0.72f)

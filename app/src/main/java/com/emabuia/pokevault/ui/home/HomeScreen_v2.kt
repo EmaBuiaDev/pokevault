@@ -2,9 +2,7 @@ package com.emabuia.pokevault.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Favorite
@@ -39,7 +37,6 @@ fun HomeScreen(
     val premiumManager = remember { PremiumManager.getInstance() }
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
     val selectedHomeSpriteId by premiumManager.selectedHomeSpriteId.collectAsStateWithLifecycle()
-    val scrollState = rememberScrollState()
 
     Box(
         modifier = Modifier
@@ -50,7 +47,6 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(scrollState)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -78,7 +74,7 @@ fun HomeScreen(
                         "graded" -> Routes.GRADED
                         "pokedex" -> Routes.POKEDEX
                         "competitive" -> Routes.COMPETITIVE
-                        "album" -> Routes.ALBUM_LIST
+                        "collector_lab" -> Routes.ALBUM_LIST
                         else -> Routes.HOME
                     }
                     onNavigate(route)

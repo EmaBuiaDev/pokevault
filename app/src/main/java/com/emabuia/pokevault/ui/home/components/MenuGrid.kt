@@ -72,7 +72,7 @@ fun MenuGrid(
         title = AppLocale.albumTitle,
         icon = Icons.Default.PhotoAlbum,
         gradientColors = listOf(OrangeCard, OrangeCard.copy(alpha = 0.7f)),
-        routeKey = "album"
+        routeKey = "collector_lab"
     )
 
     Column(

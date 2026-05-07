@@ -3,9 +3,6 @@ package com.emabuia.pokevault.ui.album
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -41,17 +38,15 @@ fun AlbumListScreen(
     onBack: () -> Unit,
     onCreateAlbum: (String?) -> Unit,
     onAlbumClick: (String) -> Unit,
+    onOpenAlbumList: () -> Unit = {},
+    onOpenChaseList: () -> Unit = {},
     onCreateChase: () -> Unit = {},
     onChaseClick: (String) -> Unit = {},
     onPremiumRequired: () -> Unit = {},
     viewModel: AlbumViewModel = viewModel(),
     goalViewModel: GoalAlbumViewModel = viewModel()
 ) {
-    val premiumManager = remember { PremiumManager.getInstance() }
-    var showDeleteDialog by remember { mutableStateOf<Album?>(null) }
-    var showPremiumDialog by remember { mutableStateOf(false) }
     var showChasePremiumDialog by remember { mutableStateOf(false) }
-    var showDeleteChaseDialog by remember { mutableStateOf<GoalAlbum?>(null) }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -59,7 +54,7 @@ fun AlbumListScreen(
             TopAppBar(
                 title = {
                     Text(
-                        AppLocale.myAlbums,
+                        AppLocale.albumTitle,
                         color = TextWhite,
                         fontWeight = FontWeight.Bold
                     )
@@ -77,173 +72,34 @@ fun AlbumListScreen(
                     containerColor = DarkBackground
                 )
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (premiumManager.canCreateAlbum(viewModel.albums.size)) {
-                        onCreateAlbum(null)
-                    } else {
-                        showPremiumDialog = true
-                    }
-                },
-                containerColor = OrangeCard,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = AppLocale.createAlbum, tint = TextWhite)
-            }
         }
     ) { padding ->
-        if (viewModel.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = OrangeCard)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(vertical = 8.dp)
-            ) {
-                // ── Sezione Espositore ────────────────────────────────────
-                item {
-                    SectionHeader(
-                        title = AppLocale.albumSectionEspositore,
-                        subtitle = AppLocale.albumSectionEspositoreSubtitle
-                    )
-                }
-                if (viewModel.albums.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.PhotoAlbum, contentDescription = null, tint = TextMuted, modifier = Modifier.size(40.dp))
-                                Spacer(Modifier.height(8.dp))
-                                Text(AppLocale.albumEmpty, color = TextMuted, fontSize = 14.sp)
-                            }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            CollectorLabCardsRow(
+                albumCount = viewModel.albums.size,
+                chaseCount = goalViewModel.goalAlbums.size,
+                onAlbumClick = {
+                    onOpenAlbumList()
+                },
+                onChaseClick = {
+                    if (goalViewModel.goalAlbums.isEmpty()) {
+                        if (goalViewModel.canCreate()) {
+                            onCreateChase()
+                        } else {
+                            showChasePremiumDialog = true
                         }
-                    }
-                } else {
-                    items(viewModel.albums, key = { it.id }) { album ->
-                        AlbumCard(
-                            album = album,
-                            cardsCount = album.cardIds.size,
-                            coverUrl = album.coverImageUrl.ifBlank {
-                                val cards = viewModel.getCardsForAlbum(album)
-                                cards.firstOrNull()?.imageUrl ?: ""
-                            },
-                            onClick = { onAlbumClick(album.id) },
-                            onDelete = { showDeleteDialog = album },
-                            onEdit = { onCreateAlbum(album.id) }
-                        )
+                    } else {
+                        onOpenChaseList()
                     }
                 }
-
-                // ── Sezione Chase ─────────────────────────────────────────
-                item { Spacer(Modifier.height(8.dp)) }
-                item {
-                    SectionHeader(
-                        title = AppLocale.albumSectionChase,
-                        subtitle = AppLocale.albumSectionChaseSubtitle
-                    )
-                }
-                item {
-                    // Card "Nuovo Chase" sempre visibile come primo elemento
-                    NewChaseCard(
-                        onClick = {
-                            if (goalViewModel.canCreate()) {
-                                onCreateChase()
-                            } else {
-                                showChasePremiumDialog = true
-                            }
-                        }
-                    )
-                }
-                items(goalViewModel.goalAlbums, key = { it.id }) { goalAlbum ->
-                    ChaseCard(
-                        goalAlbum = goalAlbum,
-                        ownedCount = goalAlbum.targetCardApiIds.count { apiId ->
-                            goalViewModel.ownedCards.any { pc -> pc.apiCardId.trim() == apiId }
-                        },
-                        onClick = { onChaseClick(goalAlbum.id) },
-                        onDelete = { showDeleteChaseDialog = goalAlbum }
-                    )
-                }
-
-                item { Spacer(modifier = Modifier.height(80.dp)) }
-            }
+            )
         }
-    }
-
-    // Delete confirmation dialog
-    showDeleteDialog?.let { album ->
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            containerColor = DarkSurface,
-            title = {
-                Text(AppLocale.albumDeleteTitle, color = TextWhite)
-            },
-            text = {
-                Text(AppLocale.albumDeleteMessage, color = TextGray)
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteAlbum(album.id)
-                    showDeleteDialog = null
-                }) {
-                    Text(AppLocale.delete, color = RedCard)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
-                    Text(AppLocale.cancel, color = TextGray)
-                }
-            }
-        )
-    }
-
-    if (showPremiumDialog) {
-        PremiumRequiredDialog(
-            title = AppLocale.premiumAlbumLimitTitle,
-            message = AppLocale.premiumAlbumLimitMessage,
-            onDismiss = { showPremiumDialog = false },
-            onUpgrade = {
-                showPremiumDialog = false
-                onPremiumRequired()
-            }
-        )
-    }
-
-    // Chase delete dialog
-    showDeleteChaseDialog?.let { goalAlbum ->
-        AlertDialog(
-            onDismissRequest = { showDeleteChaseDialog = null },
-            containerColor = DarkSurface,
-            title = { Text(AppLocale.chaseDeleteTitle, color = TextWhite) },
-            text = { Text(AppLocale.chaseDeleteMessage, color = TextGray) },
-            confirmButton = {
-                TextButton(onClick = {
-                    goalViewModel.deleteGoalAlbum(goalAlbum.id)
-                    showDeleteChaseDialog = null
-                }) { Text(AppLocale.delete, color = RedCard) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteChaseDialog = null }) {
-                    Text(AppLocale.cancel, color = TextGray)
-                }
-            }
-        )
     }
 
     if (showChasePremiumDialog) {
@@ -259,13 +115,83 @@ fun AlbumListScreen(
     }
 }
 
-// ── Section Header ────────────────────────────────────────────────────────────
+@Composable
+private fun CollectorLabCardsRow(
+    albumCount: Int,
+    chaseCount: Int,
+    onAlbumClick: () -> Unit,
+    onChaseClick: () -> Unit
+) {
+    val albumSubtitle = if (albumCount == 0) {
+        AppLocale.collectorAlbumSubtitle
+    } else {
+        "$albumCount album creati"
+    }
+    val chaseSubtitle = if (chaseCount == 0) {
+        AppLocale.collectorChaseSubtitle
+    } else {
+        "$chaseCount chase creati"
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        CollectorLabCard(
+            title = AppLocale.collectorAlbumTitle,
+            subtitle = albumSubtitle,
+            icon = Icons.Default.PhotoLibrary,
+            accent = OrangeCard,
+            onClick = onAlbumClick,
+            modifier = Modifier.weight(1f)
+        )
+        CollectorLabCard(
+            title = AppLocale.collectorChaseTitle,
+            subtitle = chaseSubtitle,
+            icon = Icons.Default.TrackChanges,
+            accent = RedCard,
+            onClick = onChaseClick,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
 
 @Composable
-private fun SectionHeader(title: String, subtitle: String) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text(title, color = TextWhite, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        Text(subtitle, color = TextMuted, fontSize = 12.sp)
+private fun CollectorLabCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .height(108.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accent.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+            }
+            Column {
+                Text(title, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(subtitle, color = TextMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 

@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.GoalAlbum
 import com.emabuia.pokevault.data.model.GoalCriteriaType
@@ -181,6 +182,49 @@ class GoalAlbumViewModel : ViewModel() {
     fun deleteGoalAlbum(albumId: String) {
         viewModelScope.launch {
             repository.deleteGoalAlbum(albumId)
+        }
+    }
+
+    fun addMissingCardToCollection(card: TcgCard, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val variants = CardOptions.getVariantsForCard(
+                card.tcgplayer?.prices?.keys ?: emptySet(),
+                card.rarity
+            )
+            val selectedVariant = variants.firstOrNull() ?: "Holo"
+
+            val market = card.cardmarket?.prices
+            val estimatedValue =
+                market?.avg30
+                    ?: market?.trendPrice
+                    ?: market?.averageSellPrice
+                    ?: market?.lowPrice
+                    ?: 0.0
+
+            val pokemonCard = PokemonCard(
+                name = card.name,
+                imageUrl = card.images.small,
+                set = card.set?.name ?: "",
+                rarity = card.rarity ?: "Unknown",
+                type = card.types?.firstOrNull() ?: "Colorless",
+                hp = card.hp?.toIntOrNull() ?: 0,
+                supertype = card.supertype.ifBlank { "Pokémon" },
+                subtypes = card.subtypes ?: emptyList(),
+                estimatedValue = estimatedValue,
+                apiCardId = card.id,
+                cardNumber = card.number,
+                variant = selectedVariant,
+                quantity = 1,
+                condition = "Near Mint",
+                language = "🇮🇹 Italiano"
+            )
+
+            repository.addCard(pokemonCard)
+                .onSuccess { onResult(true) }
+                .onFailure {
+                    errorMessage = it.message
+                    onResult(false)
+                }
         }
     }
 

@@ -56,6 +56,8 @@ import com.emabuia.pokevault.ui.scanner.ScannerScreen
 import com.emabuia.pokevault.ui.stats.StatsScreen
 import com.emabuia.pokevault.ui.album.AlbumDetailScreen
 import com.emabuia.pokevault.ui.album.AlbumListScreen
+import com.emabuia.pokevault.ui.album.AlbumCollectionListScreen
+import com.emabuia.pokevault.ui.album.ChaseListScreen
 import com.emabuia.pokevault.ui.album.CreateAlbumScreen
 import com.emabuia.pokevault.ui.album.CreateGoalAlbumScreen
 import com.emabuia.pokevault.ui.album.GoalAlbumDetailScreen
@@ -100,8 +102,10 @@ object Routes {
     const val WISHLIST_LIST = "wishlist_list"
     const val WISHLIST_DETAIL = "wishlist_detail/{wishlistId}"
     const val ALBUM_LIST = "album_list"
+    const val ALBUM_COLLECTION_LIST = "album_collection_list"
     const val CREATE_ALBUM = "create_album?albumId={albumId}"
     const val ALBUM_DETAIL = "album_detail/{albumId}"
+    const val CHASE_LIST = "chase_list"
     const val CREATE_GOAL_ALBUM = "create_goal_album"
     const val GOAL_ALBUM_DETAIL = "goal_album_detail/{goalAlbumId}"
 
@@ -550,6 +554,28 @@ fun AppNavigation(
                 onBack = { navController.popBackStack() },
                 onCreateAlbum = { albumId -> navController.navigate(Routes.createAlbum(albumId)) },
                 onAlbumClick = { albumId -> navController.navigate(Routes.albumDetail(albumId)) },
+                onOpenAlbumList = { navController.navigate(Routes.ALBUM_COLLECTION_LIST) },
+                onOpenChaseList = { navController.navigate(Routes.CHASE_LIST) },
+                onCreateChase = { navController.navigate(Routes.CREATE_GOAL_ALBUM) },
+                onChaseClick = { goalAlbumId -> navController.navigate(Routes.goalAlbumDetail(goalAlbumId)) },
+                onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
+            )
+        }
+
+        // ── Album Collection List ──
+        composable(Routes.ALBUM_COLLECTION_LIST) {
+            AlbumCollectionListScreen(
+                onBack = { navController.popBackStack() },
+                onAlbumClick = { albumId -> navController.navigate(Routes.albumDetail(albumId)) },
+                onCreateAlbum = { albumId -> navController.navigate(Routes.createAlbum(albumId)) },
+                onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
+            )
+        }
+
+        // ── Chase List ──
+        composable(Routes.CHASE_LIST) {
+            ChaseListScreen(
+                onBack = { navController.popBackStack() },
                 onCreateChase = { navController.navigate(Routes.CREATE_GOAL_ALBUM) },
                 onChaseClick = { goalAlbumId -> navController.navigate(Routes.goalAlbumDetail(goalAlbumId)) },
                 onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
@@ -602,11 +628,7 @@ fun AppNavigation(
             val goalAlbumId = backStackEntry.arguments?.getString("goalAlbumId") ?: ""
             GoalAlbumDetailScreen(
                 goalAlbumId = goalAlbumId,
-                onBack = { navController.popBackStack() },
-                onNavigateToAddCard = { apiCardId ->
-                    val route = if (apiCardId.isNotBlank()) "${Routes.ADD_CARD}?apiCardId=${URLEncoder.encode(apiCardId, "UTF-8")}" else Routes.ADD_CARD
-                    navController.navigate(route)
-                }
+                onBack = { navController.popBackStack() }
             )
         }
 
