@@ -109,6 +109,48 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     var uiState by mutableStateOf(SetsUiState())
         private set
 
+    /**
+     * Known sets whose language is mis-tagged in the source data.
+     * Key: lowercase set name fragment (partial match) → correct macro.
+     * These overrides take priority over the raw language field.
+     */
+    private val languageNameOverrides: List<Pair<String, String>> = listOf(
+        // Japanese branded sets incorrectly tagged as ENG in PokeWallet
+        "mega evolution all-stars" to "JAP",
+        "mega evolution all stars" to "JAP",
+        "pokémon card game classic" to "JAP",
+        "pokemon card game classic" to "JAP",
+        "special deck set" to "JAP",
+        "gym special" to "JAP",
+        "vmax climax" to "JAP",
+        "eevee heroes" to "JAP",
+        "25th anniversary collection" to "JAP",
+        "mega evolution deck" to "JAP"
+    )
+
+    /**
+     * Display order inside a single series group:
+     *   1. Sets WITH a usable logo come first.
+     *   2. Within each logo bucket, sort by release date DESC.
+     *   3. Sets without a parseable release date go to the bottom of their
+     *      logo bucket (LocalDate.MIN under DESC).
+     *   4. Stable tiebreaker by lowercase name.
+     */
+    private val setDisplayComparator: Comparator<TcgSet> =
+        compareBy<TcgSet> { if (hasPrioritizedLogo(it)) 0 else 1 }
+            .thenComparator { a, b ->
+                val da = parseReleaseDate(a.releaseDate)
+                val db = parseReleaseDate(b.releaseDate)
+                val aMissing = da == LocalDate.MIN
+                val bMissing = db == LocalDate.MIN
+                when {
+                    aMissing && !bMissing -> 1
+                    !aMissing && bMissing -> -1
+                    else -> db.compareTo(da) // DESC by release date
+                }
+            }
+            .thenBy { it.name.lowercase(Locale.ROOT) }
+
     init {
         TranslationService.loadCache(application.applicationContext)
         loadSets()
@@ -411,53 +453,9 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Display order inside a single series group:
-     *   1. Sets WITH a usable logo come first.
-     *   2. Within each logo bucket, sort by release date DESC.
-     *   3. Sets without a parseable release date go to the bottom of their
-     *      logo bucket (LocalDate.MIN under DESC).
-     *   4. Stable tiebreaker by lowercase name.
-     */
-    private val setDisplayComparator: Comparator<TcgSet> =
-        compareBy<TcgSet> { if (hasPrioritizedLogo(it)) 0 else 1 }
-            .thenComparator { a, b ->
-                // Place sets without a parseable date AFTER sets with one,
-                // independent of the DESC direction.
-                val da = parseReleaseDate(a.releaseDate)
-                val db = parseReleaseDate(b.releaseDate)
-                val aMissing = da == LocalDate.MIN
-                val bMissing = db == LocalDate.MIN
-                when {
-                    aMissing && !bMissing -> 1
-                    !aMissing && bMissing -> -1
-                    else -> db.compareTo(da) // DESC by release date
-                }
-            }
-            .thenBy { it.name.lowercase(Locale.ROOT) }
-
     private fun sortSetsForDisplay(sets: List<TcgSet>): List<TcgSet> {
         return sets.sortedWith(setDisplayComparator)
     }
-
-    /**
-     * Known sets whose language is mis-tagged in the source data.
-     * Key: lowercase set name fragment (partial match) → correct macro.
-     * These overrides take priority over the raw language field.
-     */
-    private val languageNameOverrides: List<Pair<String, String>> = listOf(
-        // Japanese branded sets incorrectly tagged as ENG in PokeWallet
-        "mega evolution all-stars" to "JAP",
-        "mega evolution all stars" to "JAP",
-        "pokémon card game classic" to "JAP",
-        "pokemon card game classic" to "JAP",
-        "special deck set" to "JAP",
-        "gym special" to "JAP",
-        "vmax climax" to "JAP",
-        "eevee heroes" to "JAP",
-        "25th anniversary collection" to "JAP",
-        "mega evolution deck" to "JAP"
-    )
 
     /**
      * Resolves the correct language macro for a set, applying name-based overrides
