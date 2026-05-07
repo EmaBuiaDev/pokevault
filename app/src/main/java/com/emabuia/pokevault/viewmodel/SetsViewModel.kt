@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.text.Normalizer
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.Locale
 
 private const val LOGO_CACHE_PREFS = "sets_logo_cache"
@@ -286,7 +288,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         val displayableSets = uiState.allSets.filter(::isDisplayableExpansion)
 
         val languageCountByMacro = languageMacros.associateWith { macro ->
-            displayableSets.count { it.language == macro }
+            displayableSets.count { resolveLanguageMacro(it) == macro }
         }
         val macroGroups = buildMacroGroups(displayableSets)
         val selectedMacroGroup = macroGroups.firstOrNull { it.macro == uiState.selectedLanguageMacro }
@@ -345,8 +347,16 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun buildMacroGroups(allSets: List<TcgSet>): List<LanguageMacroGroup> {
+        // Pre-bucket once per macro using a defensive language normalization (with
+        // name-based overrides for mis-tagged sets) so every set lands in the
+        // correct ENG/JAP/CHN tab.
+        val setsByMacro: Map<String, List<TcgSet>> = allSets
+            .groupBy { resolveLanguageMacro(it) }
+            .mapNotNull { (macro, sets) -> macro?.let { it to sets } }
+            .toMap()
+
         return languageMacros.map { macro ->
-            val setsInMacro = allSets.filter { it.language == macro }
+            val setsInMacro = setsByMacro[macro].orEmpty()
             val groupedByCanonicalSeries = setsInMacro.groupBy { set ->
                 canonicalSeries(set.series)
             }
@@ -401,12 +411,83 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Display order inside a single series group:
+     *   1. Sets WITH a usable logo come first.
+     *   2. Within each logo bucket, sort by release date DESC.
+     *   3. Sets without a parseable release date go to the bottom of their
+     *      logo bucket (LocalDate.MIN under DESC).
+     *   4. Stable tiebreaker by lowercase name.
+     */
+    private val setDisplayComparator: Comparator<TcgSet> =
+        compareBy<TcgSet> { if (hasPrioritizedLogo(it)) 0 else 1 }
+            .thenComparator { a, b ->
+                // Place sets without a parseable date AFTER sets with one,
+                // independent of the DESC direction.
+                val da = parseReleaseDate(a.releaseDate)
+                val db = parseReleaseDate(b.releaseDate)
+                val aMissing = da == LocalDate.MIN
+                val bMissing = db == LocalDate.MIN
+                when {
+                    aMissing && !bMissing -> 1
+                    !aMissing && bMissing -> -1
+                    else -> db.compareTo(da) // DESC by release date
+                }
+            }
+            .thenBy { it.name.lowercase(Locale.ROOT) }
+
     private fun sortSetsForDisplay(sets: List<TcgSet>): List<TcgSet> {
-        return sets.sortedWith(
-            compareBy<TcgSet> { !hasPrioritizedLogo(it) }
-                .thenByDescending { parseReleaseDate(it.releaseDate) }
-                .thenBy { it.name.lowercase(Locale.ROOT) }
-        )
+        return sets.sortedWith(setDisplayComparator)
+    }
+
+    /**
+     * Known sets whose language is mis-tagged in the source data.
+     * Key: lowercase set name fragment (partial match) → correct macro.
+     * These overrides take priority over the raw language field.
+     */
+    private val languageNameOverrides: List<Pair<String, String>> = listOf(
+        // Japanese branded sets incorrectly tagged as ENG in PokeWallet
+        "mega evolution all-stars" to "JAP",
+        "mega evolution all stars" to "JAP",
+        "pokémon card game classic" to "JAP",
+        "pokemon card game classic" to "JAP",
+        "special deck set" to "JAP",
+        "gym special" to "JAP",
+        "vmax climax" to "JAP",
+        "eevee heroes" to "JAP",
+        "25th anniversary collection" to "JAP"
+    )
+
+    /**
+     * Resolves the correct language macro for a set, applying name-based overrides
+     * for sets that are known to be mis-tagged in the source data.
+     */
+    private fun resolveLanguageMacro(set: TcgSet): String? {
+        val lowerName = set.name.trim().lowercase(Locale.ROOT)
+        for ((fragment, macro) in languageNameOverrides) {
+            if (lowerName.contains(fragment)) return macro
+        }
+        return normalizeLanguageMacro(set.language)
+    }
+
+    /**
+     * Defensive language normalization. The repository already maps to
+     * ENG/JAP/CHN, but we guard against any raw value leaking through.
+     */
+    private fun normalizeLanguageMacro(raw: String?): String? {
+        val normalized = raw?.trim()?.lowercase(Locale.ROOT)?.replace('_', ' ') ?: return null
+        if (normalized.isBlank()) return null
+        return when {
+            normalized in setOf("en", "eng", "english", "inglese") ||
+                normalized.contains("engl") || normalized.contains("ingl") -> "ENG"
+            normalized in setOf("jp", "jap", "ja", "japanese", "giapponese") ||
+                normalized.contains("jap") || normalized.contains("giapp") -> "JAP"
+            normalized in setOf("zh", "zhs", "zht", "cn", "chn", "chi", "chinese") ||
+                normalized.contains("chinese") ||
+                normalized.contains("mandarin") ||
+                normalized.contains("cinese") -> "CHN"
+            else -> null
+        }
     }
 
     private fun buildOtherSubgroups(otherSets: List<TcgSet>, existingLabels: Set<String>): List<OtherSubgroup> {
@@ -519,21 +600,56 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             .trim()
 
         return when {
-            normalized in setOf("mega evolution", "mega evolutions", "mega evoluzione", "mega evoluzioni") -> "Mega Evolutions"
-            normalized in setOf("scarlet and violet", "scarlatto e violetto", "scarlatto e violetto") -> "Scarlet & Violet"
-            normalized in setOf("sword and shield", "spada e scudo") -> "Sword & Shield"
-            normalized in setOf("sun and moon", "sole e luna") -> "Sun & Moon"
-            normalized == "xy" -> "XY"
-            normalized in setOf("black and white", "nero e bianco") -> "Black & White"
-            normalized == "heartgold and soulsilver" || normalized == "heartgold soulsilver" -> "HeartGold & SoulSilver"
+            // Mega Evolutions (current SV-era branded sub-line)
+            normalized.contains("mega evolution") ||
+                normalized.contains("mega evoluzion") -> "Mega Evolutions"
+            // Scarlet & Violet
+            normalized in setOf(
+                "scarlet and violet", "scarlet violet", "sv",
+                "scarlatto e violetto", "scarlatto violetto"
+            ) || normalized.startsWith("scarlet and violet") ||
+                normalized.startsWith("scarlatto e violetto") -> "Scarlet & Violet"
+            // Sword & Shield
+            normalized in setOf("sword and shield", "sword shield", "swsh", "spada e scudo") ||
+                normalized.startsWith("sword and shield") ||
+                normalized.startsWith("spada e scudo") -> "Sword & Shield"
+            // Sun & Moon
+            normalized in setOf("sun and moon", "sun moon", "sm", "sole e luna") ||
+                normalized.startsWith("sun and moon") ||
+                normalized.startsWith("sole e luna") -> "Sun & Moon"
+            // XY
+            normalized == "xy" || normalized.startsWith("xy ") -> "XY"
+            // Black & White
+            normalized in setOf("black and white", "black white", "bw", "nero e bianco") ||
+                normalized.startsWith("black and white") ||
+                normalized.startsWith("nero e bianco") -> "Black & White"
+            // HeartGold & SoulSilver
+            normalized == "heartgold and soulsilver" ||
+                normalized == "heartgold soulsilver" ||
+                normalized == "hgss" -> "HeartGold & SoulSilver"
+            // Platinum
             normalized == "platinum" || normalized == "platino" -> "Platinum"
-            normalized in setOf("diamond and pearl", "diamante e perla") -> "Diamond & Pearl"
-            normalized == "ex" -> "EX"
-            normalized in setOf("e card", "ecard") -> "e-Card"
-            normalized == "neo" -> "Neo"
-            normalized == "gym" -> "Gym"
-            normalized == "base" || normalized == "legendary collection" -> "Base"
-            normalized == "other" || normalized == "altro" -> "Other"
+            // Diamond & Pearl
+            normalized in setOf("diamond and pearl", "diamond pearl", "dp", "diamante e perla") ||
+                normalized.startsWith("diamond and pearl") ||
+                normalized.startsWith("diamante e perla") -> "Diamond & Pearl"
+            // EX (block, not Scarlet & Violet ex)
+            normalized == "ex" || normalized == "ex series" -> "EX"
+            // e-Card
+            normalized in setOf("e card", "ecard", "e card series") -> "e-Card"
+            // Neo
+            normalized == "neo" || normalized.startsWith("neo ") -> "Neo"
+            // Gym
+            normalized == "gym" ||
+                normalized == "gym heroes" ||
+                normalized == "gym challenge" -> "Gym"
+            // Base / Classic
+            normalized in setOf(
+                "base", "base set", "base set 2", "jungle", "fossil",
+                "team rocket", "legendary collection"
+            ) -> "Base"
+            // Explicit Other
+            normalized == "other" || normalized == "altro" -> OTHER_SERIES_KEY
             else -> OTHER_SERIES_KEY
         }
     }
@@ -552,8 +668,32 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         return logoUrl.isNotBlank() && !knownMissingLogoUrls.contains(logoUrl)
     }
 
+    /**
+     * Parses a release date string to a LocalDate, trying multiple formats in order:
+     *  1. ISO format: yyyy-MM-dd  (most common from PokeWallet)
+     *  2. Human long: "d MMMM, yyyy" (e.g. "15 January, 2026")
+     *  3. Human short: "d MMM yyyy" (e.g. "15 Jan 2026")
+     * Returns LocalDate.MIN when no format matches (treated as "no date → sort last").
+     */
     private fun parseReleaseDate(raw: String): LocalDate {
-        return runCatching { LocalDate.parse(raw) }.getOrDefault(LocalDate.MIN)
+        val source = raw.trim()
+        if (source.isBlank()) return LocalDate.MIN
+        // 1. ISO
+        runCatching { LocalDate.parse(source) }.getOrNull()?.let { return it }
+        // Clean ordinal suffixes (1st, 2nd, 3rd, 4th…) and underscores
+        val cleaned = source
+            .replace(Regex("""(\d+)(st|nd|rd|th)"""), "$1")
+            .replace('_', ' ')
+            .trim()
+        // 2. "d MMMM, yyyy"
+        runCatching {
+            LocalDate.parse(cleaned, DateTimeFormatter.ofPattern("d MMMM, uuuu", Locale.ENGLISH))
+        }.getOrNull()?.let { return it }
+        // 3. "d MMM yyyy"
+        runCatching {
+            LocalDate.parse(cleaned, DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH))
+        }.getOrNull()?.let { return it }
+        return LocalDate.MIN
     }
 
     private fun applyExactCardFilter(query: String, cards: List<TcgCard>): List<TcgCard> {
