@@ -76,7 +76,7 @@ class PokeTcgRepository {
     }
 
     companion object {
-        private const val SET_IMAGE_CACHE_VERSION = "setimg-v3"
+        private const val SET_IMAGE_CACHE_VERSION = "setimg-v4"
         private const val SETS_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000L   // 7 days
         private const val CARDS_CACHE_DURATION = 30 * 24 * 60 * 60 * 1000L  // 30 days
         private const val SEARCH_CACHE_DURATION = 60 * 60 * 1000L           // 1 hour
