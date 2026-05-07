@@ -3,6 +3,7 @@ package com.emabuia.pokevault.ui.collection
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -481,7 +482,28 @@ fun CardDetailScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 val cardMarketUrl = livePrices?.cardMarketUrl?.takeIf { it.isNotBlank() }
-                DetailSection(title = AppLocale.livePrices) {
+                val tcgPlayerUrl = livePrices?.tcgPlayerUrl?.takeIf { it.isNotBlank() }
+                DetailSection(
+                    title = AppLocale.livePrices,
+                    headerTrailing = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            CompactMarketplaceHeaderButton(
+                                label = "CardMarket",
+                                url = cardMarketUrl,
+                                onOpenUrl = { url ->
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                }
+                            )
+                            CompactMarketplaceHeaderButton(
+                                label = "TCGPlayer",
+                                url = tcgPlayerUrl,
+                                onOpenUrl = { url ->
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                }
+                            )
+                        }
+                    }
+                ) {
                     if (isLoadingLivePrices) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -495,36 +517,7 @@ fun CardDetailScreen(
                             Text(AppLocale.loadingPrices, color = TextMuted, fontSize = 12.sp)
                         }
                     } else if (livePrices != null && livePrices?.hasEurPrices == true) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text("\uD83C\uDDEA\uD83C\uDDFA", fontSize = 14.sp)
-                                Text(AppLocale.cardMarket, color = TextGray, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                            }
-                            if (cardMarketUrl != null) {
-                                IconButton(
-                                    onClick = {
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cardMarketUrl)))
-                                    },
-                                    modifier = Modifier.size(22.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                        contentDescription = AppLocale.openOnCardMarket,
-                                        tint = TextGray,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
 
                         val mainEurPrice = livePrices?.eurAvg ?: livePrices?.eurLow
                         Row(
@@ -558,6 +551,8 @@ fun CardDetailScreen(
 
                         if (livePrices?.hasSparklineData == true) {
                             Spacer(modifier = Modifier.height(8.dp))
+                            Text("Cardmarket History", color = TextGray, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
                             PriceSparkline(
                                 avg30 = livePrices?.eurAvg30 ?: 0.0,
                                 avg7 = livePrices?.eurAvg7 ?: 0.0,
@@ -707,12 +702,29 @@ fun VariantRow(
 }
 
 @Composable
-fun DetailSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+fun DetailSection(
+    title: String,
+    headerTrailing: @Composable RowScope.() -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DarkCard).padding(16.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = title, color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = title,
+                color = TextWhite,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            headerTrailing()
         }
         Spacer(modifier = Modifier.height(12.dp))
         content()
@@ -727,5 +739,103 @@ fun DetailRow(label: String, value: String) {
     ) {
         Text(text = label, color = TextMuted, fontSize = 14.sp)
         Text(text = value, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun MarketplaceLinkButton(
+    label: String,
+    url: String?,
+    modifier: Modifier = Modifier,
+    onOpenUrl: (String) -> Unit
+) {
+    val isEnabled = !url.isNullOrBlank()
+
+    Surface(
+        modifier = modifier,
+        onClick = {
+            if (isEnabled) {
+                onOpenUrl(url!!)
+            }
+        },
+        enabled = isEnabled,
+        shape = RoundedCornerShape(12.dp),
+        color = if (isEnabled) BlueCard.copy(alpha = 0.14f) else DarkSurface,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isEnabled) BlueCard.copy(alpha = 0.45f) else TextMuted.copy(alpha = 0.25f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = if (isEnabled) TextWhite else TextMuted,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 11.sp,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = if (isEnabled) "Open $label" else "$label unavailable",
+                tint = if (isEnabled) BlueCard else TextMuted.copy(alpha = 0.7f),
+                modifier = Modifier.size(12.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactMarketplaceHeaderButton(
+    label: String,
+    url: String?,
+    onOpenUrl: (String) -> Unit
+) {
+    val isEnabled = !url.isNullOrBlank()
+
+    Surface(
+        onClick = {
+            if (isEnabled) {
+                onOpenUrl(url!!)
+            }
+        },
+        enabled = isEnabled,
+        shape = RoundedCornerShape(10.dp),
+        color = if (isEnabled) BlueCard.copy(alpha = 0.14f) else DarkSurface,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isEnabled) BlueCard.copy(alpha = 0.45f) else TextMuted.copy(alpha = 0.25f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .widthIn(max = 86.dp)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = if (isEnabled) TextWhite else TextMuted,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = if (isEnabled) "Open $label" else "$label unavailable",
+                tint = if (isEnabled) BlueCard else TextMuted.copy(alpha = 0.7f),
+                modifier = Modifier.size(10.dp)
+            )
+        }
     }
 }

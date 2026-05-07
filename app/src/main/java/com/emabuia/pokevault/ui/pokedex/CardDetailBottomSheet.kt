@@ -3,6 +3,7 @@ package com.emabuia.pokevault.ui.pokedex
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,6 +36,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.remote.PokeWalletPriceData
@@ -475,12 +477,45 @@ fun CardDetailBottomSheet(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                     } else if (pokeWalletPrices != null && pokeWalletPrices.hasEurPrices) {
-                        Text(AppLocale.livePrices, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                        Spacer(modifier = Modifier.height(10.dp))
-
                         val cardMarketUrl = pokeWalletPrices.cardMarketUrl
                             ?.takeIf { it.isNotBlank() }
                             ?: card.cardmarket?.url?.takeIf { it.isNotBlank() }
+                        val tcgPlayerUrl = pokeWalletPrices.tcgPlayerUrl
+                            ?.takeIf { it.isNotBlank() }
+                            ?: card.tcgplayer?.url?.takeIf { it.isNotBlank() }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = AppLocale.livePrices,
+                                color = TextWhite,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                CompactMarketplaceHeaderButtonBottomSheet(
+                                    label = "CardMarket",
+                                    url = cardMarketUrl,
+                                    onOpenUrl = { url ->
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    }
+                                )
+                                CompactMarketplaceHeaderButtonBottomSheet(
+                                    label = "TCGPlayer",
+                                    url = tcgPlayerUrl,
+                                    onOpenUrl = { url ->
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    }
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Column(
                             modifier = Modifier
@@ -490,36 +525,6 @@ fun CardDetailBottomSheet(
                                 .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text("\uD83C\uDDEA\uD83C\uDDFA", fontSize = 14.sp)
-                                    Text(AppLocale.cardMarket, color = TextGray, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                                }
-
-                                if (cardMarketUrl != null) {
-                                    IconButton(
-                                        onClick = {
-                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cardMarketUrl)))
-                                        },
-                                        modifier = Modifier.size(22.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                            contentDescription = AppLocale.openOnCardMarket,
-                                            tint = TextGray,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                    }
-                                }
-                            }
-
                             val mainEurPrice = pokeWalletPrices.eurAvg ?: pokeWalletPrices.eurLow
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -552,6 +557,8 @@ fun CardDetailBottomSheet(
 
                             if (pokeWalletPrices.hasSparklineData) {
                                 Spacer(modifier = Modifier.height(4.dp))
+                                Text("Cardmarket History", color = TextGray, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
                                 PriceSparkline(
                                     avg30 = pokeWalletPrices.eurAvg30 ?: 0.0,
                                     avg7 = pokeWalletPrices.eurAvg7 ?: 0.0,
@@ -563,6 +570,7 @@ fun CardDetailBottomSheet(
                                 HorizontalDivider(color = TextMuted.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 2.dp))
                                 DetailInfoRow(AppLocale.minPrice, "\u20AC${String.format("%.2f", pokeWalletPrices.eurLow)}")
                             }
+
                         }
 
                         if (pokeWalletPrices.usdMarket != null) {
@@ -761,6 +769,104 @@ fun DetailInfoRow(label: String, value: String) {
     ) {
         Text(text = label, color = TextMuted, fontSize = 13.sp)
         Text(text = value, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun CompactMarketplaceHeaderButtonBottomSheet(
+    label: String,
+    url: String?,
+    onOpenUrl: (String) -> Unit
+) {
+    val isEnabled = !url.isNullOrBlank()
+
+    Surface(
+        onClick = {
+            if (isEnabled) {
+                onOpenUrl(url!!)
+            }
+        },
+        enabled = isEnabled,
+        shape = RoundedCornerShape(10.dp),
+        color = if (isEnabled) BlueCard.copy(alpha = 0.14f) else DarkSurface,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isEnabled) BlueCard.copy(alpha = 0.45f) else TextMuted.copy(alpha = 0.25f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .widthIn(max = 86.dp)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = if (isEnabled) TextWhite else TextMuted,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = if (isEnabled) "Open $label" else "$label unavailable",
+                tint = if (isEnabled) BlueCard else TextMuted.copy(alpha = 0.7f),
+                modifier = Modifier.size(10.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MarketplaceLinkButtonBottomSheet(
+    label: String,
+    url: String?,
+    modifier: Modifier = Modifier,
+    onOpenUrl: (String) -> Unit
+) {
+    val isEnabled = !url.isNullOrBlank()
+
+    Surface(
+        modifier = modifier,
+        onClick = {
+            if (isEnabled) {
+                onOpenUrl(url!!)
+            }
+        },
+        enabled = isEnabled,
+        shape = RoundedCornerShape(12.dp),
+        color = if (isEnabled) BlueCard.copy(alpha = 0.14f) else DarkSurface,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isEnabled) BlueCard.copy(alpha = 0.45f) else TextMuted.copy(alpha = 0.25f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = if (isEnabled) TextWhite else TextMuted,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 11.sp,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = if (isEnabled) "Open $label" else "$label unavailable",
+                tint = if (isEnabled) BlueCard else TextMuted.copy(alpha = 0.7f),
+                modifier = Modifier.size(12.dp)
+            )
+        }
     }
 }
 
