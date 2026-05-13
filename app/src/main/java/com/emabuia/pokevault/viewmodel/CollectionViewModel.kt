@@ -65,23 +65,26 @@ class CollectionViewModel : ViewModel() {
                     )
                 }
                 .collect { cards ->
-                    // Ricalcola statistiche localmente per reattività immediata
-                    val newStats = CollectionStats(
-                        totalCards = cards.sumOf { it.quantity },
-                        uniqueCards = cards.map { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }.toSet().size,
-                        totalValue = cards.sumOf { it.estimatedValue * it.quantity }
-                    )
-                    
-                    uiState = uiState.copy(
-                        cards = cards,
-                        filteredCards = applyFilters(cards),
-                        stats = newStats,
-                        isLoading = false
-                    )
+                    applyCardsSnapshot(cards)
 
                     hydrateMissingPrices(cards)
                 }
         }
+    }
+
+    private fun applyCardsSnapshot(cards: List<PokemonCard>) {
+        val newStats = CollectionStats(
+            totalCards = cards.sumOf { it.quantity },
+            uniqueCards = cards.map { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }.toSet().size,
+            totalValue = cards.sumOf { it.estimatedValue * it.quantity }
+        )
+
+        uiState = uiState.copy(
+            cards = cards,
+            filteredCards = applyFilters(cards),
+            stats = newStats,
+            isLoading = false
+        )
     }
 
     private fun hydrateMissingPrices(cards: List<PokemonCard>) {
@@ -183,17 +186,25 @@ class CollectionViewModel : ViewModel() {
 
     fun deleteMultipleGroups(groupKeys: Set<String>) {
         viewModelScope.launch {
-            val cardsToDelete = uiState.cards.filter { card ->
+            val originalCards = uiState.cards
+            val cardsToDelete = originalCards.filter { card ->
                 val key = card.apiCardId.ifBlank { "${card.name}_${card.set}_${card.cardNumber}" }
                 key in groupKeys
             }
-            val results = cardsToDelete.map { card ->
-                repository.deleteCard(card.id)
-            }
-            val deletedCount = results.count { it.isSuccess }
-            uiState = uiState.copy(
-                successMessage = "$deletedCount carte eliminate"
-            )
+            if (cardsToDelete.isEmpty()) return@launch
+
+            val deletedIds = cardsToDelete.map { it.id }.toSet()
+            val remainingCards = originalCards.filterNot { card -> card.id in deletedIds }
+            applyCardsSnapshot(remainingCards)
+
+            repository.deleteCards(cardsToDelete)
+                .onSuccess {
+                    uiState = uiState.copy(successMessage = "${cardsToDelete.size} carte eliminate")
+                }
+                .onFailure { error ->
+                    uiState = uiState.copy(errorMessage = "Errore: ${error.message}")
+                    applyCardsSnapshot(originalCards)
+                }
         }
     }
 

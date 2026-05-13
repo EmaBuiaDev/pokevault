@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.ui.collection
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.PlatformTextStyle
@@ -44,6 +46,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.imageLoader
+import coil.request.CachePolicy
+import coil.request.ImageRequest
+import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.home.components.SearchBar
 import com.emabuia.pokevault.ui.theme.*
@@ -54,10 +60,29 @@ import com.emabuia.pokevault.viewmodel.SortOrder
 import com.emabuia.pokevault.viewmodel.SupertypeFilter
 
 private fun safeImageUrl(url: String): String {
-    return url
+    val proxied = maybeProxyPokeWalletUrl(url)
+    return proxied
         .replace(" ", "%20")
         .replace("(", "%28")
         .replace(")", "%29")
+}
+
+private fun maybeProxyPokeWalletUrl(url: String): String {
+    if (url.isBlank()) return url
+    val proxyBase = BuildConfig.POKEWALLET_PROXY_URL.trim().trimEnd('/')
+    if (!BuildConfig.POKEWALLET_PROXY_ENABLED || proxyBase.isBlank()) return url
+
+    return try {
+        val parsed = Uri.parse(url)
+        val host = parsed.host?.lowercase().orEmpty()
+        if (host != "api.pokewallet.io") return url
+
+        val encodedPath = parsed.encodedPath?.trimStart('/').orEmpty()
+        val encodedQuery = parsed.encodedQuery?.let { "?$it" }.orEmpty()
+        "$proxyBase/$encodedPath$encodedQuery"
+    } catch (_: Exception) {
+        url
+    }
 }
 
 private enum class ExpansionSortOrder {
@@ -121,6 +146,7 @@ fun CollectionScreen(
 ) {
     val state = viewModel.uiState
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
 
     // Selection mode
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -180,6 +206,27 @@ fun CollectionScreen(
         state.selectedRarity != null ||
         state.supertypeFilter != SupertypeFilter.ALL ||
         state.sortOrder != SortOrder.NUMBER
+
+    // Prefetch immagini per rendere piu' fluida l'apertura delle espansioni.
+    LaunchedEffect(state.filteredCards, state.isGridView) {
+        val maxPrefetch = if (state.isGridView) 220 else 140
+        state.filteredCards
+            .asSequence()
+            .map { safeImageUrl(it.imageUrl) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(maxPrefetch)
+            .forEach { url ->
+                context.imageLoader.enqueue(
+                    ImageRequest.Builder(context)
+                        .data(url)
+                        .memoryCachePolicy(CachePolicy.ENABLED)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .networkCachePolicy(CachePolicy.ENABLED)
+                        .build()
+                )
+            }
+    }
 
     // Gestione espansioni aperte (inizialmente vuoto = tutte chiuse)
     var expandedExpansions by remember { mutableStateOf(setOf<String>()) }

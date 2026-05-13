@@ -219,19 +219,15 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun addMultipleCards(cards: List<TcgCard>, preferredVariant: String) {
         viewModelScope.launch {
-            var addedCount = 0
-            val addedIds = mutableSetOf<String>()
-            cards.forEach { tcgCard ->
+            val preparedCards = cards.map { tcgCard ->
                 val availableVariants = CardOptions.getVariantsForCard(
                     tcgCard.tcgplayer?.prices?.keys ?: emptySet(), tcgCard.rarity
                 )
                 val actualVariant = if (preferredVariant in availableVariants) preferredVariant
                     else availableVariants.firstOrNull() ?: "Holo"
-
-                val variantKey = CardOptions.getVariantApiKey(actualVariant)
                 val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero()
 
-                val card = PokemonCard(
+                PokemonCard(
                     name = tcgCard.name, imageUrl = tcgCard.images.small,
                     set = tcgCard.set?.name ?: uiState.set?.name ?: "",
                     rarity = tcgCard.rarity ?: "Unknown",
@@ -243,15 +239,24 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                     apiCardId = tcgCard.id, cardNumber = tcgCard.number,
                     variant = actualVariant, quantity = 1, condition = "Near Mint", language = "🇮🇹 Italiano"
                 )
-                firestoreRepository.addCard(card).onSuccess {
-                    addedCount++
-                    addedIds += tcgCard.id
-                }
             }
-            uiState = uiState.copy(
-                ownedCardIds = uiState.ownedCardIds + addedIds,
-                successMessage = if (AppLocale.isItalian) "$addedCount carte aggiunte!" else "$addedCount cards added!"
-            )
+
+            val addedIds = preparedCards.map { it.apiCardId }.toSet()
+            val originalOwnedIds = uiState.ownedCardIds
+            uiState = uiState.copy(ownedCardIds = originalOwnedIds + addedIds)
+
+            firestoreRepository.addCards(preparedCards)
+                .onSuccess {
+                    uiState = uiState.copy(
+                        successMessage = if (AppLocale.isItalian) "${preparedCards.size} carte aggiunte!" else "${preparedCards.size} cards added!"
+                    )
+                }
+                .onFailure {
+                    uiState = uiState.copy(
+                        ownedCardIds = originalOwnedIds,
+                        errorMessage = "Errore"
+                    )
+                }
         }
     }
 

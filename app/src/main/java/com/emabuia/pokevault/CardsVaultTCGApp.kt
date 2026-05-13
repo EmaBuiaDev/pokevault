@@ -85,7 +85,7 @@ class PokeVaultApp : Application(), ImageLoaderFactory {
             .memoryCachePolicy(CachePolicy.ENABLED)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.25)
+                    .maxSizePercent(0.40)
                     .build()
             }
             .diskCache {

@@ -396,12 +396,157 @@ class FirestoreRepository {
             } catch (_: Exception) { null }
 
             if (snapshot != null) {
-                for (doc in snapshot.documents) {
-                    deleteCard(doc.id)
-                }
+                deleteCards(snapshot.documents.mapNotNull { doc ->
+                    doc.toObject(PokemonCard::class.java)?.copy(id = doc.id)
+                })
             }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun addCards(cards: List<PokemonCard>): Result<List<String>> {
+        return try {
+            if (cards.isEmpty()) return Result.success(emptyList())
+
+            val batch = firestore.batch()
+            val addedIds = mutableListOf<String>()
+            var totalCardsDelta = 0L
+            var totalValueDelta = 0.0
+
+            for (card in cards) {
+                var effectiveEstimatedValue = card.estimatedValue
+
+                val data = hashMapOf<String, Any?>(
+                    "name" to card.name,
+                    "imageUrl" to card.imageUrl,
+                    "set" to card.set,
+                    "rarity" to card.rarity,
+                    "type" to card.type,
+                    "hp" to card.hp,
+                    "supertype" to card.supertype,
+                    "subtypes" to card.subtypes,
+                    "isGraded" to card.isGraded,
+                    "grade" to card.grade,
+                    "gradingCompany" to card.gradingCompany,
+                    "estimatedValue" to card.estimatedValue,
+                    "quantity" to card.quantity,
+                    "condition" to card.condition,
+                    "notes" to card.notes,
+                    "apiCardId" to card.apiCardId,
+                    "cardNumber" to card.cardNumber,
+                    "variant" to card.variant,
+                    "language" to card.language,
+                    "addedAt" to com.google.firebase.Timestamp.now()
+                )
+
+                if (card.apiCardId.isNotBlank()) {
+                    val existing: QuerySnapshot? = try {
+                        cardsCollection
+                            .whereEqualTo("apiCardId", card.apiCardId)
+                            .whereEqualTo("variant", card.variant)
+                            .get(Source.CACHE).await()
+                    } catch (_: Exception) {
+                        null
+                    }
+
+                    if (existing != null && existing.documents.isNotEmpty()) {
+                        val doc = existing.documents.first()
+                        val docRef = doc.reference
+                        val currentQty = doc.getLong("quantity")?.toInt() ?: 1
+                        val currentEstimatedValue = doc.getDouble("estimatedValue") ?: 0.0
+                        val currentSupertype = normalizeCategory(doc.getString("supertype").orEmpty())
+                        val incomingSupertype = normalizeCategory(card.supertype)
+                        val currentType = doc.getString("type").orEmpty()
+                        val currentHp = doc.getLong("hp")?.toInt() ?: 0
+                        val currentSubtypes = (doc.get("subtypes") as? List<*>)
+
+                        if (effectiveEstimatedValue <= 0.0) {
+                            effectiveEstimatedValue = currentEstimatedValue
+                        }
+
+                        val updates = mutableMapOf<String, Any>(
+                            "quantity" to (currentQty + card.quantity),
+                            "estimatedValue" to effectiveEstimatedValue
+                        )
+
+                        if (incomingSupertype != null &&
+                            (currentSupertype == null ||
+                                (currentSupertype == "Pokémon" && incomingSupertype != "Pokémon"))
+                        ) {
+                            updates["supertype"] = card.supertype
+                        }
+                        if ((currentSubtypes == null || currentSubtypes.isEmpty()) && card.subtypes.isNotEmpty()) {
+                            updates["subtypes"] = card.subtypes
+                        }
+                        if ((currentType.isBlank() || currentType.equals("Colorless", ignoreCase = true)) &&
+                            card.type.isNotBlank() &&
+                            !card.type.equals("Colorless", ignoreCase = true)
+                        ) {
+                            updates["type"] = card.type
+                        }
+                        if (currentHp <= 0 && card.hp > 0) {
+                            updates["hp"] = card.hp
+                        }
+
+                        batch.update(docRef, updates)
+                        addedIds += doc.id
+                    } else {
+                        val newDocRef = cardsCollection.document()
+                        batch.set(newDocRef, data)
+                        addedIds += newDocRef.id
+                    }
+                } else {
+                    val newDocRef = cardsCollection.document()
+                    batch.set(newDocRef, data)
+                    addedIds += newDocRef.id
+                }
+
+                totalCardsDelta += card.quantity.toLong()
+                totalValueDelta += effectiveEstimatedValue * card.quantity
+            }
+
+            batch.update(
+                userDoc,
+                mapOf(
+                    "totalCards" to FieldValue.increment(totalCardsDelta),
+                    "totalValue" to FieldValue.increment(totalValueDelta)
+                )
+            )
+
+            batch.commit().await()
+            Result.success(addedIds)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteCards(cards: List<PokemonCard>): Result<Int> {
+        return try {
+            if (cards.isEmpty()) return Result.success(0)
+
+            val batch = firestore.batch()
+            var totalCardsDelta = 0L
+            var totalValueDelta = 0.0
+
+            cards.forEach { card ->
+                batch.delete(cardsCollection.document(card.id))
+                totalCardsDelta += card.quantity.toLong()
+                totalValueDelta += card.estimatedValue * card.quantity
+            }
+
+            batch.update(
+                userDoc,
+                mapOf(
+                    "totalCards" to FieldValue.increment(-totalCardsDelta),
+                    "totalValue" to FieldValue.increment(-totalValueDelta)
+                )
+            )
+
+            batch.commit().await()
+            Result.success(cards.size)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun getCard(cardId: String): Result<PokemonCard> {
