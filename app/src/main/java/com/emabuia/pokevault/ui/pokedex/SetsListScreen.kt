@@ -39,9 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
@@ -166,19 +167,6 @@ fun SetsListScreen(
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val lifecycleOwner = LocalLifecycleOwner.current
-
-    LaunchedEffect(
-        isSearchingCards,
-        state.selectedLanguageMacro,
-        state.selectedSeries,
-        state.searchQuery,
-        state.filteredSets.size,
-        state.filteredSets.firstOrNull()?.id
-    ) {
-        if (!isSearchingCards && state.filteredSets.isNotEmpty()) {
-            setsGridState.scrollToItem(0)
-        }
-    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -494,8 +482,10 @@ fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: ()
 // ── Set Card con logo, nome e data formattata ──
 @Composable
 fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoLoadError: (String) -> Unit = {}) {
+    val context = LocalContext.current
     val logoUrl = set.images.logo.trim()
     val shouldLoadLogo = logoUrl.isNotBlank()
+    var showFallback by remember(logoUrl) { mutableStateOf(!shouldLoadLogo) }
 
     Box(
         modifier = Modifier
@@ -518,28 +508,24 @@ fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoLoadError: (String) -> Unit 
                     .height(68.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (shouldLoadLogo) {
-                    SubcomposeAsyncImage(
-                        model = logoUrl,
+                if (showFallback) {
+                    MissingSetLogoFallback(setName = set.name)
+                } else if (shouldLoadLogo) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(logoUrl)
+                            .crossfade(false)
+                            .build(),
                         contentDescription = set.name,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(58.dp),
-                        loading = {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = BlueCard,
-                                strokeWidth = 2.dp
-                            )
-                        },
-                        error = {
+                        onError = {
+                            showFallback = true
                             onLogoLoadError(logoUrl)
-                            MissingSetLogoFallback(setName = set.name)
                         }
                     )
-                } else {
-                    MissingSetLogoFallback(setName = set.name)
                 }
             }
 

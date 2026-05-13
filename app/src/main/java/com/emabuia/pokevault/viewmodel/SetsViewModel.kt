@@ -322,8 +322,6 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         logoCachePrefs.edit()
             .putStringSet(LOGO_CACHE_MISSING_URLS_KEY, knownMissingLogoUrls.toSet())
             .apply()
-
-        applyFilters()
     }
 
     private fun applyFilters() {
