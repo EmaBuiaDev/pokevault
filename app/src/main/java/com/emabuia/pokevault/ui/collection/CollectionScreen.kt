@@ -373,6 +373,9 @@ fun CollectionScreen(
                         ) {
                             expansionSections.forEachIndexed { sectionIndex, (expansionName, cardsInExpansion) ->
                                 val totalQuantity = cardsInExpansion.sumOf { (_, group) -> group.sumOf { it.quantity } }
+                                val totalExpansionValue = cardsInExpansion.sumOf { (_, group) ->
+                                    group.sumOf { card -> card.estimatedValue * card.quantity }
+                                }
                                 val isExpanded = expansionName in expandedExpansions
                                 val cardSpacing = if (state.gridColumns > 4) 6.dp else 10.dp
 
@@ -388,6 +391,7 @@ fun CollectionScreen(
                                     ExpansionAccordionHeader(
                                         expansionName = AppLocale.displaySetName(expansionName),
                                         totalCards = totalQuantity,
+                                        totalValue = totalExpansionValue,
                                         uniqueCards = cardsInExpansion.size,
                                         isExpanded = isExpanded,
                                         onToggle = {
@@ -992,6 +996,7 @@ fun RemovableFilterChip(label: String, onRemove: () -> Unit) {
 private fun ExpansionAccordionHeader(
     expansionName: String,
     totalCards: Int,
+    totalValue: Double,
     uniqueCards: Int,
     isExpanded: Boolean,
     onToggle: () -> Unit
@@ -1027,8 +1032,9 @@ private fun ExpansionAccordionHeader(
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
                         text = expansionName,
@@ -1037,20 +1043,32 @@ private fun ExpansionAccordionHeader(
                         fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        modifier = Modifier.weight(1f)
                     )
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = BlueCard.copy(alpha = 0.2f),
-                        border = BorderStroke(1.dp, BlueCard.copy(alpha = 0.3f))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "x$totalCards",
-                            color = BlueCard,
+                            text = "\u20AC${"%.2f".format(totalValue)}",
+                            color = GreenCard,
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
                         )
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = BlueCard.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, BlueCard.copy(alpha = 0.3f))
+                        ) {
+                            Text(
+                                text = "x$totalCards",
+                                color = BlueCard,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
                 Text(
