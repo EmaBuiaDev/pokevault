@@ -163,10 +163,17 @@ fun SetsListScreen(
     val state = viewModel.uiState
     var isSearchingCards by remember { mutableStateOf(false) }
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
+    var pendingTopReset by remember { mutableIntStateOf(0) }
     val setsGridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(pendingTopReset, state.selectedLanguageMacro, state.selectedSeries) {
+        if (pendingTopReset > 0 && !isSearchingCards) {
+            setsGridState.scrollToItem(0)
+        }
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -329,7 +336,7 @@ fun SetsListScreen(
                         count = count,
                         isSelected = state.selectedLanguageMacro == macro,
                         onClick = {
-                            scope.launch { setsGridState.scrollToItem(0) }
+                            pendingTopReset++
                             viewModel.filterByLanguageMacro(macro)
                         }
                     )
@@ -350,7 +357,7 @@ fun SetsListScreen(
                         count = languageCount,
                         isSelected = state.selectedSeries == null,
                         onClick = {
-                            scope.launch { setsGridState.scrollToItem(0) }
+                            pendingTopReset++
                             viewModel.filterBySeries(null)
                         }
                     )
@@ -362,7 +369,7 @@ fun SetsListScreen(
                         count = count,
                         isSelected = state.selectedSeries == series,
                         onClick = {
-                            scope.launch { setsGridState.scrollToItem(0) }
+                            pendingTopReset++
                             viewModel.filterBySeries(series)
                         }
                     )
