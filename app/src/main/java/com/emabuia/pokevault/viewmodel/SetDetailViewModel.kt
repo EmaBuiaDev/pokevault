@@ -46,8 +46,7 @@ data class SetDetailUiState(
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val selectedCardPokeWalletPrices: PokeWalletPriceData? = null,
-    val isLoadingPokeWalletPrices: Boolean = false,
-    val debugCounters: String? = null
+    val isLoadingPokeWalletPrices: Boolean = false
 ) {
     val ownedCount: Int get() = cards.count { it.id in ownedCardIds }
     val totalCount: Int get() = cards.size
@@ -69,6 +68,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         private set
 
     private var currentSetId: String? = null
+    private var currentSourceMacro: String? = null
     private var translationJob: Job? = null
     private var lastPricedCardId: String? = null
     private val requestedCardPriceIds = mutableSetOf<String>()
@@ -84,15 +84,33 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         TranslationService.loadCache(application.applicationContext)
     }
 
-    fun loadSet(setId: String) {
-        if (currentSetId == setId) return
+    fun loadSet(setId: String, sourceMacro: String? = null) {
+        val normalizedMacro = sourceMacro?.trim()?.uppercase()
+        if (currentSetId == setId && currentSourceMacro == normalizedMacro) return
         currentSetId = setId
+        currentSourceMacro = normalizedMacro
 
         val context = getApplication<Application>().applicationContext
-        uiState = uiState.copy(isLoading = true, isLoadingCards = true)
+        uiState = uiState.copy(
+            isLoading = true,
+            isLoadingCards = true,
+            searchQuery = "",
+            translatedQuery = "",
+            showOnlyMissing = false,
+            showOnlyOwned = false,
+            selectedType = null,
+            selectedSupertype = null,
+            errorMessage = null
+        )
 
         viewModelScope.launch {
-            val cardsDeferred = async { tcgRepository.getCardsBySet(setId, context = context) }
+            val cardsDeferred = async {
+                tcgRepository.getCardsBySet(
+                    setId = setId,
+                    context = context,
+                    preferredImageMacro = normalizedMacro
+                )
+            }
             val setDeferred = async { tcgRepository.getSetInfo(setId) }
 
             val cardsResult = cardsDeferred.await()
@@ -114,7 +132,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                         isLoadingCards = false
                     )
                     observeOwnedCards(resolvedSet.name)
-                    refreshDebugCounters()
                 }
                 .onFailure { error ->
                     uiState = uiState.copy(isLoading = false, isLoadingCards = false, errorMessage = "Errore: ${error.message}")
@@ -281,11 +298,9 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             pokeWalletRepository.getCardPrices(card.name, setCode, cardNumber)
                 .onSuccess { prices ->
                     uiState = uiState.copy(selectedCardPokeWalletPrices = prices, isLoadingPokeWalletPrices = false)
-                    refreshDebugCounters()
                 }
                 .onFailure {
                     uiState = uiState.copy(isLoadingPokeWalletPrices = false)
-                    refreshDebugCounters()
                 }
         }
     }
@@ -333,17 +348,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 uiState = uiState.copy(cards = merged)
             }
-            refreshDebugCounters()
         }
-    }
-
-    private fun refreshDebugCounters() {
-        if (!BuildConfig.DEBUG) return
-        val tcg = tcgRepository.getDiagnostics()
-        val prices = pokeWalletRepository.getDiagnostics()
-        uiState = uiState.copy(
-            debugCounters = "TCG h:${tcg.hits} m:${tcg.misses} n:${tcg.networkCalls} | PRICE h:${prices.hits} m:${prices.misses} n:${prices.networkCalls}"
-        )
     }
 
     private suspend fun enrichMissingCardPrices(setId: String, cards: List<TcgCard>) {

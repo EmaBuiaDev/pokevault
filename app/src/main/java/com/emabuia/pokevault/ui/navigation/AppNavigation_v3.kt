@@ -86,7 +86,7 @@ object Routes {
     const val EDIT_CARD = "edit_card/{cardId}"
     const val CARD_DETAIL = "card_detail/{cardId}"
     const val POKEDEX = "pokedex"
-    const val SET_DETAIL = "set_detail/{setId}/{setName}"
+    const val SET_DETAIL = "set_detail/{setId}/{setName}?macro={macro}"
     const val STATS = "stats"
     const val SCANNER = "scanner"
     const val COMPETITIVE = "competitive"
@@ -119,9 +119,10 @@ object Routes {
     fun tournamentDetail(tournamentId: String) = "tournament_detail/$tournamentId"
     fun addMatch(tournamentId: String, matchId: String? = null) = if (matchId != null) "add_match/$tournamentId?matchId=$matchId" else "add_match/$tournamentId"
     fun wishlistDetail(wishlistId: String) = "wishlist_detail/$wishlistId"
-    fun setDetail(setId: String, setName: String): String {
+    fun setDetail(setId: String, setName: String, macro: String? = null): String {
         val encoded = URLEncoder.encode(setName, "UTF-8")
-        return "set_detail/$setId/$encoded"
+        val encodedMacro = URLEncoder.encode((macro ?: "").trim(), "UTF-8")
+        return "set_detail/$setId/$encoded?macro=$encodedMacro"
     }
 }
 
@@ -389,9 +390,9 @@ fun AppNavigation(
         composable(Routes.POKEDEX) {
             SetsListScreen(
                 onBack = { navController.popBackStack() },
-                onSetClick = { setId ->
+                onSetClick = { setId, macro ->
                     // Naviga al dettaglio set
-                    navController.navigate(Routes.setDetail(setId, setId))
+                    navController.navigate(Routes.setDetail(setId, setId, macro))
                 }
             )
         }
@@ -401,16 +402,22 @@ fun AppNavigation(
             route = Routes.SET_DETAIL,
             arguments = listOf(
                 navArgument("setId") { type = NavType.StringType },
-                navArgument("setName") { type = NavType.StringType }
+                navArgument("setName") { type = NavType.StringType },
+                navArgument("macro") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
             )
         ) { backStackEntry ->
             val setId = backStackEntry.arguments?.getString("setId") ?: ""
             val setName = URLDecoder.decode(
                 backStackEntry.arguments?.getString("setName") ?: setId, "UTF-8"
             )
+            val macroArg = backStackEntry.arguments?.getString("macro").orEmpty().trim().ifBlank { null }
             SetDetailScreen(
                 setId = setId,
                 setName = setName,
+                sourceMacro = macroArg,
                 onBack = { navController.popBackStack() },
                 onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
             )

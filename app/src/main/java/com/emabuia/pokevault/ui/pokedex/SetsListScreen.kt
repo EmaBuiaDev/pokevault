@@ -157,7 +157,7 @@ fun PokeballLoadingAnimation(
 @Composable
 fun SetsListScreen(
     onBack: () -> Unit,
-    onSetClick: (String) -> Unit,
+    onSetClick: (String, String?) -> Unit,
     viewModel: SetsViewModel = viewModel()
 ) {
     val state = viewModel.uiState
@@ -321,9 +321,9 @@ fun SetsListScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isSearchingCards) {
-            CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery, onCardClick = { card -> selectedCard = card }) { setId -> onSetClick(setId) }
+            CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery, onCardClick = { card -> selectedCard = card }) { setId -> onSetClick(setId, state.selectedLanguageMacro) }
         } else {
-            val languageMacros = listOf("ENG", "JAP", "CHN")
+            val languageMacros = listOf("ITA", "ENG", "JAP", "CHN")
 
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
@@ -418,7 +418,7 @@ fun SetsListScreen(
                     items(items = displayedSets, key = { it.id }) { set ->
                         SetCard(
                             set = set,
-                            onClick = { onSetClick(set.id) },
+                            onClick = { onSetClick(set.id, state.selectedLanguageMacro) },
                             onLogoLoadError = { viewModel.onSetLogoLoadFailed(it) }
                         )
                     }

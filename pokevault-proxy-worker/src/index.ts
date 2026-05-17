@@ -9,10 +9,13 @@
 
 interface Env {
   CACHE: KVNamespace;
+  IMAGES_BUCKET?: R2Bucket;
   POKEWALLET_API_KEY: string;
   ORIGIN_API: string;
   CACHE_TTL_SECONDS: string;
   BACKFILL_BATCH_SIZE?: string;
+  IT_IMAGE_PREFIX?: string;
+  IT_CATALOG_KEY?: string;
 }
 
 interface CachedResponse {
@@ -74,7 +77,20 @@ interface BackfillCursor {
   updatedAt: number;
 }
 
+type ItalianAssetRequest =
+  | {
+    kind: 'card';
+    setCode: string;
+    cardNumber: string;
+    size: string;
+  }
+  | {
+    kind: 'setLogo';
+    setCode: string;
+  };
+
 const TTL_24_HOURS = 24 * 60 * 60;
+const TTL_5_MINUTES = 5 * 60;
 const TTL_90_DAYS = 90 * 24 * 60 * 60;
 const REAL_TOTALS_INDEX_KEY = 'pokewallet:real-totals:index:v1';
 const REAL_TOTALS_CURSOR_KEY = 'pokewallet:real-totals:cursor:v1';
@@ -126,6 +142,10 @@ function normalizeSearchParams(searchParams: URLSearchParams): string {
 }
 
 function getBaseTtlSeconds(pathname: string, fallbackTtl: number): number {
+  if (pathname === '/ita/catalog.json') {
+    return TTL_5_MINUTES;
+  }
+
   if (pathname === '/search') {
     return TTL_24_HOURS;
   }
@@ -147,6 +167,9 @@ function getBaseTtlSeconds(pathname: string, fallbackTtl: number): number {
 
 function getTtlSeconds(pathname: string, status: number, fallbackTtl: number): number {
   if (status === 404 && (pathname.startsWith('/images/') || pathname.endsWith('/image'))) {
+    if (pathname.startsWith('/images/it/')) {
+      return TTL_5_MINUTES;
+    }
     return TTL_24_HOURS;
   }
   return getBaseTtlSeconds(pathname, fallbackTtl);
@@ -178,7 +201,7 @@ function normalizeLanguageMacro(raw: string | null | undefined): string | null {
 
 function shouldBackfillSet(setSummary: PokeWalletSetSummary): boolean {
   const macro = normalizeLanguageMacro(setSummary.language);
-  return !!setSummary.set_code && !!setSummary.set_id && ['ENG', 'JAP', 'CHN'].includes(macro ?? '');
+  return !!setSummary.set_code && !!setSummary.set_id && ['ENG', 'JAP', 'CHN', 'IT'].includes(macro ?? '');
 }
 
 function resolveRealTotal(index: RealTotalsIndex, setSummary: PokeWalletSetSummary | undefined): number | null {
@@ -214,6 +237,305 @@ function isActualCard(card: PokeWalletCardPayload): boolean {
   }
   const name = info.name?.toLowerCase() ?? '';
   return !PRODUCT_PATTERNS.some((pattern) => pattern.test(name));
+}
+
+function normalizeR2Prefix(rawPrefix: string | undefined): string {
+  const prefix = (rawPrefix || 'it').trim().replace(/^\/+|\/+$/g, '');
+  return prefix || 'it';
+}
+
+function parseItalianCatalogRequest(urlObj: URL): boolean {
+  return urlObj.pathname === '/ita/catalog.json';
+}
+
+function buildItalianCatalogKeyCandidates(prefix: string, envKey: string | undefined): string[] {
+  const configured = (envKey || '').trim().replace(/^\/+/, '');
+  const defaultCandidates = [
+    `${prefix}/catalog/catalog.json`,
+    `${prefix}/catalog/cards.catalog.json`,
+    `${prefix}/catalog/cards.cleaned.json`,
+    `${prefix}/cards.cleaned.json`,
+  ];
+
+  if (!configured) {
+    return defaultCandidates;
+  }
+
+  return [configured, ...defaultCandidates.filter((candidate) => candidate !== configured)];
+}
+
+function parseItalianAssetRequest(urlObj: URL): ItalianAssetRequest | null {
+  const cardMatch = urlObj.pathname.match(/^\/images\/it\/([^/]+)\/([^/]+)$/i);
+  if (cardMatch) {
+    const setCode = decodeURIComponent(cardMatch[1]).trim().toUpperCase();
+    const cardNumber = decodeURIComponent(cardMatch[2]).trim();
+    if (!setCode || !cardNumber) {
+      return null;
+    }
+    return {
+      kind: 'card',
+      setCode,
+      cardNumber,
+      size: (urlObj.searchParams.get('size') || '').trim().toLowerCase(),
+    };
+  }
+
+  return null;
+}
+
+function normalizeCardNumber(raw: string): string {
+  const digitsOnly = raw.replace(/[^0-9]/g, '');
+  if (digitsOnly) {
+    return digitsOnly.replace(/^0+/, '') || '0';
+  }
+  return raw.trim().replace(/^0+/, '') || '0';
+}
+
+function buildItalianCardKeyCandidates(prefix: string, setCode: string, cardNumber: string, size: string): string[] {
+  const normalized = normalizeCardNumber(cardNumber);
+  const padded = normalized.padStart(3, '0');
+  const upperSetCode = setCode.toUpperCase();
+  const lowerSetCode = setCode.toLowerCase();
+  const setCodeTokens = [upperSetCode, lowerSetCode];
+  const basePaths = [
+    `${prefix}/${upperSetCode}`,
+    `${prefix}/${lowerSetCode}`,
+  ];
+  const candidates = new Set<string>();
+  const imageExtensions = ['png', 'webp', 'jpg', 'jpeg'];
+
+  // Primary layout for all expansions: {setCode}/{number}.png
+  for (const basePath of basePaths) {
+    for (const ext of imageExtensions) {
+      candidates.add(`${basePath}/${normalized}.${ext}`);
+      candidates.add(`${basePath}/${padded}.${ext}`);
+    }
+  }
+
+  if (size === 'low' || size === 'high') {
+    for (const basePath of basePaths) {
+      for (const setToken of setCodeTokens) {
+        for (const ext of imageExtensions) {
+          candidates.add(`${basePath}/${setToken}_IT_${normalized}_${size}.${ext}`);
+          candidates.add(`${basePath}/${setToken}_IT_${normalized}-${size}.${ext}`);
+          candidates.add(`${basePath}/${setToken}_IT_${padded}_${size}.${ext}`);
+          candidates.add(`${basePath}/${setToken}_IT_${padded}-${size}.${ext}`);
+        }
+      }
+    }
+  }
+
+  // Legacy layouts kept as fallback for already-uploaded historical assets.
+  for (const basePath of basePaths) {
+    for (const setToken of setCodeTokens) {
+      for (const ext of imageExtensions) {
+        candidates.add(`${basePath}/${setToken}_IT_${normalized}.${ext}`);
+        candidates.add(`${basePath}/${setToken}_IT_${padded}.${ext}`);
+      }
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+function buildItalianSetLogoCandidates(prefix: string, setCode: string): string[] {
+  const basePath = `${prefix}/${setCode}`;
+  return [
+    `${basePath}/set-logo.png`,
+    `${basePath}/set_logo.png`,
+    `${basePath}/logo.png`,
+    `${basePath}/cover.png`,
+    `${basePath}/${setCode}_IT_logo.png`,
+  ];
+}
+
+function guessContentTypeFromKey(key: string): string {
+  if (key.endsWith('.png')) return 'image/png';
+  if (key.endsWith('.webp')) return 'image/webp';
+  if (key.endsWith('.jpg') || key.endsWith('.jpeg')) return 'image/jpeg';
+  return 'application/octet-stream';
+}
+
+async function getFirstExistingR2Object(
+  bucket: R2Bucket,
+  keys: string[]
+): Promise<{ key: string; object: R2ObjectBody } | null> {
+  for (const key of keys) {
+    const object = await bucket.get(key);
+    if (object) {
+      return { key, object };
+    }
+  }
+  return null;
+}
+
+async function handleItalianR2AssetRequest(
+  requestUrl: URL,
+  requestInfo: ItalianAssetRequest,
+  env: Env,
+  cache: KVNamespace,
+  fallbackTtlSeconds: number,
+  ctx: ExecutionContext
+): Promise<Response | null> {
+  if (!env.IMAGES_BUCKET) {
+    return null;
+  }
+
+  const cacheKey = generateCacheKey(requestUrl.toString());
+  const cachedData = await cache.get(cacheKey, 'json') as CachedResponse | null;
+  if (cachedData && isCacheValid(cachedData)) {
+    return createResponseFromCache(cachedData, true, requestUrl.pathname, cache);
+  }
+
+  const prefix = normalizeR2Prefix(env.IT_IMAGE_PREFIX);
+  const keys = requestInfo.kind === 'card'
+    ? buildItalianCardKeyCandidates(prefix, requestInfo.setCode, requestInfo.cardNumber, requestInfo.size)
+    : buildItalianSetLogoCandidates(prefix, requestInfo.setCode);
+
+  const hit = await getFirstExistingR2Object(env.IMAGES_BUCKET, keys);
+
+  // For set logos, if nothing is in R2 fall through to the PokeWallet proxy so
+  // the upstream API can serve the image (e.g. sets that don't have a local ITA logo).
+  if (!hit && requestInfo.kind === 'setLogo') {
+    return null;
+  }
+
+  let status = 404;
+  let statusText = 'Not Found';
+  let headersToCache: Record<string, string> = {
+    'content-type': 'text/plain; charset=utf-8',
+  };
+  let responseBodyText = 'Asset not found';
+  let responseBodyBinary: Uint8Array | null = null;
+  let bodyEncoding: 'text' | 'base64' = 'text';
+
+  if (hit) {
+    const bytes = new Uint8Array(await hit.object.arrayBuffer());
+    const keyContentType = hit.object.httpMetadata?.contentType || guessContentTypeFromKey(hit.key);
+
+    status = 200;
+    statusText = 'OK';
+    headersToCache = {
+      'content-type': keyContentType,
+      'cache-control': `public, max-age=${TTL_90_DAYS}`,
+    };
+    if (hit.object.httpEtag) {
+      headersToCache.etag = hit.object.httpEtag;
+    }
+    responseBodyBinary = bytes;
+    bodyEncoding = 'base64';
+  }
+
+  if (shouldCacheStatus(status)) {
+    const effectiveTtlSeconds = getTtlSeconds(requestUrl.pathname, status, fallbackTtlSeconds);
+    const cachedResponse: CachedResponse = {
+      status,
+      statusText,
+      headers: headersToCache,
+      body: bodyEncoding === 'base64'
+        ? Buffer.from(responseBodyBinary || new Uint8Array()).toString('base64')
+        : responseBodyText,
+      bodyEncoding,
+      cachedAt: Date.now(),
+      ttl: effectiveTtlSeconds,
+    };
+
+    ctx.waitUntil(
+      cache.put(cacheKey, JSON.stringify(cachedResponse), {
+        expirationTtl: effectiveTtlSeconds,
+      }).catch((err) => {
+        console.error(`Failed to cache ${cacheKey}:`, err);
+      })
+    );
+  }
+
+  const responseHeaders = new Headers(headersToCache);
+  responseHeaders.set('X-Cache-Status', 'MISS');
+  responseHeaders.set('X-Cached-At', new Date().toISOString());
+  responseHeaders.set('X-Cache-TTL', getTtlSeconds(requestUrl.pathname, status, fallbackTtlSeconds).toString());
+  responseHeaders.delete('content-length');
+
+  return new Response(responseBodyBinary ?? responseBodyText, {
+    status,
+    statusText,
+    headers: responseHeaders,
+  });
+}
+
+async function handleItalianCatalogRequest(
+  requestUrl: URL,
+  env: Env,
+  cache: KVNamespace,
+  fallbackTtlSeconds: number,
+  ctx: ExecutionContext
+): Promise<Response | null> {
+  if (!env.IMAGES_BUCKET) {
+    return null;
+  }
+
+  const cacheKey = generateCacheKey(requestUrl.toString());
+  const cachedData = await cache.get(cacheKey, 'json') as CachedResponse | null;
+  if (cachedData && isCacheValid(cachedData)) {
+    return createResponseFromCache(cachedData, true, requestUrl.pathname, cache);
+  }
+
+  const prefix = normalizeR2Prefix(env.IT_IMAGE_PREFIX);
+  const keyCandidates = buildItalianCatalogKeyCandidates(prefix, env.IT_CATALOG_KEY);
+  const hit = await getFirstExistingR2Object(env.IMAGES_BUCKET, keyCandidates);
+
+  let status = 404;
+  let statusText = 'Not Found';
+  let headersToCache: Record<string, string> = {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': `public, max-age=${TTL_5_MINUTES}`,
+  };
+  let responseBodyText = '{"error":"Italian catalog not found"}';
+
+  if (hit) {
+    const text = await hit.object.text();
+    status = 200;
+    statusText = 'OK';
+    headersToCache = {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': `public, max-age=${TTL_5_MINUTES}`,
+    };
+    if (hit.object.httpEtag) {
+      headersToCache.etag = hit.object.httpEtag;
+    }
+    responseBodyText = text;
+  }
+
+  if (shouldCacheStatus(status)) {
+    const effectiveTtlSeconds = getTtlSeconds(requestUrl.pathname, status, fallbackTtlSeconds);
+    const cachedResponse: CachedResponse = {
+      status,
+      statusText,
+      headers: headersToCache,
+      body: responseBodyText,
+      bodyEncoding: 'text',
+      cachedAt: Date.now(),
+      ttl: effectiveTtlSeconds,
+    };
+
+    ctx.waitUntil(
+      cache.put(cacheKey, JSON.stringify(cachedResponse), {
+        expirationTtl: effectiveTtlSeconds,
+      }).catch((err) => {
+        console.error(`Failed to cache ${cacheKey}:`, err);
+      })
+    );
+  }
+
+  const responseHeaders = new Headers(headersToCache);
+  responseHeaders.set('X-Cache-Status', 'MISS');
+  responseHeaders.set('X-Cached-At', new Date().toISOString());
+  responseHeaders.set('X-Cache-TTL', getTtlSeconds(requestUrl.pathname, status, fallbackTtlSeconds).toString());
+
+  return new Response(responseBodyText, {
+    status,
+    statusText,
+    headers: responseHeaders,
+  });
 }
 
 function buildUpstreamUrl(env: Env, path: string, query?: URLSearchParams): string {
@@ -509,6 +831,34 @@ export default {
           },
         }
       );
+    }
+
+    if (parseItalianCatalogRequest(requestUrl)) {
+      const catalogResponse = await handleItalianCatalogRequest(
+        requestUrl,
+        env,
+        cache,
+        cacheTtlSeconds,
+        ctx
+      );
+      if (catalogResponse) {
+        return catalogResponse;
+      }
+    }
+
+    const italianAssetRequest = parseItalianAssetRequest(requestUrl);
+    if (italianAssetRequest) {
+      const italianAssetResponse = await handleItalianR2AssetRequest(
+        requestUrl,
+        italianAssetRequest,
+        env,
+        cache,
+        fallbackTtlSeconds,
+        ctx
+      );
+      if (italianAssetResponse) {
+        return italianAssetResponse;
+      }
     }
 
     try {

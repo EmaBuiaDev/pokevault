@@ -1,10 +1,14 @@
 package com.emabuia.pokevault.data.remote
 
 import android.content.Context
+import com.emabuia.pokevault.data.italian.ItalianCardRecord
+import com.emabuia.pokevault.data.italian.ItalianCatalog
+import com.emabuia.pokevault.data.italian.ItalianCatalogRemoteRepository
 import com.emabuia.pokevault.data.local.toEntity
 import com.emabuia.pokevault.data.local.toTcgCard
 import com.emabuia.pokevault.data.local.toTcgSet
 import com.emabuia.pokevault.data.local.ItalianTranslations
+import com.emabuia.pokevault.util.AppLocale
 import com.google.gson.Gson
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -25,11 +29,13 @@ class PokeTcgRepository {
 
     private val api = PokeWalletRetrofitClient.create(com.emabuia.pokevault.BuildConfig.POKEWALLET_API_KEY)
     private val db get() = RepositoryProvider.database
+    private val italianCatalogRepository = ItalianCatalogRemoteRepository()
     private val gson = Gson()
 
     @Volatile
     private var memorySets: List<TcgSet>? = null
     private val memoryCards = ConcurrentHashMap<String, List<TcgCard>>()
+    private val memoryItalianCards = ConcurrentHashMap<String, List<TcgCard>>()
     private val memorySearch = ConcurrentHashMap<String, Pair<List<TcgCard>, Long>>()
 
     // Concurrency control to avoid duplicated requests when multiple screens ask the same data.
@@ -80,7 +86,8 @@ class PokeTcgRepository {
         private const val SETS_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000L   // 7 days
         private const val CARDS_CACHE_DURATION = 30 * 24 * 60 * 60 * 1000L  // 30 days
         private const val SEARCH_CACHE_DURATION = 60 * 60 * 1000L           // 1 hour
-        private val ALLOWED_LANGUAGES = setOf("ENG", "JAP", "CHN")
+        private val ALLOWED_LANGUAGES = setOf("ITA", "ENG", "JAP", "CHN")
+        private const val ITALIAN_SET_SUFFIX = "__ita"
 
         private const val RATE_LIMIT_COOLDOWN_MS = 60 * 1000L
 
@@ -207,16 +214,19 @@ class PokeTcgRepository {
         setsMutex.withLock {
             if (!forceRefresh && memorySets != null) {
                 recordCacheHit("getSets:memory")
-                return Result.success(memorySets!!)
+                val merged = mergeItalianSets(memorySets!!, context, forceRefresh = false)
+                memorySets = merged
+                return Result.success(merged)
             }
 
             // L2: Room DB
             if (!forceRefresh) {
                 val roomSets = loadSetsFromRoom()
                 if (roomSets != null) {
-                    memorySets = roomSets
+                    val merged = mergeItalianSets(roomSets, context, forceRefresh = false)
+                    memorySets = merged
                     recordCacheHit("getSets:room")
-                    return Result.success(roomSets)
+                    return Result.success(merged)
                 }
             }
 
@@ -248,32 +258,59 @@ class PokeTcgRepository {
             }
 
             networkResult.onSuccess { sets ->
-                memorySets = sets
-                refreshLanguageMapFromSets(sets)
-                saveSetsToRoom(sets)
+                val merged = mergeItalianSets(sets, context, forceRefresh = forceRefresh)
+                memorySets = merged
+                refreshLanguageMapFromSets(merged)
+                saveSetsToRoom(merged)
             }
 
             if (networkResult.isSuccess) {
                 Result.success(memorySets!!)
             } else {
                 staleCache?.let {
-                    memorySets = it
-                    refreshLanguageMapFromSets(it)
+                    val merged = mergeItalianSets(it, context, forceRefresh = false)
+                    memorySets = merged
+                    refreshLanguageMapFromSets(merged)
                     recordCacheHit("getSets:stale")
-                    Result.success(it)
+                    Result.success(merged)
                 } ?: networkResult
             }
         }
 
-    suspend fun getCardsBySet(setId: String, context: Context? = null, forceRefresh: Boolean = false): Result<List<TcgCard>> =
+    suspend fun getCardsBySet(
+        setId: String,
+        context: Context? = null,
+        forceRefresh: Boolean = false,
+        preferredImageMacro: String? = null
+    ): Result<List<TcgCard>> =
         cardsMutex.withLock {
+            if (isItalianSetId(setId)) {
+                return getCardsByItalianSet(
+                    setId = setId,
+                    context = context,
+                    forceRefresh = forceRefresh
+                )
+            }
+
+            val normalizedMacro = preferredImageMacro?.trim()?.uppercase(Locale.ROOT)
+            if (normalizedMacro == "ITA") {
+                val italianCards = getItalianOverlayCards(
+                    setId = setId,
+                    context = context,
+                    forceRefresh = forceRefresh
+                )
+                return Result.success(italianCards ?: emptyList())
+            }
+
             // L1: Memory
             if (!forceRefresh) {
                 memoryCards[setId]?.let {
                     if (it.isNotEmpty()) {
+                        val localizedCards = adaptPilotImagesForCurrentLocale(setId, it, preferredImageMacro)
+                        memoryCards[setId] = localizedCards
                         updateSetTotalsFromKnownCards(setId = setId, cardsCount = it.size)
                         recordCacheHit("getCardsBySet:memory:$setId")
-                        return Result.success(it)
+                        return Result.success(localizedCards)
                     }
                 }
             }
@@ -282,10 +319,11 @@ class PokeTcgRepository {
             if (!forceRefresh) {
                 val roomCards = loadCardsFromRoom(setId)
                 if (roomCards != null) {
-                    memoryCards[setId] = roomCards
+                    val localizedCards = adaptPilotImagesForCurrentLocale(setId, roomCards, preferredImageMacro)
+                    memoryCards[setId] = localizedCards
                     updateSetTotalsFromKnownCards(setId = setId, cardsCount = roomCards.size)
                     recordCacheHit("getCardsBySet:room:$setId")
-                    return Result.success(roomCards)
+                    return Result.success(localizedCards)
                 }
             }
 
@@ -301,16 +339,17 @@ class PokeTcgRepository {
                 fetchAllCardsForSet(setId)
             }
 
-            networkResult.onSuccess { result ->
-                memoryCards[setId] = result.cards
-                saveCardsToRoom(result.cards)
-                updateSetTotalsFromKnownCards(setId = setId, cardsCount = result.cards.size)
-            }
-
             if (networkResult.isSuccess) {
-                Result.success(networkResult.getOrThrow().cards)
+                val networkCards = networkResult.getOrThrow().cards
+                val localizedCards = adaptPilotImagesForCurrentLocale(setId, networkCards, preferredImageMacro)
+                memoryCards[setId] = localizedCards
+                saveCardsToRoom(networkCards)
+                updateSetTotalsFromKnownCards(setId = setId, cardsCount = localizedCards.size)
+                Result.success(localizedCards)
             } else {
-                val fallback = memoryCards[setId] ?: staleCache
+                val fallback = memoryCards[setId] ?: staleCache?.let {
+                    adaptPilotImagesForCurrentLocale(setId, it, preferredImageMacro)
+                }
                 fallback?.let {
                     recordCacheHit("getCardsBySet:stale:$setId")
                     Result.success(it)
@@ -640,6 +679,10 @@ class PokeTcgRepository {
                 .asSequence()
                 .flatMap { it.asSequence() }
                 .firstOrNull { it.id == cardId }
+                ?: memoryItalianCards.values
+                    .asSequence()
+                    .flatMap { it.asSequence() }
+                    .firstOrNull { it.id == cardId }
         }
 
         suspend fun findRoomCard(): TcgCard? {
@@ -652,6 +695,9 @@ class PokeTcgRepository {
         suspend fun loadFromNetwork(): Result<TcgCard> = guardedApiCall(resourceKey = "card:$cardId") {
             when {
                 isPokeWalletCardId(cardId) -> api.getCard(cardId).toTcgCard()
+                isItalianOverlayCardId(cardId) -> {
+                    findMemoryCard() ?: throw NoSuchElementException("Carta italiana non trovata: $cardId")
+                }
                 else -> {
                     val legacy = LEGACY_ID_REGEX.matchEntire(cardId)
                     if (legacy == null) {
@@ -1251,6 +1297,545 @@ class PokeTcgRepository {
         }.sortedByDescending { parseReleaseDateToEpoch(it.releaseDate) }
     }
 
+    private fun isItalianSetId(setId: String): Boolean {
+        return setId.trim().lowercase(Locale.ROOT).endsWith(ITALIAN_SET_SUFFIX)
+    }
+
+    private fun isItalianOverlayCardId(cardId: String): Boolean {
+        return cardId.trim().lowercase(Locale.ROOT).startsWith("ita:")
+    }
+
+    private fun buildItalianSetId(expansionId: String): String {
+        return "${expansionId.trim().lowercase(Locale.ROOT)}$ITALIAN_SET_SUFFIX"
+    }
+
+    private fun parseItalianExpansionId(setId: String): String? {
+        val normalized = setId.trim().lowercase(Locale.ROOT)
+        if (!normalized.endsWith(ITALIAN_SET_SUFFIX)) return null
+        return normalized.removeSuffix(ITALIAN_SET_SUFFIX).ifBlank { null }
+    }
+
+    private fun normalizeItalianSetCode(raw: String): String {
+        return SetCodeMapper.normalizeDecklistSetCode(raw)
+            ?.uppercase(Locale.ROOT)
+            ?.takeIf { it.isNotBlank() }
+            ?: raw.trim().uppercase(Locale.ROOT)
+    }
+
+    private fun preferredBaseSetCodeForItalianExpansion(expansionId: String): String? {
+        return when (expansionId.trim().lowercase(Locale.ROOT)) {
+            "me01" -> "MEG"
+            "me02" -> "PFL"
+            "me03" -> "ME03"
+            "me2pt5" -> "ASC"
+            "mep" -> "MEP"
+            "sv01" -> "SVI"
+            "sv02" -> "PAL"
+            "sv03" -> "OBF"
+            "sv04" -> "PAR"
+            "sv05" -> "TEF"
+            "sv06" -> "TWM"
+            "sv07" -> "SCR"
+            "sv08" -> "SSP"
+            "sv09" -> "JTG"
+            "sv10" -> "DRI"
+            "sv3pt5" -> "MEW"
+            "sv4pt5" -> "PAF"
+            "sv6pt5" -> "SFA"
+            "sv8pt5" -> "PRE"
+            else -> null
+        }
+    }
+
+    private fun buildItalianCardId(record: ItalianCardRecord): String {
+        val imageRef = record.imageReference()
+        val normalizedSetCode = imageRef?.setCode ?: normalizeItalianSetCode(record.espansioneId)
+        val normalizedNumber = imageRef?.cardNumber ?: extractCardNumber(record.cardId)
+        return "ita:${normalizedSetCode.lowercase(Locale.ROOT)}:$normalizedNumber"
+    }
+
+    private fun findExactRawSetMatch(sets: List<TcgSet>, rawSetCode: String?): TcgSet? {
+        val target = rawSetCode?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return sets
+            .asSequence()
+            .filter { set ->
+                val setRef = extractSetRefFromImageUrl(set.images.symbol)
+                    ?: extractSetRefFromImageUrl(set.images.logo)
+                    ?: return@filter false
+                setRef.equals(target, ignoreCase = true)
+            }
+            .maxByOrNull { set -> parseReleaseDateToEpoch(set.releaseDate) }
+    }
+
+    private suspend fun resolveItalianExpansionIdForSet(
+        setId: String,
+        catalog: ItalianCatalog
+    ): String? {
+        val safeSetId = setId.trim()
+        if (safeSetId.isBlank()) return null
+
+        val direct = safeSetId.lowercase(Locale.ROOT)
+        if (catalog.cardsByExpansion().containsKey(direct)) {
+            return direct
+        }
+
+        val set = memorySets?.firstOrNull { it.id == safeSetId }
+            ?: loadSetsFromRoom(ignoreExpiry = true)?.firstOrNull { it.id == safeSetId }
+
+        val setRef = set?.let {
+            extractSetRefFromImageUrl(it.images.symbol)
+                ?: extractSetRefFromImageUrl(it.images.logo)
+        }
+        val setName = set?.name.orEmpty()
+
+        val italianExpansionId = parseItalianExpansionId(safeSetId)
+
+        val preferredBaseSetCode = italianExpansionId?.let(::preferredBaseSetCodeForItalianExpansion)
+        val targetRaw = (preferredBaseSetCode ?: setRef ?: safeSetId).trim().uppercase(Locale.ROOT)
+        val targetCanonical = normalizeItalianSetCode(preferredBaseSetCode ?: setRef ?: safeSetId)
+        val cardsByExpansion = catalog.cardsByExpansion()
+
+        val preferredExpansionId = preferredItalianExpansionIdHint(
+            setName = setName,
+            targetRawSetCode = targetRaw,
+            targetCanonicalSetCode = targetCanonical
+        )
+        if (preferredExpansionId != null && cardsByExpansion.containsKey(preferredExpansionId)) {
+            return preferredExpansionId
+        }
+
+        val byRawCardCode = catalog.expansions.firstOrNull { manifest ->
+            val rawFromCards = cardsByExpansion[manifest.espansioneId.lowercase(Locale.ROOT)]
+                .orEmpty()
+                .asSequence()
+                .mapNotNull { record -> record.imageReference()?.setCode }
+                .map { code -> code.trim().uppercase(Locale.ROOT) }
+                .groupingBy { it }
+                .eachCount()
+                .maxByOrNull { it.value }
+                ?.key
+            rawFromCards == targetRaw
+        }
+
+        if (byRawCardCode != null) {
+            return byRawCardCode.espansioneId.trim().lowercase(Locale.ROOT)
+        }
+
+        val byCardCode = catalog.expansions.firstOrNull { manifest ->
+            val canonicalFromCards = cardsByExpansion[manifest.espansioneId.lowercase(Locale.ROOT)]
+                .orEmpty()
+                .asSequence()
+                .mapNotNull { record -> record.imageReference()?.setCode }
+                .map { code -> normalizeItalianSetCode(code) }
+                .groupingBy { it }
+                .eachCount()
+                .maxByOrNull { it.value }
+                ?.key
+            canonicalFromCards == targetCanonical
+        }
+
+        if (byCardCode != null) {
+            return byCardCode.espansioneId.trim().lowercase(Locale.ROOT)
+        }
+
+        return catalog.expansions
+            .firstOrNull { manifest ->
+                normalizeItalianSetCode(manifest.espansioneId) == targetCanonical
+            }
+            ?.espansioneId
+            ?.trim()
+            ?.lowercase(Locale.ROOT)
+    }
+
+    private fun preferredItalianExpansionIdHint(
+        setName: String,
+        targetRawSetCode: String,
+        targetCanonicalSetCode: String
+    ): String? {
+        val normalizedName = setName.trim().lowercase(Locale.ROOT)
+
+        if (
+            normalizedName.contains("ascesa eroica") ||
+            normalizedName.contains("ascended heroes") ||
+            targetRawSetCode == "ASC" ||
+            targetCanonicalSetCode == "ASC"
+        ) {
+            return "me2pt5"
+        }
+
+        if (
+            normalizedName.contains("fiamme spettrali") ||
+            normalizedName.contains("phantasmal flames") ||
+            targetRawSetCode == "PFL" ||
+            targetCanonicalSetCode == "PFL"
+        ) {
+            return "mep"
+        }
+
+        return null
+    }
+
+    private suspend fun mergeItalianSets(
+        baseSets: List<TcgSet>,
+        context: Context?,
+        forceRefresh: Boolean
+    ): List<TcgSet> {
+        val nonItalianSets = baseSets.filterNot { isItalianSetId(it.id) }
+        if (context == null) return nonItalianSets
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = forceRefresh)
+            .getOrElse {
+                Timber.w(it, "mergeItalianSets: catalogo ITA non disponibile")
+                return nonItalianSets
+            }
+
+        val cardsByExpansion = catalog.cardsByExpansion()
+        if (cardsByExpansion.isEmpty()) return nonItalianSets
+
+        val italianSets = catalog.expansions.mapNotNull { manifest ->
+            val expansionId = manifest.espansioneId.trim().lowercase(Locale.ROOT)
+            if (expansionId.isBlank()) return@mapNotNull null
+
+            val expansionCards = cardsByExpansion[expansionId].orEmpty()
+            val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
+            val dominantRawSetCode = expansionCards
+                .asSequence()
+                .mapNotNull { record -> record.imageReference()?.setCode }
+                .map { code -> code.trim().uppercase(Locale.ROOT) }
+                .groupingBy { it }
+                .eachCount()
+                .maxByOrNull { it.value }
+                ?.key
+
+            val baseRawSetCode = preferredBaseSetCode ?: dominantRawSetCode ?: expansionId.uppercase(Locale.ROOT)
+            val dominantCanonicalSetCode = normalizeItalianSetCode(baseRawSetCode)
+
+            val linkedBase = findExactRawSetMatch(nonItalianSets, baseRawSetCode)
+                ?: nonItalianSets.firstOrNull { set ->
+                    val setRef = extractSetRefFromImageUrl(set.images.symbol)
+                        ?: extractSetRefFromImageUrl(set.images.logo)
+                        ?: return@firstOrNull false
+                    normalizeItalianSetCode(setRef) == dominantCanonicalSetCode
+                }
+
+            val cardCount = manifest.cardCount.takeIf { it > 0 } ?: expansionCards.size
+            val setName = linkedBase?.name?.takeIf { it.isNotBlank() }
+                ?: baseRawSetCode
+                ?: expansionId.uppercase(Locale.ROOT)
+            val setSeries = linkedBase?.series?.takeIf { it.isNotBlank() }
+                ?: deriveSeriesName(
+                    setCode = baseRawSetCode,
+                    language = "ITA",
+                    setName = setName
+                )
+            val setImages = linkedBase?.images ?: SetImages(
+                symbol = buildSetImageUrl(baseRawSetCode),
+                logo = buildSetImageUrl(baseRawSetCode)
+            )
+
+            TcgSet(
+                id = buildItalianSetId(expansionId),
+                name = setName,
+                series = setSeries,
+                language = "ITA",
+                printedTotal = cardCount,
+                total = cardCount,
+                releaseDate = linkedBase?.releaseDate.orEmpty(),
+                images = setImages
+            )
+        }
+
+        return (nonItalianSets + italianSets)
+            .distinctBy { it.id }
+    }
+
+    private suspend fun getCardsByItalianSet(
+        setId: String,
+        context: Context?,
+        forceRefresh: Boolean
+    ): Result<List<TcgCard>> {
+        val safeContext = context ?: return Result.failure(
+            IllegalStateException("Context richiesto per caricare catalogo ITA")
+        )
+
+        val expansionId = parseItalianExpansionId(setId) ?: return Result.success(emptyList())
+        val catalog = italianCatalogRepository.getCatalog(safeContext, forceRefresh = forceRefresh)
+            .getOrElse { return Result.failure(it) }
+        val expansionCards = catalog.cardsByExpansion()[expansionId].orEmpty()
+        val cacheKey = setId.trim().lowercase(Locale.ROOT)
+
+        if (!forceRefresh) {
+            val expectedCardIds = expansionCards.mapTo(linkedSetOf()) { record -> buildItalianCardId(record) }
+            val cachedCards = memoryItalianCards[cacheKey] ?: memoryCards[setId]
+            if (!cachedCards.isNullOrEmpty()) {
+                val cachedIds = cachedCards.mapTo(linkedSetOf()) { it.id }
+                if (cachedIds == expectedCardIds) {
+                    return Result.success(cachedCards)
+                }
+            }
+        }
+
+        val setInfo = memorySets?.firstOrNull { it.id == setId } ?: loadSetsFromRoom(ignoreExpiry = true)
+            ?.firstOrNull { it.id == setId }
+            ?: TcgSet(
+                id = setId,
+                name = expansionId.uppercase(Locale.ROOT),
+                series = deriveSeriesName(setCode = expansionId, language = "ENG", setName = expansionId),
+                language = "ENG"
+            )
+
+        val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
+        val dominantRawSetCode = expansionCards
+            .asSequence()
+            .mapNotNull { record -> record.imageReference()?.setCode }
+            .map { code -> code.trim().uppercase(Locale.ROOT) }
+            .groupingBy { it }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+        val baseSetId = resolveEnglishBaseSetIdForItalianSet(
+            italianSet = setInfo,
+            dominantRawSetCode = preferredBaseSetCode ?: dominantRawSetCode
+        )
+
+        val baseCards = baseSetId?.let { resolvedBaseSetId ->
+            loadStandardCardsForSet(resolvedBaseSetId, context = safeContext, forceRefresh = forceRefresh)
+                .getOrDefault(emptyList())
+        } ?: emptyList()
+        val baseCardsByNumber = baseCards.associateBy { extractCardNumber(it.number) }
+
+        val cards = expansionCards
+            .map { record ->
+                val baseCard = baseCardsByNumber[record.imageReference()?.cardNumber ?: extractCardNumber(record.cardId)]
+                toItalianTcgCard(record, setInfo, baseCard)
+            }
+            .sortedBy { card -> extractCardNumber(card.number).toIntOrNull() ?: Int.MAX_VALUE }
+
+        memoryItalianCards[cacheKey] = cards
+        memoryCards[setId] = cards
+        updateSetTotalsFromKnownCards(setId = setId, cardsCount = cards.size)
+        return Result.success(cards)
+    }
+
+    private suspend fun resolveEnglishBaseSetIdForItalianSet(
+        italianSet: TcgSet,
+        dominantRawSetCode: String?
+    ): String? {
+        val setRef = extractSetRefFromImageUrl(italianSet.images.symbol)
+            ?: extractSetRefFromImageUrl(italianSet.images.logo)
+        val candidateCodes = linkedSetOf<String>()
+
+        findExactRawSetMatch(
+            sets = memorySets ?: loadSetsFromRoom(ignoreExpiry = true) ?: getSets(forceRefresh = false).getOrDefault(emptyList()),
+            rawSetCode = dominantRawSetCode
+        )?.let { return it.id }
+
+        findExactRawSetMatch(
+            sets = memorySets ?: loadSetsFromRoom(ignoreExpiry = true) ?: getSets(forceRefresh = false).getOrDefault(emptyList()),
+            rawSetCode = setRef
+        )?.let { return it.id }
+
+        dominantRawSetCode?.takeIf { it.isNotBlank() }?.let { candidateCodes += normalizeItalianSetCode(it).lowercase(Locale.ROOT) }
+        setRef?.takeIf { it.isNotBlank() }?.let { candidateCodes += normalizeItalianSetCode(it).lowercase(Locale.ROOT) }
+
+        for (candidateCode in candidateCodes) {
+            val baseSet = resolveImportedSetCandidates(candidateCode)
+                .firstOrNull { !isItalianSetId(it.id) }
+            if (baseSet != null) {
+                return baseSet.id
+            }
+        }
+
+        return null
+    }
+
+    private suspend fun toItalianTcgCard(record: ItalianCardRecord, setInfo: TcgSet, baseCard: TcgCard? = null): TcgCard {
+        val imageRef = record.imageReference()
+        val normalizedSetCode = imageRef?.setCode ?: normalizeItalianSetCode(record.espansioneId)
+        val normalizedNumber = imageRef?.cardNumber ?: extractCardNumber(record.cardId)
+        val smallImage = record.imageUrl(PokeWalletRetrofitClient.imageBaseUrl, size = "low")
+            ?: "${PokeWalletRetrofitClient.imageBaseUrl}images/it/$normalizedSetCode/$normalizedNumber?size=low"
+        val largeImage = record.imageUrl(PokeWalletRetrofitClient.imageBaseUrl, size = "high")
+            ?: "${PokeWalletRetrofitClient.imageBaseUrl}images/it/$normalizedSetCode/$normalizedNumber?size=high"
+        val smallImageWithBust = appendItalianImageCacheBuster(smallImage)
+        val largeImageWithBust = appendItalianImageCacheBuster(largeImage)
+        val cardSet = TcgCardSet(
+            id = setInfo.id,
+            name = setInfo.name,
+            series = setInfo.series
+        )
+
+        return TcgCard(
+            id = buildItalianCardId(record),
+            name = record.nome.ifBlank { baseCard?.name.orEmpty() },
+            supertype = baseCard?.supertype?.takeIf { it.isNotBlank() } ?: deriveItalianSupertype(record),
+            subtypes = baseCard?.subtypes ?: emptyList(),
+            hp = record.ps?.takeIf { it.isNotBlank() } ?: baseCard?.hp,
+            types = record.tipo?.takeIf { it.isNotBlank() }?.let { listOf(it) } ?: baseCard?.types,
+            set = cardSet,
+            number = normalizedNumber,
+            rarity = baseCard?.rarity?.takeIf { it.isNotBlank() },
+            images = CardImages(
+                small = smallImageWithBust,
+                large = largeImageWithBust
+            ),
+            tcgplayer = baseCard?.tcgplayer,
+            cardmarket = baseCard?.cardmarket
+        )
+    }
+
+    private fun appendItalianImageCacheBuster(url: String): String {
+        if (url.isBlank()) return url
+        val separator = if (url.contains('?')) '&' else '?'
+        return "$url${separator}itv=r2v3"
+    }
+
+    private suspend fun getItalianOverlayCards(
+        setId: String,
+        context: Context?,
+        forceRefresh: Boolean
+    ): List<TcgCard>? {
+        val safeContext = context ?: return null
+        val cacheKey = setId.trim().lowercase(Locale.ROOT)
+        val refreshItalianCatalog = forceRefresh
+
+        val catalog = italianCatalogRepository.getCatalog(safeContext, forceRefresh = refreshItalianCatalog)
+            .getOrElse { return null }
+
+        val expansionId = resolveItalianExpansionIdForSet(setId = setId, catalog = catalog) ?: cacheKey
+        val records = catalog.cardsByExpansion()[expansionId].orEmpty()
+        if (records.isEmpty()) return null
+
+        val baseCards = loadCachedStandardCardsForSet(setId)
+        val baseCardsByNumber = baseCards.associateBy { extractCardNumber(it.number) }
+        val setInfo = memorySets?.firstOrNull { it.id == setId }
+            ?: loadSetsFromRoom(ignoreExpiry = true)?.firstOrNull { it.id == setId }
+            ?: TcgSet(id = setId, name = setId, series = deriveSeriesName(setCode = setId, language = "ENG", setName = setId), language = "ENG")
+
+        val cards = records.map { record ->
+            val key = record.imageReference()?.cardNumber ?: extractCardNumber(record.cardId)
+            toItalianTcgCard(record, setInfo, baseCardsByNumber[key])
+        }.sortedBy { card -> extractCardNumber(card.number).toIntOrNull() ?: Int.MAX_VALUE }
+
+        memoryItalianCards[cacheKey] = cards
+        return cards
+    }
+
+    private suspend fun loadCachedStandardCardsForSet(setId: String): List<TcgCard> {
+        memoryCards[setId]?.let { cached ->
+            if (cached.isNotEmpty()) return cached
+        }
+
+        val roomCards = loadCardsFromRoom(setId, ignoreExpiry = true)
+        if (roomCards != null && roomCards.isNotEmpty()) {
+            memoryCards[setId] = roomCards
+            return roomCards
+        }
+
+        return emptyList()
+    }
+
+    private suspend fun loadStandardCardsForSet(
+        setId: String,
+        context: Context?,
+        forceRefresh: Boolean,
+        preferredImageMacro: String? = null
+    ): Result<List<TcgCard>> {
+        if (context == null) {
+            return Result.failure(IllegalStateException("Context richiesto per caricare carte"))
+        }
+
+        if (!forceRefresh) {
+            memoryCards[setId]?.let {
+                if (it.isNotEmpty()) {
+                    val localizedCards = adaptPilotImagesForCurrentLocale(setId, it, preferredImageMacro)
+                    memoryCards[setId] = localizedCards
+                    updateSetTotalsFromKnownCards(setId = setId, cardsCount = it.size)
+                    recordCacheHit("getCardsBySet:memory:$setId")
+                    return Result.success(localizedCards)
+                }
+            }
+        }
+
+        if (!forceRefresh) {
+            val roomCards = loadCardsFromRoom(setId)
+            if (roomCards != null) {
+                val localizedCards = adaptPilotImagesForCurrentLocale(setId, roomCards, preferredImageMacro)
+                memoryCards[setId] = localizedCards
+                updateSetTotalsFromKnownCards(setId = setId, cardsCount = roomCards.size)
+                recordCacheHit("getCardsBySet:room:$setId")
+                return Result.success(localizedCards)
+            }
+        }
+
+        ensureSetLanguageMapReady()
+        if (!isAllowedSetLanguage(setId)) {
+            return Result.success(emptyList())
+        }
+
+        recordCacheMiss("getCardsBySet:$setId")
+
+        val staleCache = loadCardsFromRoom(setId, ignoreExpiry = true)
+        val networkResult = guardedApiCall(resourceKey = "cards:$setId") {
+            fetchAllCardsForSet(setId)
+        }
+
+        return if (networkResult.isSuccess) {
+            val networkCards = networkResult.getOrThrow().cards
+            val localizedCards = adaptPilotImagesForCurrentLocale(setId, networkCards, preferredImageMacro)
+            memoryCards[setId] = localizedCards
+            saveCardsToRoom(networkCards)
+            updateSetTotalsFromKnownCards(setId = setId, cardsCount = localizedCards.size)
+            Result.success(localizedCards)
+        } else {
+            val fallback = memoryCards[setId] ?: staleCache?.let {
+                adaptPilotImagesForCurrentLocale(setId, it, preferredImageMacro)
+            }
+            fallback?.let {
+                recordCacheHit("getCardsBySet:stale:$setId")
+                Result.success(it)
+            } ?: Result.failure(networkResult.exceptionOrNull()!!)
+        }
+    }
+
+    private fun deriveItalianSupertype(record: ItalianCardRecord): String {
+        val tipo = record.tipo?.trim()?.lowercase(Locale.ROOT).orEmpty()
+        return when {
+            tipo.contains("allenator") || tipo.contains("trainer") -> "Trainer"
+            tipo.contains("energ") -> "Energy"
+            else -> if (record.ps?.toIntOrNull() ?: 0 > 0) "Pokémon" else "Trainer"
+        }
+    }
+
+    private suspend fun resolveItalianCardRarity(canonicalSetCode: String, normalizedNumber: String): String? {
+        val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(canonicalSetCode)
+            ?.lowercase(Locale.ROOT)
+            ?: return null
+
+        val candidates = resolveImportedSetCandidates(normalizedSet)
+            .filterNot { isItalianSetId(it.id) }
+
+        for (candidate in candidates) {
+            memoryCards[candidate.id]
+                ?.firstOrNull { card -> extractCardNumber(card.number) == normalizedNumber }
+                ?.rarity
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return it }
+
+            val roomRarity = runCatching {
+                db.cardDao().getBySetIdAndNumber(candidate.id, normalizedNumber)
+                    .firstOrNull()
+                    ?.rarity
+            }.getOrNull()
+
+            if (!roomRarity.isNullOrBlank()) {
+                return roomRarity
+            }
+        }
+
+        return null
+    }
+
     private fun selectCatalogMatch(cards: List<TcgCard>, normalizedName: String?): TcgCard? {
         if (cards.isEmpty()) return null
         if (normalizedName == null) return cards.firstOrNull()
@@ -1436,8 +2021,18 @@ class PokeTcgRepository {
             number = rawNumber.substringBefore('/').trim().ifBlank { rawNumber },
             rarity = normalizeRarity(info?.rarity),
             images = CardImages(
-                small = buildCardImageUrl(id, "low"),
-                large = buildCardImageUrl(id, "high")
+                small = buildCardImageUrl(
+                    cardId = id,
+                    size = "low",
+                    setCode = setCode,
+                    cardNumber = rawNumber
+                ),
+                large = buildCardImageUrl(
+                    cardId = id,
+                    size = "high",
+                    setCode = setCode,
+                    cardNumber = rawNumber
+                )
             ),
             tcgplayer = tcgplayer?.toLegacyTcgPlayer(),
             cardmarket = cardmarket?.toLegacyCardMarket()
@@ -1478,9 +2073,63 @@ class PokeTcgRepository {
         )
     }
 
-    private fun buildCardImageUrl(cardId: String, size: String): String {
+    private fun buildCardImageUrl(
+        cardId: String,
+        size: String,
+        setCode: String? = null,
+        cardNumber: String? = null
+    ): String {
         val encodedCardId = encodeUrlPathSegment(cardId)
         return "${PokeWalletRetrofitClient.imageBaseUrl}images/$encodedCardId?size=$size"
+    }
+
+    private suspend fun adaptPilotImagesForCurrentLocale(
+        setId: String,
+        cards: List<TcgCard>,
+        preferredImageMacro: String? = null
+    ): List<TcgCard> {
+        if (cards.isEmpty()) return cards
+        if (!isItalianPilotSet(setId)) return cards
+
+        val normalizedMacro = preferredImageMacro?.trim()?.uppercase(Locale.ROOT)
+        val useItalianPilotImages = when (normalizedMacro) {
+            "ITA" -> true
+            "ENG", "JAP", "CHN" -> false
+            else -> AppLocale.isItalian
+        }
+
+        return cards.map { card ->
+            val normalizedNumber = extractCardNumber(card.number)
+            val smallUrl = if (useItalianPilotImages && normalizedNumber.isNotBlank()) {
+                "${PokeWalletRetrofitClient.imageBaseUrl}images/it/ME03/$normalizedNumber?size=low"
+            } else {
+                buildCardImageUrl(card.id, "low")
+            }
+            val largeUrl = if (useItalianPilotImages && normalizedNumber.isNotBlank()) {
+                "${PokeWalletRetrofitClient.imageBaseUrl}images/it/ME03/$normalizedNumber?size=high"
+            } else {
+                buildCardImageUrl(card.id, "high")
+            }
+
+            if (card.images.small == smallUrl && card.images.large == largeUrl) {
+                card
+            } else {
+                card.copy(images = CardImages(small = smallUrl, large = largeUrl))
+            }
+        }
+    }
+
+    private suspend fun isItalianPilotSet(setId: String): Boolean {
+        if (setId.isBlank()) return false
+
+        val sets = memorySets ?: loadSetsFromRoom(ignoreExpiry = true).orEmpty()
+        val set = sets.firstOrNull { it.id == setId } ?: return false
+        val setRef = extractSetRefFromImageUrl(set.images.symbol)
+            ?: extractSetRefFromImageUrl(set.images.logo)
+            ?: return false
+        val normalized = SetCodeMapper.normalizeDecklistSetCode(setRef)?.uppercase(Locale.ROOT)
+            ?: setRef.uppercase(Locale.ROOT)
+        return normalized == "ME03"
     }
 
     private fun encodeUrlPathSegment(value: String): String {
@@ -1625,7 +2274,7 @@ class PokeTcgRepository {
     private fun mapLanguageMacro(raw: String?): String? {
         val normalized = raw?.trim()?.lowercase()?.replace('_', ' ') ?: return null
         return when {
-            normalized in setOf("it", "ita", "italian", "italiano") || normalized.contains("ital") -> "IT"
+            normalized in setOf("it", "ita", "italian", "italiano") || normalized.contains("ital") -> "ITA"
             normalized in setOf("en", "eng", "english", "inglese") || normalized.contains("engl") || normalized.contains("ingl") -> "ENG"
             normalized in setOf("jp", "jap", "ja", "japanese", "giapponese") || normalized.contains("jap") || normalized.contains("giapp") -> "JAP"
             normalized in setOf("zh", "zhs", "zht", "cn", "chn", "chi", "chinese") ||

@@ -53,7 +53,7 @@ data class LanguageMacroGroup(
 data class SetsUiState(
     val allSets: List<TcgSet> = emptyList(),
     val filteredSets: List<TcgSet> = emptyList(),
-    val selectedLanguageMacro: String = "ENG",
+    val selectedLanguageMacro: String = "ITA",
     val languageCountByMacro: Map<String, Int> = emptyMap(),
     val macroGroups: List<LanguageMacroGroup> = emptyList(),
     val seriesList: List<String> = emptyList(),
@@ -87,7 +87,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         ?.toMutableSet()
         ?: mutableSetOf()
 
-    private val languageMacros = listOf("ENG", "JAP", "CHN")
+    private val languageMacros = listOf("ITA", "ENG", "JAP", "CHN")
     private val officialSeriesOrder = listOf(
         "Mega Evolutions",
         "Scarlet & Violet",
@@ -328,7 +328,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         val displayableSets = uiState.allSets.filter(::isDisplayableExpansion)
 
         val languageCountByMacro = languageMacros.associateWith { macro ->
-            displayableSets.count { resolveLanguageMacro(it) == macro }
+            displayableSets.count { macro in resolveMacroMemberships(it) }
         }
         val macroGroups = buildMacroGroups(displayableSets)
         val selectedMacroGroup = macroGroups.firstOrNull { it.macro == uiState.selectedLanguageMacro }
@@ -387,13 +387,13 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun buildMacroGroups(allSets: List<TcgSet>): List<LanguageMacroGroup> {
-        // Pre-bucket once per macro using a defensive language normalization (with
-        // name-based overrides for mis-tagged sets) so every set lands in the
-        // correct ENG/JAP/CHN tab.
+        // Pre-bucket once per macro using defensive language normalization.
+        // Pilot ITA duplicates targeted sets without removing them from source macros.
         val setsByMacro: Map<String, List<TcgSet>> = allSets
-            .groupBy { resolveLanguageMacro(it) }
-            .mapNotNull { (macro, sets) -> macro?.let { it to sets } }
-            .toMap()
+            .flatMap { set ->
+                resolveMacroMemberships(set).map { macro -> macro to set }
+            }
+            .groupBy({ it.first }, { it.second })
 
         return languageMacros.map { macro ->
             val setsInMacro = setsByMacro[macro].orEmpty()
@@ -494,6 +494,12 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         return normalizeLanguageMacro(set.language)
     }
 
+    private fun resolveMacroMemberships(set: TcgSet): Set<String> {
+        val memberships = linkedSetOf<String>()
+        resolveLanguageMacro(set)?.let { memberships += it }
+        return memberships
+    }
+
     /**
      * Defensive language normalization. The repository already maps to
      * ENG/JAP/CHN, but we guard against any raw value leaking through.
@@ -502,6 +508,8 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         val normalized = raw?.trim()?.lowercase(Locale.ROOT)?.replace('_', ' ') ?: return null
         if (normalized.isBlank()) return null
         return when {
+            normalized in setOf("it", "ita", "italian", "italiano") ||
+                normalized.contains("ital") -> "ITA"
             normalized in setOf("en", "eng", "english", "inglese") ||
                 normalized.contains("engl") || normalized.contains("ingl") -> "ENG"
             normalized in setOf("jp", "jap", "ja", "japanese", "giapponese") ||

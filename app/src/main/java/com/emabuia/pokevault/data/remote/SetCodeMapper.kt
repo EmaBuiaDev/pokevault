@@ -23,6 +23,8 @@ object SetCodeMapper {
         "CRI" to "dcr",
         "ME01" to "MEG",
         "ME02" to "PFL",
+        "MEP" to "MEG",
+        "ME2PT5" to "PFL",
         "BLK" to "sv11",
         "WHT" to "sv11",
         "RCL" to "swsh2",

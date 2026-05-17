@@ -6,7 +6,8 @@
   "scripts": {
     "deploy": "wrangler publish",
     "dev": "wrangler dev",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "upload:ita": "powershell -ExecutionPolicy Bypass -File ./scripts/upload-ita-r2.ps1"
   },
   "devDependencies": {
     "wrangler": "^3.45.0",

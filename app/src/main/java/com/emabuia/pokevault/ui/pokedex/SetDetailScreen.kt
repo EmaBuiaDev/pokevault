@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.Wishlist
@@ -202,6 +203,7 @@ fun matchesSearchContext(card: TcgCard, ctx: ItalianSearchContext): Boolean {
 fun SetDetailScreen(
     setId: String,
     setName: String,
+    sourceMacro: String? = null,
     onBack: () -> Unit,
     onPremiumRequired: () -> Unit,
     viewModel: SetDetailViewModel = viewModel(),
@@ -213,7 +215,7 @@ fun SetDetailScreen(
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     var quickAddCard by remember { mutableStateOf<TcgCard?>(null) }
-    var selectedRarityFilter by remember { mutableStateOf<String?>(null) }
+    var selectedRarityFilter by remember(setId, sourceMacro) { mutableStateOf<String?>(null) }
     var filtersExpanded by rememberSaveable { mutableStateOf(false) }
     var pickerCard by remember { mutableStateOf<TcgCard?>(null) }
     var createDialogCard by remember { mutableStateOf<TcgCard?>(null) }
@@ -239,7 +241,7 @@ fun SetDetailScreen(
         if (isSelectionMode) quickAddCard = null
     }
 
-    LaunchedEffect(setId) { viewModel.loadSet(setId) }
+    LaunchedEffect(setId, sourceMacro) { viewModel.loadSet(setId, sourceMacro) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.successMessage, state.errorMessage) {
@@ -267,6 +269,32 @@ fun SetDetailScreen(
             matchesRarity && matchesSearch && matchesMissing && matchesOwned && matchesType && matchesSupertype
         }.sortedBy {
             it.number.replace(Regex("[^0-9]"), "").toIntOrNull() ?: Int.MAX_VALUE
+        }
+    }
+
+    val hasExplicitCardFilters = remember(
+        state.searchQuery,
+        state.showOnlyMissing,
+        state.showOnlyOwned,
+        state.selectedType,
+        state.selectedSupertype,
+        selectedRarityFilter
+    ) {
+        state.searchQuery.isNotBlank() ||
+            state.showOnlyMissing ||
+            state.showOnlyOwned ||
+            state.selectedType != null ||
+            state.selectedSupertype != null ||
+            selectedRarityFilter != null
+    }
+
+    val displayedCards = remember(state.cards, sortedCards, hasExplicitCardFilters) {
+        if (sortedCards.isEmpty() && state.cards.isNotEmpty() && !hasExplicitCardFilters) {
+            state.cards.sortedBy {
+                it.number.replace(Regex("[^0-9]"), "").toIntOrNull() ?: Int.MAX_VALUE
+            }
+        } else {
+            sortedCards
         }
     }
 
@@ -392,7 +420,7 @@ fun SetDetailScreen(
                                         offset.y.toInt() in info.offset.y until (info.offset.y + info.size.height)
                                     }
                                     val cardIndex = (item?.index ?: -1) - headerCount
-                                    val card = sortedCards.getOrNull(cardIndex)
+                                    val card = displayedCards.getOrNull(cardIndex)
                                     if (card != null) {
                                         isSelectionMode = true
                                         selectedCardIds = selectedCardIds + card.id
@@ -406,7 +434,7 @@ fun SetDetailScreen(
                                             change.position.y.toInt() in info.offset.y until (info.offset.y + info.size.height)
                                         }
                                         val cardIndex = (item?.index ?: -1) - headerCount
-                                        val card = sortedCards.getOrNull(cardIndex)
+                                        val card = displayedCards.getOrNull(cardIndex)
                                         if (card != null && card.id !in selectedCardIds) {
                                             selectedCardIds = selectedCardIds + card.id
                                         }
@@ -422,8 +450,7 @@ fun SetDetailScreen(
                             ownedCount = state.ownedCount,
                             displayTotal = state.displayTotal,
                             completionPercent = state.completionPercent,
-                            rarityCounts = rarityCounts,
-                            debugCounters = state.debugCounters
+                            rarityCounts = rarityCounts
                         )
                     }
 
@@ -657,7 +684,7 @@ fun SetDetailScreen(
                         items(12) {
                             ShimmerCardPlaceholder()
                         }
-                    } else if (sortedCards.isEmpty()) {
+                    } else if (displayedCards.isEmpty()) {
                         item(span = { GridItemSpan(3) }) {
                             Box(modifier = Modifier
                                 .fillMaxWidth()
@@ -667,7 +694,7 @@ fun SetDetailScreen(
                         }
                     } else {
                         when (state.viewMode) {
-                            "grid" -> items(sortedCards, key = { "${it.id}_${it.number}" }) { card ->
+                            "grid" -> items(displayedCards, key = { "${it.id}_${it.number}" }) { card ->
                                 if (premiumManager.canViewPrices()) {
                                     val currentPrice = resolveDisplayPrice(card)
                                     LaunchedEffect(card.id, currentPrice) {
@@ -729,7 +756,7 @@ fun SetDetailScreen(
                                     }
                                 )
                             }
-                            "list" -> items(sortedCards, key = { "${it.id}_${it.number}" }, span = { GridItemSpan(3) }) { card ->
+                            "list" -> items(displayedCards, key = { "${it.id}_${it.number}" }, span = { GridItemSpan(3) }) { card ->
                                 if (premiumManager.canViewPrices()) {
                                     val currentPrice = resolveDisplayPrice(card)
                                     LaunchedEffect(card.id, currentPrice) {
@@ -768,7 +795,7 @@ fun SetDetailScreen(
                         onVariantChange = { selectionVariant = it },
                         onAddAll = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            val cards = sortedCards.filter { it.id in selectedCardIds }
+                            val cards = displayedCards.filter { it.id in selectedCardIds }
                             viewModel.addMultipleCards(cards, selectionVariant)
                             isSelectionMode = false
                             selectedCardIds = emptySet()
@@ -915,8 +942,7 @@ fun SetInfoHeader(
     ownedCount: Int,
     displayTotal: Int,
     completionPercent: Int,
-    rarityCounts: Map<RarityInfo, Pair<Int, Int>>,
-    debugCounters: String? = null
+    rarityCounts: Map<RarityInfo, Pair<Int, Int>>
 ) {
     Column(
         modifier = Modifier
@@ -1019,7 +1045,6 @@ fun SetInfoHeader(
             }
         }
 
-
     }
 }
 
@@ -1054,6 +1079,9 @@ fun TcgCardCompactItem(
     val variantOptions = remember(card.tcgplayer?.prices?.keys, card.rarity) {
         CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity)
     }
+    var isImageAvailable by remember(card.id, card.images.small) {
+        mutableStateOf(card.images.small.isNotBlank())
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(modifier = Modifier
@@ -1076,15 +1104,38 @@ fun TcgCardCompactItem(
                     contentDescription = card.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    error = { CardImageFallback(card = card, compact = false) }
+                    loading = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(DarkSurface)
+                        )
+                    },
+                    error = {
+                        isImageAvailable = false
+                        CardImageFallback(card = card, compact = false)
+                    },
+                    success = {
+                        isImageAvailable = true
+                        SubcomposeAsyncImageContent()
+                    }
                 )
             } else {
+                isImageAvailable = false
                 CardImageFallback(card = card, compact = false)
             }
 
-            if (!isOwned && !isSelected && !isAdding) Box(modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.55f)))
+            if (!isImageAvailable && !isSelected) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.18f))
+                )
+            } else if (!isOwned && !isSelected && !isAdding) {
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f)))
+            }
 
             if (isSelected) Box(modifier = Modifier
                 .fillMaxSize()
@@ -1313,6 +1364,9 @@ fun TcgCardListRow(
     onWishlistClick: () -> Unit
 ) {
     val rarityInfo = RarityUtils.getRarityInfo(card.rarity)
+    var isImageAvailable by remember(card.id, card.images.small) {
+        mutableStateOf(card.images.small.isNotBlank())
+    }
     Row(modifier = Modifier
         .fillMaxWidth()
         .clip(RoundedCornerShape(12.dp))
@@ -1329,14 +1383,35 @@ fun TcgCardListRow(
                     contentDescription = card.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    error = { CardImageFallback(card = card, compact = true) }
+                    loading = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(DarkSurface)
+                        )
+                    },
+                    error = {
+                        isImageAvailable = false
+                        CardImageFallback(card = card, compact = true)
+                    },
+                    success = {
+                        isImageAvailable = true
+                        SubcomposeAsyncImageContent()
+                    }
                 )
             } else {
+                isImageAvailable = false
                 CardImageFallback(card = card, compact = true)
             }
-            if (!isOwned) Box(modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.4f)))
+            if (!isImageAvailable) {
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.12f)))
+            } else if (!isOwned) {
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f)))
+            }
         }
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

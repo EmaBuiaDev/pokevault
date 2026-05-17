@@ -32,6 +32,10 @@ POKEWALLET_PROXY_ENABLED=false
 # Leave empty if POKEWALLET_PROXY_ENABLED=false
 POKEWALLET_PROXY_URL=https://pokevault-proxy.YOUR_ACCOUNT_ID.workers.dev/
 
+# External ITA catalog JSON URL (no Pokemon official URLs inside payload)
+# Example: https://pokevault-proxy.YOUR_ACCOUNT_ID.workers.dev/ita/catalog.json
+ITALIAN_CATALOG_URL=
+
 # ── Release Build Signing Configuration ──
 # For building release APK/AAB. These are only needed for release builds.
 # Generate a keystore using: keytool -genkey -v -keystore release.keystore ...

@@ -29,6 +29,7 @@ android {
         buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
         buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "${localProperties.getProperty("POKEWALLET_PROXY_ENABLED", "false")}")
         buildConfigField("String", "POKEWALLET_PROXY_URL", "\"${localProperties.getProperty("POKEWALLET_PROXY_URL", "")}\"")
+        buildConfigField("String", "ITALIAN_CATALOG_URL", "\"${localProperties.getProperty("ITALIAN_CATALOG_URL", "")}\"")
     }
 
     signingConfigs {
