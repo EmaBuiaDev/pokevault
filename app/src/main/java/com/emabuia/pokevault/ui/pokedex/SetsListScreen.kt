@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.theme.*
@@ -195,10 +196,14 @@ fun SetsListScreen(
     }
 
     if (selectedCard != null) {
+        val collectionLanguage = CardOptions.languageLabelForMacro(state.selectedLanguageMacro)
+            ?: CardOptions.LANGUAGES.first()
         CardDetailBottomSheet(
             card = selectedCard!!,
             isOwned = false,
             isLoading = state.isAddingCard == selectedCard!!.id,
+            languageOptions = CardOptions.languageOptionsForMacro(state.selectedLanguageMacro),
+            defaultLanguage = collectionLanguage,
             onAddCard = { v, q, c, l ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.addCardWithDetails(selectedCard!!, v, q, c, l)

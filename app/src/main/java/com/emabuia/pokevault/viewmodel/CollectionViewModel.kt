@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.CollectionStats
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
@@ -75,7 +76,7 @@ class CollectionViewModel : ViewModel() {
     private fun applyCardsSnapshot(cards: List<PokemonCard>) {
         val newStats = CollectionStats(
             totalCards = cards.sumOf { it.quantity },
-            uniqueCards = cards.map { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }.toSet().size,
+            uniqueCards = cards.map { it.collectionGroupKey() }.toSet().size,
             totalValue = cards.sumOf { it.estimatedValue * it.quantity }
         )
 
@@ -188,8 +189,7 @@ class CollectionViewModel : ViewModel() {
         viewModelScope.launch {
             val originalCards = uiState.cards
             val cardsToDelete = originalCards.filter { card ->
-                val key = card.apiCardId.ifBlank { "${card.name}_${card.set}_${card.cardNumber}" }
-                key in groupKeys
+                card.collectionGroupKey() in groupKeys
             }
             if (cardsToDelete.isEmpty()) return@launch
 

@@ -50,6 +50,8 @@ fun CardDetailBottomSheet(
     card: TcgCard,
     isOwned: Boolean,
     isLoading: Boolean,
+    languageOptions: List<String> = CardOptions.LANGUAGES,
+    defaultLanguage: String? = null,
     onAddCard: (variant: String, quantity: Int, condition: String, language: String) -> Unit,
     onRemoveCard: () -> Unit,
     onDismiss: () -> Unit,
@@ -65,12 +67,18 @@ fun CardDetailBottomSheet(
     val availableVariants = remember(card) {
         CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity)
     }
+    val resolvedLanguageOptions = remember(languageOptions) {
+        languageOptions.distinct().ifEmpty { CardOptions.LANGUAGES }
+    }
+    val resolvedDefaultLanguage = remember(card.id, defaultLanguage, resolvedLanguageOptions) {
+        defaultLanguage?.takeIf { it in resolvedLanguageOptions } ?: resolvedLanguageOptions.first()
+    }
 
     // State form
     var selectedVariant by remember { mutableStateOf(availableVariants.firstOrNull() ?: "Normal") }
     var quantity by remember { mutableIntStateOf(1) }
     var selectedCondition by remember { mutableStateOf("Near Mint") }
-    var selectedLanguage by remember { mutableStateOf("🇮🇹 Italiano") }
+    var selectedLanguage by remember(card.id, resolvedDefaultLanguage) { mutableStateOf(resolvedDefaultLanguage) }
     var showAddForm by remember { mutableStateOf(!isOwned) }
 
     val currentCardIndex = remember(card.id, cardList) { cardList.indexOfFirst { it.id == card.id } }
@@ -398,7 +406,7 @@ fun CardDetailBottomSheet(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(AppLocale.languageLabel, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
                                 OptionSelector(
-                                    options = CardOptions.LANGUAGES,
+                                    options = resolvedLanguageOptions,
                                     selected = selectedLanguage,
                                     onSelect = { selectedLanguage = it }
                                 )

@@ -51,6 +51,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.ui.home.components.SearchBar
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
@@ -172,7 +173,7 @@ fun CollectionScreen(
     // Compute grouped cards by logical card key and organize them by expansion.
     val groupedCards = remember(state.filteredCards) {
         state.filteredCards
-            .groupBy { it.apiCardId.ifBlank { "${it.name}_${it.set}_${it.cardNumber}" } }
+            .groupBy { it.collectionGroupKey() }
             .entries
             .map { (key, group) -> key to group }
     }
@@ -483,7 +484,7 @@ fun CollectionScreen(
                                                                 }
                                                                 if (selectedGroupKeys.isEmpty()) isSelectionMode = false
                                                             } else {
-                                                                onCardClick(representative.apiCardId.ifBlank { representative.id })
+                                                                    onCardClick(groupKey)
                                                             }
                                                         },
                                                         onLongClick = {
@@ -525,7 +526,7 @@ fun CollectionScreen(
                                                             }
                                                             if (selectedGroupKeys.isEmpty()) isSelectionMode = false
                                                         } else {
-                                                            onCardClick(representative.apiCardId.ifBlank { representative.id })
+                                                                onCardClick(groupKey)
                                                         }
                                                     },
                                                     onLongClick = {

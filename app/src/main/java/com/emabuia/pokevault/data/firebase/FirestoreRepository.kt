@@ -8,6 +8,7 @@ import com.emabuia.pokevault.data.model.MatchLog
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.Tournament
 import com.emabuia.pokevault.data.model.Wishlist
+import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -216,6 +217,7 @@ class FirestoreRepository {
     suspend fun addCard(card: PokemonCard): Result<String> {
         return try {
             var effectiveEstimatedValue = card.estimatedValue
+            val canonicalLanguage = canonicalDisplayLanguage(card.language)
 
             val data = hashMapOf<String, Any?>(
                 "name" to card.name,
@@ -236,7 +238,7 @@ class FirestoreRepository {
                 "apiCardId" to card.apiCardId,
                 "cardNumber" to card.cardNumber,
                 "variant" to card.variant,
-                "language" to card.language,
+                "language" to canonicalLanguage,
                 "addedAt" to com.google.firebase.Timestamp.now()
             )
 
@@ -250,8 +252,12 @@ class FirestoreRepository {
                     null // cache miss: trattiamo come carta nuova
                 }
 
-                if (existing != null && existing.documents.isNotEmpty()) {
-                    val doc = existing.documents.first()
+                val existingForLanguage = existing?.documents?.firstOrNull { doc ->
+                    normalizeLanguageKey(doc.getString("language")) == normalizeLanguageKey(canonicalLanguage)
+                }
+
+                if (existingForLanguage != null) {
+                    val doc = existingForLanguage
                     val docRef = doc.reference
                     val currentQty = doc.getLong("quantity")?.toInt() ?: 1
                     val currentEstimatedValue = doc.getDouble("estimatedValue") ?: 0.0
@@ -266,7 +272,8 @@ class FirestoreRepository {
 
                     val updates = mutableMapOf<String, Any>(
                         "quantity" to (currentQty + card.quantity),
-                        "estimatedValue" to effectiveEstimatedValue
+                        "estimatedValue" to effectiveEstimatedValue,
+                        "language" to canonicalLanguage
                     )
 
                     // Heal legacy docs that were saved without proper classification fields.
@@ -415,6 +422,7 @@ class FirestoreRepository {
 
             for (card in cards) {
                 var effectiveEstimatedValue = card.estimatedValue
+                val canonicalLanguage = canonicalDisplayLanguage(card.language)
 
                 val data = hashMapOf<String, Any?>(
                     "name" to card.name,
@@ -435,7 +443,7 @@ class FirestoreRepository {
                     "apiCardId" to card.apiCardId,
                     "cardNumber" to card.cardNumber,
                     "variant" to card.variant,
-                    "language" to card.language,
+                    "language" to canonicalLanguage,
                     "addedAt" to com.google.firebase.Timestamp.now()
                 )
 
@@ -449,8 +457,12 @@ class FirestoreRepository {
                         null
                     }
 
-                    if (existing != null && existing.documents.isNotEmpty()) {
-                        val doc = existing.documents.first()
+                    val existingForLanguage = existing?.documents?.firstOrNull { doc ->
+                        normalizeLanguageKey(doc.getString("language")) == normalizeLanguageKey(canonicalLanguage)
+                    }
+
+                    if (existingForLanguage != null) {
+                        val doc = existingForLanguage
                         val docRef = doc.reference
                         val currentQty = doc.getLong("quantity")?.toInt() ?: 1
                         val currentEstimatedValue = doc.getDouble("estimatedValue") ?: 0.0
@@ -466,7 +478,8 @@ class FirestoreRepository {
 
                         val updates = mutableMapOf<String, Any>(
                             "quantity" to (currentQty + card.quantity),
-                            "estimatedValue" to effectiveEstimatedValue
+                            "estimatedValue" to effectiveEstimatedValue,
+                            "language" to canonicalLanguage
                         )
 
                         if (incomingSupertype != null &&
@@ -558,6 +571,28 @@ class FirestoreRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    private fun canonicalDisplayLanguage(language: String?): String {
+        return when (normalizeLanguageKey(language)) {
+            "ITA" -> "🇮🇹 Italiano"
+            "ENG" -> "🇬🇧 English"
+            "JAP" -> "🇯🇵 Giapponese"
+            "CHN" -> "🇨🇳 Cinese"
+            else -> language?.trim()?.takeIf { it.isNotBlank() } ?: "🇬🇧 English"
+        }
+    }
+
+    private fun normalizeLanguageKey(language: String?): String {
+        val normalized = language.orEmpty().trim().lowercase()
+        return when {
+            normalized.isBlank() -> ""
+            "ital" in normalized -> "ITA"
+            "eng" in normalized -> "ENG"
+            "jap" in normalized || "giapp" in normalized -> "JAP"
+            "chn" in normalized || "chin" in normalized -> "CHN"
+            else -> normalized.uppercase()
+        }
+    }
+
     suspend fun getCollectionStats(): CollectionStats {
         return try {
             // Leggiamo il profilo utente e tutte le carte in parallelo (un solo round-trip extra)
@@ -568,9 +603,7 @@ class FirestoreRepository {
             val cards = cardsCollection.get().await()
                 .documents.mapNotNull { it.toObject(PokemonCard::class.java) }
 
-            val uniqueKey: (PokemonCard) -> String = { c ->
-                c.apiCardId.ifBlank { "${c.name}_${c.set}_${c.cardNumber}" }
-            }
+            val uniqueKey: (PokemonCard) -> String = { c -> c.collectionGroupKey() }
 
             val totalCards = cards.sumOf { it.quantity }
             val totalValue = cards.sumOf { it.estimatedValue * it.quantity }

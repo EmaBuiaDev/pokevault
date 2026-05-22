@@ -210,6 +210,12 @@ fun SetDetailScreen(
     wishlistViewModel: WishlistViewModel = viewModel()
 ) {
     val state = viewModel.uiState
+    val collectionLanguage = remember(sourceMacro, state.set?.language) {
+        CardOptions.languageLabelForMacro(sourceMacro ?: state.set?.language) ?: CardOptions.LANGUAGES.first()
+    }
+    val collectionLanguageOptions = remember(sourceMacro, state.set?.language) {
+        CardOptions.languageOptionsForMacro(sourceMacro ?: state.set?.language)
+    }
     val haptic = LocalHapticFeedback.current
     val premiumManager = remember { PremiumManager.getInstance() }
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
@@ -315,6 +321,8 @@ fun SetDetailScreen(
             card = sheetCard,
             isOwned = sheetCard.id in state.ownedCardIds,
             isLoading = state.isAddingCard == sheetCard.id,
+            languageOptions = collectionLanguageOptions,
+            defaultLanguage = collectionLanguage,
             pokeWalletPrices = state.selectedCardPokeWalletPrices,
             isLoadingPokeWalletPrices = state.isLoadingPokeWalletPrices,
             onAddCard = { v, q, c, l ->
@@ -733,7 +741,7 @@ fun SetDetailScreen(
                                                 card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity
                                             )
                                             if (variants.size <= 1) {
-                                                viewModel.addCardWithDetails(card, variants.firstOrNull() ?: "Holo", 1, "Near Mint", "🇮🇹 Italiano")
+                                                viewModel.addCardWithDetails(card, variants.firstOrNull() ?: "Holo", 1, "Near Mint", collectionLanguage)
                                             } else {
                                                 quickAddCard = if (quickAddCard?.id == card.id) null else card
                                             }
@@ -751,7 +759,7 @@ fun SetDetailScreen(
                                     },
                                     onVariantSelected = { variant ->
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        viewModel.addCardWithDetails(card, variant, 1, "Near Mint", "🇮🇹 Italiano")
+                                        viewModel.addCardWithDetails(card, variant, 1, "Near Mint", collectionLanguage)
                                         quickAddCard = null
                                     }
                                 )

@@ -75,6 +75,11 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private val hydratedPriceSetIds = mutableSetOf<String>()
     private val hydrationPrefs = application.applicationContext.getSharedPreferences("price_hydration", Application.MODE_PRIVATE)
 
+    private fun defaultCollectionLanguage(): String {
+        return CardOptions.languageLabelForMacro(currentSourceMacro ?: uiState.set?.language)
+            ?: CardOptions.LANGUAGES.first()
+    }
+
     companion object {
         private const val PRICE_HYDRATION_WINDOW_MS = 24L * 60 * 60 * 1000
         private const val MAX_PRICE_HYDRATION_REQUESTS_PER_SET = 20
@@ -131,7 +136,10 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                         isLoading = false,
                         isLoadingCards = false
                     )
-                    observeOwnedCards(resolvedSet.name)
+                    observeOwnedCards(
+                        setName = resolvedSet.name,
+                        currentCards = cards
+                    )
                 }
                 .onFailure { error ->
                     uiState = uiState.copy(isLoading = false, isLoadingCards = false, errorMessage = "Errore: ${error.message}")
@@ -139,7 +147,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun observeOwnedCards(setName: String) {
+    private fun observeOwnedCards(setName: String, currentCards: List<TcgCard>) {
         viewModelScope.launch {
             firestoreRepository.getOwnedCardsBySet(setName)
                 .catch { e ->
@@ -148,10 +156,18 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
                 .collectLatest { ownedCards ->
-                    val ownedIds = ownedCards
-                        .filter { it.apiCardId.isNotBlank() }
-                        .map { it.apiCardId }
+                    val currentCardIds = currentCards
+                        .asSequence()
+                        .map { it.id }
+                        .filter { it.isNotBlank() }
                         .toSet()
+
+                    val ownedIds = ownedCards
+                        .asSequence()
+                        .map { it.apiCardId }
+                        .filter { it.isNotBlank() && it in currentCardIds }
+                        .toSet()
+
                     uiState = uiState.copy(ownedCardIds = ownedIds)
                 }
         }
@@ -203,6 +219,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             uiState = uiState.copy(isAddingCard = tcgCard.id)
             val variantKey = CardOptions.getVariantApiKey(variant)
             val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero()
+            val resolvedLanguage = language.ifBlank { defaultCollectionLanguage() }
 
             val card = PokemonCard(
                 name = tcgCard.name, imageUrl = tcgCard.images.small,
@@ -214,7 +231,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 subtypes = tcgCard.subtypes ?: emptyList(),
                 estimatedValue = price,
                 apiCardId = tcgCard.id, cardNumber = tcgCard.number,
-                variant = variant, quantity = quantity, condition = condition, language = language
+                variant = variant, quantity = quantity, condition = condition, language = resolvedLanguage
             )
             firestoreRepository.addCard(card)
                 .onSuccess {
@@ -254,7 +271,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                     subtypes = tcgCard.subtypes ?: emptyList(),
                     estimatedValue = price,
                     apiCardId = tcgCard.id, cardNumber = tcgCard.number,
-                    variant = actualVariant, quantity = 1, condition = "Near Mint", language = "🇮🇹 Italiano"
+                    variant = actualVariant, quantity = 1, condition = "Near Mint", language = defaultCollectionLanguage()
                 )
             }
 

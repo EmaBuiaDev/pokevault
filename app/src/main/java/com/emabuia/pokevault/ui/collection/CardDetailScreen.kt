@@ -34,6 +34,7 @@ import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.ui.pokedex.PriceSparkline
@@ -122,20 +123,18 @@ fun CardDetailScreen(
     fun loadData() {
         scope.launch {
             repository.getCard(cardId).onSuccess { initialCard ->
-                val apiId = initialCard.apiCardId
-                if (apiId.isNotBlank()) {
-                    repository.getCards().first().let { allCards ->
-                        val found = allCards.filter { it.apiCardId == apiId }
-                        variants = found
-                        editedQuantities = found.associate { it.id to it.quantity }
-                    }
-                } else {
-                    variants = listOf(initialCard)
-                    editedQuantities = mapOf(initialCard.id to initialCard.quantity)
+                repository.getCards().first().let { allCards ->
+                    val groupKey = initialCard.collectionGroupKey()
+                    val found = allCards.filter { it.collectionGroupKey() == groupKey }
+                    val resolved = found.ifEmpty { listOf(initialCard) }
+                    variants = resolved
+                    editedQuantities = resolved.associate { it.id to it.quantity }
                 }
             }.onFailure {
                 repository.getCards().first().let { allCards ->
-                    val found = allCards.filter { it.apiCardId == cardId || it.id == cardId }
+                    val found = allCards.filter {
+                        it.collectionGroupKey() == cardId || it.apiCardId == cardId || it.id == cardId
+                    }
                     variants = found
                     editedQuantities = found.associate { it.id to it.quantity }
                 }

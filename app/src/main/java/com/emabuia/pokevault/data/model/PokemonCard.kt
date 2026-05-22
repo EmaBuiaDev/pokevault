@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.data.model
 
+import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.PropertyName
 
@@ -84,6 +85,46 @@ data class PokemonCard(
     }
 }
 
+fun PokemonCard.collectionGroupKey(): String {
+    val normalizedSet = ItalianTranslations.translateExpansionName(set.trim())
+        .trim()
+        .lowercase()
+        .replace(Regex("\\s+"), " ")
+    val normalizedNumber = normalizeCollectionCardNumber(cardNumber)
+    val normalizedVariant = variant.trim().lowercase()
+
+    return if (normalizedSet.isNotBlank() && normalizedNumber.isNotBlank()) {
+        "${normalizedSet}|${normalizedNumber}|${normalizedVariant}"
+    } else {
+        apiCardId.ifBlank { "${name.trim().lowercase()}|${normalizedSet}|${normalizedNumber}|${normalizedVariant}" }
+    }
+}
+
+private fun normalizeCollectionCardNumber(raw: String): String {
+    val token = raw.substringBefore('/').trim().uppercase()
+    if (token.isBlank()) return ""
+
+    if (token.all { it.isDigit() }) {
+        return token.trimStart('0').ifEmpty { "0" }
+    }
+
+    val prefixDigits = Regex("^([A-Z]+)0*(\\d+)$").matchEntire(token)
+    if (prefixDigits != null) {
+        val prefix = prefixDigits.groupValues[1]
+        val digits = prefixDigits.groupValues[2].trimStart('0').ifEmpty { "0" }
+        return "$prefix$digits"
+    }
+
+    val splitDigits = Regex("^0*(\\d+)(.*)$").matchEntire(token)
+    if (splitDigits != null) {
+        val digits = splitDigits.groupValues[1].trimStart('0').ifEmpty { "0" }
+        val suffix = splitDigits.groupValues[2]
+        return "$digits$suffix"
+    }
+
+    return token
+}
+
 data class MenuSection(
     val title: String,
     val icon: String,
@@ -95,9 +136,26 @@ object CardOptions {
     val CONDITIONS = listOf("Mint", "Near Mint", "Excellent", "Good", "Light Played", "Played", "Poor")
     val GRADING_COMPANIES = listOf("PSA", "BGS", "CGC", "ACE", "SGC")
     val LANGUAGES = listOf(
-        "🇬🇧 English"
+        "🇮🇹 Italiano",
+        "🇬🇧 English",
+        "🇯🇵 Giapponese",
+        "🇨🇳 Cinese"
     )
     val DEFAULT_VARIANTS = listOf("Normal", "Reverse", "Holo")
+
+    fun languageLabelForMacro(macro: String?): String? {
+        return when (macro?.trim()?.uppercase()) {
+            "ITA" -> "🇮🇹 Italiano"
+            "ENG" -> "🇬🇧 English"
+            "JAP", "JPN" -> "🇯🇵 Giapponese"
+            "CHN" -> "🇨🇳 Cinese"
+            else -> null
+        }
+    }
+
+    fun languageOptionsForMacro(macro: String?): List<String> {
+        return languageLabelForMacro(macro)?.let(::listOf) ?: LANGUAGES
+    }
 
     private val SINGLE_VARIANT_RARITIES = setOf(
         "ace spec", "special illustration rare", "special art rare",
