@@ -43,6 +43,8 @@ import coil.request.ImageRequest
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
@@ -157,7 +159,7 @@ fun PokeballLoadingAnimation(
 @Composable
 fun SetsListScreen(
     onBack: () -> Unit,
-    onSetClick: (String, String?) -> Unit,
+    onSetClick: (String, String) -> Unit,
     viewModel: SetsViewModel = viewModel()
 ) {
     val state = viewModel.uiState
@@ -330,10 +332,11 @@ fun SetsListScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(languageMacros, key = { it }) { macro ->
-                    val count = state.languageCountByMacro[macro] ?: 0
                     SeriesFilterChip(
-                        label = macro,
-                        count = count,
+                        label = languageMacroToFlag(macro),
+                        count = 0,
+                        showCount = false,
+                        contentDescription = languageMacroToDescription(macro),
                         isSelected = state.selectedLanguageMacro == macro,
                         onClick = {
                             pendingTopReset++
@@ -433,6 +436,22 @@ fun SetsListScreen(
     }
 }
 
+private fun languageMacroToFlag(macro: String): String = when (macro) {
+    "ITA" -> "🇮🇹"
+    "ENG" -> "🇺🇸"
+    "JAP" -> "🇯🇵"
+    "CHN" -> "🇨🇳"
+    else -> macro
+}
+
+private fun languageMacroToDescription(macro: String): String = when (macro) {
+    "ITA" -> "Italiano"
+    "ENG" -> "English"
+    "JAP" -> "Japanese"
+    "CHN" -> "Chinese"
+    else -> macro
+}
+
 // ── Tab item ──
 @Composable
 fun RowScope.TabItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
@@ -451,13 +470,27 @@ fun RowScope.TabItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
 
 // ── Filtro serie migliorato con conteggio ──
 @Composable
-fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: () -> Unit) {
+fun SeriesFilterChip(
+    label: String,
+    count: Int,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    showCount: Boolean = true,
+    contentDescription: String? = null
+) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
             .background(if (isSelected) BlueCard else DarkCard)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .then(
+                if (contentDescription != null) {
+                    Modifier.semantics { this.contentDescription = contentDescription }
+                } else {
+                    Modifier
+                }
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
@@ -467,21 +500,23 @@ fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: ()
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
             fontSize = 13.sp, maxLines = 1
         )
-        Box(
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(
-                    if (isSelected) Color.White.copy(alpha = 0.2f)
-                    else TextMuted.copy(alpha = 0.15f)
+        if (showCount) {
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(
+                        if (isSelected) Color.White.copy(alpha = 0.2f)
+                        else TextMuted.copy(alpha = 0.15f)
+                    )
+                    .padding(horizontal = 6.dp, vertical = 1.dp)
+            ) {
+                Text(
+                    text = "$count",
+                    color = if (isSelected) TextWhite else TextMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
                 )
-                .padding(horizontal = 6.dp, vertical = 1.dp)
-        ) {
-            Text(
-                text = "$count",
-                color = if (isSelected) TextWhite else TextMuted,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium
-            )
+            }
         }
     }
 }

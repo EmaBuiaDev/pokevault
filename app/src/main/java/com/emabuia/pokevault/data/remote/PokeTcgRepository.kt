@@ -1494,6 +1494,45 @@ class PokeTcgRepository {
         val cardsByExpansion = catalog.cardsByExpansion()
         if (cardsByExpansion.isEmpty()) return nonItalianSets
 
+        // Pre-index nonItalianSets once: raw setRef (uppercase) → newest set, and
+        // canonical (normalized) setRef → first set. Avoids O(N*M) linear scans per expansion.
+        // We prefer ENG sets so that ITA expansions always inherit ENG logos/series (never JAP/CHN);
+        // a non-ENG fallback is still allowed if no ENG match exists.
+        fun TcgSet.langPriority(): Int = when (language?.trim()?.uppercase(Locale.ROOT).orEmpty()) {
+            "ENG" -> 0
+            "" -> 1
+            else -> 2
+        }
+        val setsByRawRef: Map<String, TcgSet> = run {
+            val grouped = HashMap<String, MutableList<TcgSet>>(nonItalianSets.size)
+            for (set in nonItalianSets) {
+                val ref = (extractSetRefFromImageUrl(set.images.symbol)
+                    ?: extractSetRefFromImageUrl(set.images.logo))
+                    ?.trim()?.uppercase(Locale.ROOT)
+                    ?: continue
+                grouped.getOrPut(ref) { mutableListOf() }.add(set)
+            }
+            grouped.mapValues { (_, list) ->
+                list.sortedWith(
+                    compareBy<TcgSet> { it.langPriority() }
+                        .thenByDescending { parseReleaseDateToEpoch(it.releaseDate) }
+                ).first()
+            }
+        }
+        val setsByCanonicalRef: Map<String, TcgSet> = run {
+            val map = HashMap<String, TcgSet>(setsByRawRef.size)
+            // Iterate ENG-first so canonical key resolves to the ENG variant when present.
+            val ordered = setsByRawRef.values.sortedBy { it.langPriority() }
+            for (set in ordered) {
+                val ref = extractSetRefFromImageUrl(set.images.symbol)
+                    ?: extractSetRefFromImageUrl(set.images.logo)
+                    ?: continue
+                val canonical = normalizeItalianSetCode(ref)
+                map.putIfAbsent(canonical, set)
+            }
+            map
+        }
+
         val italianSets = catalog.expansions.mapNotNull { manifest ->
             val expansionId = manifest.espansioneId.trim().lowercase(Locale.ROOT)
             if (expansionId.isBlank()) return@mapNotNull null
@@ -1512,13 +1551,8 @@ class PokeTcgRepository {
             val baseRawSetCode = preferredBaseSetCode ?: dominantRawSetCode ?: expansionId.uppercase(Locale.ROOT)
             val dominantCanonicalSetCode = normalizeItalianSetCode(baseRawSetCode)
 
-            val linkedBase = findExactRawSetMatch(nonItalianSets, baseRawSetCode)
-                ?: nonItalianSets.firstOrNull { set ->
-                    val setRef = extractSetRefFromImageUrl(set.images.symbol)
-                        ?: extractSetRefFromImageUrl(set.images.logo)
-                        ?: return@firstOrNull false
-                    normalizeItalianSetCode(setRef) == dominantCanonicalSetCode
-                }
+            val linkedBase = setsByRawRef[baseRawSetCode.trim().uppercase(Locale.ROOT)]
+                ?: setsByCanonicalRef[dominantCanonicalSetCode]
 
             val cardCount = manifest.cardCount.takeIf { it > 0 } ?: expansionCards.size
             val setName = linkedBase?.name?.takeIf { it.isNotBlank() }

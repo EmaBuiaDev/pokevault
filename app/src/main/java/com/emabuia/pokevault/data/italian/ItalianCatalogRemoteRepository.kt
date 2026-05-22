@@ -47,10 +47,12 @@ class ItalianCatalogRemoteRepository {
             return Result.failure(IllegalStateException("ITALIAN_CATALOG_URL non configurato"))
         }
 
-        val networkResult = runCatching {
-            fetchCatalogJson(url)
-        }.mapCatching { rawJson ->
-            ItalianCatalogNormalizer.parseCatalogJson(rawJson)
+        val networkResult: Result<ItalianCatalog> = runCatching {
+            val rawJson = fetchCatalogJson(url)
+            // Move heavy Gson parse off the caller's thread (avoid blocking Main).
+            withContext(Dispatchers.Default) {
+                ItalianCatalogNormalizer.parseCatalogJson(rawJson)
+            }
         }
 
         networkResult.onSuccess { catalog ->
@@ -70,26 +72,29 @@ class ItalianCatalogRemoteRepository {
         networkResult
     }
 
-    private fun loadFromPrefs(context: Context, ignoreExpiry: Boolean = false): ItalianCatalog? {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val updatedAt = prefs.getLong(KEY_UPDATED_AT, 0L)
-        if (updatedAt <= 0L) return null
-        val age = System.currentTimeMillis() - updatedAt
-        if (!ignoreExpiry && age > CACHE_TTL_MS) return null
+    private suspend fun loadFromPrefs(context: Context, ignoreExpiry: Boolean = false): ItalianCatalog? =
+        withContext(Dispatchers.IO) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val updatedAt = prefs.getLong(KEY_UPDATED_AT, 0L)
+            if (updatedAt <= 0L) return@withContext null
+            val age = System.currentTimeMillis() - updatedAt
+            if (!ignoreExpiry && age > CACHE_TTL_MS) return@withContext null
 
-        val json = prefs.getString(KEY_JSON, null)?.trim().orEmpty()
-        if (json.isBlank()) return null
+            val json = prefs.getString(KEY_JSON, null)?.trim().orEmpty()
+            if (json.isBlank()) return@withContext null
 
-        return runCatching { ItalianCatalogNormalizer.parseCatalogJson(json) }.getOrNull()
-    }
+            runCatching { ItalianCatalogNormalizer.parseCatalogJson(json) }.getOrNull()
+        }
 
-    private fun saveToPrefs(context: Context, catalog: ItalianCatalog) {
-        val payload = ItalianCatalogNormalizer.toCatalogJson(catalog)
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit()
-            .putString(KEY_JSON, payload)
-            .putLong(KEY_UPDATED_AT, System.currentTimeMillis())
-            .apply()
+    private suspend fun saveToPrefs(context: Context, catalog: ItalianCatalog) {
+        withContext(Dispatchers.IO) {
+            val payload = ItalianCatalogNormalizer.toCatalogJson(catalog)
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString(KEY_JSON, payload)
+                .putLong(KEY_UPDATED_AT, System.currentTimeMillis())
+                .apply()
+        }
     }
 
     private suspend fun fetchCatalogJson(url: String): String = withContext(Dispatchers.IO) {
