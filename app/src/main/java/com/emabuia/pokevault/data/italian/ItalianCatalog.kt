@@ -75,13 +75,14 @@ object ItalianCatalogNormalizer {
     private val gson = Gson()
     private val cardListType = object : TypeToken<List<ItalianCardRecord>>() {}.type
     private val catalogPayloadType = object : TypeToken<ItalianCatalogPayload>() {}.type
+    private const val UTF8_BOM = "\uFEFF"
     private val imageIdRegex = Regex(
-        "^([A-Za-z0-9]+)_IT_([A-Za-z0-9]+)\\.(png|webp|jpe?g)$",
+        "^([A-Za-z0-9]+)_IT_([A-Za-z0-9_]+)\\.(png|webp|jpe?g)$",
         RegexOption.IGNORE_CASE
     )
 
     fun parseCards(json: String): List<ItalianCardRecord> {
-        val parsed: List<ItalianCardRecord> = gson.fromJson(json, cardListType) ?: emptyList()
+        val parsed: List<ItalianCardRecord> = gson.fromJson(stripUtf8Bom(json), cardListType) ?: emptyList()
         return parsed
             .filter { it.cardId.isNotBlank() && it.espansioneId.isNotBlank() && it.nome.isNotBlank() }
             .sortedWith(cardComparator())
@@ -92,7 +93,7 @@ object ItalianCatalogNormalizer {
     }
 
     fun parseCatalogJson(json: String): ItalianCatalog {
-        val raw = json.trim()
+        val raw = stripUtf8Bom(json).trim()
         if (raw.isBlank()) return ItalianCatalog()
 
         return if (raw.startsWith("[")) {
@@ -119,6 +120,8 @@ object ItalianCatalogNormalizer {
             )
         )
     }
+
+    private fun stripUtf8Bom(raw: String): String = raw.removePrefix(UTF8_BOM)
 
     fun buildCatalog(cards: List<ItalianCardRecord>): ItalianCatalog {
         val normalizedCards = cards.sortedWith(cardComparator())

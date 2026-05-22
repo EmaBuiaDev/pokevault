@@ -74,6 +74,28 @@ class SeriesDerivationTest {
     }
 
     @Test
+    fun `maps black bolt alias to scarlet and violet`() {
+        val series = repository.deriveSeriesName(
+            setCode = "BLK",
+            language = "ita",
+            setName = "Luce Nera"
+        )
+
+        assertEquals("Scarlatto e Violetto", series)
+    }
+
+    @Test
+    fun `maps white flare alias to scarlet and violet`() {
+        val series = repository.deriveSeriesName(
+            setCode = "WHT",
+            language = "ita",
+            setName = "Fuoco Bianco"
+        )
+
+        assertEquals("Scarlatto e Violetto", series)
+    }
+
+    @Test
     fun `keeps ssp in scarlet and violet`() {
         val series = repository.deriveSeriesName(
             setCode = "SSP",

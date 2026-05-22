@@ -12,6 +12,8 @@ param(
 
     [switch]$SkipCatalog,
 
+    [switch]$UseWrangler4,
+
     [int]$Throttle = 6,
 
     [int]$RetryCount = 3
@@ -50,7 +52,8 @@ function Get-TargetSets {
 
 function Upload-Object {
     param(
-        [string]$NpxCommand,
+        [string]$WranglerExecutable,
+        [string[]]$WranglerArgsPrefix,
         [string]$WorkerRoot,
         [string]$BucketName,
         [string]$Key,
@@ -59,7 +62,7 @@ function Upload-Object {
 
     $objectRef = "$BucketName/$Key"
     Write-Host "UPLOAD $objectRef"
-    & $NpxCommand wrangler r2 object put $objectRef --file "$FilePath"
+    & $WranglerExecutable @WranglerArgsPrefix r2 object put $objectRef --file "$FilePath" --remote
     if ($LASTEXITCODE -ne 0) {
         throw "Upload fallito: $objectRef"
     }
@@ -97,18 +100,50 @@ Assert-PathExists -Path $SourceRoot -Label "SourceRoot"
 $allowedExtensions = @(".png", ".webp", ".jpg", ".jpeg")
 $targetSets = Get-TargetSets -Root $SourceRoot -RequestedSetCodes $SetCodes
 $workerRoot = Split-Path -Parent $PSScriptRoot
-$npxCommandInfo = Get-Command npx.cmd -ErrorAction SilentlyContinue
-if ($npxCommandInfo) {
-    $npxCommand = $npxCommandInfo.Source
-}
-if (-not $npxCommand) {
-    $npxFallbackInfo = Get-Command npx -ErrorAction SilentlyContinue
-    if ($npxFallbackInfo) {
-        $npxCommand = $npxFallbackInfo.Source
+$wranglerExecutable = $null
+$wranglerArgsPrefix = @()
+
+if ($UseWrangler4) {
+    $localWranglerCmd = Join-Path $workerRoot "node_modules/.bin/wrangler.cmd"
+    $localWrangler = Join-Path $workerRoot "node_modules/.bin/wrangler"
+
+    if (Test-Path -LiteralPath $localWranglerCmd) {
+        $wranglerExecutable = $localWranglerCmd
+    } elseif (Test-Path -LiteralPath $localWrangler) {
+        $wranglerExecutable = $localWrangler
+    } else {
+        $npmCommandInfo = Get-Command npm.cmd -ErrorAction SilentlyContinue
+        if ($npmCommandInfo) {
+            $wranglerExecutable = $npmCommandInfo.Source
+        }
+        if (-not $wranglerExecutable) {
+            $npmFallbackInfo = Get-Command npm -ErrorAction SilentlyContinue
+            if ($npmFallbackInfo) {
+                $wranglerExecutable = $npmFallbackInfo.Source
+            }
+        }
+        if (-not $wranglerExecutable) {
+            throw "npm non trovato nel PATH"
+        }
+
+        $wranglerArgsPrefix = @("exec", "--yes", "--package", "wrangler@4", "--", "wrangler")
     }
-}
-if (-not $npxCommand) {
-    throw "npx non trovato nel PATH"
+} else {
+    $npxCommandInfo = Get-Command npx.cmd -ErrorAction SilentlyContinue
+    if ($npxCommandInfo) {
+        $wranglerExecutable = $npxCommandInfo.Source
+    }
+    if (-not $wranglerExecutable) {
+        $npxFallbackInfo = Get-Command npx -ErrorAction SilentlyContinue
+        if ($npxFallbackInfo) {
+            $wranglerExecutable = $npxFallbackInfo.Source
+        }
+    }
+    if (-not $wranglerExecutable) {
+        throw "npx non trovato nel PATH"
+    }
+
+    $wranglerArgsPrefix = @("wrangler")
 }
 
 if ($Throttle -lt 1) {
@@ -171,14 +206,14 @@ if (-not $SkipImages) {
         }
 
         [void]$jobs.Add((Start-Job -ScriptBlock {
-            param($NpxCommandPath, $WorkerDir, $BucketName, $UploadKey, $UploadFile, $MaxRetries)
+            param($WranglerExecutablePath, $WranglerArgs, $WorkerDir, $BucketName, $UploadKey, $UploadFile, $MaxRetries)
 
             Set-Location $WorkerDir
             $attempt = 0
 
             while ($attempt -lt $MaxRetries) {
                 $attempt += 1
-                $output = & $NpxCommandPath wrangler r2 object put "$BucketName/$UploadKey" --file "$UploadFile" 2>&1 | Out-String
+                $output = & $WranglerExecutablePath @WranglerArgs r2 object put "$BucketName/$UploadKey" --file "$UploadFile" --remote 2>&1 | Out-String
                 $exitCode = $LASTEXITCODE
 
                 if ($exitCode -eq 0) {
@@ -198,7 +233,7 @@ if (-not $SkipImages) {
                     }
                 }
             }
-        } -ArgumentList $npxCommand, $workerRoot, $Bucket, $upload.Key, $upload.FilePath, $RetryCount))
+        } -ArgumentList $wranglerExecutable, $wranglerArgsPrefix, $workerRoot, $Bucket, $upload.Key, $upload.FilePath, $RetryCount))
     }
 
     while ($jobs.Count -gt 0) {
@@ -225,7 +260,7 @@ if (-not $SkipCatalog) {
     }
 
     Assert-PathExists -Path $CatalogPath -Label "CatalogPath"
-    Upload-Object -NpxCommand $npxCommand -WorkerRoot $workerRoot -BucketName $Bucket -Key "it/catalog/cards.cleaned.json" -FilePath $CatalogPath
+    Upload-Object -WranglerExecutable $wranglerExecutable -WranglerArgsPrefix $wranglerArgsPrefix -WorkerRoot $workerRoot -BucketName $Bucket -Key "it/catalog/cards.cleaned.json" -FilePath $CatalogPath
     Write-Host "Catalogo aggiornato: it/catalog/cards.cleaned.json"
 }
 

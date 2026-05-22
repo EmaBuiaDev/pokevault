@@ -292,11 +292,19 @@ function normalizeCardNumber(raw: string): string {
 }
 
 function buildItalianCardKeyCandidates(prefix: string, setCode: string, cardNumber: string, size: string): string[] {
-  const normalized = normalizeCardNumber(cardNumber);
+  const rawCardNumber = cardNumber.trim();
+  const normalized = normalizeCardNumber(rawCardNumber);
   const padded = normalized.padStart(3, '0');
   const upperSetCode = setCode.toUpperCase();
   const lowerSetCode = setCode.toLowerCase();
   const setCodeTokens = [upperSetCode, lowerSetCode];
+  const cardNumberTokens = new Set<string>([
+    rawCardNumber,
+    rawCardNumber.toUpperCase(),
+    rawCardNumber.toLowerCase(),
+    normalized,
+    padded,
+  ].filter(Boolean));
   const basePaths = [
     `${prefix}/${upperSetCode}`,
     `${prefix}/${lowerSetCode}`,
@@ -306,20 +314,21 @@ function buildItalianCardKeyCandidates(prefix: string, setCode: string, cardNumb
 
   // Primary layout for all expansions: {setCode}/{number}.png
   for (const basePath of basePaths) {
-    for (const ext of imageExtensions) {
-      candidates.add(`${basePath}/${normalized}.${ext}`);
-      candidates.add(`${basePath}/${padded}.${ext}`);
+    for (const cardToken of cardNumberTokens) {
+      for (const ext of imageExtensions) {
+        candidates.add(`${basePath}/${cardToken}.${ext}`);
+      }
     }
   }
 
   if (size === 'low' || size === 'high') {
     for (const basePath of basePaths) {
       for (const setToken of setCodeTokens) {
-        for (const ext of imageExtensions) {
-          candidates.add(`${basePath}/${setToken}_IT_${normalized}_${size}.${ext}`);
-          candidates.add(`${basePath}/${setToken}_IT_${normalized}-${size}.${ext}`);
-          candidates.add(`${basePath}/${setToken}_IT_${padded}_${size}.${ext}`);
-          candidates.add(`${basePath}/${setToken}_IT_${padded}-${size}.${ext}`);
+        for (const cardToken of cardNumberTokens) {
+          for (const ext of imageExtensions) {
+            candidates.add(`${basePath}/${setToken}_IT_${cardToken}_${size}.${ext}`);
+            candidates.add(`${basePath}/${setToken}_IT_${cardToken}-${size}.${ext}`);
+          }
         }
       }
     }
@@ -328,9 +337,10 @@ function buildItalianCardKeyCandidates(prefix: string, setCode: string, cardNumb
   // Legacy layouts kept as fallback for already-uploaded historical assets.
   for (const basePath of basePaths) {
     for (const setToken of setCodeTokens) {
-      for (const ext of imageExtensions) {
-        candidates.add(`${basePath}/${setToken}_IT_${normalized}.${ext}`);
-        candidates.add(`${basePath}/${setToken}_IT_${padded}.${ext}`);
+      for (const cardToken of cardNumberTokens) {
+        for (const ext of imageExtensions) {
+          candidates.add(`${basePath}/${setToken}_IT_${cardToken}.${ext}`);
+        }
       }
     }
   }

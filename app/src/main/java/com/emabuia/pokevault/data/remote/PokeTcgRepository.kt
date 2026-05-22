@@ -1339,6 +1339,8 @@ class PokeTcgRepository {
             "sv08" -> "SSP"
             "sv09" -> "JTG"
             "sv10" -> "DRI"
+                "zsv10pt5" -> "BLK"
+                "rsv10pt5" -> "WHT"
             "sv3pt5" -> "MEW"
             "sv4pt5" -> "PAF"
             "sv6pt5" -> "SFA"
