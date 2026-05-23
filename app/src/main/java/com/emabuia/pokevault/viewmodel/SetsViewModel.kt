@@ -88,6 +88,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         ?: mutableSetOf()
 
     private val languageMacros = listOf("ITA", "ENG", "JAP", "CHN")
+    private val macrosAllowedWithZeroTotals = setOf("ENG")
     private val officialSeriesOrder = listOf(
         "Mega Evolutions",
         "Scarlet & Violet",
@@ -125,7 +126,13 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         "vmax climax" to "JAP",
         "eevee heroes" to "JAP",
         "25th anniversary collection" to "JAP",
-        "mega evolution deck" to "JAP"
+        "mega evolution deck" to "JAP",
+        // Ensure latest ENG expansions remain visible even with partial source metadata.
+        "chaos rising" to "ENG",
+        "abyss eye" to "ENG",
+        "abyss eyes" to "ENG",
+        "abiss eye" to "ENG",
+        "abiss eyes" to "ENG"
     )
 
     /**
@@ -168,6 +175,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                         isLoading = false
                     )
                     applyFilters()
+                    revalidateSetsFromNetwork(context)
                 }
                 .onFailure { error ->
                     uiState = uiState.copy(
@@ -209,8 +217,35 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                         errorMessage = null
                     )
                     applyFilters()
+                    revalidateSetsFromNetwork(context)
                 }
         }
+    }
+
+    private fun revalidateSetsFromNetwork(context: Context) {
+        viewModelScope.launch {
+            repository.getSets(context = context, forceRefresh = true)
+                .onSuccess { freshSets ->
+                    if (!hasSetCatalogChanged(uiState.allSets, freshSets)) return@onSuccess
+                    uiState = uiState.copy(
+                        allSets = freshSets,
+                        errorMessage = null,
+                        isLoading = false
+                    )
+                    applyFilters()
+                }
+        }
+    }
+
+    private fun hasSetCatalogChanged(current: List<TcgSet>, incoming: List<TcgSet>): Boolean {
+        if (current.size != incoming.size) return true
+        val currentKey = current
+            .map { it.id to it.language }
+            .sortedBy { it.first }
+        val incomingKey = incoming
+            .map { it.id to it.language }
+            .sortedBy { it.first }
+        return currentKey != incomingKey
     }
 
     fun refresh() {
@@ -691,8 +726,12 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         if (normalizedName == "gym yeld" || normalizedName == "gym yield") {
             return false
         }
-        // Hide empty expansions: both printed and effective total are zero.
-        return set.printedTotal > 0 || set.total > 0
+        if (set.printedTotal > 0 || set.total > 0) {
+            return true
+        }
+
+        // Keep ENG expansions visible even when totals are missing from source payload.
+        return resolveMacroMemberships(set).any { it in macrosAllowedWithZeroTotals }
     }
 
     private fun hasPrioritizedLogo(set: TcgSet): Boolean {

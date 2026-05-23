@@ -250,7 +250,15 @@ fun SetDetailScreen(
         if (isSelectionMode) quickAddCard = null
     }
 
-    LaunchedEffect(setId, sourceMacro) { viewModel.loadSet(setId, sourceMacro) }
+    LaunchedEffect(setId, sourceMacro) {
+        // Ensure a fresh view every time a set is opened: stale local filters can
+        // make users think cards are missing even when repository loaded all cards.
+        selectedRarityFilter = null
+        filtersExpanded = false
+        isSelectionMode = false
+        selectedCardIds = emptySet()
+        viewModel.loadSet(setId, sourceMacro)
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.successMessage, state.errorMessage) {
@@ -296,7 +304,6 @@ fun SetDetailScreen(
             state.selectedSupertype != null ||
             selectedRarityFilter != null
     }
-
     val displayedCards = remember(state.cards, sortedCards, hasExplicitCardFilters) {
         if (sortedCards.isEmpty() && state.cards.isNotEmpty() && !hasExplicitCardFilters) {
             state.cards.sortedBy {
@@ -306,6 +313,8 @@ fun SetDetailScreen(
             sortedCards
         }
     }
+    val visibleCount = displayedCards.size
+    val totalCount = state.cards.size
 
     val rarityCounts = remember(state.cards, state.ownedCardIds) {
         state.cards.groupBy { RarityUtils.getRarityInfo(it.rarity) }
@@ -687,6 +696,42 @@ fun SetDetailScreen(
                                         .clickable { viewModel.setViewMode(mode) }
                                         .background(if (state.viewMode == mode) BlueCard.copy(alpha = 0.3f) else Color.Transparent)
                                         .padding(vertical = 10.dp))
+                            }
+                        }
+                    }
+
+                    item(span = { GridItemSpan(3) }) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = if (AppLocale.isItalian) {
+                                    "Visibili: $visibleCount / $totalCount"
+                                } else {
+                                    "Visible: $visibleCount / $totalCount"
+                                },
+                                color = TextMuted,
+                                fontSize = 12.sp
+                            )
+
+                            if (hasExplicitCardFilters) {
+                                Text(
+                                    text = if (AppLocale.isItalian) "Reset filtri" else "Reset filters",
+                                    color = BlueCard,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            selectedRarityFilter = null
+                                            viewModel.clearCardFilters()
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
                             }
                         }
                     }
@@ -1084,8 +1129,14 @@ fun TcgCardCompactItem(
     val variantOptions = remember(card.tcgplayer?.prices?.keys, card.rarity) {
         CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity)
     }
-    var isImageAvailable by remember(card.id, card.images.small) {
-        mutableStateOf(card.images.small.isNotBlank())
+    var currentImageUrl by remember(card.id, card.images.small, card.images.large) {
+        mutableStateOf(card.images.small.ifBlank { card.images.large })
+    }
+    var isImageAvailable by remember(card.id, card.images.small, card.images.large) {
+        mutableStateOf(currentImageUrl.isNotBlank())
+    }
+    var imageLoadFailed by remember(card.id, card.images.small, card.images.large) {
+        mutableStateOf(currentImageUrl.isBlank())
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1103,12 +1154,22 @@ fun TcgCardCompactItem(
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
         ) {
-            if (card.images.small.isNotBlank()) {
+            if (!imageLoadFailed && currentImageUrl.isNotBlank()) {
                 SubcomposeAsyncImage(
-                    model = safeImageUrl(card.images.small),
+                    model = safeImageUrl(currentImageUrl),
                     contentDescription = card.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
+                    onError = {
+                        val canTryLarge =
+                            currentImageUrl != card.images.large && card.images.large.isNotBlank()
+                        if (canTryLarge) {
+                            currentImageUrl = card.images.large
+                        } else {
+                            imageLoadFailed = true
+                            isImageAvailable = false
+                        }
+                    },
                     loading = {
                         Box(
                             modifier = Modifier
@@ -1117,11 +1178,11 @@ fun TcgCardCompactItem(
                         )
                     },
                     error = {
-                        isImageAvailable = false
                         CardImageFallback(card = card, compact = false)
                     },
                     success = {
                         isImageAvailable = true
+                        imageLoadFailed = false
                         SubcomposeAsyncImageContent()
                     }
                 )
@@ -1369,8 +1430,14 @@ fun TcgCardListRow(
     onWishlistClick: () -> Unit
 ) {
     val rarityInfo = RarityUtils.getRarityInfo(card.rarity)
-    var isImageAvailable by remember(card.id, card.images.small) {
-        mutableStateOf(card.images.small.isNotBlank())
+    var currentImageUrl by remember(card.id, card.images.small, card.images.large) {
+        mutableStateOf(card.images.small.ifBlank { card.images.large })
+    }
+    var isImageAvailable by remember(card.id, card.images.small, card.images.large) {
+        mutableStateOf(currentImageUrl.isNotBlank())
+    }
+    var imageLoadFailed by remember(card.id, card.images.small, card.images.large) {
+        mutableStateOf(currentImageUrl.isBlank())
     }
     Row(modifier = Modifier
         .fillMaxWidth()
@@ -1382,12 +1449,22 @@ fun TcgCardListRow(
             .width(45.dp)
             .height(63.dp)
             .clip(RoundedCornerShape(6.dp))) {
-            if (card.images.small.isNotBlank()) {
+            if (!imageLoadFailed && currentImageUrl.isNotBlank()) {
                 SubcomposeAsyncImage(
-                    model = safeImageUrl(card.images.small),
+                    model = safeImageUrl(currentImageUrl),
                     contentDescription = card.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
+                    onError = {
+                        val canTryLarge =
+                            currentImageUrl != card.images.large && card.images.large.isNotBlank()
+                        if (canTryLarge) {
+                            currentImageUrl = card.images.large
+                        } else {
+                            imageLoadFailed = true
+                            isImageAvailable = false
+                        }
+                    },
                     loading = {
                         Box(
                             modifier = Modifier
@@ -1396,11 +1473,11 @@ fun TcgCardListRow(
                         )
                     },
                     error = {
-                        isImageAvailable = false
                         CardImageFallback(card = card, compact = true)
                     },
                     success = {
                         isImageAvailable = true
+                        imageLoadFailed = false
                         SubcomposeAsyncImageContent()
                     }
                 )

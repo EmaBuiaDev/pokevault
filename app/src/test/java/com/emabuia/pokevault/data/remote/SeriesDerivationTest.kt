@@ -1,11 +1,64 @@
 package com.emabuia.pokevault.data.remote
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SeriesDerivationTest {
 
     private val repository = PokeTcgRepository()
+
+    @Test
+    fun `chaos rising cri code classifies as mega evolutions`() {
+        val series = repository.deriveSeriesName(
+            setCode = "CRI",
+            language = null,
+            setName = "Chaos Rising"
+        )
+
+        assertEquals("Mega Evoluzioni", series)
+    }
+
+    @Test
+    fun `abyss eye m5 code classifies as mega evolutions`() {
+        val series = repository.deriveSeriesName(
+            setCode = "m5",
+            language = null,
+            setName = "Abyss Eye"
+        )
+
+        assertEquals("Mega Evoluzioni", series)
+    }
+
+    @Test
+    fun `infer english language for chaos rising with missing language`() {
+        val inferred = repository.inferEnglishLanguageFallback(
+            setCode = "CRI",
+            setName = "Chaos Rising"
+        )
+
+        assertEquals("ENG", inferred)
+    }
+
+    @Test
+    fun `infer english language for abyss eye m5 with missing language`() {
+        val inferred = repository.inferEnglishLanguageFallback(
+            setCode = "m5",
+            setName = "Abyss Eye"
+        )
+
+        assertEquals("ENG", inferred)
+    }
+
+    @Test
+    fun `do not infer english language for unrelated unknown set`() {
+        val inferred = repository.inferEnglishLanguageFallback(
+            setCode = "ZZZ",
+            setName = "Some Random Set"
+        )
+
+        assertNull(inferred)
+    }
 
     @Test
     fun `maps mega evolution code pfl to mega evoluzione`() {
@@ -170,6 +223,17 @@ class SeriesDerivationTest {
         )
 
         assertEquals("Platinum", series)
+    }
+
+    @Test
+    fun `does not map m23 promo code to mega evolutions`() {
+        val series = repository.deriveSeriesName(
+            setCode = "M23",
+            language = "eng",
+            setName = "McDonald's Promos 2023"
+        )
+
+        assertEquals("Altro", series)
     }
 
     @Test

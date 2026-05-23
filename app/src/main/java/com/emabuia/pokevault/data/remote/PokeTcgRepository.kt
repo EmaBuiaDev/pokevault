@@ -102,9 +102,29 @@ class PokeTcgRepository {
         private val HUMAN_DATE_LONG = DateTimeFormatter.ofPattern("d MMMM, uuuu", Locale.ENGLISH)
         private val HUMAN_DATE_SHORT = DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH)
 
-        private val MEGA_EVOLUTION_SET_CODES = setOf("MEG", "PFL", "ASC", "POR", "CRI")
-        private val MEGA_EVOLUTION_CODE_PATTERN = Regex("^ME\\d+$")
+        private val MEGA_EVOLUTION_SET_CODES = setOf("MEG", "PFL", "ASC", "POR", "CRI", "M5")
+        // Accept canonical Mega codes (ME01, ME03, ...) and short wave codes (M5, M6, ...).
+        // Avoid broad matches like M23/M24 (non Mega Evolution expansions).
+        private val MEGA_EVOLUTION_CODE_PATTERN = Regex("^(?:ME\\d+|M\\d)$")
         private val SCARLET_VIOLET_SET_CODES = setOf("BLK", "WHT")
+        private data class MissingSetSeed(
+            val setId: String,
+            val setCode: String,
+            val searchQuery: String
+        )
+        private val MISSING_MEGA_SET_SEEDS = listOf(
+            MissingSetSeed(setId = "24655", setCode = "CRI", searchQuery = "Chaos Rising"),
+            MissingSetSeed(setId = "24711", setCode = "m5", searchQuery = "Abyss Eye")
+        )
+        // Name fragments (lowercase) used to infer ENG language when the source
+        // metadata is incomplete for brand-new expansions just released by PokeWallet.
+        private val ENG_NAME_HINTS = setOf(
+            "chaos rising",
+            "abyss eye",
+            "abyss eyes",
+            "ascending heroes",
+            "perfect order"
+        )
         private val LEGACY_CODE_TO_SERIES = mapOf(
             "BS" to "Base",
             "JU" to "Base",
@@ -237,8 +257,9 @@ class PokeTcgRepository {
 
             val networkResult = guardedApiCall(resourceKey = "sets") {
                 val response = api.getSets()
+                val enrichedSets = enrichMissingMegaSetsFromSearch(response.data)
                 setLanguageById.clear()
-                response.data
+                enrichedSets
                     .mapNotNull { remoteSet ->
                         runCatching {
                             val mapped = remoteSet.toTcgSet()
@@ -284,6 +305,11 @@ class PokeTcgRepository {
         preferredImageMacro: String? = null
     ): Result<List<TcgCard>> =
         cardsMutex.withLock {
+            val mustBypassCache = MISSING_MEGA_SET_SEEDS.any {
+                it.setId.equals(setId, ignoreCase = true) || it.setCode.equals(setId, ignoreCase = true)
+            }
+            val effectiveForceRefresh = forceRefresh || mustBypassCache
+
             if (isItalianSetId(setId)) {
                 return getCardsByItalianSet(
                     setId = setId,
@@ -303,7 +329,7 @@ class PokeTcgRepository {
             }
 
             // L1: Memory
-            if (!forceRefresh) {
+            if (!effectiveForceRefresh) {
                 memoryCards[setId]?.let {
                     if (it.isNotEmpty()) {
                         val localizedCards = adaptPilotImagesForCurrentLocale(setId, it, preferredImageMacro)
@@ -316,7 +342,7 @@ class PokeTcgRepository {
             }
 
             // L2: Room DB
-            if (!forceRefresh) {
+            if (!effectiveForceRefresh) {
                 val roomCards = loadCardsFromRoom(setId)
                 if (roomCards != null) {
                     val localizedCards = adaptPilotImagesForCurrentLocale(setId, roomCards, preferredImageMacro)
@@ -980,6 +1006,51 @@ class PokeTcgRepository {
                 val language = setLanguageById[setId]
                 language in ALLOWED_LANGUAGES
             }
+    }
+
+    private suspend fun enrichMissingMegaSetsFromSearch(baseSets: List<PokeWalletSet>): List<PokeWalletSet> {
+        if (baseSets.isEmpty()) return baseSets
+
+        val presentIds = baseSets.map { it.setId.trim() }.toMutableSet()
+        val presentCodes = baseSets
+            .mapNotNull { it.setCode?.trim()?.uppercase(Locale.ROOT) }
+            .toMutableSet()
+        val fallbackAdds = mutableListOf<PokeWalletSet>()
+
+        for (seed in MISSING_MEGA_SET_SEEDS) {
+            if (seed.setId in presentIds || seed.setCode.uppercase(Locale.ROOT) in presentCodes) continue
+
+            val lookup = runCatching {
+                api.search(query = seed.searchQuery, page = 1, limit = 25)
+            }.getOrNull() ?: continue
+
+            val matchingCard = lookup.results.firstOrNull { card ->
+                val info = card.cardInfo
+                val idMatch = info?.setId?.trim() == seed.setId
+                val codeMatch = info?.setCode?.trim()?.equals(seed.setCode, ignoreCase = true) == true
+                idMatch || codeMatch
+            } ?: continue
+
+            val info = matchingCard.cardInfo ?: continue
+            val setId = info.setId?.trim().orEmpty().ifBlank { seed.setId }
+            val setCode = info.setCode?.trim().orEmpty().ifBlank { seed.setCode }
+            val setName = info.setName?.trim().orEmpty().ifBlank { seed.searchQuery }
+
+            fallbackAdds += PokeWalletSet(
+                name = setName,
+                setCode = setCode,
+                setId = setId,
+                cardCount = 0,
+                totalCards = 0,
+                language = null,
+                releaseDate = null
+            )
+            presentIds += setId
+            presentCodes += setCode.uppercase(Locale.ROOT)
+        }
+
+        if (fallbackAdds.isEmpty()) return baseSets
+        return baseSets + fallbackAdds
     }
 
     private suspend fun performAdaptiveApiSearch(query: String, page: Int): List<TcgCard> {
@@ -2075,11 +2146,13 @@ class PokeTcgRepository {
         // Remove set code prefix if present (e.g., "ME03:Perfect Order" → "Perfect Order")
         val cleanName = name.substringAfterLast(":").trim().takeIf { it.isNotBlank() } ?: name
         val imageSetRef = setCode?.takeIf { it.isNotBlank() } ?: setId
+        val resolvedLanguage = mapLanguageMacro(language)
+            ?: inferEnglishLanguageFallback(setCode = setCode, setName = cleanName)
         return TcgSet(
             id = setId,
             name = ItalianTranslations.translateExpansionName(cleanName),
             series = deriveSeriesName(setCode = setCode, language = language, setName = cleanName),
-            language = mapLanguageMacro(language),
+            language = resolvedLanguage,
             printedTotal = printedCount,
             total = totalCount,
             releaseDate = releaseDate.orEmpty(),
@@ -2088,6 +2161,31 @@ class PokeTcgRepository {
                 logo = buildSetImageUrl(imageSetRef)
             )
         )
+    }
+
+    /**
+     * Best-effort ENG language inference for newly published expansions that
+     * may arrive from PokeWallet with a missing/blank `language` field.
+     * Strict: only triggers on well-known Mega Evolution codes/patterns or on
+     * curated English name fragments to avoid mislabelling unrelated sets.
+     */
+    internal fun inferEnglishLanguageFallback(setCode: String?, setName: String?): String? {
+        val rawCode = setCode?.trim().orEmpty().uppercase(Locale.ROOT)
+        val normalizedCode = SetCodeMapper.normalizeDecklistSetCode(rawCode)?.uppercase(Locale.ROOT)
+            ?: rawCode
+        if (rawCode.isNotEmpty()) {
+            if (rawCode in MEGA_EVOLUTION_SET_CODES || MEGA_EVOLUTION_CODE_PATTERN.matches(rawCode)) {
+                return "ENG"
+            }
+            if (normalizedCode in MEGA_EVOLUTION_SET_CODES || MEGA_EVOLUTION_CODE_PATTERN.matches(normalizedCode)) {
+                return "ENG"
+            }
+        }
+        val lowerName = setName?.trim()?.lowercase(Locale.ROOT).orEmpty()
+        if (lowerName.isNotEmpty() && ENG_NAME_HINTS.any { lowerName.contains(it) }) {
+            return "ENG"
+        }
+        return null
     }
 
     private fun PokeWalletCard.toTcgCard(setOverride: PokeWalletSet? = null): TcgCard {
@@ -2278,9 +2376,12 @@ class PokeTcgRepository {
                 name.contains("phantasmal flames") ||
                 name.contains("ascesa eroica") ||
                 name.contains("heroic rise") ||
+                name.contains("ascending heroes") ||
                 name.contains("perfect order") ||
                 name.contains("equilibrio perfetto") ||
-                name.contains("caos nascente")
+                name.contains("caos nascente") ||
+                name.contains("chaos rising") ||
+                name.contains("abyss eye")
         val isScarletVioletByName =
             name.contains("scarlatto e violetto") ||
                 name.contains("scarlet & violet") ||
