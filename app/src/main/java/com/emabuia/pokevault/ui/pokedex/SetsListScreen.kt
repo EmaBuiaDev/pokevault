@@ -334,6 +334,7 @@ fun SetsListScreen(
                     SeriesFilterChip(
                         label = languageMacroToFlag(macro),
                         count = count,
+                        showCount = false,
                         isSelected = state.selectedLanguageMacro == macro,
                         onClick = {
                             pendingTopReset++
@@ -377,14 +378,6 @@ fun SetsListScreen(
             }
 
             Spacer(modifier = Modifier.height(6.dp))
-
-            if (!state.isLoading) {
-                Text(
-                    text = AppLocale.expansionsCount(state.filteredSets.size),
-                    color = TextMuted, fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
-                )
-            }
 
             // ── Contenuto ──
             if (state.isLoading) {
@@ -459,7 +452,13 @@ fun RowScope.TabItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
 
 // ── Filtro serie migliorato con conteggio ──
 @Composable
-fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: () -> Unit) {
+fun SeriesFilterChip(
+    label: String,
+    count: Int,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    showCount: Boolean = true
+) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
@@ -475,21 +474,23 @@ fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: ()
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
             fontSize = 13.sp, maxLines = 1
         )
-        Box(
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(
-                    if (isSelected) Color.White.copy(alpha = 0.2f)
-                    else TextMuted.copy(alpha = 0.15f)
+        if (showCount) {
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(
+                        if (isSelected) Color.White.copy(alpha = 0.2f)
+                        else TextMuted.copy(alpha = 0.15f)
+                    )
+                    .padding(horizontal = 6.dp, vertical = 1.dp)
+            ) {
+                Text(
+                    text = "$count",
+                    color = if (isSelected) TextWhite else TextMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
                 )
-                .padding(horizontal = 6.dp, vertical = 1.dp)
-        ) {
-            Text(
-                text = "$count",
-                color = if (isSelected) TextWhite else TextMuted,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium
-            )
+            }
         }
     }
 }
