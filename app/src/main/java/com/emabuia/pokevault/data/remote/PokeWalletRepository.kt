@@ -11,6 +11,7 @@ class PokeWalletRepository {
 
     companion object {
         private const val MAX_SET_LOOKUP_CANDIDATES = 6
+        const val PRICE_STALE_AFTER_MS: Long = 48L * 60 * 60 * 1000 // 48 hours
     }
 
     private val apiService: PokeWalletApiService by lazy {
@@ -24,7 +25,7 @@ class PokeWalletRepository {
     private val setPriceCache = ConcurrentHashMap<String, Pair<Map<String, PokeWalletPriceData>, Long>>()
     private val inFlightPriceRequests = ConcurrentHashMap<String, CompletableDeferred<Result<PokeWalletPriceData>>>()
     private val inFlightSetPriceRequests = ConcurrentHashMap<String, CompletableDeferred<Result<Map<String, PokeWalletPriceData>>>>()
-    private val CACHE_DURATION_MS = 24L * 60 * 60 * 1000 // 24 hours
+    private val CACHE_DURATION_MS = PRICE_STALE_AFTER_MS
     @Volatile
     private var cacheHitCount: Long = 0
     @Volatile
@@ -278,6 +279,37 @@ class PokeWalletRepository {
 
         pendingRequest.complete(result)
         return result
+    }
+
+    suspend fun isCardPriceStale(
+        setCode: String,
+        cardNumber: String,
+        staleAfterMs: Long = PRICE_STALE_AFTER_MS
+    ): Boolean {
+        val cleanNumber = cardNumber.split("/").firstOrNull()?.trim() ?: cardNumber
+        if (setCode.isBlank() || cleanNumber.isBlank()) return true
+
+        val cacheKey = "${setCode.lowercase()}_${cleanNumber.lowercase()}"
+        val now = System.currentTimeMillis()
+
+        val memoryCached = priceCache[cacheKey]
+        if (memoryCached != null) {
+            return now - memoryCached.second >= staleAfterMs
+        }
+
+        return try {
+            val roomCached = db.priceDao().getPrice(cacheKey, setCode.lowercase())
+            if (roomCached != null) {
+                val data = roomCached.toPriceData()
+                priceCache[cacheKey] = Pair(data, roomCached.cachedAt)
+                now - roomCached.cachedAt >= staleAfterMs
+            } else {
+                true
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Errore lettura stale-state prezzi Room")
+            true
+        }
     }
 
     private fun recordCacheHit(tag: String) {

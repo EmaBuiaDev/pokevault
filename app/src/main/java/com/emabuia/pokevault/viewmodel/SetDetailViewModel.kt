@@ -495,13 +495,22 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun clearMessages() { uiState = uiState.copy(errorMessage = null, successMessage = null) }
 
     fun loadPokeWalletPrices(card: TcgCard) {
-        if (lastPricedCardId == card.id && uiState.selectedCardPokeWalletPrices != null) return
-        lastPricedCardId = card.id
-        uiState = uiState.copy(
-            isLoadingPokeWalletPrices = true,
-            selectedCardPokeWalletPrices = priceDataFromCard(card)
-        )
         viewModelScope.launch {
+            val lookup = resolvePriceLookup(card)
+            val isStale = pokeWalletRepository.isCardPriceStale(
+                setCode = lookup.setCode,
+                cardNumber = lookup.cardNumber
+            )
+            if (lastPricedCardId == card.id && uiState.selectedCardPokeWalletPrices != null && !isStale) {
+                return@launch
+            }
+
+            lastPricedCardId = card.id
+            uiState = uiState.copy(
+                isLoadingPokeWalletPrices = true,
+                selectedCardPokeWalletPrices = priceDataFromCard(card)
+            )
+
             val setPrices = resolveItalianSetPriceMap(uiState.cards, forceRefresh = false)
             val setPrice = normalizeCardNumberKey(card.number)?.let(setPrices::get)
             if (setPrice?.hasEurPrices == true) {
@@ -515,7 +524,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch
             }
 
-            val lookup = resolvePriceLookup(card)
             pokeWalletRepository.getCardPrices(
                 cardName = lookup.cardName,
                 setCode = lookup.setCode,
@@ -538,12 +546,18 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun ensureCardPrice(card: TcgCard) {
         val current = uiState.cards.firstOrNull { it.id == card.id } ?: card
-        val cm = current.cardmarket?.prices
-        val hasApiEurPrice = cm.hasPositiveEurPrice()
-        if (hasApiEurPrice) return
         if (!requestedCardPriceIds.add(card.id)) return
 
         viewModelScope.launch {
+            val cm = current.cardmarket?.prices
+            val hasApiEurPrice = cm.hasPositiveEurPrice()
+            val lookup = resolvePriceLookup(current)
+            val shouldRefreshExistingPrice = hasApiEurPrice && pokeWalletRepository.isCardPriceStale(
+                setCode = lookup.setCode,
+                cardNumber = lookup.cardNumber
+            )
+            if (hasApiEurPrice && !shouldRefreshExistingPrice) return@launch
+
             val setPrices = resolveItalianSetPriceMap(uiState.cards, forceRefresh = false)
             val setPrice = normalizeCardNumberKey(current.number)?.let(setPrices::get)
 
@@ -570,7 +584,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch
             }
 
-            val lookup = resolvePriceLookup(current)
             val result = pokeWalletRepository.getCardPrices(
                 cardName = lookup.cardName,
                 setCode = lookup.setCode,

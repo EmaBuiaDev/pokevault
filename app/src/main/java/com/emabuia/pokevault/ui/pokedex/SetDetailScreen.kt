@@ -707,11 +707,8 @@ fun SetDetailScreen(
                         when (state.viewMode) {
                             "grid" -> items(displayedCards, key = { "${it.id}_${it.number}" }) { card ->
                                 if (premiumManager.canViewPrices()) {
-                                    val currentPrice = resolveDisplayPrice(card)
-                                    LaunchedEffect(card.id, currentPrice) {
-                                        if (currentPrice == null || currentPrice <= 0.0) {
-                                            viewModel.ensureCardPrice(card)
-                                        }
+                                    LaunchedEffect(card.id) {
+                                        viewModel.ensureCardPrice(card)
                                     }
                                 }
 
@@ -769,11 +766,8 @@ fun SetDetailScreen(
                             }
                             "list" -> items(displayedCards, key = { "${it.id}_${it.number}" }, span = { GridItemSpan(3) }) { card ->
                                 if (premiumManager.canViewPrices()) {
-                                    val currentPrice = resolveDisplayPrice(card)
-                                    LaunchedEffect(card.id, currentPrice) {
-                                        if (currentPrice == null || currentPrice <= 0.0) {
-                                            viewModel.ensureCardPrice(card)
-                                        }
+                                    LaunchedEffect(card.id) {
+                                        viewModel.ensureCardPrice(card)
                                     }
                                 }
 
