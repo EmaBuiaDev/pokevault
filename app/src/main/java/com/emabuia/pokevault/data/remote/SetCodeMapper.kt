@@ -31,6 +31,7 @@ object SetCodeMapper {
         "DRI" to "sv10",
         "ASC" to "asc",
         "POR" to "me03",
+        "ME03" to "me03",
         "CRI" to "dcr",
         "ME01" to "MEG",
         "ME02" to "PFL",

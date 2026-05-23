@@ -17,7 +17,6 @@ import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.workers.CacheCleanupWorker
 import com.emabuia.pokevault.workers.CardsSyncWorker
-import com.emabuia.pokevault.workers.PriceSyncWorker
 import com.emabuia.pokevault.workers.SetsSyncWorker
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -137,14 +136,9 @@ class PokeVaultApp : Application(), ImageLoaderFactory {
                 .build()
         )
 
-        // Price sync: every 12h
-        wm.enqueueUniquePeriodicWork(
-            "price_sync",
-            ExistingPeriodicWorkPolicy.KEEP,
-            PeriodicWorkRequestBuilder<PriceSyncWorker>(12, TimeUnit.HOURS)
-                .setConstraints(networkConstraint)
-                .build()
-        )
+        // Disable autonomous background price refresh to avoid token consumption
+        // outside user-visible cards in Set Detail.
+        wm.cancelUniqueWork("price_sync")
 
         // Cache cleanup: every 24h
         wm.enqueueUniquePeriodicWork(

@@ -9,6 +9,10 @@ import java.util.concurrent.ConcurrentHashMap
 
 class PokeWalletRepository {
 
+    companion object {
+        private const val MAX_SET_LOOKUP_CANDIDATES = 6
+    }
+
     private val apiService: PokeWalletApiService by lazy {
         PokeWalletRetrofitClient.create(BuildConfig.POKEWALLET_API_KEY)
     }
@@ -93,9 +97,7 @@ class PokeWalletRepository {
                 }.toMap()
             }
 
-            val candidateSetCodes = linkedSetOf<String>().apply {
-                buildSetLookupCandidates(setCode).forEach { add(it) }
-            }
+            val candidateSetCodes = prioritizedSetLookupCandidates(setCode)
 
             var mapped = emptyMap<String, PokeWalletPriceData>()
             for (candidate in candidateSetCodes) {
@@ -221,7 +223,7 @@ class PokeWalletRepository {
             }
 
             var setResponse: PokeWalletSetDetailResponse? = null
-            for (candidate in buildSetLookupCandidates(setCode)) {
+            for (candidate in prioritizedSetLookupCandidates(setCode)) {
                 val response = runCatching {
                     apiService.getSet(
                         setCode = candidate,
@@ -326,6 +328,29 @@ class PokeWalletRepository {
             }
         }
         return candidates.filter { it.isNotBlank() }
+    }
+
+    private fun prioritizedSetLookupCandidates(rawSetCode: String): List<String> {
+        val canonical = SetCodeMapper.normalizeDecklistSetCode(rawSetCode)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        val prioritized = linkedSetOf<String>()
+        if (canonical != null) {
+            prioritized += canonical
+            prioritized += canonical.lowercase()
+            prioritized += canonical.uppercase()
+        }
+
+        rawSetCode.trim().takeIf { it.isNotBlank() }?.let { raw ->
+            prioritized += raw
+            prioritized += raw.lowercase()
+            prioritized += raw.uppercase()
+        }
+
+        buildSetLookupCandidates(rawSetCode).forEach { prioritized += it }
+        return prioritized
+            .filter { it.isNotBlank() }
+            .take(MAX_SET_LOOKUP_CANDIDATES)
     }
 
     private fun PokeWalletCard.toPriceData(): PokeWalletPriceData {

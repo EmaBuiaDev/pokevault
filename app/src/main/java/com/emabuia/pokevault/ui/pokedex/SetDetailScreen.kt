@@ -709,7 +709,7 @@ fun SetDetailScreen(
                                 if (premiumManager.canViewPrices()) {
                                     val currentPrice = resolveDisplayPrice(card)
                                     LaunchedEffect(card.id, currentPrice) {
-                                        if (isItalianSection || currentPrice == null || currentPrice <= 0.0) {
+                                        if (currentPrice == null || currentPrice <= 0.0) {
                                             viewModel.ensureCardPrice(card)
                                         }
                                     }
@@ -771,7 +771,7 @@ fun SetDetailScreen(
                                 if (premiumManager.canViewPrices()) {
                                     val currentPrice = resolveDisplayPrice(card)
                                     LaunchedEffect(card.id, currentPrice) {
-                                        if (isItalianSection || currentPrice == null || currentPrice <= 0.0) {
+                                        if (currentPrice == null || currentPrice <= 0.0) {
                                             viewModel.ensureCardPrice(card)
                                         }
                                     }

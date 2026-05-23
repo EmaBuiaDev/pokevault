@@ -82,6 +82,12 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private var italianSetPriceMap: Map<String, PokeWalletPriceData> = emptyMap()
     private var italianSetPriceMapSetId: String? = null
     private var italianSetPriceMapAttemptedSetId: String? = null
+    private var italianSetPriceMapAttemptedAtMs: Long = 0L
+    private val italianMirrorCounterpartCache = mutableMapOf<String, TcgCard?>()
+
+    companion object {
+        private const val ITALIAN_SET_MAP_RETRY_COOLDOWN_MS = 20_000L
+    }
 
     private fun isItalianSection(set: TcgSet? = uiState.set): Boolean {
         val sectionMacro = currentSourceMacro?.trim()?.uppercase()
@@ -135,6 +141,21 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
+    private fun priceDataFromCard(card: TcgCard): PokeWalletPriceData? {
+        val prices = card.cardmarket?.prices ?: return null
+        if (!prices.hasPositiveEurPrice()) return null
+        return PokeWalletPriceData(
+            eurAvg = prices.averageSellPrice,
+            eurLow = prices.lowPrice,
+            eurTrend = prices.trendPrice,
+            eurAvg1 = prices.avg1,
+            eurAvg7 = prices.avg7,
+            eurAvg30 = prices.avg30,
+            cardMarketUrl = card.cardmarket?.url,
+            tcgPlayerUrl = card.tcgplayer?.url
+        )
+    }
+
     private suspend fun resolveItalianSetPriceMap(
         cards: List<TcgCard>,
         forceRefresh: Boolean = false
@@ -146,7 +167,10 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             return italianSetPriceMap
         }
         if (!forceRefresh && activeSetId != null && italianSetPriceMapAttemptedSetId == activeSetId) {
-            return emptyMap()
+            val elapsed = System.currentTimeMillis() - italianSetPriceMapAttemptedAtMs
+            if (elapsed < ITALIAN_SET_MAP_RETRY_COOLDOWN_MS) {
+                return emptyMap()
+            }
         }
 
         val setCode = cards.asSequence()
@@ -170,6 +194,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
         if (activeSetId != null) {
             italianSetPriceMapAttemptedSetId = activeSetId
+            italianSetPriceMapAttemptedAtMs = System.currentTimeMillis()
         }
 
         if (activeSetId != null && resolved.isNotEmpty()) {
@@ -196,12 +221,19 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 ?.let { "${it}__ita" }
             ?: return null
 
-        val counterpart = tcgRepository.getEnglishBaseCardForItalianOverlay(
-            italianCardId = card.id,
-            italianSetId = italianSetId,
-            context = getApplication<Application>().applicationContext,
-            forceRefresh = false
-        ).getOrNull() ?: return null
+        val counterpartCacheKey = "$italianSetId:${card.number}"
+        val counterpart = if (counterpartCacheKey in italianMirrorCounterpartCache) {
+            italianMirrorCounterpartCache[counterpartCacheKey]
+        } else {
+            tcgRepository.getEnglishBaseCardForItalianOverlay(
+                italianCardId = card.id,
+                italianSetId = italianSetId,
+                context = getApplication<Application>().applicationContext,
+                forceRefresh = false
+            ).getOrNull().also { resolved ->
+                italianMirrorCounterpartCache[counterpartCacheKey] = resolved
+            }
+        } ?: return null
 
         val counterpartLookup = resolvePriceLookup(counterpart)
         val mirroredFromPokeWallet = pokeWalletRepository.getCardPrices(
@@ -250,6 +282,8 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         italianSetPriceMap = emptyMap()
         italianSetPriceMapSetId = null
         italianSetPriceMapAttemptedSetId = null
+        italianSetPriceMapAttemptedAtMs = 0L
+        italianMirrorCounterpartCache.clear()
 
         val context = getApplication<Application>().applicationContext
         uiState = uiState.copy(
@@ -463,7 +497,10 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun loadPokeWalletPrices(card: TcgCard) {
         if (lastPricedCardId == card.id && uiState.selectedCardPokeWalletPrices != null) return
         lastPricedCardId = card.id
-        uiState = uiState.copy(isLoadingPokeWalletPrices = true, selectedCardPokeWalletPrices = null)
+        uiState = uiState.copy(
+            isLoadingPokeWalletPrices = true,
+            selectedCardPokeWalletPrices = priceDataFromCard(card)
+        )
         viewModelScope.launch {
             val setPrices = resolveItalianSetPriceMap(uiState.cards, forceRefresh = false)
             val setPrice = normalizeCardNumberKey(card.number)?.let(setPrices::get)
@@ -503,13 +540,14 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         val current = uiState.cards.firstOrNull { it.id == card.id } ?: card
         val cm = current.cardmarket?.prices
         val hasApiEurPrice = cm.hasPositiveEurPrice()
-        val isItalian = isItalianSection()
-        if (hasApiEurPrice && !isItalian) return
+        if (hasApiEurPrice) return
         if (!requestedCardPriceIds.add(card.id)) return
 
         viewModelScope.launch {
-            val setPrices = resolveItalianSetPriceMap(uiState.cards)
+            val isItalian = isItalianSection()
+            val setPrices = resolveItalianSetPriceMap(uiState.cards, forceRefresh = false)
             val setPrice = normalizeCardNumberKey(current.number)?.let(setPrices::get)
+
             if (setPrice?.hasEurPrices == true) {
                 val merged = uiState.cards.map { listCard ->
                     if (listCard.id == current.id) withPriceData(listCard, setPrice) else listCard
@@ -519,7 +557,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
             val mirroredPrices = resolveItalianMirrorPrices(
                 card = current,
-                forceRefreshRemote = isItalian
+                forceRefreshRemote = false
             )
             if (mirroredPrices != null) {
                 val merged = uiState.cards.map { listCard ->
