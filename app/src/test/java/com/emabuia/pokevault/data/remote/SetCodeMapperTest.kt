@@ -17,7 +17,8 @@ class SetCodeMapperTest {
         assertEquals("MEG", SetCodeMapper.normalizeDecklistSetCode("ME01"))
         assertEquals("PFL", SetCodeMapper.normalizeDecklistSetCode("ME02"))
         assertEquals("MEG", SetCodeMapper.normalizeDecklistSetCode("MEP"))
-        assertEquals("PFL", SetCodeMapper.normalizeDecklistSetCode("ME2PT5"))
+        assertEquals("asc", SetCodeMapper.normalizeDecklistSetCode("ME2PT5"))
+        assertEquals("me03", SetCodeMapper.normalizeDecklistSetCode("ME03"))
         assertEquals("sv11", SetCodeMapper.normalizeDecklistSetCode("BLK"))
         assertEquals("sv11", SetCodeMapper.normalizeDecklistSetCode("wht"))
     }

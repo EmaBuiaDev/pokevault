@@ -544,7 +544,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         if (!requestedCardPriceIds.add(card.id)) return
 
         viewModelScope.launch {
-            val isItalian = isItalianSection()
             val setPrices = resolveItalianSetPriceMap(uiState.cards, forceRefresh = false)
             val setPrice = normalizeCardNumberKey(current.number)?.let(setPrices::get)
 
@@ -570,10 +569,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 uiState = uiState.copy(cards = merged)
                 return@launch
             }
-
-            // If ITA refresh did not return EUR prices, keep the previous cached value untouched,
-            // but still try a non-destructive direct lookup as last fallback.
-            if (isItalian && hasApiEurPrice) return@launch
 
             val lookup = resolvePriceLookup(current)
             val result = pokeWalletRepository.getCardPrices(
