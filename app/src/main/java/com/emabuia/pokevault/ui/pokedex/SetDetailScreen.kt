@@ -313,8 +313,6 @@ fun SetDetailScreen(
             sortedCards
         }
     }
-    val visibleCount = displayedCards.size
-    val totalCount = state.cards.size
 
     val rarityCounts = remember(state.cards, state.ownedCardIds) {
         state.cards.groupBy { RarityUtils.getRarityInfo(it.rarity) }
@@ -700,41 +698,6 @@ fun SetDetailScreen(
                         }
                     }
 
-                    item(span = { GridItemSpan(3) }) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 2.dp, bottom = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = if (AppLocale.isItalian) {
-                                    "Visibili: $visibleCount / $totalCount"
-                                } else {
-                                    "Visible: $visibleCount / $totalCount"
-                                },
-                                color = TextMuted,
-                                fontSize = 12.sp
-                            )
-
-                            if (hasExplicitCardFilters) {
-                                Text(
-                                    text = if (AppLocale.isItalian) "Reset filtri" else "Reset filters",
-                                    color = BlueCard,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            selectedRarityFilter = null
-                                            viewModel.clearCardFilters()
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
                     if (state.isLoadingCards) {
                         // Shimmer placeholder while cards load
                         items(12) {

@@ -274,10 +274,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun loadSet(setId: String, sourceMacro: String? = null) {
         val normalizedMacro = sourceMacro?.trim()?.uppercase()
-        if (currentSetId == setId && currentSourceMacro == normalizedMacro) {
-            clearCardFilters()
-            return
-        }
+        if (currentSetId == setId && currentSourceMacro == normalizedMacro) return
         currentSetId = setId
         currentSourceMacro = normalizedMacro
         requestedCardPriceIds.clear()
@@ -405,17 +402,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun selectSupertype(supertype: String?) {
         uiState = uiState.copy(selectedSupertype = supertype)
-    }
-
-    fun clearCardFilters() {
-        uiState = uiState.copy(
-            searchQuery = "",
-            translatedQuery = "",
-            showOnlyMissing = false,
-            showOnlyOwned = false,
-            selectedType = null,
-            selectedSupertype = null
-        )
     }
 
     fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {
