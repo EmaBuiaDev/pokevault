@@ -17,7 +17,9 @@ class PokeWalletRepository {
 
     // L1 in-memory cache
     private val priceCache = ConcurrentHashMap<String, Pair<PokeWalletPriceData, Long>>()
+    private val setPriceCache = ConcurrentHashMap<String, Pair<Map<String, PokeWalletPriceData>, Long>>()
     private val inFlightPriceRequests = ConcurrentHashMap<String, CompletableDeferred<Result<PokeWalletPriceData>>>()
+    private val inFlightSetPriceRequests = ConcurrentHashMap<String, CompletableDeferred<Result<Map<String, PokeWalletPriceData>>>>()
     private val CACHE_DURATION_MS = 24L * 60 * 60 * 1000 // 24 hours
     @Volatile
     private var cacheHitCount: Long = 0
@@ -40,10 +42,98 @@ class PokeWalletRepository {
         )
     }
 
+    suspend fun getSetPriceMap(
+        setCode: String,
+        forceRefresh: Boolean = false
+    ): Result<Map<String, PokeWalletPriceData>> {
+        val proxyEnabled = BuildConfig.POKEWALLET_PROXY_ENABLED && BuildConfig.POKEWALLET_PROXY_URL.isNotBlank()
+        if (!proxyEnabled && BuildConfig.POKEWALLET_API_KEY.isBlank()) {
+            return Result.failure(IllegalStateException("POKEWALLET_API_KEY not configured"))
+        }
+
+        val canonicalSetCode = SetCodeMapper.normalizeDecklistSetCode(setCode)
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+            ?: setCode.trim().lowercase()
+        if (canonicalSetCode.isBlank()) {
+            return Result.failure(IllegalArgumentException("setCode required"))
+        }
+
+        if (forceRefresh) {
+            setPriceCache.remove(canonicalSetCode)
+        }
+
+        val memoryCached = setPriceCache[canonicalSetCode]
+        if (!forceRefresh && memoryCached != null && System.currentTimeMillis() - memoryCached.second < CACHE_DURATION_MS) {
+            recordCacheHit("set-prices:memory:$canonicalSetCode")
+            return Result.success(memoryCached.first)
+        }
+
+        val pendingRequest = CompletableDeferred<Result<Map<String, PokeWalletPriceData>>>()
+        val existingRequest = inFlightSetPriceRequests.putIfAbsent(canonicalSetCode, pendingRequest)
+        if (existingRequest != null) {
+            recordCacheHit("set-prices:inflight:$canonicalSetCode")
+            return existingRequest.await()
+        }
+
+        return try {
+            recordNetworkCall("set-prices:$canonicalSetCode")
+            val cacheBust = if (forceRefresh) System.currentTimeMillis().toString() else null
+            suspend fun mapSetResponse(setCodeToUse: String): Map<String, PokeWalletPriceData> {
+                val response = apiService.getSet(
+                    setCode = setCodeToUse,
+                    limit = 250,
+                    cacheBust = cacheBust
+                )
+                return response.cards.mapNotNull { card ->
+                    val numberKey = normalizeCardNumberKey(card.cardInfo?.cardNumber.orEmpty()) ?: return@mapNotNull null
+                    val priceData = card.toPriceData()
+                    if (!priceData.hasEurPrices) return@mapNotNull null
+                    numberKey to priceData
+                }.toMap()
+            }
+
+            val candidateSetCodes = linkedSetOf<String>().apply {
+                buildSetLookupCandidates(setCode).forEach { add(it) }
+            }
+
+            var mapped = emptyMap<String, PokeWalletPriceData>()
+            for (candidate in candidateSetCodes) {
+                val resolved = mapSetResponse(candidate)
+                if (resolved.isNotEmpty()) {
+                    mapped = resolved
+                    break
+                }
+            }
+
+            if (mapped.isNotEmpty()) {
+                val now = System.currentTimeMillis()
+                setPriceCache[canonicalSetCode] = mapped to now
+                mapped.forEach { (numberKey, priceData) ->
+                    val cacheKey = "${canonicalSetCode}_${numberKey.lowercase()}"
+                    priceCache[cacheKey] = priceData to now
+                    try {
+                        db.priceDao().upsertPrice(priceData.toEntity(cacheKey, canonicalSetCode))
+                    } catch (e: Exception) {
+                        Timber.w(e, "Errore salvataggio cache prezzi Room")
+                    }
+                }
+            }
+
+            Result.success(mapped)
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            inFlightSetPriceRequests.remove(canonicalSetCode, pendingRequest)
+        }
+            .also { pendingRequest.complete(it) }
+    }
+
     suspend fun getCardPrices(
         cardName: String,
         setCode: String,
-        cardNumber: String
+        cardNumber: String,
+        forceRefresh: Boolean = false
     ): Result<PokeWalletPriceData> {
         val proxyEnabled = BuildConfig.POKEWALLET_PROXY_ENABLED && BuildConfig.POKEWALLET_PROXY_URL.isNotBlank()
         if (!proxyEnabled && BuildConfig.POKEWALLET_API_KEY.isBlank()) {
@@ -52,10 +142,15 @@ class PokeWalletRepository {
 
         val cleanNumber = cardNumber.split("/").firstOrNull()?.trim() ?: cardNumber
         val cacheKey = "${setCode.lowercase()}_${cleanNumber.lowercase()}"
+        val requestedSetCanonical = SetCodeMapper.normalizeDecklistSetCode(setCode)
+
+        if (forceRefresh) {
+            priceCache.remove(cacheKey)
+        }
 
         // L1: Memory
         val memoryCached = priceCache[cacheKey]
-        if (memoryCached != null && System.currentTimeMillis() - memoryCached.second < CACHE_DURATION_MS) {
+        if (!forceRefresh && memoryCached != null && System.currentTimeMillis() - memoryCached.second < CACHE_DURATION_MS) {
             recordCacheHit("prices:memory:$cacheKey")
             return Result.success(memoryCached.first)
         }
@@ -63,7 +158,7 @@ class PokeWalletRepository {
         // L2: Room DB
         try {
             val roomCached = db.priceDao().getPrice(cacheKey, setCode.lowercase())
-            if (roomCached != null && System.currentTimeMillis() - roomCached.cachedAt < CACHE_DURATION_MS) {
+            if (!forceRefresh && roomCached != null && System.currentTimeMillis() - roomCached.cachedAt < CACHE_DURATION_MS) {
                 val data = roomCached.toPriceData()
                 priceCache[cacheKey] = Pair(data, roomCached.cachedAt)
                 recordCacheHit("prices:room:$cacheKey")
@@ -85,6 +180,7 @@ class PokeWalletRepository {
         // L3: Network
         val result = try {
             recordNetworkCall("prices:$cacheKey")
+            val cacheBust = if (forceRefresh) System.currentTimeMillis().toString() else null
             val queryPrimary = if (setCode.isNotBlank() && cleanNumber.isNotBlank()) {
                 "$setCode $cleanNumber"
             } else {
@@ -93,26 +189,68 @@ class PokeWalletRepository {
 
             val queryFallback = "$cardName $cleanNumber".trim()
 
+            fun hasEur(card: PokeWalletCard): Boolean {
+                return card.cardmarket?.prices?.any { (it.avg ?: 0.0) > 0.0 || (it.low ?: 0.0) > 0.0 } == true
+            }
+
+            fun sameRequestedSet(card: PokeWalletCard): Boolean {
+                if (requestedSetCanonical.isNullOrBlank()) return true
+                val info = card.cardInfo
+                val candidates = linkedSetOf<String>()
+                SetCodeMapper.normalizeDecklistSetCode(info?.setCode)?.let { candidates += it }
+                SetCodeMapper.normalizeDecklistSetCode(info?.setId)?.let { candidates += it }
+                SetCodeMapper.normalizeDecklistSetCode(info?.setName)?.let { candidates += it }
+                return requestedSetCanonical in candidates
+            }
+
+            fun cardNumberMatches(card: PokeWalletCard): Boolean {
+                val apiNum = card.cardInfo?.cardNumber?.split("/")?.firstOrNull()?.trim() ?: ""
+                return apiNum.equals(cleanNumber, ignoreCase = true)
+            }
+
             fun pickMatch(results: List<PokeWalletCard>): PokeWalletCard? {
                 return results.firstOrNull { card ->
-                    val apiNum = card.cardInfo?.cardNumber?.split("/")?.firstOrNull()?.trim() ?: ""
-                    val hasEur = card.cardmarket?.prices?.any { (it.avg ?: 0.0) > 0.0 || (it.low ?: 0.0) > 0.0 } == true
-                    apiNum.equals(cleanNumber, ignoreCase = true) && hasEur
+                    cardNumberMatches(card) && sameRequestedSet(card) && hasEur(card)
                 } ?: results.firstOrNull { card ->
-                    val hasEur = card.cardmarket?.prices?.any { (it.avg ?: 0.0) > 0.0 || (it.low ?: 0.0) > 0.0 } == true
-                    card.cardInfo?.cleanName?.contains(cardName, ignoreCase = true) == true && hasEur
+                    cardNumberMatches(card) && hasEur(card)
                 } ?: results.firstOrNull { card ->
-                    card.cardmarket?.prices?.any { (it.avg ?: 0.0) > 0.0 || (it.low ?: 0.0) > 0.0 } == true
+                    sameRequestedSet(card) && card.cardInfo?.cleanName?.contains(cardName, ignoreCase = true) == true && hasEur(card)
+                } ?: results.firstOrNull { card ->
+                    sameRequestedSet(card) && hasEur(card)
                 }
             }
 
-            val responsePrimary = apiService.search(queryPrimary, limit = 10)
-            val matchPrimary = pickMatch(responsePrimary.results)
-            val match = if (matchPrimary != null || queryFallback == queryPrimary) {
-                matchPrimary
+            var setResponse: PokeWalletSetDetailResponse? = null
+            for (candidate in buildSetLookupCandidates(setCode)) {
+                val response = runCatching {
+                    apiService.getSet(
+                        setCode = candidate,
+                        limit = 250,
+                        cacheBust = cacheBust
+                    )
+                }.getOrNull()
+                if (response != null) {
+                    setResponse = response
+                    break
+                }
+            }
+            val setMatch = setResponse?.cards?.firstOrNull { card ->
+                cardNumberMatches(card) && sameRequestedSet(card) && hasEur(card)
+            } ?: setResponse?.cards?.firstOrNull { card ->
+                cardNumberMatches(card) && hasEur(card)
+            }
+
+            val match = if (setMatch != null) {
+                setMatch
             } else {
-                val responseFallback = apiService.search(queryFallback, limit = 10)
-                pickMatch(responseFallback.results)
+                val responsePrimary = apiService.search(queryPrimary, limit = 10, cacheBust = cacheBust)
+                val matchPrimary = pickMatch(responsePrimary.results)
+                if (matchPrimary != null || queryFallback == queryPrimary) {
+                    matchPrimary
+                } else {
+                    val responseFallback = apiService.search(queryFallback, limit = 10, cacheBust = cacheBust)
+                    pickMatch(responseFallback.results)
+                }
             }
 
             if (match != null) {
@@ -159,6 +297,35 @@ class PokeWalletRepository {
         if (BuildConfig.DEBUG) {
             Timber.d("PW_NETWORK[%s] hit=%d miss=%d net=%d", tag, cacheHitCount, cacheMissCount, networkCallCount)
         }
+    }
+
+    private fun normalizeCardNumberKey(raw: String): String? {
+        val clean = raw.split("/").firstOrNull()?.trim().orEmpty()
+        if (clean.isBlank()) return null
+        return clean.toIntOrNull()?.toString() ?: clean.uppercase()
+    }
+
+    private fun buildSetLookupCandidates(rawSetCode: String): List<String> {
+        val candidates = linkedSetOf<String>()
+        rawSetCode.trim().takeIf { it.isNotBlank() }?.let { raw ->
+            candidates += raw
+            candidates += raw.uppercase()
+            candidates += raw.lowercase()
+            SetCodeMapper.normalizeDecklistSetCode(raw)?.let { normalized ->
+                candidates += normalized
+                candidates += normalized.uppercase()
+                candidates += normalized.lowercase()
+            }
+            SetCodeMapper.searchTokensForSetQuery(raw).forEach { token ->
+                candidates += token
+                SetCodeMapper.normalizeDecklistSetCode(token)?.let { normalizedToken ->
+                    candidates += normalizedToken
+                    candidates += normalizedToken.uppercase()
+                    candidates += normalizedToken.lowercase()
+                }
+            }
+        }
+        return candidates.filter { it.isNotBlank() }
     }
 
     private fun PokeWalletCard.toPriceData(): PokeWalletPriceData {

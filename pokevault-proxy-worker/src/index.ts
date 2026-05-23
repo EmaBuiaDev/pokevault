@@ -155,7 +155,8 @@ function getBaseTtlSeconds(pathname: string, fallbackTtl: number): number {
   }
 
   if (pathname === '/sets' || pathname.startsWith('/sets/')) {
-    return pathname.endsWith('/image') ? TTL_90_DAYS : TTL_90_DAYS;
+    // Price-bearing set payloads should refresh daily, while static logos can stay long-lived.
+    return pathname.endsWith('/image') ? TTL_90_DAYS : TTL_24_HOURS;
   }
 
   if (pathname.startsWith('/cards/')) {
@@ -168,7 +169,7 @@ function getBaseTtlSeconds(pathname: string, fallbackTtl: number): number {
 function getTtlSeconds(pathname: string, status: number, fallbackTtl: number): number {
   if (status === 404 && (pathname.startsWith('/images/') || pathname.endsWith('/image'))) {
     if (pathname.startsWith('/images/it/')) {
-      return TTL_5_MINUTES;
+      return TTL_24_HOURS;
     }
     return TTL_24_HOURS;
   }

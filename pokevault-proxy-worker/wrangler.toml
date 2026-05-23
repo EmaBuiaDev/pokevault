@@ -18,7 +18,7 @@ r2_buckets = [
 [vars]
 ORIGIN_API = "https://api.pokewallet.io"
 CACHE_TTL_SECONDS = "259200"
-BACKFILL_BATCH_SIZE = "6"
+BACKFILL_BATCH_SIZE = "3"
 IT_IMAGE_PREFIX = "it"
 IT_CATALOG_KEY = "it/catalog/cards.cleaned.json"
 

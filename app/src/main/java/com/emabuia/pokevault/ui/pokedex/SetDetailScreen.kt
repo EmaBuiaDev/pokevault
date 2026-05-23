@@ -216,6 +216,9 @@ fun SetDetailScreen(
     val collectionLanguageOptions = remember(sourceMacro, state.set?.language) {
         CardOptions.languageOptionsForMacro(sourceMacro ?: state.set?.language)
     }
+    val isItalianSection = remember(sourceMacro, state.set?.language) {
+        sourceMacro?.trim()?.uppercase() == "ITA" || state.set?.language?.trim()?.uppercase() == "ITA"
+    }
     val haptic = LocalHapticFeedback.current
     val premiumManager = remember { PremiumManager.getInstance() }
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
@@ -706,7 +709,7 @@ fun SetDetailScreen(
                                 if (premiumManager.canViewPrices()) {
                                     val currentPrice = resolveDisplayPrice(card)
                                     LaunchedEffect(card.id, currentPrice) {
-                                        if (currentPrice == null || currentPrice <= 0.0) {
+                                        if (isItalianSection || currentPrice == null || currentPrice <= 0.0) {
                                             viewModel.ensureCardPrice(card)
                                         }
                                     }
@@ -768,7 +771,7 @@ fun SetDetailScreen(
                                 if (premiumManager.canViewPrices()) {
                                     val currentPrice = resolveDisplayPrice(card)
                                     LaunchedEffect(card.id, currentPrice) {
-                                        if (currentPrice == null || currentPrice <= 0.0) {
+                                        if (isItalianSection || currentPrice == null || currentPrice <= 0.0) {
                                             viewModel.ensureCardPrice(card)
                                         }
                                     }

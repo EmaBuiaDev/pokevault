@@ -16,6 +16,7 @@ import com.emabuia.pokevault.data.remote.PokeTcgRepository
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.CardMarket
 import com.emabuia.pokevault.data.remote.CardMarketPrices
+import com.emabuia.pokevault.data.remote.SetCodeMapper
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
@@ -60,6 +61,12 @@ data class SetDetailUiState(
 
 class SetDetailViewModel(application: Application) : AndroidViewModel(application) {
 
+    private data class PriceLookupRequest(
+        val cardName: String,
+        val setCode: String,
+        val cardNumber: String
+    )
+
     private val tcgRepository = RepositoryProvider.tcgRepository
     private val firestoreRepository = FirestoreRepository()
     private val pokeWalletRepository = RepositoryProvider.pokeWalletRepository
@@ -72,17 +79,161 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private var translationJob: Job? = null
     private var lastPricedCardId: String? = null
     private val requestedCardPriceIds = mutableSetOf<String>()
-    private val hydratedPriceSetIds = mutableSetOf<String>()
-    private val hydrationPrefs = application.applicationContext.getSharedPreferences("price_hydration", Application.MODE_PRIVATE)
+    private var italianSetPriceMap: Map<String, PokeWalletPriceData> = emptyMap()
+    private var italianSetPriceMapSetId: String? = null
+    private var italianSetPriceMapAttemptedSetId: String? = null
+
+    private fun isItalianSection(set: TcgSet? = uiState.set): Boolean {
+        val sectionMacro = currentSourceMacro?.trim()?.uppercase()
+        if (sectionMacro == "ITA") return true
+        return set?.language?.trim()?.uppercase() == "ITA"
+    }
 
     private fun defaultCollectionLanguage(): String {
         return CardOptions.languageLabelForMacro(currentSourceMacro ?: uiState.set?.language)
             ?: CardOptions.LANGUAGES.first()
     }
 
-    companion object {
-        private const val PRICE_HYDRATION_WINDOW_MS = 24L * 60 * 60 * 1000
-        private const val MAX_PRICE_HYDRATION_REQUESTS_PER_SET = 20
+    private fun resolvePriceLookup(card: TcgCard): PriceLookupRequest {
+        val overlaySetCode = card.id
+            .takeIf { it.startsWith("ita:", ignoreCase = true) }
+            ?.split(':')
+            ?.getOrNull(1)
+            .orEmpty()
+
+        val fallbackSetCode = card.set?.id
+            ?.substringBefore("__")
+            .orEmpty()
+
+        return PriceLookupRequest(
+            cardName = card.name,
+            setCode = overlaySetCode.ifBlank { fallbackSetCode },
+            cardNumber = card.number
+        )
+    }
+
+    private fun normalizeCardNumberKey(raw: String): String? {
+        val clean = raw.split("/").firstOrNull()?.trim().orEmpty()
+        if (clean.isBlank()) return null
+        return clean.toIntOrNull()?.toString() ?: clean.uppercase()
+    }
+
+    private fun withPriceData(card: TcgCard, priceData: PokeWalletPriceData): TcgCard {
+        val cmPrices = CardMarketPrices(
+            averageSellPrice = priceData.eurAvg,
+            lowPrice = priceData.eurLow,
+            trendPrice = priceData.eurTrend,
+            avg1 = priceData.eurAvg1,
+            avg7 = priceData.eurAvg7,
+            avg30 = priceData.eurAvg30
+        )
+        return card.copy(
+            cardmarket = CardMarket(
+                url = priceData.cardMarketUrl.orEmpty(),
+                prices = cmPrices
+            )
+        )
+    }
+
+    private suspend fun resolveItalianSetPriceMap(
+        cards: List<TcgCard>,
+        forceRefresh: Boolean = false
+    ): Map<String, PokeWalletPriceData> {
+        if (!isItalianSection()) return emptyMap()
+
+        val activeSetId = currentSetId
+        if (!forceRefresh && activeSetId != null && italianSetPriceMapSetId == activeSetId && italianSetPriceMap.isNotEmpty()) {
+            return italianSetPriceMap
+        }
+        if (!forceRefresh && activeSetId != null && italianSetPriceMapAttemptedSetId == activeSetId) {
+            return emptyMap()
+        }
+
+        val setCode = cards.asSequence()
+            .mapNotNull { card ->
+                card.id.takeIf { it.startsWith("ita:", ignoreCase = true) }
+                    ?.split(':')
+                    ?.getOrNull(1)
+                    ?.takeIf { it.isNotBlank() }
+            }
+            .firstOrNull()
+            ?: currentSetId
+                ?.substringBefore("__")
+                ?.takeIf { it.isNotBlank() }
+            ?: return emptyMap()
+
+        val canonicalSetCode = SetCodeMapper.normalizeDecklistSetCode(setCode) ?: setCode
+        val resolved = pokeWalletRepository.getSetPriceMap(
+            setCode = canonicalSetCode,
+            forceRefresh = forceRefresh
+        ).getOrDefault(emptyMap())
+
+        if (activeSetId != null) {
+            italianSetPriceMapAttemptedSetId = activeSetId
+        }
+
+        if (activeSetId != null && resolved.isNotEmpty()) {
+            italianSetPriceMapSetId = activeSetId
+            italianSetPriceMap = resolved
+        }
+
+        return resolved
+    }
+
+    private suspend fun resolveItalianMirrorPrices(
+        card: TcgCard,
+        forceRefreshRemote: Boolean = false
+    ): PokeWalletPriceData? {
+        if (!isItalianSection()) return null
+
+        val italianSetId = currentSetId
+            ?.takeIf { it.endsWith("__ita", ignoreCase = true) }
+            ?: card.id
+                .takeIf { it.startsWith("ita:", ignoreCase = true) }
+                ?.split(':')
+                ?.getOrNull(1)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { "${it}__ita" }
+            ?: return null
+
+        val counterpart = tcgRepository.getEnglishBaseCardForItalianOverlay(
+            italianCardId = card.id,
+            italianSetId = italianSetId,
+            context = getApplication<Application>().applicationContext,
+            forceRefresh = false
+        ).getOrNull() ?: return null
+
+        val counterpartLookup = resolvePriceLookup(counterpart)
+        val mirroredFromPokeWallet = pokeWalletRepository.getCardPrices(
+            cardName = counterpartLookup.cardName,
+            setCode = counterpartLookup.setCode,
+            cardNumber = counterpartLookup.cardNumber,
+            forceRefresh = forceRefreshRemote
+        ).getOrNull()
+        if (mirroredFromPokeWallet?.hasEurPrices == true) {
+            return mirroredFromPokeWallet
+        }
+
+        val firstUsdPrice = counterpart.tcgplayer?.prices?.values?.firstOrNull {
+            it.market != null || it.low != null
+        }
+
+        val counterpartCardMarket = counterpart.cardmarket?.prices
+        val hasMirrorPrice = counterpartCardMarket?.hasPositiveEurPrice() == true
+        if (!hasMirrorPrice) return null
+
+        return PokeWalletPriceData(
+            eurAvg = counterpartCardMarket?.averageSellPrice,
+            eurLow = counterpartCardMarket?.lowPrice,
+            eurTrend = counterpartCardMarket?.trendPrice,
+            eurAvg1 = counterpartCardMarket?.avg1,
+            eurAvg7 = counterpartCardMarket?.avg7,
+            eurAvg30 = counterpartCardMarket?.avg30,
+            cardMarketUrl = counterpart.cardmarket?.url,
+            usdMarket = firstUsdPrice?.market,
+            usdLow = firstUsdPrice?.low,
+            tcgPlayerUrl = counterpart.tcgplayer?.url
+        )
     }
 
     init {
@@ -94,6 +245,11 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         if (currentSetId == setId && currentSourceMacro == normalizedMacro) return
         currentSetId = setId
         currentSourceMacro = normalizedMacro
+        requestedCardPriceIds.clear()
+        lastPricedCardId = null
+        italianSetPriceMap = emptyMap()
+        italianSetPriceMapSetId = null
+        italianSetPriceMapAttemptedSetId = null
 
         val context = getApplication<Application>().applicationContext
         uiState = uiState.copy(
@@ -217,7 +373,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {
         viewModelScope.launch {
             uiState = uiState.copy(isAddingCard = tcgCard.id)
-            val variantKey = CardOptions.getVariantApiKey(variant)
             val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero()
             val resolvedLanguage = language.ifBlank { defaultCollectionLanguage() }
 
@@ -310,9 +465,26 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         lastPricedCardId = card.id
         uiState = uiState.copy(isLoadingPokeWalletPrices = true, selectedCardPokeWalletPrices = null)
         viewModelScope.launch {
-            val setCode = card.set?.id ?: ""
-            val cardNumber = card.number
-            pokeWalletRepository.getCardPrices(card.name, setCode, cardNumber)
+            val setPrices = resolveItalianSetPriceMap(uiState.cards, forceRefresh = false)
+            val setPrice = normalizeCardNumberKey(card.number)?.let(setPrices::get)
+            if (setPrice?.hasEurPrices == true) {
+                uiState = uiState.copy(selectedCardPokeWalletPrices = setPrice, isLoadingPokeWalletPrices = false)
+                return@launch
+            }
+
+            val mirroredPrices = resolveItalianMirrorPrices(card)
+            if (mirroredPrices != null) {
+                uiState = uiState.copy(selectedCardPokeWalletPrices = mirroredPrices, isLoadingPokeWalletPrices = false)
+                return@launch
+            }
+
+            val lookup = resolvePriceLookup(card)
+            pokeWalletRepository.getCardPrices(
+                cardName = lookup.cardName,
+                setCode = lookup.setCode,
+                cardNumber = lookup.cardNumber,
+                forceRefresh = false
+            )
                 .onSuccess { prices ->
                     uiState = uiState.copy(selectedCardPokeWalletPrices = prices, isLoadingPokeWalletPrices = false)
                 }
@@ -331,34 +503,53 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         val current = uiState.cards.firstOrNull { it.id == card.id } ?: card
         val cm = current.cardmarket?.prices
         val hasApiEurPrice = cm.hasPositiveEurPrice()
-        if (hasApiEurPrice) return
+        val isItalian = isItalianSection()
+        if (hasApiEurPrice && !isItalian) return
         if (!requestedCardPriceIds.add(card.id)) return
 
         viewModelScope.launch {
+            val setPrices = resolveItalianSetPriceMap(uiState.cards)
+            val setPrice = normalizeCardNumberKey(current.number)?.let(setPrices::get)
+            if (setPrice?.hasEurPrices == true) {
+                val merged = uiState.cards.map { listCard ->
+                    if (listCard.id == current.id) withPriceData(listCard, setPrice) else listCard
+                }
+                uiState = uiState.copy(cards = merged)
+            }
+
+            val mirroredPrices = resolveItalianMirrorPrices(
+                card = current,
+                forceRefreshRemote = isItalian
+            )
+            if (mirroredPrices != null) {
+                val merged = uiState.cards.map { listCard ->
+                    if (listCard.id == current.id) {
+                        withPriceData(listCard, mirroredPrices)
+                    } else {
+                        listCard
+                    }
+                }
+                uiState = uiState.copy(cards = merged)
+                return@launch
+            }
+
+            // If ITA refresh did not return EUR prices, keep the previous cached value untouched,
+            // but still try a non-destructive direct lookup as last fallback.
+            if (isItalian && hasApiEurPrice) return@launch
+
+            val lookup = resolvePriceLookup(current)
             val result = pokeWalletRepository.getCardPrices(
-                cardName = current.name,
-                setCode = current.set?.id.orEmpty(),
-                cardNumber = current.number
+                cardName = lookup.cardName,
+                setCode = lookup.setCode,
+                cardNumber = lookup.cardNumber,
+                forceRefresh = false
             )
 
             val priceData = result.getOrNull()
             if (priceData != null && ((priceData.eurAvg ?: 0.0) > 0.0 || (priceData.eurLow ?: 0.0) > 0.0)) {
-                val cmPrices = CardMarketPrices(
-                    averageSellPrice = priceData.eurAvg,
-                    lowPrice = priceData.eurLow,
-                    trendPrice = priceData.eurTrend,
-                    avg1 = priceData.eurAvg1,
-                    avg7 = priceData.eurAvg7,
-                    avg30 = priceData.eurAvg30
-                )
                 val merged = uiState.cards.map { listCard ->
                     if (listCard.id == current.id) {
-                        listCard.copy(
-                            cardmarket = CardMarket(
-                                url = priceData.cardMarketUrl.orEmpty(),
-                                prices = cmPrices
-                            )
-                        )
+                        withPriceData(listCard, priceData)
                     } else {
                         listCard
                     }
@@ -366,67 +557,5 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 uiState = uiState.copy(cards = merged)
             }
         }
-    }
-
-    private suspend fun enrichMissingCardPrices(setId: String, cards: List<TcgCard>) {
-        val needingPrices = cards.filter { card ->
-            val cm = card.cardmarket?.prices
-            val hasApiEurPrice = cm.hasPositiveEurPrice()
-            !hasApiEurPrice
-        }.take(MAX_PRICE_HYDRATION_REQUESTS_PER_SET)
-
-        if (needingPrices.isEmpty()) return
-
-        val updatedById = HashMap<String, TcgCard>()
-        val lastIndex = needingPrices.lastIndex
-
-        needingPrices.forEachIndexed { index, card ->
-            val priceData = pokeWalletRepository
-                .getCardPrices(card.name, card.set?.id.orEmpty(), card.number)
-                .getOrNull()
-
-            if (priceData != null && ((priceData.eurAvg ?: 0.0) > 0.0 || (priceData.eurLow ?: 0.0) > 0.0)) {
-                val cmPrices = CardMarketPrices(
-                    averageSellPrice = priceData.eurAvg,
-                    lowPrice = priceData.eurLow,
-                    trendPrice = priceData.eurTrend,
-                    avg1 = priceData.eurAvg1,
-                    avg7 = priceData.eurAvg7,
-                    avg30 = priceData.eurAvg30
-                )
-                updatedById[card.id] = card.copy(
-                    cardmarket = CardMarket(
-                        url = priceData.cardMarketUrl.orEmpty(),
-                        prices = cmPrices
-                    )
-                )
-            }
-
-            // Apply in small batches to keep UI responsive while prices stream in.
-            if ((index + 1) % 8 == 0 || index == lastIndex) {
-                if (updatedById.isNotEmpty()) {
-                    val merged = uiState.cards.map { current -> updatedById[current.id] ?: current }
-                    uiState = uiState.copy(cards = merged)
-                }
-            }
-        }
-
-        // Mark hydration window only if at least one EUR API price was resolved.
-        if (updatedById.isNotEmpty()) {
-            hydratedPriceSetIds.add(setId)
-            markHydration(setId)
-        } else {
-            // Allow retries in the same session if no prices were resolved.
-            hydratedPriceSetIds.remove(setId)
-        }
-    }
-
-    private fun shouldHydratePrices(setId: String): Boolean {
-        val lastHydration = hydrationPrefs.getLong("set_$setId", 0L)
-        return System.currentTimeMillis() - lastHydration > PRICE_HYDRATION_WINDOW_MS
-    }
-
-    private fun markHydration(setId: String) {
-        hydrationPrefs.edit().putLong("set_$setId", System.currentTimeMillis()).apply()
     }
 }

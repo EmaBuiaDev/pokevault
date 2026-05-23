@@ -139,7 +139,8 @@ interface PokeWalletApiService {
         @Path("setCode") setCode: String,
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 200,
-        @Query("language") language: String? = null
+        @Query("language") language: String? = null,
+        @Query("_cb") cacheBust: String? = null
     ): PokeWalletSetDetailResponse
 
     @GET("cards/{id}")
@@ -152,7 +153,8 @@ interface PokeWalletApiService {
     suspend fun search(
         @Query("q") query: String,
         @Query("page") page: Int = 1,
-        @Query("limit") limit: Int = 10
+        @Query("limit") limit: Int = 10,
+        @Query("_cb") cacheBust: String? = null
     ): PokeWalletSearchResponse
 }
 

@@ -43,10 +43,7 @@ import coil.request.ImageRequest
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.theme.*
@@ -160,7 +157,7 @@ fun PokeballLoadingAnimation(
 @Composable
 fun SetsListScreen(
     onBack: () -> Unit,
-    onSetClick: (String, String) -> Unit,
+    onSetClick: (String) -> Unit,
     viewModel: SetsViewModel = viewModel()
 ) {
     val state = viewModel.uiState
@@ -196,14 +193,10 @@ fun SetsListScreen(
     }
 
     if (selectedCard != null) {
-        val collectionLanguage = CardOptions.languageLabelForMacro(state.selectedLanguageMacro)
-            ?: CardOptions.LANGUAGES.first()
         CardDetailBottomSheet(
             card = selectedCard!!,
             isOwned = false,
             isLoading = state.isAddingCard == selectedCard!!.id,
-            languageOptions = CardOptions.languageOptionsForMacro(state.selectedLanguageMacro),
-            defaultLanguage = collectionLanguage,
             onAddCard = { v, q, c, l ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.addCardWithDetails(selectedCard!!, v, q, c, l)
@@ -328,20 +321,19 @@ fun SetsListScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isSearchingCards) {
-            CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery, onCardClick = { card -> selectedCard = card }) { setId -> onSetClick(setId, state.selectedLanguageMacro) }
+            CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery, onCardClick = { card -> selectedCard = card }) { setId -> onSetClick(setId) }
         } else {
-            val languageMacros = listOf("ITA", "ENG", "JAP", "CHN")
+            val languageMacros = listOf("ENG", "JAP", "CHN")
 
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(languageMacros, key = { it }) { macro ->
+                    val count = state.languageCountByMacro[macro] ?: 0
                     SeriesFilterChip(
                         label = languageMacroToFlag(macro),
-                        count = 0,
-                        showCount = false,
-                        contentDescription = languageMacroToDescription(macro),
+                        count = count,
                         isSelected = state.selectedLanguageMacro == macro,
                         onClick = {
                             pendingTopReset++
@@ -426,7 +418,7 @@ fun SetsListScreen(
                     items(items = displayedSets, key = { it.id }) { set ->
                         SetCard(
                             set = set,
-                            onClick = { onSetClick(set.id, state.selectedLanguageMacro) },
+                            onClick = { onSetClick(set.id) },
                             onLogoLoadError = { viewModel.onSetLogoLoadFailed(it) }
                         )
                     }
@@ -442,18 +434,9 @@ fun SetsListScreen(
 }
 
 private fun languageMacroToFlag(macro: String): String = when (macro) {
-    "ITA" -> "🇮🇹"
     "ENG" -> "🇺🇸"
     "JAP" -> "🇯🇵"
     "CHN" -> "🇨🇳"
-    else -> macro
-}
-
-private fun languageMacroToDescription(macro: String): String = when (macro) {
-    "ITA" -> "Italiano"
-    "ENG" -> "English"
-    "JAP" -> "Japanese"
-    "CHN" -> "Chinese"
     else -> macro
 }
 
@@ -475,27 +458,13 @@ fun RowScope.TabItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
 
 // ── Filtro serie migliorato con conteggio ──
 @Composable
-fun SeriesFilterChip(
-    label: String,
-    count: Int,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    showCount: Boolean = true,
-    contentDescription: String? = null
-) {
+fun SeriesFilterChip(label: String, count: Int, isSelected: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
             .background(if (isSelected) BlueCard else DarkCard)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-            .then(
-                if (contentDescription != null) {
-                    Modifier.semantics { this.contentDescription = contentDescription }
-                } else {
-                    Modifier
-                }
-            ),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
@@ -505,23 +474,21 @@ fun SeriesFilterChip(
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
             fontSize = 13.sp, maxLines = 1
         )
-        if (showCount) {
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(
-                        if (isSelected) Color.White.copy(alpha = 0.2f)
-                        else TextMuted.copy(alpha = 0.15f)
-                    )
-                    .padding(horizontal = 6.dp, vertical = 1.dp)
-            ) {
-                Text(
-                    text = "$count",
-                    color = if (isSelected) TextWhite else TextMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
+        Box(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(
+                    if (isSelected) Color.White.copy(alpha = 0.2f)
+                    else TextMuted.copy(alpha = 0.15f)
                 )
-            }
+                .padding(horizontal = 6.dp, vertical = 1.dp)
+        ) {
+            Text(
+                text = "$count",
+                color = if (isSelected) TextWhite else TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
