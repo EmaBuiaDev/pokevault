@@ -266,6 +266,18 @@ function buildItalianCatalogKeyCandidates(prefix: string, envKey: string | undef
 }
 
 function parseItalianAssetRequest(urlObj: URL): ItalianAssetRequest | null {
+  const setLogoMatch = urlObj.pathname.match(/^\/sets\/([^/]+)\/image$/i);
+  if (setLogoMatch) {
+    const setCode = decodeURIComponent(setLogoMatch[1]).trim().toUpperCase();
+    if (!setCode) {
+      return null;
+    }
+    return {
+      kind: 'setLogo',
+      setCode,
+    };
+  }
+
   const cardMatch = urlObj.pathname.match(/^\/images\/it\/([^/]+)\/([^/]+)$/i);
   if (cardMatch) {
     const setCode = decodeURIComponent(cardMatch[1]).trim().toUpperCase();
