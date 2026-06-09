@@ -166,6 +166,9 @@ object ItalianCatalogNormalizer {
         return when (expansionId.lowercase(Locale.ROOT)) {
             "svp" -> 0
             "mep" -> 1
+            "me2pt5" -> 2
+            "me03" -> 3
+            "me04" -> 4
             else -> 100
         }
     }

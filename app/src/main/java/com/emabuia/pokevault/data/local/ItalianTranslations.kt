@@ -44,6 +44,7 @@ object ItalianTranslations {
         "Ascended Heroes" to "Ascesa Eroica",
         "Destined Rivals" to "Rivali Predestinati",
         "Perfect Order" to "Equilibrio Perfetto",
+        "Chaos Rising" to "Caos Nascente",
         "Phantasmal Flame" to "Fiamme Spettrali",
         "Phantasmal Flames" to "Fiamme Spettrali",
         "Mega Evolution" to "Mega Evoluzioni",

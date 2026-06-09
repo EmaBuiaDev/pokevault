@@ -19,6 +19,11 @@
 # renaming fields, or removing classes used by Gson/Retrofit via reflection.
 -keep class com.emabuia.pokevault.data.remote.** { *; }
 
+# ── Italian catalog DTOs / repository ──
+# Release builds parse the Cloudflare ITA catalog with Gson, so these classes
+# must not be renamed or stripped by R8.
+-keep class com.emabuia.pokevault.data.italian.** { *; }
+
 # ── Retrofit / OkHttp ──
 -keep class retrofit2.** { *; }
 -dontwarn retrofit2.**

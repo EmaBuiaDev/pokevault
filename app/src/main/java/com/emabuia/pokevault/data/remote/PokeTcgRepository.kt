@@ -1449,6 +1449,7 @@ class PokeTcgRepository {
             "me01" -> "MEG"
             "me02" -> "PFL"
             "me03" -> "ME03"
+            "me04" -> "CRI"
             "me2pt5" -> "ASC"
             "mep" -> "MEP"
             "sv01" -> "SVI"
@@ -1593,6 +1594,15 @@ class PokeTcgRepository {
             targetCanonicalSetCode == "ASC"
         ) {
             return "me2pt5"
+        }
+
+        if (
+            normalizedName.contains("caos nascente") ||
+            normalizedName.contains("chaos rising") ||
+            targetRawSetCode == "CRI" ||
+            targetCanonicalSetCode == "DCR"
+        ) {
+            return "me04"
         }
 
         if (
