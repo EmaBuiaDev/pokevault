@@ -1032,9 +1032,18 @@ class PokeTcgRepository {
             } ?: continue
 
             val info = matchingCard.cardInfo ?: continue
-            val setId = info.setId?.trim().orEmpty().ifBlank { seed.setId }
-            val setCode = info.setCode?.trim().orEmpty().ifBlank { seed.setCode }
-            val setName = info.setName?.trim().orEmpty().ifBlank { seed.searchQuery }
+            val detailSet = resolveMissingMegaSetDetail(seed, info)
+            val setId = detailSet?.setId?.trim().orEmpty()
+                .ifBlank { info.setId?.trim().orEmpty() }
+                .ifBlank { seed.setId }
+            val setCode = detailSet?.setCode?.trim().orEmpty()
+                .ifBlank { info.setCode?.trim().orEmpty() }
+                .ifBlank { seed.setCode }
+            val setName = detailSet?.name?.trim().orEmpty()
+                .ifBlank { info.setName?.trim().orEmpty() }
+                .ifBlank { seed.searchQuery }
+            val releaseDate = detailSet?.releaseDate?.trim().orEmpty().ifBlank { null }
+            val language = detailSet?.language?.trim().orEmpty().ifBlank { null }
 
             fallbackAdds += PokeWalletSet(
                 name = setName,
@@ -1042,8 +1051,8 @@ class PokeTcgRepository {
                 setId = setId,
                 cardCount = 0,
                 totalCards = 0,
-                language = null,
-                releaseDate = null
+                language = language,
+                releaseDate = releaseDate
             )
             presentIds += setId
             presentCodes += setCode.uppercase(Locale.ROOT)
@@ -1051,6 +1060,27 @@ class PokeTcgRepository {
 
         if (fallbackAdds.isEmpty()) return baseSets
         return baseSets + fallbackAdds
+    }
+
+    private suspend fun resolveMissingMegaSetDetail(
+        seed: MissingSetSeed,
+        cardInfo: PokeWalletCardInfo
+    ): PokeWalletSet? {
+        val response = runCatching {
+            api.getSet(seed.setCode, page = 1, limit = 1)
+        }.getOrNull() ?: return null
+
+        val expectedId = cardInfo.setId?.trim().orEmpty().ifBlank { seed.setId }
+        val expectedCode = cardInfo.setCode?.trim().orEmpty().ifBlank { seed.setCode }
+        val candidates = buildList {
+            response.set?.let(::add)
+            addAll(response.matches)
+        }
+
+        return candidates.firstOrNull { candidate ->
+            candidate.setId.trim() == expectedId ||
+                candidate.setCode?.trim()?.equals(expectedCode, ignoreCase = true) == true
+        }
     }
 
     private suspend fun performAdaptiveApiSearch(query: String, page: Int): List<TcgCard> {

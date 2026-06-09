@@ -240,10 +240,10 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     private fun hasSetCatalogChanged(current: List<TcgSet>, incoming: List<TcgSet>): Boolean {
         if (current.size != incoming.size) return true
         val currentKey = current
-            .map { it.id to it.language }
+            .map { Triple(it.id, it.language, it.releaseDate) }
             .sortedBy { it.first }
         val incomingKey = incoming
-            .map { it.id to it.language }
+            .map { Triple(it.id, it.language, it.releaseDate) }
             .sortedBy { it.first }
         return currentKey != incomingKey
     }
