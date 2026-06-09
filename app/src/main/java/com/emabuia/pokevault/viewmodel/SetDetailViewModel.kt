@@ -77,6 +77,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentSetId: String? = null
     private var currentSourceMacro: String? = null
     private var translationJob: Job? = null
+    private var italianSetPriceWarmupJob: Job? = null
     private var lastPricedCardId: String? = null
     private val requestedCardPriceIds = mutableSetOf<String>()
     private var italianSetPriceMap: Map<String, PokeWalletPriceData> = emptyMap()
@@ -275,6 +276,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun loadSet(setId: String, sourceMacro: String? = null) {
         val normalizedMacro = sourceMacro?.trim()?.uppercase()
         if (currentSetId == setId && currentSourceMacro == normalizedMacro) return
+        italianSetPriceWarmupJob?.cancel()
         currentSetId = setId
         currentSourceMacro = normalizedMacro
         requestedCardPriceIds.clear()
@@ -326,6 +328,11 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                         isLoading = false,
                         isLoadingCards = false
                     )
+                    if (normalizedMacro == "ITA" || resolvedSet.language?.trim()?.uppercase() == "ITA") {
+                        italianSetPriceWarmupJob = viewModelScope.launch {
+                            resolveItalianSetPriceMap(cards, forceRefresh = false)
+                        }
+                    }
                     observeOwnedCards(
                         setName = resolvedSet.name,
                         currentCards = cards

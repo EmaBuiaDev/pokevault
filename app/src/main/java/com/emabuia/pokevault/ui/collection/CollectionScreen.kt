@@ -208,15 +208,28 @@ fun CollectionScreen(
         state.supertypeFilter != SupertypeFilter.ALL ||
         state.sortOrder != SortOrder.NUMBER
 
+    // Gestione espansioni aperte (inizialmente vuoto = tutte chiuse)
+    var expandedExpansions by remember { mutableStateOf(setOf<String>()) }
+
     // Prefetch immagini per rendere piu' fluida l'apertura delle espansioni.
-    LaunchedEffect(state.filteredCards, state.isGridView) {
-        val maxPrefetch = if (state.isGridView) 220 else 140
-        state.filteredCards
-            .asSequence()
+    LaunchedEffect(state.filteredCards, state.isGridView, expandedExpansions) {
+        val maxPrefetch = if (state.isGridView) 72 else 48
+        val cardsToPrefetch = if (expandedExpansions.isEmpty()) {
+            state.filteredCards.asSequence().take(maxPrefetch)
+        } else {
+            state.filteredCards
+                .asSequence()
+                .filter { card ->
+                    val expansionName = card.set.takeIf { it.isNotBlank() }
+                        ?: if (AppLocale.isItalian) "Espansione sconosciuta" else "Unknown Expansion"
+                    expansionName in expandedExpansions
+                }
+                .take(maxPrefetch)
+        }
+        cardsToPrefetch
             .map { safeImageUrl(it.imageUrl) }
             .filter { it.isNotBlank() }
             .distinct()
-            .take(maxPrefetch)
             .forEach { url ->
                 context.imageLoader.enqueue(
                     ImageRequest.Builder(context)
@@ -228,9 +241,6 @@ fun CollectionScreen(
                 )
             }
     }
-
-    // Gestione espansioni aperte (inizialmente vuoto = tutte chiuse)
-    var expandedExpansions by remember { mutableStateOf(setOf<String>()) }
 
     // Performance: con tante carte evitare di espandere tutto all'ingresso.
     // Auto-espandi solo quando ci sono filtri attivi, per mostrare subito i risultati filtrati.
