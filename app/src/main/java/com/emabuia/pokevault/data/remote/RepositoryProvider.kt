@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.data.remote
 
 import android.content.Context
+import com.emabuia.pokevault.data.italian.ItalianPriceSnapshotRepository
 import com.emabuia.pokevault.data.local.PokeVaultDatabase
 
 object RepositoryProvider {
@@ -14,4 +15,5 @@ object RepositoryProvider {
 
     val tcgRepository: PokeTcgRepository by lazy { PokeTcgRepository() }
     val pokeWalletRepository: PokeWalletRepository by lazy { PokeWalletRepository() }
+    val italianPriceSnapshotRepository: ItalianPriceSnapshotRepository by lazy { ItalianPriceSnapshotRepository() }
 }

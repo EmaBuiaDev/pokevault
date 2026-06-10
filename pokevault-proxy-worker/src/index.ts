@@ -77,6 +77,80 @@ interface BackfillCursor {
   updatedAt: number;
 }
 
+interface ItalianPriceEntry {
+  avg?: number;
+  low?: number;
+  trend?: number;
+  avg1?: number;
+  avg7?: number;
+  avg30?: number;
+  /** TCGPlayer USD fallback for sets without CardMarket data upstream. */
+  usd?: number;
+  usdLow?: number;
+  url?: string;
+}
+
+interface ItalianPriceExpansionEntry {
+  baseSetCode: string;
+  updatedAt: number;
+  prices: Record<string, ItalianPriceEntry>;
+}
+
+interface ItalianPriceSnapshot {
+  version: number;
+  builtAt: number;
+  expansions: Record<string, ItalianPriceExpansionEntry>;
+  aliases: Record<string, string>;
+  /** Number of catalog expansions eligible for pricing (coverage target). */
+  totalExpansions?: number;
+}
+
+interface ItalianCatalogRecordPayload {
+  cardId?: string;
+  espansioneId?: string;
+}
+
+interface UpstreamCardMarketPricePayload {
+  avg?: number | null;
+  low?: number | null;
+  trend?: number | null;
+  avg1?: number | null;
+  avg7?: number | null;
+  avg30?: number | null;
+  variant_type?: string | null;
+}
+
+interface UpstreamTcgPlayerPricePayload {
+  market_price?: number | null;
+  low_price?: number | null;
+  mid_price?: number | null;
+  sub_type_name?: string | null;
+}
+
+interface UpstreamSearchResultCard {
+  card_info?: {
+    card_number?: string | null;
+    set_id?: string | null;
+    set_code?: string | null;
+    set_name?: string | null;
+  } | null;
+  cardmarket?: {
+    product_url?: string | null;
+    prices?: UpstreamCardMarketPricePayload[] | null;
+  } | null;
+  tcgplayer?: {
+    url?: string | null;
+    prices?: UpstreamTcgPlayerPricePayload[] | null;
+  } | null;
+}
+
+interface UpstreamSearchPayload {
+  results?: UpstreamSearchResultCard[];
+  pagination?: {
+    total_pages?: number;
+  };
+}
+
 type ItalianAssetRequest =
   | {
     kind: 'card';
@@ -104,6 +178,159 @@ const FORCED_REAL_TOTALS_BY_SET_CODE: Record<string, number> = {
 const FORCED_REAL_TOTALS_BY_SET_ID: Record<string, number> = {
   '24587': 124,
 };
+
+// ── Italian price snapshot (pre-merged ITA→ENG price index) ──
+// Upstream note: /sets/{code} payloads no longer carry CardMarket prices;
+// /search is the only price-bearing endpoint, so the snapshot is built by
+// paging /search with the English set-name prefix (e.g. "ME01").
+const ITA_PRICE_SNAPSHOT_KEY = 'it:prices:snapshot:v2';
+const ITA_PRICE_SNAPSHOT_TTL = 7 * 24 * 60 * 60; // survives missed rebuilds
+const ITA_PRICE_EXPANSION_STALE_MS = 24 * 60 * 60 * 1000; // refresh cadence per expansion
+const ITA_PRICE_INLINE_REBUILD_MIN_AGE_MS = 30 * 60 * 1000; // ?rebuild=1 throttle
+const ITA_PRICE_MAX_UPSTREAM_FETCHES = 30; // per run; KV-cached pages are free
+const ITA_PRICE_SEARCH_PAGE_LIMIT = 100;
+const ITA_PRICE_MAX_PAGES_PER_SET = 4;
+// Catalog expansion id -> upstream numeric set_id(s). set_id is unambiguous
+// (set_code collides: PR, RR, BKP, CL...). Multiple ids merge sub-sets that the
+// catalog treats as one expansion (e.g. Generations + Radiant Collection).
+const ITA_EXPANSION_UPSTREAM_SET_IDS: Record<string, string[]> = {
+  bw1: ['1400'], // Black and White
+  bw2: ['1424'], // Emerging Powers
+  bw3: ['1385'], // Noble Victories
+  bw4: ['1412'], // Next Destinies
+  bw5: ['1386'], // Dark Explorers
+  bw6: ['1394'], // Dragons Exalted
+  bw7: ['1408'], // Boundaries Crossed
+  bw8: ['1413'], // Plasma Storm
+  bw9: ['1382'], // Plasma Freeze
+  bwp: ['1407'], // Black and White Promos
+  cel25: ['2867'], // Celebrations
+  cel25c: ['2931'], // Celebrations: Classic Collection
+  col1: ['1415'], // Call of Legends
+  det: ['2409'], // Detective Pikachu
+  dp1: ['1430'], // Diamond and Pearl
+  dp2: ['1368'], // Mysterious Treasures
+  dp3: ['1380'], // Secret Wonders
+  dp5: ['1390'], // Majestic Dawn
+  dp6: ['1417'], // Legends Awakened
+  dp7: ['1369'], // Stormfront
+  g1: ['1728', '1729'], // Generations + Radiant Collection
+  hgss1: ['1402'], // HeartGold SoulSilver
+  hgss2: ['1399'], // Unleashed
+  hgss3: ['1403'], // Undaunted
+  hgss4: ['1381'], // Triumphant
+  me01: ['24380'], // ME01: Mega Evolution
+  me02: ['24448'], // ME02: Phantasmal Flames
+  me03: ['24587'], // ME03: Perfect Order
+  me2pt5: ['24541'], // ME: Ascended Heroes
+  mep: ['24451'], // ME: Mega Evolution Promo
+  pgo: ['3064'], // Pokemon GO
+  pl1: ['1406'], // Platinum
+  pl2: ['1367'], // Rising Rivals
+  pl4: ['1391'], // Arceus
+  rsv10pt5: ['24326'], // SV: White Flare
+  sm1: ['1863'], // SM Base Set
+  sm2: ['1919'], // Guardians Rising
+  sm3: ['1957'], // Burning Shadows
+  sm35: ['2054'], // Shining Legends
+  sm4: ['2071'], // Crimson Invasion
+  sm5: ['2178'], // Ultra Prism
+  sm6: ['2209'], // Forbidden Light
+  sm7: ['2278'], // Celestial Storm
+  sm75: ['2295'], // Dragon Majesty
+  sm8: ['2328'], // Lost Thunder
+  sm9: ['2377'], // Team Up
+  sm10: ['2420'], // Unbroken Bonds
+  sm11: ['2464'], // Unified Minds
+  sm115: ['2480'], // Hidden Fates
+  sm12: ['2534'], // Cosmic Eclipse
+  sma: ['2594'], // Hidden Fates: Shiny Vault
+  smp: ['1861'], // SM Promos
+  sv01: ['22873'], // SV01: Scarlet & Violet Base Set
+  sv02: ['23120'], // SV02: Paldea Evolved
+  sv03: ['23228'], // SV03: Obsidian Flames
+  sv04: ['23286'], // SV04: Paradox Rift
+  sv05: ['23381'], // SV05: Temporal Forces
+  sv06: ['23473'], // SV06: Twilight Masquerade
+  sv07: ['23537'], // SV07: Stellar Crown
+  sv08: ['23651'], // SV08: Surging Sparks
+  sv09: ['24073'], // SV09: Journey Together
+  sv10: ['24269'], // SV10: Destined Rivals
+  sv3pt5: ['23237'], // SV: Scarlet & Violet 151
+  sv4pt5: ['23353'], // SV: Paldean Fates
+  sv6pt5: ['23529'], // SV: Shrouded Fable
+  sv8pt5: ['23821'], // SV: Prismatic Evolutions
+  svp: ['22872'], // SV: Scarlet & Violet Promo Cards
+  swsh1: ['2585'],
+  swsh2: ['2626'],
+  swsh3: ['2675'],
+  swsh35: ['2685'], // Champion's Path
+  swsh4: ['2701'],
+  swsh45: ['2754'], // Shining Fates
+  swsh45sv: ['2781'], // Shining Fates: Shiny Vault
+  swsh5: ['2765'],
+  swsh6: ['2807'],
+  swsh7: ['2848'],
+  swsh8: ['2906'],
+  swsh9: ['2948'],
+  swsh9tg: ['3020'], // Brilliant Stars Trainer Gallery
+  swsh10: ['3040'],
+  swsh10tg: ['3068'], // Astral Radiance Trainer Gallery
+  swsh11: ['3118'],
+  swsh11tg: ['3172'], // Lost Origin Trainer Gallery
+  swsh12: ['3170'],
+  swsh12tg: ['17674'], // Silver Tempest Trainer Gallery
+  swsh12pt5: ['17688'], // Crown Zenith
+  swsh12pt5gg: ['17689'], // Crown Zenith: Galarian Gallery
+  swshp: ['2545'], // SWSH Promo Cards
+  xy0: ['1522'], // Kalos Starter Set
+  xy1: ['1387'], // XY Base Set
+  xy2: ['1464'], // Flashfire
+  xy3: ['1481'], // Furious Fists
+  xy4: ['1494'], // Phantom Forces
+  xy5: ['1509'], // Primal Clash
+  xy6: ['1534'], // Roaring Skies
+  xy7: ['1576'], // Ancient Origins
+  xy8: ['1661'], // BREAKthrough
+  xy9: ['1701'], // XY - BREAKpoint
+  xy10: ['1780'], // Fates Collide
+  xy11: ['1815'], // Steam Siege
+  xy12: ['1842'], // Evolutions
+  xyp: ['1451'], // XY Promos
+};
+// Search query overrides for sets whose derived name queries return nothing upstream.
+const ITA_EXPANSION_QUERY_OVERRIDE: Record<string, string[]> = {
+  sv3pt5: ['SV 151', '151'],
+  svp: ['SV Promo'],
+  swsh35: ['Champion'], // apostrophe in "Champion's Path" breaks upstream search
+  swshp: ['SWSH Promo', 'Sword Shield Promo'],
+};
+// Mirrors preferredBaseSetCodeForItalianExpansion in the Android app.
+const ITA_EXPANSION_BASE_SET: Record<string, string> = {
+  me01: 'MEG',
+  me02: 'PFL',
+  me03: 'ME03',
+  me04: 'CRI',
+  me2pt5: 'ASC',
+  mep: 'MEP',
+  sv01: 'SVI',
+  sv02: 'PAL',
+  sv03: 'OBF',
+  sv04: 'PAR',
+  sv05: 'TEF',
+  sv06: 'TWM',
+  sv07: 'SCR',
+  sv08: 'SSP',
+  sv09: 'JTG',
+  sv10: 'DRI',
+  zsv10pt5: 'BLK',
+  rsv10pt5: 'WHT',
+  sv3pt5: 'MEW',
+  sv4pt5: 'PAF',
+  sv6pt5: 'SFA',
+  sv8pt5: 'PRE',
+};
+const ITALIAN_CARD_ID_PREFIX_REGEX = /^([A-Za-z0-9]+)_IT_/i;
 
 const PRODUCT_PATTERNS = [
   /\bmini tin\b/i,
@@ -311,25 +538,33 @@ function buildItalianCardKeyCandidates(prefix: string, setCode: string, cardNumb
   const upperSetCode = setCode.toUpperCase();
   const lowerSetCode = setCode.toLowerCase();
   const setCodeTokens = [upperSetCode, lowerSetCode];
-  const cardNumberTokens = new Set<string>([
+  const cardNumberTokens = [
+    normalized,
+    padded,
     rawCardNumber,
     rawCardNumber.toUpperCase(),
     rawCardNumber.toLowerCase(),
-    normalized,
-    padded,
-  ].filter(Boolean));
+  ].filter(Boolean).filter((value, index, list) => list.indexOf(value) === index);
   const basePaths = [
     `${prefix}/${upperSetCode}`,
     `${prefix}/${lowerSetCode}`,
   ];
-  const candidates = new Set<string>();
+  const candidates: string[] = [];
   const imageExtensions = ['png', 'webp', 'jpg', 'jpeg'];
 
+  const pushCandidate = (key: string) => {
+    if (!key) return;
+    if (!candidates.includes(key)) {
+      candidates.push(key);
+    }
+  };
+
   // Primary layout for all expansions: {setCode}/{number}.png
+  // Keep this list intentionally short to reduce R2 lookup latency.
   for (const basePath of basePaths) {
-    for (const cardToken of cardNumberTokens) {
+    for (const cardToken of cardNumberTokens.slice(0, 3)) {
       for (const ext of imageExtensions) {
-        candidates.add(`${basePath}/${cardToken}.${ext}`);
+        pushCandidate(`${basePath}/${cardToken}.${ext}`);
       }
     }
   }
@@ -337,10 +572,10 @@ function buildItalianCardKeyCandidates(prefix: string, setCode: string, cardNumb
   if (size === 'low' || size === 'high') {
     for (const basePath of basePaths) {
       for (const setToken of setCodeTokens) {
-        for (const cardToken of cardNumberTokens) {
+        for (const cardToken of cardNumberTokens.slice(0, 2)) {
           for (const ext of imageExtensions) {
-            candidates.add(`${basePath}/${setToken}_IT_${cardToken}_${size}.${ext}`);
-            candidates.add(`${basePath}/${setToken}_IT_${cardToken}-${size}.${ext}`);
+            pushCandidate(`${basePath}/${setToken}_IT_${cardToken}_${size}.${ext}`);
+            pushCandidate(`${basePath}/${setToken}_IT_${cardToken}-${size}.${ext}`);
           }
         }
       }
@@ -348,17 +583,20 @@ function buildItalianCardKeyCandidates(prefix: string, setCode: string, cardNumb
   }
 
   // Legacy layouts kept as fallback for already-uploaded historical assets.
+  // Only add PNG fallback variants to avoid a large candidate explosion.
   for (const basePath of basePaths) {
-    for (const setToken of setCodeTokens) {
-      for (const cardToken of cardNumberTokens) {
-        for (const ext of imageExtensions) {
-          candidates.add(`${basePath}/${setToken}_IT_${cardToken}.${ext}`);
-        }
+    for (const setToken of setCodeTokens.slice(0, 1)) {
+      for (const cardToken of cardNumberTokens.slice(0, 2)) {
+        pushCandidate(`${basePath}/${setToken}_IT_${cardToken}.png`);
+        pushCandidate(`${basePath}/${setToken}_IT_${cardToken}.webp`);
+      }
+      for (const cardToken of cardNumberTokens.slice(0, 1)) {
+        pushCandidate(`${basePath}/${cardToken}.png`);
       }
     }
   }
 
-  return Array.from(candidates);
+  return candidates;
 }
 
 function buildItalianSetLogoCandidates(prefix: string, setCode: string): string[] {
@@ -383,10 +621,20 @@ async function getFirstExistingR2Object(
   bucket: R2Bucket,
   keys: string[]
 ): Promise<{ key: string; object: R2ObjectBody } | null> {
-  for (const key of keys) {
-    const object = await bucket.get(key);
-    if (object) {
-      return { key, object };
+  if (keys.length === 0) {
+    return null;
+  }
+
+  // Probe in small parallel batches to reduce tail latency while preserving key priority.
+  const batchSize = 8;
+  for (let i = 0; i < keys.length; i += batchSize) {
+    const batch = keys.slice(i, i + batchSize);
+    const results = await Promise.all(
+      batch.map(async (key) => ({ key, object: await bucket.get(key) }))
+    );
+    const hit = results.find((entry) => entry.object != null);
+    if (hit?.object) {
+      return { key: hit.key, object: hit.object };
     }
   }
   return null;
@@ -440,7 +688,7 @@ async function handleItalianR2AssetRequest(
     statusText = 'OK';
     headersToCache = {
       'content-type': keyContentType,
-      'cache-control': `public, max-age=${TTL_90_DAYS}`,
+      'cache-control': `public, max-age=${TTL_90_DAYS}, immutable`,
     };
     if (hit.object.httpEtag) {
       headersToCache.etag = hit.object.httpEtag;
@@ -780,6 +1028,502 @@ async function backfillRealSetTotals(env: Env, cache: KVNamespace): Promise<void
   });
 }
 
+// ── Italian price snapshot helpers ──
+
+function normalizeCardNumberKeyForPrices(raw: string): string | null {
+  const clean = (raw.split('/')[0] ?? '').trim();
+  if (!clean) return null;
+  if (/^\d+$/.test(clean)) {
+    return parseInt(clean, 10).toString();
+  }
+  return clean.toUpperCase();
+}
+
+function extractPriceEntryFromSearchCard(card: UpstreamSearchResultCard): ItalianPriceEntry | null {
+  const prices = card.cardmarket?.prices ?? [];
+
+  const hasValue = (price: UpstreamCardMarketPricePayload): boolean =>
+    (price.avg ?? 0) > 0 || (price.low ?? 0) > 0 || (price.trend ?? 0) > 0;
+
+  const cm = prices.find((price) => price?.variant_type === 'normal' && hasValue(price))
+    ?? prices.find((price) => price != null && hasValue(price));
+
+  if (cm) {
+    const entry: ItalianPriceEntry = {};
+    if (typeof cm.avg === 'number' && cm.avg > 0) entry.avg = cm.avg;
+    if (typeof cm.low === 'number' && cm.low > 0) entry.low = cm.low;
+    if (typeof cm.trend === 'number' && cm.trend > 0) entry.trend = cm.trend;
+    if (typeof cm.avg1 === 'number' && cm.avg1 > 0) entry.avg1 = cm.avg1;
+    if (typeof cm.avg7 === 'number' && cm.avg7 > 0) entry.avg7 = cm.avg7;
+    if (typeof cm.avg30 === 'number' && cm.avg30 > 0) entry.avg30 = cm.avg30;
+    if (entry.avg != null || entry.low != null || entry.trend != null) {
+      const url = card.cardmarket?.product_url;
+      if (url) entry.url = url;
+      return entry;
+    }
+  }
+
+  // Older sets (SWSH and earlier) carry only TCGPlayer USD prices upstream.
+  const tpPrices = card.tcgplayer?.prices ?? [];
+  const hasTpValue = (price: UpstreamTcgPlayerPricePayload): boolean =>
+    (price.market_price ?? 0) > 0 || (price.low_price ?? 0) > 0;
+  const tp = tpPrices.find((price) => price?.sub_type_name === 'Normal' && hasTpValue(price))
+    ?? tpPrices.find((price) => price != null && hasTpValue(price));
+  if (tp) {
+    const entry: ItalianPriceEntry = {};
+    if (typeof tp.market_price === 'number' && tp.market_price > 0) entry.usd = tp.market_price;
+    if (typeof tp.low_price === 'number' && tp.low_price > 0) entry.usdLow = tp.low_price;
+    if (entry.usd != null || entry.usdLow != null) {
+      const url = card.tcgplayer?.url;
+      if (url) entry.url = url;
+      return entry;
+    }
+  }
+
+  return null;
+}
+
+function buildProxySearchCacheKey(query: string, page: number): string {
+  const params = new URLSearchParams();
+  params.set('q', query);
+  params.set('page', page.toString());
+  params.set('limit', ITA_PRICE_SEARCH_PAGE_LIMIT.toString());
+  return `pokewallet:/search${normalizeSearchParams(params)}`;
+}
+
+/**
+ * Reads a /search page from the same KV slot the proxy uses for app requests;
+ * falls back to one upstream fetch (budget-capped) and pre-warms that KV slot
+ * so user requests also benefit. Zero extra API cost when warm.
+ */
+async function getSearchPageKvFirst(
+  env: Env,
+  cache: KVNamespace,
+  query: string,
+  page: number,
+  budget: { remaining: number }
+): Promise<UpstreamSearchPayload | null> {
+  const cacheKey = buildProxySearchCacheKey(query, page);
+  const cached = await cache.get(cacheKey, 'json') as CachedResponse | null;
+  if (cached && isCacheValid(cached)) {
+    if (cached.status !== 200 || cached.bodyEncoding === 'base64') {
+      return null;
+    }
+    try {
+      return JSON.parse(cached.body) as UpstreamSearchPayload;
+    } catch {
+      return null;
+    }
+  }
+
+  if (budget.remaining <= 0) {
+    return null;
+  }
+  budget.remaining -= 1;
+
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      page: page.toString(),
+      limit: ITA_PRICE_SEARCH_PAGE_LIMIT.toString(),
+    });
+    const response = await fetch(buildUpstreamUrl(env, '/search', params), {
+      method: 'GET',
+      headers: createUpstreamHeaders(env),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const body = await response.text();
+    const cachedResponse: CachedResponse = {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/json' },
+      body,
+      bodyEncoding: 'text',
+      cachedAt: Date.now(),
+      ttl: TTL_24_HOURS,
+    };
+    await cache.put(cacheKey, JSON.stringify(cachedResponse), { expirationTtl: TTL_24_HOURS });
+    return JSON.parse(body) as UpstreamSearchPayload;
+  } catch (error) {
+    console.error(`ITA price snapshot: search fetch failed for "${query}" p${page}:`, error);
+    return null;
+  }
+}
+
+/** Derives candidate search queries from an upstream set name, most selective first. */
+function deriveSearchQueryCandidatesForSetName(setName: string): string[] {
+  const trimmed = setName.trim();
+  if (!trimmed) return [];
+  const candidates: string[] = [];
+  const colonIndex = trimmed.indexOf(':');
+  if (colonIndex > 0) {
+    const prefix = trimmed.slice(0, colonIndex).trim();
+    const suffix = trimmed.slice(colonIndex + 1).trim();
+    // Code-like prefixes with digits (ME01, SV04) are highly selective queries,
+    // but some are unknown upstream (ME03) — always fall back to the suffix name.
+    if (/\d/.test(prefix)) {
+      candidates.push(prefix);
+    }
+    if (suffix) candidates.push(suffix);
+    if (!/\d/.test(prefix) && candidates.length === 0) candidates.push(prefix);
+  } else {
+    // "SM - Burning Shadows" -> "Burning Shadows".
+    const dashIndex = trimmed.indexOf(' - ');
+    if (dashIndex > 0) {
+      const suffix = trimmed.slice(dashIndex + 3).trim();
+      if (suffix) candidates.push(suffix);
+    }
+    candidates.push(trimmed);
+  }
+  return [...new Set(candidates)];
+}
+
+/**
+ * Pages /search for one upstream set summary and merges price entries into
+ * `collected`. Tries each candidate query until one yields matches.
+ * Returns `complete: false` when pagination was cut short by the fetch budget,
+ * so the expansion stays stale and the next run resumes from warm KV pages.
+ */
+async function collectPricesForSetSummary(
+  env: Env,
+  cache: KVNamespace,
+  summary: PokeWalletSetSummary,
+  budget: { remaining: number },
+  collected: Record<string, ItalianPriceEntry>,
+  queryOverrides?: string[]
+): Promise<{ complete: boolean }> {
+  if (!summary.set_id || !summary.name) {
+    return { complete: true };
+  }
+  const queries = queryOverrides && queryOverrides.length > 0
+    ? queryOverrides
+    : deriveSearchQueryCandidatesForSetName(summary.name);
+  // Override queries are complementary (results merged); derived candidates are
+  // alternatives (stop at the first that matches).
+  const mergeAllQueries = !!queryOverrides && queryOverrides.length > 0;
+  const targetSetId = String(summary.set_id);
+
+  let anyFound = false;
+  let anyTruncated = false;
+  for (const searchQuery of queries) {
+    const sizeBefore = Object.keys(collected).length;
+    let truncated = false;
+    for (let page = 1; page <= ITA_PRICE_MAX_PAGES_PER_SET; page += 1) {
+      const payload = await getSearchPageKvFirst(env, cache, searchQuery, page, budget);
+      if (!payload) {
+        truncated = true;
+        break;
+      }
+      for (const card of payload.results ?? []) {
+        if (String(card.card_info?.set_id ?? '') !== targetSetId) {
+          continue;
+        }
+        const numberKey = normalizeCardNumberKeyForPrices(card.card_info?.card_number ?? '');
+        if (!numberKey || numberKey in collected) {
+          continue;
+        }
+        const entry = extractPriceEntryFromSearchCard(card);
+        if (entry) {
+          collected[numberKey] = entry;
+        }
+      }
+      const totalPages = payload.pagination?.total_pages ?? 1;
+      if (page >= totalPages) {
+        break;
+      }
+    }
+    if (truncated) {
+      anyTruncated = true;
+    }
+    if (Object.keys(collected).length > sizeBefore) {
+      anyFound = true;
+      if (!mergeAllQueries) {
+        return { complete: !truncated };
+      }
+    }
+    if (truncated && budget.remaining <= 0) {
+      return { complete: false };
+    }
+  }
+  if (anyFound) {
+    return { complete: !anyTruncated };
+  }
+  return { complete: true };
+}
+
+/**
+ * Loads the upstream /sets directory, KV-first via the same slot the proxy
+ * uses for app traffic; falls back to one upstream fetch and pre-warms the slot.
+ */
+async function loadUpstreamSetsDirectoryKvFirst(
+  env: Env,
+  cache: KVNamespace
+): Promise<PokeWalletSetSummary[] | null> {
+  const cacheKey = 'pokewallet:/sets';
+  const cached = await cache.get(cacheKey, 'json') as CachedResponse | null;
+  if (cached && isCacheValid(cached) && cached.status === 200 && cached.bodyEncoding !== 'base64') {
+    try {
+      const payload = JSON.parse(cached.body) as PokeWalletSetsPayload;
+      if (Array.isArray(payload.data) && payload.data.length > 0) {
+        return payload.data;
+      }
+    } catch {
+      // fall through to upstream
+    }
+  }
+
+  try {
+    const response = await fetch(buildUpstreamUrl(env, '/sets'), {
+      method: 'GET',
+      headers: createUpstreamHeaders(env),
+    });
+    if (!response.ok) {
+      console.error(`ITA price snapshot: /sets directory fetch failed: ${response.status}`);
+      return null;
+    }
+    const body = await response.text();
+    const payload = JSON.parse(body) as PokeWalletSetsPayload;
+    const cachedResponse: CachedResponse = {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/json' },
+      body,
+      bodyEncoding: 'text',
+      cachedAt: Date.now(),
+      ttl: TTL_24_HOURS,
+    };
+    await cache.put(cacheKey, JSON.stringify(cachedResponse), { expirationTtl: TTL_24_HOURS });
+    return payload.data ?? [];
+  } catch (error) {
+    console.error('ITA price snapshot: failed to load /sets directory:', error);
+    return null;
+  }
+}
+
+async function loadItalianCatalogCards(env: Env): Promise<ItalianCatalogRecordPayload[]> {
+  if (!env.IMAGES_BUCKET) {
+    return [];
+  }
+  const prefix = normalizeR2Prefix(env.IT_IMAGE_PREFIX);
+  const candidates = buildItalianCatalogKeyCandidates(prefix, env.IT_CATALOG_KEY);
+  const hit = await getFirstExistingR2Object(env.IMAGES_BUCKET, candidates);
+  if (!hit) {
+    return [];
+  }
+  try {
+    const rawText = await hit.object.text();
+    // Strip UTF-8 BOM (the catalog file may include one; JSON.parse rejects it).
+    const cleanText = rawText.charCodeAt(0) === 0xfeff ? rawText.slice(1) : rawText;
+    const parsed = JSON.parse(cleanText) as unknown;
+    const cards = Array.isArray(parsed)
+      ? parsed
+      : (parsed as { cards?: unknown[] } | null)?.cards ?? [];
+    return Array.isArray(cards) ? cards as ItalianCatalogRecordPayload[] : [];
+  } catch (error) {
+    console.error('ITA price snapshot: failed to parse catalog:', error);
+    return [];
+  }
+}
+
+async function buildItalianPriceSnapshot(
+  env: Env,
+  cache: KVNamespace,
+  options: { force?: boolean } = {}
+): Promise<ItalianPriceSnapshot | null> {
+  const existing = await cache.get(ITA_PRICE_SNAPSHOT_KEY, 'json') as ItalianPriceSnapshot | null;
+
+  const records = await loadItalianCatalogCards(env);
+  if (records.length === 0) {
+    return existing;
+  }
+
+  // Group catalog records by expansion and tally raw image set codes.
+  const rawCodeCountsByExpansion = new Map<string, Map<string, number>>();
+  for (const record of records) {
+    const expansionId = (record.espansioneId ?? '').trim().toLowerCase();
+    if (!expansionId) {
+      continue;
+    }
+    let counts = rawCodeCountsByExpansion.get(expansionId);
+    if (!counts) {
+      counts = new Map();
+      rawCodeCountsByExpansion.set(expansionId, counts);
+    }
+    const match = (record.cardId ?? '').trim().match(ITALIAN_CARD_ID_PREFIX_REGEX);
+    if (match) {
+      const code = match[1].toUpperCase();
+      counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+  }
+
+  // Upstream set directory: maps base set codes to set_id + name (search filter).
+  const setSummaries = await loadUpstreamSetsDirectoryKvFirst(env, cache);
+  if (!setSummaries || setSummaries.length === 0) {
+    return existing;
+  }
+
+  const findSetSummary = (code: string): PokeWalletSetSummary | undefined => {
+    const target = code.trim().toUpperCase();
+    const matches = setSummaries.filter(
+      (summary) => (summary.set_code ?? '').trim().toUpperCase() === target
+    );
+    return matches.find((summary) => normalizeLanguageMacro(summary.language) === 'ENG') ?? matches[0];
+  };
+
+  // Merge over the previous snapshot so budget-capped runs converge over time.
+  const snapshot: ItalianPriceSnapshot = {
+    version: 1,
+    builtAt: Date.now(),
+    expansions: { ...(existing?.expansions ?? {}) },
+    aliases: { ...(existing?.aliases ?? {}) },
+    totalExpansions: rawCodeCountsByExpansion.size,
+  };
+
+  const budget = { remaining: ITA_PRICE_MAX_UPSTREAM_FETCHES };
+  const now = Date.now();
+
+  // Process stalest expansions first so refresh effort is spread fairly.
+  const orderedExpansions = [...rawCodeCountsByExpansion.entries()].sort((a, b) => {
+    const updatedA = snapshot.expansions[a[0]]?.updatedAt ?? 0;
+    const updatedB = snapshot.expansions[b[0]]?.updatedAt ?? 0;
+    return updatedA - updatedB;
+  });
+
+  for (const [expansionId, rawCodeCounts] of orderedExpansions) {
+    const existingEntry = snapshot.expansions[expansionId];
+    if (!options.force && existingEntry && now - existingEntry.updatedAt < ITA_PRICE_EXPANSION_STALE_MS) {
+      continue;
+    }
+
+    const dominantRawCode = [...rawCodeCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+
+    let resolvedBase = '';
+    let prices: Record<string, ItalianPriceEntry> = {};
+    let complete = true;
+
+    // Preferred path: explicit upstream set_id mapping (unambiguous, supports
+    // multi-set expansions like Generations + Radiant Collection).
+    const mappedSetIds = ITA_EXPANSION_UPSTREAM_SET_IDS[expansionId];
+    const mappedSummaries = (mappedSetIds ?? [])
+      .map((setId) => setSummaries.find((summary) => String(summary.set_id ?? '') === setId))
+      .filter((summary): summary is PokeWalletSetSummary => !!summary?.set_id && !!summary.name);
+
+    if (mappedSummaries.length > 0) {
+      const collected: Record<string, ItalianPriceEntry> = {};
+      const queryOverrides = ITA_EXPANSION_QUERY_OVERRIDE[expansionId];
+      for (const summary of mappedSummaries) {
+        const result = await collectPricesForSetSummary(env, cache, summary, budget, collected, queryOverrides);
+        if (!result.complete) {
+          complete = false;
+        }
+      }
+      if (Object.keys(collected).length > 0 || complete) {
+        resolvedBase = (mappedSummaries[0].set_code ?? '').trim().toUpperCase() || expansionId.toUpperCase();
+        prices = collected;
+      }
+    } else {
+      // Fallback path: resolve by set_code candidates.
+      const preferredBase = ITA_EXPANSION_BASE_SET[expansionId];
+      const candidates = [...new Set(
+        [preferredBase, dominantRawCode, expansionId.toUpperCase()]
+          .filter((candidate): candidate is string => !!candidate)
+      )];
+
+      for (const candidate of candidates) {
+        const summary = findSetSummary(candidate);
+        if (!summary?.set_id || !summary.name) {
+          continue;
+        }
+        const collected: Record<string, ItalianPriceEntry> = {};
+        const result = await collectPricesForSetSummary(env, cache, summary, budget, collected);
+        if (Object.keys(collected).length > 0) {
+          resolvedBase = candidate;
+          prices = collected;
+          complete = result.complete;
+          break;
+        }
+        if (!result.complete) {
+          complete = false;
+          break;
+        }
+      }
+    }
+
+    const mergedPrices = { ...(existingEntry?.prices ?? {}), ...prices };
+    const baseCode = resolvedBase || existingEntry?.baseSetCode || '';
+    if (baseCode && Object.keys(mergedPrices).length > 0) {
+      snapshot.expansions[expansionId] = {
+        baseSetCode: baseCode,
+        // Incomplete runs stay stale so the next run resumes (KV pages are warm).
+        updatedAt: complete ? now : (existingEntry?.updatedAt ?? 0),
+        prices: mergedPrices,
+      };
+      snapshot.aliases[expansionId] = expansionId;
+      snapshot.aliases[baseCode.toLowerCase()] = expansionId;
+      if (dominantRawCode) {
+        snapshot.aliases[dominantRawCode.toLowerCase()] = expansionId;
+      }
+    }
+
+    if (budget.remaining <= 0) {
+      break;
+    }
+  }
+
+  await cache.put(ITA_PRICE_SNAPSHOT_KEY, JSON.stringify(snapshot), {
+    expirationTtl: ITA_PRICE_SNAPSHOT_TTL,
+  });
+  return snapshot;
+}
+
+async function handleItalianPricesRequest(
+  requestUrl: URL,
+  env: Env,
+  cache: KVNamespace
+): Promise<Response> {
+  let snapshot = await cache.get(ITA_PRICE_SNAPSHOT_KEY, 'json') as ItalianPriceSnapshot | null;
+  const wantsRebuild = requestUrl.searchParams.get('rebuild') === '1';
+  const coveredCount = snapshot ? Object.keys(snapshot.expansions).length : 0;
+  const coverageIncomplete = !snapshot
+    || coveredCount === 0
+    || snapshot.totalExpansions == null
+    || coveredCount < snapshot.totalExpansions;
+  const staleEnoughForRebuild = coverageIncomplete
+    || !snapshot
+    || Date.now() - snapshot.builtAt > ITA_PRICE_INLINE_REBUILD_MIN_AGE_MS;
+
+  if (wantsRebuild && staleEnoughForRebuild) {
+    // force=1 bypasses per-expansion freshness (warm KV pages keep it cheap);
+    // otherwise staleness directs the budget to incomplete/stale expansions.
+    const wantsForce = requestUrl.searchParams.get('force') === '1';
+    snapshot = await buildItalianPriceSnapshot(env, cache, { force: wantsForce }) ?? snapshot;
+  } else if (!snapshot) {
+    snapshot = await buildItalianPriceSnapshot(env, cache);
+  }
+
+  if (!snapshot) {
+    return new Response(JSON.stringify({ error: 'Italian price snapshot not available' }), {
+      status: 404,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': `public, max-age=${TTL_5_MINUTES}`,
+      },
+    });
+  }
+
+  return new Response(JSON.stringify(snapshot), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'public, max-age=1800',
+      'X-Snapshot-Built-At': new Date(snapshot.builtAt).toISOString(),
+      'X-Snapshot-Expansions': Object.keys(snapshot.expansions).length.toString(),
+    },
+  });
+}
+
 /**
  * Generates a cache key from the incoming request.
  * Uses the full URL path and query string to ensure uniqueness.
@@ -854,6 +1598,10 @@ export default {
           },
         }
       );
+    }
+
+    if (requestUrl.pathname === '/ita/prices.json') {
+      return handleItalianPricesRequest(requestUrl, env, cache);
     }
 
     if (parseItalianCatalogRequest(requestUrl)) {
@@ -1042,6 +1790,9 @@ export default {
       return;
     }
 
-    ctx.waitUntil(backfillRealSetTotals(env, env.CACHE));
+    ctx.waitUntil(Promise.allSettled([
+      backfillRealSetTotals(env, env.CACHE),
+      buildItalianPriceSnapshot(env, env.CACHE),
+    ]));
   },
 };

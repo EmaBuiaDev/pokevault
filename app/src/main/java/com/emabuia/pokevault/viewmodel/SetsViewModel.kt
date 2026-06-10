@@ -11,11 +11,16 @@ import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.local.ItalianTranslations
+import com.emabuia.pokevault.data.remote.CardMarket
+import com.emabuia.pokevault.data.remote.CardMarketPrices
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
+import com.emabuia.pokevault.data.remote.TcgPlayer
+import com.emabuia.pokevault.data.remote.TcgPriceInfo
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
+import com.emabuia.pokevault.util.hasPositiveEurPrice
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -311,7 +316,8 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
             val allCards = (italianCards + directCards + translatedCards).distinctBy { it.id }
             val filteredCards = if (exactMode) applyExactCardFilter(query, allCards) else allCards
-            val finalCards = rankCardSearchResults(query, filteredCards)
+            val rankedCards = rankCardSearchResults(query, filteredCards)
+            val finalCards = enrichItalianCardsWithSnapshotPrices(rankedCards, context)
             uiState = uiState.copy(searchedCards = finalCards, isSearchingCards = false)
         }
     }
@@ -875,6 +881,61 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     private fun isItalianCard(card: TcgCard): Boolean {
         val setId = card.set?.id.orEmpty().lowercase(Locale.ROOT)
         return setId.endsWith("__ita")
+    }
+
+    /** Applies pre-merged ITA snapshot prices to Italian search results (no API calls). */
+    private suspend fun enrichItalianCardsWithSnapshotPrices(
+        cards: List<TcgCard>,
+        context: Context
+    ): List<TcgCard> {
+        if (cards.none { isItalianCard(it) }) return cards
+        val snapshot = RepositoryProvider.italianPriceSnapshotRepository
+            .getSnapshot(context)
+            .getOrNull()
+            ?: return cards
+
+        return cards.map { card ->
+            if (!isItalianCard(card) || card.cardmarket?.prices.hasPositiveEurPrice()) {
+                return@map card
+            }
+            val lookupCode = card.id
+                .takeIf { it.startsWith("ita:", ignoreCase = true) }
+                ?.split(':')
+                ?.getOrNull(1)
+                ?.takeIf { it.isNotBlank() }
+                ?: card.set?.id?.substringBefore("__").orEmpty()
+            val numberKey = normalizeSnapshotNumberKey(card.number) ?: return@map card
+            val entry = snapshot.priceMapFor(lookupCode)[numberKey] ?: return@map card
+            val hasEur = entry.avg != null || entry.low != null || entry.trend != null
+            val tcgPlayer = if (entry.usd != null || entry.usdLow != null) {
+                TcgPlayer(
+                    url = entry.url.takeIf { !hasEur }.orEmpty(),
+                    prices = mapOf("normal" to TcgPriceInfo(low = entry.usdLow, market = entry.usd))
+                )
+            } else {
+                card.tcgplayer
+            }
+            card.copy(
+                cardmarket = CardMarket(
+                    url = entry.url.takeIf { hasEur }.orEmpty(),
+                    prices = CardMarketPrices(
+                        averageSellPrice = entry.avg,
+                        lowPrice = entry.low,
+                        trendPrice = entry.trend,
+                        avg1 = entry.avg1,
+                        avg7 = entry.avg7,
+                        avg30 = entry.avg30
+                    )
+                ),
+                tcgplayer = tcgPlayer
+            )
+        }
+    }
+
+    private fun normalizeSnapshotNumberKey(raw: String): String? {
+        val clean = raw.split("/").firstOrNull()?.trim().orEmpty()
+        if (clean.isBlank()) return null
+        return clean.toIntOrNull()?.toString() ?: clean.uppercase(Locale.ROOT)
     }
 
     private fun normalizeSearchName(raw: String?): String {

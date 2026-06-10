@@ -126,6 +126,16 @@ private fun resolveDisplayPrice(card: TcgCard): Double? {
         ?: card.cardmarket?.prices?.averageSellPrice
 }
 
+/** EUR (CardMarket) first; TCGPlayer USD fallback for sets without EUR data. */
+private fun resolveDisplayPriceText(card: TcgCard): String? {
+    val eur = resolveDisplayPrice(card)
+    if (eur != null && eur > 0) return formatPriceEur(eur)
+    val usd = card.tcgplayer?.prices?.values
+        ?.firstNotNullOfOrNull { it.market ?: it.low }
+    if (usd != null && usd > 0) return "$ ${String.format(Locale.ITALY, "%.2f", usd)}"
+    return null
+}
+
 private fun formatPriceEur(price: Double): String {
     return "€ ${String.format(Locale.ITALY, "%.2f", price)}"
 }
@@ -1296,10 +1306,10 @@ fun TcgCardCompactItem(
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     if (canViewPrices) {
-                                        val price = resolveDisplayPrice(card)
-                                        if (price != null && price > 0) {
+                                        val priceText = resolveDisplayPriceText(card)
+                                        if (priceText != null) {
                                             Text(
-                                                text = formatPriceEur(price),
+                                                text = priceText,
                                                 color = GreenCard,
                                                 fontSize = 9.sp,
                                                 fontWeight = FontWeight.Bold,
@@ -1467,10 +1477,10 @@ fun TcgCardListRow(
             Text("#${card.number} · ${AppLocale.translateRarity(card.rarity ?: "")}", color = TextMuted, fontSize = 11.sp)
         }
         if (canViewPrices) {
-            val price = resolveDisplayPrice(card)
-            if (price != null && price > 0) {
+            val priceText = resolveDisplayPriceText(card)
+            if (priceText != null) {
                 Text(
-                    text = formatPriceEur(price),
+                    text = priceText,
                     color = GreenCard,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,

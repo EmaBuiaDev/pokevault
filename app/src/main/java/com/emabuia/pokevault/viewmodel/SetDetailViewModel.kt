@@ -18,6 +18,8 @@ import com.emabuia.pokevault.data.remote.CardMarket
 import com.emabuia.pokevault.data.remote.CardMarketPrices
 import com.emabuia.pokevault.data.remote.SetCodeMapper
 import com.emabuia.pokevault.data.remote.TcgCard
+import com.emabuia.pokevault.data.remote.TcgPlayer
+import com.emabuia.pokevault.data.remote.TcgPriceInfo
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
 import com.emabuia.pokevault.util.AppLocale
@@ -70,6 +72,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private val tcgRepository = RepositoryProvider.tcgRepository
     private val firestoreRepository = FirestoreRepository()
     private val pokeWalletRepository = RepositoryProvider.pokeWalletRepository
+    private val italianPriceSnapshotRepository = RepositoryProvider.italianPriceSnapshotRepository
 
     var uiState by mutableStateOf(SetDetailUiState())
         private set
@@ -134,11 +137,25 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             avg7 = priceData.eurAvg7,
             avg30 = priceData.eurAvg30
         )
+        val tcgPlayer = if (priceData.usdMarket != null || priceData.usdLow != null) {
+            TcgPlayer(
+                url = priceData.tcgPlayerUrl ?: card.tcgplayer?.url.orEmpty(),
+                prices = mapOf(
+                    "normal" to TcgPriceInfo(
+                        low = priceData.usdLow,
+                        market = priceData.usdMarket
+                    )
+                )
+            )
+        } else {
+            card.tcgplayer
+        }
         return card.copy(
             cardmarket = CardMarket(
                 url = priceData.cardMarketUrl.orEmpty(),
                 prices = cmPrices
-            )
+            ),
+            tcgplayer = tcgPlayer
         )
     }
 
@@ -186,6 +203,25 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 ?.substringBefore("__")
                 ?.takeIf { it.isNotBlank() }
             ?: return emptyMap()
+
+        // Fast path: pre-merged ITA price snapshot served by the worker.
+        val context = getApplication<Application>().applicationContext
+        val expansionLookup = currentSetId?.substringBefore("__")?.takeIf { it.isNotBlank() }
+        val snapshotPrices = italianPriceSnapshotRepository
+            .getPriceMap(context, setCode, forceRefresh = forceRefresh)
+            .ifEmpty {
+                expansionLookup
+                    ?.takeIf { !it.equals(setCode, ignoreCase = true) }
+                    ?.let { italianPriceSnapshotRepository.getPriceMap(context, it) }
+                    .orEmpty()
+            }
+        if (snapshotPrices.isNotEmpty()) {
+            if (activeSetId != null) {
+                italianSetPriceMapSetId = activeSetId
+                italianSetPriceMap = snapshotPrices
+            }
+            return snapshotPrices
+        }
 
         val canonicalSetCode = SetCodeMapper.normalizeDecklistSetCode(setCode) ?: setCode
         val resolved = pokeWalletRepository.getSetPriceMap(
@@ -330,7 +366,21 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                     )
                     if (normalizedMacro == "ITA" || resolvedSet.language?.trim()?.uppercase() == "ITA") {
                         italianSetPriceWarmupJob = viewModelScope.launch {
-                            resolveItalianSetPriceMap(cards, forceRefresh = false)
+                            val warmPrices = resolveItalianSetPriceMap(cards, forceRefresh = false)
+                            if (warmPrices.isNotEmpty()) {
+                                val merged = uiState.cards.map { listCard ->
+                                    if (listCard.cardmarket?.prices.hasPositiveEurPrice()) {
+                                        listCard
+                                    } else {
+                                        normalizeCardNumberKey(listCard.number)
+                                            ?.let(warmPrices::get)
+                                            ?.takeIf { it.hasEurPrices || it.usdMarket != null || it.usdLow != null }
+                                            ?.let { withPriceData(listCard, it) }
+                                            ?: listCard
+                                    }
+                                }
+                                uiState = uiState.copy(cards = merged)
+                            }
                         }
                     }
                     observeOwnedCards(
@@ -573,6 +623,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                     if (listCard.id == current.id) withPriceData(listCard, setPrice) else listCard
                 }
                 uiState = uiState.copy(cards = merged)
+                return@launch
             }
 
             val mirroredPrices = resolveItalianMirrorPrices(
