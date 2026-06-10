@@ -10,6 +10,8 @@ import com.emabuia.pokevault.data.local.toTcgSet
 import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.emabuia.pokevault.util.AppLocale
 import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import retrofit2.HttpException
@@ -515,6 +517,73 @@ class PokeTcgRepository {
 
     suspend fun searchCardsFuzzy(name: String, page: Int = 1): Result<List<TcgCard>> {
         return searchCardsFuzzy(name = name, page = page, targetSetId = null)
+    }
+
+    suspend fun searchItalianCardsByName(
+        query: String,
+        context: Context,
+        exactMode: Boolean = false,
+        limit: Int = 60
+    ): Result<List<TcgCard>> {
+        val cleanQuery = sanitizeQuery(query)
+        val normalizedQuery = normalizeNameForLookup(cleanQuery)
+        if (normalizedQuery.isBlank()) return Result.success(emptyList())
+
+        val safeLimit = limit.coerceIn(1, 100)
+        val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
+            .getOrElse { return Result.success(emptyList()) }
+
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                val scoredRecords = catalog.cards.asSequence()
+                    .mapNotNull { record ->
+                        val normalizedName = normalizeNameForLookup(record.nome)
+                        if (normalizedName.isBlank()) return@mapNotNull null
+
+                        val score = scoreItalianNameMatch(
+                            normalizedName = normalizedName,
+                            normalizedQuery = normalizedQuery,
+                            queryTokens = queryTokens,
+                            exactMode = exactMode
+                        )
+
+                        if (score <= 0) null else record to score
+                    }
+                    .sortedWith(
+                        compareByDescending<Pair<ItalianCardRecord, Int>> { it.second }
+                            .thenBy { extractCardNumber(it.first.cardId).toIntOrNull() ?: Int.MAX_VALUE }
+                            .thenBy { normalizeItalianSetCode(it.first.espansioneId) }
+                    )
+                    .take(safeLimit)
+                    .toList()
+
+                if (scoredRecords.isEmpty()) {
+                    return@withContext emptyList()
+                }
+
+                val setsById = linkedMapOf<String, TcgSet>()
+                val availableSets = memorySets ?: getSets(context = context, forceRefresh = false).getOrDefault(emptyList())
+                availableSets.forEach { set -> setsById[set.id] = set }
+
+                scoredRecords.map { (record, _) ->
+                    val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+                    val italianSetId = buildItalianSetId(expansionId)
+                    val setInfo = setsById[italianSetId] ?: TcgSet(
+                        id = italianSetId,
+                        name = expansionId.uppercase(Locale.ROOT),
+                        series = deriveSeriesName(
+                            setCode = expansionId,
+                            language = "ITA",
+                            setName = expansionId
+                        ),
+                        language = "ITA"
+                    )
+                    toItalianTcgCard(record = record, setInfo = setInfo)
+                }.distinctBy { it.id }
+            }
+        }
     }
 
     suspend fun searchCardsFuzzy(name: String, page: Int = 1, targetSetId: String? = null): Result<List<TcgCard>> {
@@ -1105,6 +1174,40 @@ class PokeTcgRepository {
                     " $normalizedName ".contains(" $token ")
                 })
         }.distinctBy { it.id }
+    }
+
+    private fun scoreItalianNameMatch(
+        normalizedName: String,
+        normalizedQuery: String,
+        queryTokens: List<String>,
+        exactMode: Boolean
+    ): Int {
+        if (normalizedName == normalizedQuery) return 1000
+
+        val startsWith = normalizedName.startsWith(normalizedQuery)
+        val wordContains = " $normalizedName ".contains(" $normalizedQuery ")
+
+        if (exactMode) {
+            return when {
+                startsWith -> 850
+                wordContains -> 700
+                else -> 0
+            }
+        }
+
+        if (startsWith) return 850
+        if (wordContains) return 700
+        if (normalizedName.contains(normalizedQuery)) return 560
+
+        val longTokens = queryTokens.filter { it.length >= 2 }
+        if (longTokens.isNotEmpty() && longTokens.all { token -> normalizedName.contains(token) }) {
+            return 420
+        }
+        if (longTokens.any { token -> token.length >= 3 && " $normalizedName ".contains(" $token ") }) {
+            return 260
+        }
+
+        return 0
     }
 
     private suspend fun searchCardsFromLocalCache(query: String): List<TcgCard> {

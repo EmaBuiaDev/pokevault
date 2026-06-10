@@ -52,6 +52,10 @@ import com.emabuia.pokevault.viewmodel.SetsViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.util.Locale
 
 // Formatta data
 fun formatDate(date: String): String {
@@ -321,7 +325,17 @@ fun SetsListScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isSearchingCards) {
-            CardSearchResults(state.searchedCards, state.isSearchingCards, state.cardSearchQuery, onCardClick = { card -> selectedCard = card }) { setId -> onSetClick(setId, state.selectedLanguageMacro) }
+            val setReleaseDateById = remember(state.allSets) {
+                state.allSets.associate { it.id to it.releaseDate }
+            }
+            CardSearchResults(
+                cards = state.searchedCards,
+                isLoading = state.isSearchingCards,
+                query = state.cardSearchQuery,
+                setReleaseDateById = setReleaseDateById,
+                onCardClick = { card -> selectedCard = card },
+                onCardSetClick = { setId -> onSetClick(setId, state.selectedLanguageMacro) }
+            )
         } else {
             val languageMacros = listOf("ITA", "ENG", "JAP", "CHN")
 
@@ -589,7 +603,14 @@ private fun MissingSetLogoFallback(setName: String) {
 
 // ── Card search results ──
 @Composable
-fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, onCardClick: (TcgCard) -> Unit = {}, onCardSetClick: (String) -> Unit) {
+fun CardSearchResults(
+    cards: List<TcgCard>,
+    isLoading: Boolean,
+    query: String,
+    setReleaseDateById: Map<String, String>,
+    onCardClick: (TcgCard) -> Unit = {},
+    onCardSetClick: (String) -> Unit
+) {
     if (query.length < 2) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -612,6 +633,17 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
         }
     } else {
         val grouped = cards.groupBy { it.set?.id?.takeIf { id -> id.isNotBlank() } ?: "unknown" }
+        val orderedGroups = grouped.entries
+            .sortedWith(
+                compareByDescending<Map.Entry<String, List<TcgCard>>> { entry ->
+                    parseReleaseDateToEpochUi(
+                        setReleaseDateById[entry.key].orEmpty()
+                    )
+                }.thenBy { entry ->
+                    entry.value.firstOrNull()?.set?.name?.lowercase(Locale.ROOT) ?: ""
+                }
+            )
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -621,8 +653,9 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
             item(span = { GridItemSpan(3) }) {
                 Text(AppLocale.resultsCountInExpansions(cards.size, grouped.size), color = TextMuted, fontSize = 13.sp)
             }
-            grouped.forEach { (setId, setCards) ->
+            orderedGroups.forEach { (setId, setCards) ->
                 val setName = setCards.firstOrNull()?.set?.name ?: AppLocale.unknown
+                val formattedReleaseDate = formatReleaseDateUi(setReleaseDateById[setId].orEmpty())
                 item(span = { GridItemSpan(3) }) {
                     Row(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DarkCard)
@@ -635,16 +668,49 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
                     ) {
                         Column {
                             Text(setName, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text(AppLocale.resultsCount(setCards.size), color = TextMuted, fontSize = 11.sp)
+                            val subtitle = if (formattedReleaseDate.isBlank()) {
+                                AppLocale.resultsCount(setCards.size)
+                            } else {
+                                "${AppLocale.resultsCount(setCards.size)} • $formattedReleaseDate"
+                            }
+                            Text(subtitle, color = TextMuted, fontSize = 11.sp)
                         }
                         Icon(Icons.Default.ChevronRight, null, tint = TextMuted, modifier = Modifier.size(20.dp))
                     }
                 }
-                items(setCards.sortedBy { it.number.toIntOrNull() ?: 999 }, key = { "${it.id}_$setId" }) { card ->
-                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(10.dp))
-                        .clickable { onCardClick(card) }) {
+                items(
+                    setCards.sortedBy { extractCardNumberForUi(it.number).toIntOrNull() ?: Int.MAX_VALUE },
+                    key = { "${it.id}_$setId" }
+                ) { card ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(0.72f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onCardClick(card) }
+                    ) {
                         if (card.images.small.isNotBlank()) {
-                            AsyncImage(model = card.images.small, contentDescription = card.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                            AsyncImage(
+                                model = card.images.small,
+                                contentDescription = card.name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .fillMaxWidth()
+                                    .background(Color.Black.copy(alpha = 0.55f))
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "#${extractCardNumberForUi(card.number)} ${card.name}",
+                                    color = TextWhite,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         } else {
                             Box(
                                 modifier = Modifier
@@ -660,6 +726,69 @@ fun CardSearchResults(cards: List<TcgCard>, isLoading: Boolean, query: String, o
             }
         }
     }
+}
+
+private fun extractCardNumberForUi(rawNumber: String): String {
+    return rawNumber.substringBefore('/').trim().trimStart('0').ifEmpty { "0" }
+}
+
+private fun formatReleaseDateUi(raw: String): String {
+    val source = raw.trim()
+    if (source.isBlank()) return ""
+
+    runCatching {
+        LocalDate.parse(source, DateTimeFormatter.ISO_LOCAL_DATE)
+    }.getOrNull()?.let { date ->
+        return date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.ITALY))
+    }
+
+    val cleaned = source
+        .replace(Regex("""(\d+)(st|nd|rd|th)"""), "$1")
+        .replace('_', ' ')
+        .trim()
+
+    val fallbackParsers = listOf(
+        DateTimeFormatter.ofPattern("d MMMM, uuuu", Locale.ENGLISH),
+        DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH)
+    )
+    for (parser in fallbackParsers) {
+        try {
+            val parsed = LocalDate.parse(cleaned, parser)
+            return parsed.format(DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.ITALY))
+        } catch (_: DateTimeParseException) {
+            // Try next parser.
+        }
+    }
+
+    return source
+}
+
+private fun parseReleaseDateToEpochUi(raw: String): Long {
+    val source = raw.trim()
+    if (source.isBlank()) return Long.MIN_VALUE
+
+    runCatching {
+        LocalDate.parse(source, DateTimeFormatter.ISO_LOCAL_DATE)
+    }.getOrNull()?.let { return it.toEpochDay() }
+
+    val cleaned = source
+        .replace(Regex("""(\d+)(st|nd|rd|th)"""), "$1")
+        .replace('_', ' ')
+        .trim()
+
+    val fallbackParsers = listOf(
+        DateTimeFormatter.ofPattern("d MMMM, uuuu", Locale.ENGLISH),
+        DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH)
+    )
+    for (parser in fallbackParsers) {
+        try {
+            return LocalDate.parse(cleaned, parser).toEpochDay()
+        } catch (_: DateTimeParseException) {
+            // Try next parser.
+        }
+    }
+
+    return Long.MIN_VALUE
 }
 
 // SeriesChip non più necessario, sostituito da SeriesFilterChip

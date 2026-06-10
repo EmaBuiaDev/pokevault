@@ -279,29 +279,39 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         }
         val exactMode = uiState.isExactCardSearch
         searchJob = viewModelScope.launch {
-            delay(500)
+            delay(250)
             uiState = uiState.copy(isSearchingCards = true)
             val context = getApplication<Application>().applicationContext
             val isFullNumberQuery = FLEX_CARD_NUMBER_REGEX.matches(query)
 
-            // Search with original query + translate in parallel
+            // Prefer local ITA catalog + direct search first; use translation only as fallback.
             val directDeferred = async { repository.searchCards(query) }
-            val translatedDeferred = async {
-                if (isFullNumberQuery) {
-                    null
-                } else {
-                    val translated = TranslationService.translateItToEn(query, context)
-                    if (translated != null && translated.lowercase() != query.lowercase()) {
-                        repository.searchCards(translated)
-                    } else null
-                }
+            val italianDeferred = async {
+                repository.searchItalianCardsByName(
+                    query = query,
+                    context = context,
+                    exactMode = exactMode,
+                    limit = 60
+                )
             }
 
             val directCards = directDeferred.await().getOrDefault(emptyList())
-            val translatedCards = translatedDeferred.await()?.getOrDefault(emptyList()) ?: emptyList()
+            val italianCards = italianDeferred.await().getOrDefault(emptyList())
 
-            val allCards = (directCards + translatedCards).distinctBy { it.id }
-            val finalCards = if (exactMode) applyExactCardFilter(query, allCards) else allCards
+            val translatedCards = if (isFullNumberQuery || directCards.isNotEmpty() || italianCards.isNotEmpty()) {
+                emptyList()
+            } else {
+                val translated = TranslationService.translateItToEn(query, context)
+                if (translated != null && translated.lowercase() != query.lowercase()) {
+                    repository.searchCards(translated).getOrDefault(emptyList())
+                } else {
+                    emptyList()
+                }
+            }
+
+            val allCards = (italianCards + directCards + translatedCards).distinctBy { it.id }
+            val filteredCards = if (exactMode) applyExactCardFilter(query, allCards) else allCards
+            val finalCards = rankCardSearchResults(query, filteredCards)
             uiState = uiState.copy(searchedCards = finalCards, isSearchingCards = false)
         }
     }
@@ -818,6 +828,53 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                 " $normalizedName ".contains(" $token ")
             }
         }
+    }
+
+    private fun rankCardSearchResults(query: String, cards: List<TcgCard>): List<TcgCard> {
+        if (cards.isEmpty()) return cards
+
+        val fullNumber = FLEX_CARD_NUMBER_REGEX.matchEntire(query)
+        if (fullNumber != null) return cards
+
+        val normalizedQuery = normalizeSearchName(query)
+        if (normalizedQuery.isBlank()) return cards
+        val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
+
+        return cards.sortedWith(
+            compareByDescending<TcgCard> { card ->
+                scoreCardNameMatch(
+                    normalizedName = normalizeSearchName(card.name),
+                    normalizedQuery = normalizedQuery,
+                    queryTokens = queryTokens
+                )
+            }
+                .thenByDescending { card -> if (isItalianCard(card)) 1 else 0 }
+                .thenBy { card -> extractCardNumberForSearch(card.number).toIntOrNull() ?: Int.MAX_VALUE }
+                .thenBy { card -> normalizeSearchName(card.name) }
+                .thenBy { card -> card.id }
+        )
+    }
+
+    private fun scoreCardNameMatch(
+        normalizedName: String,
+        normalizedQuery: String,
+        queryTokens: List<String>
+    ): Int {
+        if (normalizedName.isBlank() || normalizedQuery.isBlank()) return 0
+        return when {
+            normalizedName == normalizedQuery -> 1000
+            normalizedName.startsWith(normalizedQuery) -> 850
+            " $normalizedName ".contains(" $normalizedQuery ") -> 700
+            normalizedName.contains(normalizedQuery) -> 560
+            queryTokens.isNotEmpty() && queryTokens.all { token -> normalizedName.contains(token) } -> 420
+            queryTokens.any { token -> token.length >= 3 && " $normalizedName ".contains(" $token ") } -> 260
+            else -> 0
+        }
+    }
+
+    private fun isItalianCard(card: TcgCard): Boolean {
+        val setId = card.set?.id.orEmpty().lowercase(Locale.ROOT)
+        return setId.endsWith("__ita")
     }
 
     private fun normalizeSearchName(raw: String?): String {
