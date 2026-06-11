@@ -43,7 +43,9 @@ data class TcgCard(
 data class TcgCardSet(
     val id: String = "",
     val name: String = "",
-    val series: String = ""
+    val series: String = "",
+    /** Totale stampato del set (es. 87 per "067/087"); 0 se sconosciuto. */
+    val printedTotal: Int = 0
 )
 
 @Immutable

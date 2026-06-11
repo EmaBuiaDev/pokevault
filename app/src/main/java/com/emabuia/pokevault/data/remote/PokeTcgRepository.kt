@@ -88,8 +88,12 @@ class PokeTcgRepository {
         private const val SETS_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000L   // 7 days
         private const val CARDS_CACHE_DURATION = 30 * 24 * 60 * 60 * 1000L  // 30 days
         private const val SEARCH_CACHE_DURATION = 60 * 60 * 1000L           // 1 hour
+        private const val SCANNER_MIN_NAME_SCORE = 36
         private val ALLOWED_LANGUAGES = setOf("ITA", "ENG", "JAP", "CHN")
         private const val ITALIAN_SET_SUFFIX = "__ita"
+        private val ITALIAN_PRINTED_TOTAL_BY_EXPANSION = mapOf(
+            "me04" to 87
+        )
 
         private const val RATE_LIMIT_COOLDOWN_MS = 60 * 1000L
 
@@ -523,7 +527,8 @@ class PokeTcgRepository {
         query: String,
         context: Context,
         exactMode: Boolean = false,
-        limit: Int = 60
+        limit: Int = 60,
+        targetSetId: String? = null
     ): Result<List<TcgCard>> {
         val cleanQuery = sanitizeQuery(query)
         val normalizedQuery = normalizeNameForLookup(cleanQuery)
@@ -531,6 +536,10 @@ class PokeTcgRepository {
 
         val safeLimit = limit.coerceIn(1, 100)
         val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
+        val normalizedTargetSet = targetSetId
+            ?.let(SetCodeMapper::normalizeDecklistSetCode)
+            ?.lowercase(Locale.ROOT)
+            ?.takeIf { it.isNotBlank() }
 
         val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
             .getOrElse { return Result.success(emptyList()) }
@@ -538,6 +547,13 @@ class PokeTcgRepository {
         return runCatching {
             withContext(Dispatchers.Default) {
                 val scoredRecords = catalog.cards.asSequence()
+                    .filter { record ->
+                        normalizedTargetSet == null ||
+                            matchesItalianExpansionHint(
+                                record.espansioneId.trim().lowercase(Locale.ROOT),
+                                normalizedTargetSet
+                            )
+                    }
                     .mapNotNull { record ->
                         val normalizedName = normalizeNameForLookup(record.nome)
                         if (normalizedName.isBlank()) return@mapNotNull null
@@ -563,14 +579,181 @@ class PokeTcgRepository {
                     return@withContext emptyList()
                 }
 
-                val setsById = linkedMapOf<String, TcgSet>()
-                val availableSets = memorySets ?: getSets(context = context, forceRefresh = false).getOrDefault(emptyList())
-                availableSets.forEach { set -> setsById[set.id] = set }
-
                 scoredRecords.map { (record, _) ->
                     val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
                     val italianSetId = buildItalianSetId(expansionId)
-                    val setInfo = setsById[italianSetId] ?: TcgSet(
+                    val setInfo = TcgSet(
+                        id = italianSetId,
+                        name = expansionId.uppercase(Locale.ROOT),
+                        series = deriveSeriesName(
+                            setCode = expansionId,
+                            language = "ITA",
+                            setName = expansionId
+                        ),
+                        language = "ITA"
+                    )
+                    toItalianTcgCard(record = record, setInfo = setInfo)
+                }.distinctBy { it.id }
+            }
+        }
+    }
+
+    suspend fun searchItalianScannerCandidates(
+        name: String?,
+        number: String?,
+        setTotal: String?,
+        targetSetId: String?,
+        context: Context,
+        limit: Int = 6
+    ): Result<List<TcgCard>> {
+        val normalizedNumber = number?.trim()?.trimStart('0')?.ifBlank { "0" }
+        val normalizedName = normalizeNameForLookup(name)
+        val normalizedTargetSet = targetSetId
+            ?.let(SetCodeMapper::normalizeDecklistSetCode)
+            ?.lowercase(Locale.ROOT)
+            ?.takeIf { it.isNotBlank() }
+        val targetTotal = setTotal?.toIntOrNull()
+
+        if (normalizedNumber.isNullOrBlank() && normalizedName.isBlank()) {
+            return Result.success(emptyList())
+        }
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
+            .getOrElse { return Result.success(emptyList()) }
+        val expansionManifests = catalog.expansions.associateBy { it.espansioneId.trim().lowercase(Locale.ROOT) }
+
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                val baseCandidates = catalog.cards.filter { record ->
+                    val numberOk = if (normalizedNumber.isNullOrBlank()) {
+                        true
+                    } else {
+                        val ref = record.imageReference()
+                        val cardNum = (ref?.cardNumber ?: extractCardNumber(record.cardId))
+                            .trimStart('0')
+                            .ifBlank { "0" }
+                        cardNum == normalizedNumber
+                    }
+                    numberOk && (
+                        normalizedTargetSet == null ||
+                            matchesItalianExpansionHint(
+                                record.espansioneId.trim().lowercase(Locale.ROOT),
+                                normalizedTargetSet
+                            )
+                        )
+                }
+
+                fun rank(applyNameGate: Boolean): List<Pair<ItalianCardRecord, Int>> =
+                    baseCandidates.mapNotNull { record ->
+                        val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+                        val cardName = normalizeNameForLookup(record.nome)
+                        val nameScore = scannerNameScore(cardName, normalizedName)
+                        if (applyNameGate && normalizedName.isNotBlank() && nameScore < SCANNER_MIN_NAME_SCORE) {
+                            return@mapNotNull null
+                        }
+
+                        var score = 0
+                        if (!normalizedNumber.isNullOrBlank()) score += 120
+                        score += nameScore
+                        if (normalizedTargetSet != null) score += 120
+
+                        val printedTotal = ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId]
+                            ?: expansionManifests[expansionId]?.cardCount?.takeIf { it > 0 }
+                        if (targetTotal != null && printedTotal != null) {
+                            score += when {
+                                printedTotal == targetTotal -> 45
+                                abs(printedTotal - targetTotal) <= 2 -> 18
+                                else -> 0
+                            }
+                        }
+
+                        record to score
+                    }.sortedWith(
+                        compareByDescending<Pair<ItalianCardRecord, Int>> { it.second }
+                            .thenBy { it.first.espansioneId }
+                            .thenBy { extractCardNumber(it.first.cardId).toIntOrNull() ?: Int.MAX_VALUE }
+                    ).take(limit.coerceIn(1, 20))
+
+                // Il nome OCR e spesso sporco: se il gate sul nome azzera i risultati
+                // ma il numero carta e disponibile, riprova senza gate cosi il chiamante
+                // puo comunque proporre i candidati per numero/totale set.
+                val gated = rank(applyNameGate = true)
+                val ranked = if (gated.isEmpty() && normalizedName.isNotBlank() && !normalizedNumber.isNullOrBlank()) {
+                    rank(applyNameGate = false)
+                } else {
+                    gated
+                }
+
+                ranked.map { (record, _) ->
+                    val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+                    val printedTotal = ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId]
+                        ?: expansionManifests[expansionId]?.cardCount?.takeIf { it > 0 }
+                    toItalianTcgCard(
+                        record = record,
+                        setInfo = TcgSet(
+                            id = buildItalianSetId(expansionId),
+                            name = expansionId.uppercase(Locale.ROOT),
+                            series = deriveSeriesName(setCode = expansionId, language = "ITA", setName = expansionId),
+                            printedTotal = printedTotal ?: 0,
+                            language = "ITA"
+                        )
+                    )
+                }.distinctBy { it.id }
+            }
+        }
+    }
+
+    /**
+     * Cerca le carte ITA nel catalogo locale filtrando per numero carta e, se fornito, per totale stampato del set.
+     * Il filtro totale usa i set ITA gia mergiati in memorySets, cosi eredita il printedTotal reale dal set base ENG.
+     */
+    suspend fun searchItalianCardsByNumber(
+        number: String,
+        context: Context,
+        setTotal: String? = null,
+        targetSetId: String? = null
+    ): Result<List<TcgCard>> {
+        val normalizedTarget = number.trimStart('0').ifBlank { number }
+        if (normalizedTarget.isBlank()) return Result.success(emptyList())
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
+            .getOrElse { return Result.success(emptyList()) }
+
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                val normalizedTargetSet = targetSetId
+                    ?.let(SetCodeMapper::normalizeDecklistSetCode)
+                    ?.lowercase(Locale.ROOT)
+                    ?.takeIf { it.isNotBlank() }
+
+                // Hard-scope only by explicit set hint. Do not hard-filter by setTotal:
+                // printed totals can differ from catalog card counts when secret cards are present.
+                val allowedExpansions: Set<String>? = if (normalizedTargetSet != null) {
+                    catalog.expansions
+                        .asSequence()
+                        .map { it.espansioneId.trim().lowercase(Locale.ROOT) }
+                        .filter { it.isNotBlank() }
+                        .filter { expansionId -> matchesItalianExpansionHint(expansionId, normalizedTargetSet) }
+                        .toSet()
+                        .takeIf { it.isNotEmpty() }
+                } else null
+
+                val matchingRecords = catalog.cards.filter { record ->
+                    if (allowedExpansions != null &&
+                        record.espansioneId.trim().lowercase(Locale.ROOT) !in allowedExpansions
+                    ) return@filter false
+                    val ref = record.imageReference()
+                    val cardNum = (ref?.cardNumber ?: extractCardNumber(record.cardId))
+                        .trimStart('0').ifBlank { "0" }
+                    cardNum.equals(normalizedTarget, ignoreCase = true)
+                }
+
+                if (matchingRecords.isEmpty()) return@withContext emptyList()
+
+                matchingRecords.map { record ->
+                    val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+                    val italianSetId = buildItalianSetId(expansionId)
+                    val setInfo = TcgSet(
                         id = italianSetId,
                         name = expansionId.uppercase(Locale.ROOT),
                         series = deriveSeriesName(
@@ -1210,6 +1393,53 @@ class PokeTcgRepository {
         return 0
     }
 
+    private fun scannerNameScore(normalizedName: String, normalizedQuery: String): Int {
+        if (normalizedQuery.isBlank()) return 0
+        if (normalizedName == normalizedQuery) return 120
+        if (normalizedName.startsWith(normalizedQuery) || normalizedQuery.startsWith(normalizedName)) return 105
+        if (normalizedName.contains(normalizedQuery) || normalizedQuery.contains(normalizedName)) return 88
+
+        val queryTokens = normalizedQuery.split(" ").filter { it.length >= 2 }
+        val nameTokens = normalizedName.split(" ").filter { it.length >= 2 }
+        if (queryTokens.isNotEmpty() && queryTokens.all { token -> nameTokens.any { it.contains(token) || token.contains(it) } }) {
+            return 72
+        }
+
+        val distance = levenshteinDistance(normalizedName, normalizedQuery)
+        val maxLength = maxOf(normalizedName.length, normalizedQuery.length).coerceAtLeast(1)
+        val similarity = 1.0 - distance.toDouble() / maxLength.toDouble()
+        return when {
+            similarity >= 0.82 -> 68
+            similarity >= 0.72 -> 52
+            similarity >= 0.62 -> 36
+            else -> 0
+        }
+    }
+
+    private fun levenshteinDistance(left: String, right: String): Int {
+        if (left == right) return 0
+        if (left.isEmpty()) return right.length
+        if (right.isEmpty()) return left.length
+
+        val previous = IntArray(right.length + 1) { it }
+        val current = IntArray(right.length + 1)
+
+        for (leftIndex in left.indices) {
+            current[0] = leftIndex + 1
+            for (rightIndex in right.indices) {
+                val substitutionCost = if (left[leftIndex] == right[rightIndex]) 0 else 1
+                current[rightIndex + 1] = minOf(
+                    current[rightIndex] + 1,
+                    previous[rightIndex + 1] + 1,
+                    previous[rightIndex] + substitutionCost
+                )
+            }
+            previous.indices.forEach { index -> previous[index] = current[index] }
+        }
+
+        return previous[right.length]
+    }
+
     private suspend fun searchCardsFromLocalCache(query: String): List<TcgCard> {
         if (query.isBlank()) return emptyList()
 
@@ -1577,6 +1807,25 @@ class PokeTcgRepository {
             ?: raw.trim().uppercase(Locale.ROOT)
     }
 
+    private fun matchesItalianSetHint(setId: String?, expectedSetId: String): Boolean {
+        val expansionId = setId?.let(::parseItalianExpansionId) ?: return false
+        return matchesItalianExpansionHint(expansionId, expectedSetId)
+    }
+
+    private fun matchesItalianExpansionHint(expansionId: String, expectedSetId: String): Boolean {
+        val preferredBase = preferredBaseSetCodeForItalianExpansion(expansionId)
+        val candidates = linkedSetOf<String>()
+        preferredBase?.let { code ->
+            SetCodeMapper.normalizeDecklistSetCode(code)
+                ?.lowercase(Locale.ROOT)
+                ?.let(candidates::add)
+        }
+        SetCodeMapper.normalizeDecklistSetCode(expansionId)
+            ?.lowercase(Locale.ROOT)
+            ?.let(candidates::add)
+        return expectedSetId in candidates
+    }
+
     private fun preferredBaseSetCodeForItalianExpansion(expansionId: String): String? {
         return when (expansionId.trim().lowercase(Locale.ROOT)) {
             "me01" -> "MEG"
@@ -1827,7 +2076,8 @@ class PokeTcgRepository {
             val linkedBase = setsByRawRef[baseRawSetCode.trim().uppercase(Locale.ROOT)]
                 ?: setsByCanonicalRef[dominantCanonicalSetCode]
 
-            val cardCount = manifest.cardCount.takeIf { it > 0 } ?: expansionCards.size
+            val linkedPrintedTotal = linkedBase?.printedTotal?.takeIf { it > 0 }
+            val cardCount = linkedPrintedTotal ?: manifest.cardCount.takeIf { it > 0 } ?: expansionCards.size
             val setName = linkedBase?.name?.takeIf { it.isNotBlank() }
                 ?: baseRawSetCode
                 ?: expansionId.uppercase(Locale.ROOT)
@@ -1971,7 +2221,8 @@ class PokeTcgRepository {
         val cardSet = TcgCardSet(
             id = setInfo.id,
             name = setInfo.name,
-            series = setInfo.series
+            series = setInfo.series,
+            printedTotal = setInfo.printedTotal
         )
 
         return TcgCard(

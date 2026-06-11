@@ -155,4 +155,17 @@ object ItalianTranslations {
         val lower = english.trim().lowercase()
         return EXPANSIONS_IT.entries.firstOrNull { it.key.lowercase() == lower }?.value ?: english
     }
+
+    fun normalizeExpansionName(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isBlank()) return trimmed
+
+        EXPANSIONS_IT[trimmed]?.let { return trimmed }
+
+        val lower = trimmed.lowercase()
+        EXPANSIONS_IT.entries.firstOrNull { it.key.lowercase() == lower }?.let { return it.key }
+        EXPANSIONS_IT.entries.firstOrNull { it.value.lowercase() == lower }?.let { return it.key }
+
+        return trimmed
+    }
 }

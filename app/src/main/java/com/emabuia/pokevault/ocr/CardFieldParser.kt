@@ -2,6 +2,8 @@ package com.emabuia.pokevault.ocr
 
 import android.util.Log
 import com.emabuia.pokevault.BuildConfig
+import com.emabuia.pokevault.data.local.ItalianTranslations
+import com.emabuia.pokevault.data.remote.SetCodeMapper
 
 /**
  * Parser specializzato per estrarre campi strutturati dal testo OCR di carte Pokemon.
@@ -41,6 +43,13 @@ object CardFieldParser {
 
         val number = extractCardNumber(rawText)
         val setTotal = extractSetTotal(rawText)
+        val footerText = lines.takeLast(4).joinToString(" ")
+        val setName = extractSetName(footerText).orEmpty().ifBlank { extractSetName(rawText).orEmpty() }.ifBlank { null }
+        val setCode = extractSetCode(footerText).orEmpty().ifBlank {
+            setName?.let(SetCodeMapper::normalizeDecklistSetCode).orEmpty()
+        }.ifBlank {
+            extractSetCode(rawText).orEmpty()
+        }.ifBlank { null }
         val hp = extractHP(rawText)
         val stage = extractStage(rawText)
         val name = extractCardName(lines, hp, stage)
@@ -53,6 +62,8 @@ object CardFieldParser {
             cardName = name,
             cardNumber = number,
             setTotal = setTotal,
+            setName = setName,
+            setCode = setCode,
             hp = hp,
             stage = stage,
             illustrator = illustrator,
@@ -100,6 +111,12 @@ object CardFieldParser {
         // Numero carta: dalla zona bottom
         val number = extractCardNumber(bottomText) ?: extractCardNumber(fullText)
         val setTotal = extractSetTotal(bottomText) ?: extractSetTotal(fullText)
+        val setName = extractSetName(bottomText).orEmpty().ifBlank { extractSetName(fullText).orEmpty() }.ifBlank { null }
+        val setCode = extractSetCode(bottomText).orEmpty().ifBlank {
+            setName?.let(SetCodeMapper::normalizeDecklistSetCode).orEmpty()
+        }.ifBlank {
+            extractSetCode(fullText).orEmpty()
+        }.ifBlank { null }
 
         // Illustratore: dalla zona bottom
         val illustrator = extractIllustrator(bottomText)
@@ -121,6 +138,8 @@ object CardFieldParser {
             cardName = name,
             cardNumber = number,
             setTotal = setTotal,
+            setName = setName,
+            setCode = setCode,
             hp = hp,
             stage = stage,
             illustrator = illustrator,
@@ -157,6 +176,74 @@ object CardFieldParser {
         return if (total.isNotBlank()) total else "0"
     }
 
+    private val SET_CODE_PATTERN = Regex("""\b([A-Za-z]{2,5}\d{0,2}|ME\d{2}|SV\d{1,2}|SWSH\d{1,2})\b""")
+    private val KNOWN_SET_CODE_TOKENS = setOf(
+        "SVI", "PAL", "OBF", "MEW", "PAR", "PAF", "TEF", "TWM", "SFA", "SCR", "SSP", "PRE", "JTG", "DRI",
+        "MEG", "PFL", "ASC", "POR", "CRI", "DCR", "MEP", "ME01", "ME02", "ME03", "ME04", "ME2PT5",
+        "BLK", "WHT", "RCL", "DAA", "CPA", "VIV", "BST", "CRE", "EVS", "FST", "BRS", "ASR", "LOR", "SIT", "CRZ"
+    )
+    private val SET_CODE_STOP_TOKENS = setOf(
+        "HP", "PV", "FASE", "BASE", "BASIC", "STAGE", "MEGA", "ENERGIA", "ENERGY", "DANNI", "DANNO",
+        "ATTACCO", "ABILITA", "ABILITÀ", "RITIRATA", "DEBOLEZZA", "RESISTENZA", "ILLUS", "TRAINER"
+    )
+    private val STRUCTURED_SET_CODE_PATTERN = Regex("""^(SV|SWSH)\d{1,2}$""")
+
+    fun extractSetCode(text: String): String? {
+        val tokens = SET_CODE_PATTERN.findAll(text)
+            .map { it.groupValues[1].trim() }
+            .filter { candidate ->
+                val upper = candidate.uppercase()
+                candidate.any { it.isLetter() } && upper !in SET_CODE_STOP_TOKENS
+            }
+            .toList()
+
+        return tokens.firstNotNullOfOrNull { candidate ->
+            val upper = candidate.uppercase()
+            val normalized = SetCodeMapper.normalizeDecklistSetCode(candidate)?.takeIf { it.isNotBlank() }
+            when {
+                upper in KNOWN_SET_CODE_TOKENS -> normalized ?: upper
+                STRUCTURED_SET_CODE_PATTERN.matches(upper) -> normalized ?: upper
+                normalized != null && normalized != upper && normalized != candidate.lowercase() -> normalized
+                else -> null
+            }
+        }
+    }
+
+    fun extractSetName(text: String): String? {
+        val normalizedText = normalizeSetText(text)
+        if (normalizedText.isBlank()) return null
+
+        val candidates = text.lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .sortedByDescending { it.length }
+
+        candidates.forEach { line ->
+            val normalizedLine = normalizeSetText(line)
+            if (normalizedLine.isBlank()) return@forEach
+
+            val normalizedExpansion = ItalianTranslations.normalizeExpansionName(line)
+            val canonicalFromWholeLine = SetCodeMapper.normalizeDecklistSetCode(normalizedExpansion)
+            if (!canonicalFromWholeLine.isNullOrBlank() && canonicalFromWholeLine != normalizedExpansion.uppercase()) {
+                return normalizedExpansion
+            }
+        }
+
+        val knownNames = listOf(
+            "Chaos Rising", "Caos Nascente",
+            "Ascended Heroes", "Ascesa Eroica",
+            "Perfect Order", "Equilibrio Perfetto",
+            "Phantasmal Flame", "Phantasmal Flames", "Fiamme Spettrali",
+            "Black Bolt", "White Flare"
+        )
+
+        return knownNames.firstOrNull { candidate ->
+            normalizeSetText(candidate).let { normalizedCandidate ->
+                normalizedCandidate.isNotBlank() && normalizedText.contains(normalizedCandidate)
+            }
+        }?.let(ItalianTranslations::normalizeExpansionName)
+    }
+
     // ═══════════════════════════════════════════
     // ESTRAZIONE NOME CARTA
     // ═══════════════════════════════════════════
@@ -177,7 +264,8 @@ object CardFieldParser {
         "coin", "discard", "shuffle", "search",
         "your", "this", "each", "does", "from", "into",
         "draw", "put", "take", "choose", "look",
-        "basic", "once", "during", "turn",
+        "basic", "base", "fase", "evoluzione", "evolve", "evolvi", "si evolve",
+        "once", "during", "turn",
         "rule", "regulation", "mark",
         "©", "®", "™"
     )
@@ -185,11 +273,11 @@ object CardFieldParser {
     private val NAME_STOP_TOKENS = NAME_EXCLUSIONS + setOf("hp")
 
     /** Pattern per HP nella stessa riga del nome */
-    private val HP_IN_NAME_PATTERN = Regex("""[\s\-]+HP\s*\d+|[\s\-]+\d+\s*HP""", RegexOption.IGNORE_CASE)
+    private val HP_IN_NAME_PATTERN = Regex("""[\s\-]+(?:HP|PV)\s*\d+|[\s\-]+\d+\s*(?:HP|PV)""", RegexOption.IGNORE_CASE)
 
     /** Pattern per stage/evoluzione prefisso */
     private val STAGE_PREFIX_PATTERN = Regex(
-        """^(BASIC|Stage\s*[12]|STAGE\s*[12]|MEGA|M\s+)\s+""",
+        """^(BASIC|BASE|Stage\s*[12]|STAGE\s*[12]|Fase\s*[12]|FASE\s*[12]|MEGA|M\s+)\s+""",
         RegexOption.IGNORE_CASE
     )
 
@@ -298,8 +386,8 @@ object CardFieldParser {
     // ═══════════════════════════════════════════
 
     private val HP_PATTERNS = listOf(
-        Regex("""(\d{2,3})\s*HP""", RegexOption.IGNORE_CASE),
-        Regex("""HP\s*(\d{2,3})""", RegexOption.IGNORE_CASE)
+        Regex("""(\d{2,3})\s*(?:HP|PV)""", RegexOption.IGNORE_CASE),
+        Regex("""(?:HP|PV)\s*(\d{2,3})""", RegexOption.IGNORE_CASE)
     )
 
     /** Estrae gli HP della carta. Range valido: 30-360 */
@@ -322,8 +410,8 @@ object CardFieldParser {
     fun extractStage(text: String): String? {
         val lower = text.lowercase()
         return when {
-            lower.contains("stage 2") || lower.contains("stage2") -> "Stage 2"
-            lower.contains("stage 1") || lower.contains("stage1") -> "Stage 1"
+            lower.contains("stage 2") || lower.contains("stage2") || lower.contains("fase 2") || lower.contains("fase2") -> "Stage 2"
+            lower.contains("stage 1") || lower.contains("stage1") || lower.contains("fase 1") || lower.contains("fase1") -> "Stage 1"
             lower.contains("mega") || lower.startsWith("m ") -> "MEGA"
             lower.contains("break") -> "BREAK"
             lower.contains("basic") || lower.contains("base") -> "Basic"
@@ -533,6 +621,8 @@ object CardFieldParser {
             cardName = zoned.cardName ?: fullFrame.cardName,
             cardNumber = fullFrame.cardNumber ?: zoned.cardNumber, // Numero piu affidabile da full
             setTotal = fullFrame.setTotal ?: zoned.setTotal,
+            setName = zoned.setName ?: fullFrame.setName,
+            setCode = zoned.setCode ?: fullFrame.setCode,
             hp = zoned.hp ?: fullFrame.hp, // HP piu preciso da zona top
             stage = zoned.stage ?: fullFrame.stage,
             illustrator = zoned.illustrator ?: fullFrame.illustrator,
@@ -543,5 +633,13 @@ object CardFieldParser {
             confidence = maxOf(fullFrame.confidence, zoned.confidence),
             detectedZones = zoned.detectedZones.ifEmpty { fullFrame.detectedZones }
         )
+    }
+
+    private fun normalizeSetText(value: String): String {
+        return value
+            .lowercase()
+            .replace(Regex("""[^a-z0-9à-ÿ\s&'-]"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
     }
 }
