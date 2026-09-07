@@ -39,7 +39,19 @@ jobs:
       - name: Apply schema/003 migration (adds expansions.dominant_set_code)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler d1 execute pokevault-catalog --remote --file schema/003_add_dominant_set_code.sql
+        # Idempotent on purpose: a re-run of this workflow (e.g. after a fix to a
+        # later step) hits "duplicate column name" here because the ALTER TABLE
+        # already succeeded last time -- that's not a real failure, so it's
+        # treated as success. Any other wrangler error still fails the step.
+        run: |
+          set -o pipefail
+          if ! npx wrangler d1 execute pokevault-catalog --remote --file schema/003_add_dominant_set_code.sql 2>&1 | tee migration-output.log; then
+            if grep -q "duplicate column name: dominant_set_code" migration-output.log; then
+              echo "Colonna dominant_set_code gia' presente (migration applicata in un run precedente) -- proseguo."
+            else
+              exit 1
+            fi
+          fi
 
       - name: Download current catalog blob from R2
         env:
