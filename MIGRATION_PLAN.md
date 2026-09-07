@@ -1126,3 +1126,17 @@ Fatto il punto 2 della lista sopra: `mergeItalianSets()`, `getItalianOverlayCard
 2. Rilanciare `scripts/import-catalog-to-d1.mjs` sul catalogo corrente e applicare il SQL generato (backfilla `dominant_set_code` sulle 106 espansioni)
 3. `wrangler deploy` del Worker aggiornato (dopo revisione diff, come per ogni deploy precedente di questa migrazione)
 4. `./gradlew :app:compileDebugKotlin` + verifica manuale/strumentata di: lista set (nomi/loghi/serie invariati per un set con mapping esplicito tipo `sv10` e uno senza tipo `dp1`), `SetDetail` su entrambi, l'overlay ME03 (`preferredImageMacro = "ITA"`)
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (punti 1-3 eseguiti in produzione, punto 4 ancora aperto)
+
+Eseguiti i punti 1-3 sopra tramite `.github/workflows/ops-dominant-set-code.yml` (l'utente ha lanciato il workflow da GitHub Actions sul branch `release/R3.0.0`, io ho monitorato via API GitHub e corretto tre bug emersi durante l'esecuzione reale, non trovati nella sola rilettura statica):
+
+1. `scripts/import-catalog-to-d1.mjs`: l'INSERT su `cards` non aveva `ON CONFLICT` (pensato per un DB vuoto) -> `UNIQUE constraint failed: cards.card_id` al primo re-run. Aggiunto `ON CONFLICT(card_id) DO UPDATE`, stesso pattern di `expansions` e di `ingest-tcgdex-set.mjs` -- lo script e' ora idempotente per intero, non solo per le espansioni.
+2. Il workflow falliva duro su un secondo tentativo di `ALTER TABLE` (colonna gia' aggiunta dal run precedente) invece di trattarlo come "gia' fatto". Aggiunto un controllo esplicito su "duplicate column name" che tratta quel caso specifico come successo, senza mascherare altri errori wrangler.
+3. Il default dello script (`--batch-size` 300) produceva un singolo INSERT troppo grande per D1 (`SQLITE_TOOBIG`) una volta sommato il blob `attacchi_json` di ogni carta -- coerente con la nota gia' in questo documento ("batch da 50, D1 rifiuta batch da 300"). Il workflow ora passa esplicitamente `--batch-size 50`.
+
+**Verificato in produzione** (non solo "il job e' verde"): lo step di verifica ha confermato `"populated": 106` su 106 espansioni; lo smoke test su `/v1/expansions` mostra `dominant_set_code` popolato correttamente per ogni riga (es. `dp1` -> `"DP1"`, `bw4` -> `"BW4"`). Il Worker deployato mostra tutti i binding attesi (CACHE, pokevault_catalog, IMAGES_BUCKET). `release/R3.0.0` e `claude/continue-plan-fxtrod` sono allineati (fast-forward) con tutti questi fix.
+
+**Cosa resta**: solo il punto 4 -- build Android reale (`./gradlew :app:compileDebugKotlin`) e verifica manuale/strumentata su device o emulatore, che questa sessione non puo' fare (nessun accesso a `dl.google.com`). Il codice Kotlin di oggi (`mergeItalianSets`, `getItalianOverlayCards`, `getEnglishBaseCardForItalianOverlay`) ora legge `dominant_set_code` da un backend che lo popola davvero -- il percorso "felice" del fallback e' quindi gia' coperto, ma la build resta da confermare prima di un rilascio.
