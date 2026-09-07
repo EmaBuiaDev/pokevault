@@ -1672,7 +1672,7 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
 
   if (pathname === '/v1/expansions') {
     const { results } = await db
-      .prepare('SELECT id, card_count, sort_order, logo_key FROM expansions WHERE published = 1 ORDER BY sort_order, id')
+      .prepare('SELECT id, card_count, sort_order, logo_key, dominant_set_code FROM expansions WHERE published = 1 ORDER BY sort_order, id')
       .all();
     return jsonResponse({ expansions: results });
   }

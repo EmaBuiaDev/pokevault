@@ -1093,3 +1093,36 @@ Nuovi metodi `ItalianCatalogRemoteRepository.getExpansions()` (`GET /v1/expansio
 1. **Verificare con una build reale** (`./gradlew :app:compileDebugKotlin`, poi test strumentato/manuale di `SetDetail` su almeno un set con mapping esplicito e uno senza, es. `sv10` e `dp1`) prima di considerare il pezzo fatto oggi definitivo
 2. Se si vuole completare anche `mergeItalianSets`/`getItalianOverlayCards`: aggiungere `dominant_set_code` a `expansions` in D1 (calcolato una volta in ingest, non a ogni richiesta), esporlo in `/v1/expansions`, poi ripetere la stessa conversione fatta oggi per queste due funzioni
 3. Le funzioni di ricerca (`searchItalianCardsByName/ByNumber`, `searchItalianScannerCandidates`) restano intenzionalmente sul catalogo completo: hanno bisogno di scansionare tutte le carte per il matching fuzzy, e il Worker non espone oggi un endpoint di ricerca full-catalog lato server
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (dominant_set_code: mergeItalianSets e getItalianOverlayCards completati)
+
+Fatto il punto 2 della lista sopra: `mergeItalianSets()`, `getItalianOverlayCards()`/`resolveItalianExpansionIdForSet()` e `getEnglishBaseCardForItalianOverlay()` (un quarto punto trovato rileggendo il file per intero, stesso pattern degli altri tre) **non usano piu' `getCatalog()` (blob intero)**. Con questo, l'unico consumo residuo del blob intero sono le 3 funzioni di ricerca (punto 3 sopra), lasciate cosi' deliberatamente.
+
+### Cosa e' cambiato, lato server (preparato ma NON deployato -- vedi sotto)
+
+- **`schema/003_add_dominant_set_code.sql`**: nuova colonna `expansions.dominant_set_code` -- il codice set ENG dominante di un'espansione (es. "DP1"), lo stesso valore che il Kotlin calcolava al volo scansionando le carte.
+- **`scripts/import-catalog-to-d1.mjs`**: calcola `dominant_set_code` per le 106 espansioni storiche (stesso algoritmo del Kotlin: conteggio del prefisso `{SET}_IT_` per cardId, replicato in Node -- vedi commento `dominantSetCode()` nello script). **Testato con un catalogo sintetico di 3 carte/2 espansioni**: output SQL verificato a mano, `dominant_set_code` corretto per entrambe.
+- **`scripts/ingest-tcgdex-set.mjs`**: per i set ingeriti da TCGdex il valore e' banale (`setId.toUpperCase()`, sempre lo stesso per costruzione del cardId) -- nessuno scan necessario, aggiunto come valore costante nell'INSERT.
+- **`src/index.ts`**: `GET /v1/expansions` ora seleziona anche `dominant_set_code`. `npm run type-check` pulito.
+
+### Cosa e' cambiato, lato Android
+
+- `ItalianExpansionManifest` ha un nuovo campo `dominantSetCode: String?` (null per i catalog costruiti dal blob intero, che non lo calcolano piu' localmente -- solo i tre consumer sotto lo popolano, dal blob completo nessuno lo legge piu').
+- `mergeItalianSets()`, `resolveItalianExpansionIdForSet()`/`getItalianOverlayCards()`, `getEnglishBaseCardForItalianOverlay()`: usano `manifest.dominantSetCode` invece di scansionare le carte dell'espansione, e recuperano i dati via `getExpansions()`/`getExpansionCards()` invece di `getCatalog()`.
+- **Fallback esplicito e verificato per il rollout fuori ordine**: se il client aggiorna prima del backend (o il D1 non e' ancora stato ribackfillato con lo script sopra), `dominant_set_code` arriva `null` dal server. In quel caso tutte e tre le funzioni ricadono su `expansionId.uppercase()` -- lo stesso fallback che il codice usava gia' come ultima risorsa. Non e' un crash ne' un dato mancante, solo una risoluzione meno precisa per le espansioni storiche senza mapping esplicito finche' il backfill non gira. Confermato rileggendo ogni punto di uscita delle tre funzioni, non assunto.
+- `ItalianCatalog.cardsByExpansion()` rimosso: dopo questi cambi non aveva piu' nessun chiamante (verificato con una grep sull'intero `app/src/main`).
+
+### Cosa NON e' stato fatto (richiede l'utente)
+
+1. **Migration D1 in produzione**: `schema/003_add_dominant_set_code.sql` va applicata (`wrangler d1 execute pokevault-catalog --remote --file schema/003_add_dominant_set_code.sql`) e poi va rilanciato `scripts/import-catalog-to-d1.mjs` contro il catalogo attuale per popolare `dominant_set_code` sulle 106 espansioni esistenti. Nessuna delle due e' stata eseguita qui: **questa sessione remota non ha credenziali Cloudflare** (`wrangler whoami` -> "You are not authenticated"), a differenza delle sessioni precedenti sulla macchina Windows dell'utente.
+2. **Deploy del Worker**: `src/index.ts` con la nuova colonna in `/v1/expansions` non e' stato deployato, stesso motivo (nessuna credenziale).
+3. **Build Android reale**: come nel checkpoint precedente, questo ambiente non raggiunge `dl.google.com` (bloccato dalla policy di rete del container) quindi l'Android Gradle Plugin non si risolve e `./gradlew` non parte qui. Tutte le modifiche Kotlin sono state rilette a mano con attenzione (inclusi gli import, che avevano bisogno di un fix -- `ItalianExpansionManifest` non era importato, `ItalianCatalog` era rimasto importato da inutilizzato), ma **non compilate**. Da verificare con `./gradlew :app:compileDebugKotlin` prima di considerare il lavoro definitivo.
+
+### Ordine consigliato per chiudere il cerchio
+
+1. Applicare `schema/003_add_dominant_set_code.sql` a D1 (`wrangler d1 execute ... --remote`)
+2. Rilanciare `scripts/import-catalog-to-d1.mjs` sul catalogo corrente e applicare il SQL generato (backfilla `dominant_set_code` sulle 106 espansioni)
+3. `wrangler deploy` del Worker aggiornato (dopo revisione diff, come per ogni deploy precedente di questa migrazione)
+4. `./gradlew :app:compileDebugKotlin` + verifica manuale/strumentata di: lista set (nomi/loghi/serie invariati per un set con mapping esplicito tipo `sv10` e uno senza tipo `dp1`), `SetDetail` su entrambi, l'overlay ME03 (`preferredImageMacro = "ITA"`)
