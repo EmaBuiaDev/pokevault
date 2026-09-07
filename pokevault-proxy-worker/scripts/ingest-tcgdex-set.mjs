@@ -25,7 +25,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workerRoot = path.resolve(__dirname, '..');
 const tmpDir = path.join(__dirname, '.ingest-tmp');
 const BUCKET = 'pokevault-images';
-const COVERAGE_THRESHOLD = 0.9;
+const COVERAGE_THRESHOLD = 0.8; // lowered from 0.9 on 2026-09-07 (user decision, after seeing me05 sit at 85% unpublished)
 const CONCURRENCY = 6;
 
 const wranglerBin = path.join(workerRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler');

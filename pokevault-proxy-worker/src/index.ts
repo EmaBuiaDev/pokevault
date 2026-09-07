@@ -759,7 +759,7 @@ async function handleItalianR2AssetRequest(
 // attacchi, regolaSpeciale} -- see ItalianCatalogNormalizer.kt on the
 // Android side) but sourced from D1 instead of the static R2 blob. Only
 // cards belonging to `published = 1` expansions are included, matching the
-// coverage-threshold rule: a set below 90% IT image coverage (e.g. me05 at
+// coverage-threshold rule: a set below 80% IT image coverage (e.g. me05 at
 // ingest time) must not appear in the app until it clears the bar, exactly
 // as it's already hidden from /v1/expansions.
 //
@@ -767,7 +767,7 @@ async function handleItalianR2AssetRequest(
 // local.properties) -- already-installed clients can never be pointed at a
 // different URL remotely. Swapping what powers this SAME endpoint server-
 // side is the only way to get D1 (and therefore new automated ingests, e.g.
-// me05 once it clears 90%) in front of existing installs without a new
+// me05 once it clears 80%) in front of existing installs without a new
 // app release. Returns null on any failure so the caller falls back to the
 // pre-existing R2 blob behavior untouched -- this must never make the
 // catalog endpoint LESS reliable than it is today.
