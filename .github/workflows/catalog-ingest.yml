@@ -1,0 +1,65 @@
+name: Catalog Ingest (TCGdex)
+
+# Automated "new expansion" pipeline: checks TCGdex for sets released after
+# our most recent known one, and if any are found, ingests them into D1 + R2
+# (coverage-gated: a set is only published in the Pokedex once >=90% of its
+# cards have a verified Italian image, otherwise it's written unpublished
+# and re-checked on the next run -- see scripts/discover-new-sets.mjs and
+# scripts/ingest-tcgdex-set.mjs).
+#
+# TCGdex is contacted ONLY by this workflow. The Worker and the Android app
+# never call it at runtime -- they only ever read from D1/R2, which this job
+# keeps up to date.
+#
+# Requires the repo secret CLOUDFLARE_API_TOKEN: a scoped Cloudflare API
+# token (Account: D1 Edit, Workers R2 Storage Edit) created at
+# dash.cloudflare.com -> My Profile -> API Tokens. wrangler picks this up
+# automatically from the environment, no interactive login needed.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # once/day at 06:00 UTC
+  workflow_dispatch: {}   # manual trigger from the Actions tab
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: pokevault-proxy-worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Discover and ingest new sets
+        id: ingest
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/discover-new-sets.mjs --ingest | tee ingest-output.log
+
+      - name: Open an issue if a new set was ingested
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if grep -q "Set DAVVERO nuovi (usciti dopo" ingest-output.log && \
+             ! grep -q "Set DAVVERO nuovi (usciti dopo .*: 0" ingest-output.log; then
+            SUMMARY=$(grep -A2 "Set DAVVERO nuovi" ingest-output.log | head -3)
+            gh issue create \
+              --title "Catalogo: nuova espansione rilevata e importata" \
+              --body "Il job schedulato ha trovato e importato almeno un'espansione nuova.
+
+          \`\`\`
+          $SUMMARY
+          \`\`\`
+
+          Vedi il log completo nella run di Actions per i dettagli (copertura immagini, published/unpublished)." \
+              --repo "${{ github.repository }}" || true
+          fi

@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json is committed intentionally: catalog-ingest.yml (CI) uses
+# `npm ci`, which requires it for reproducible, fast installs.
 yarn.lock
 
 # Wrangler & Build outputs

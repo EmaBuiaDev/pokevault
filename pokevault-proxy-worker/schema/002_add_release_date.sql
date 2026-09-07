@@ -1,0 +1,12 @@
+-- Adds release_date to expansions. Needed for two things:
+--   1. Correct chronological Pokedex ordering (sort_order was a TODO left
+--      at 100 for everything -- see plan checkpoint 2026-09-07).
+--   2. A precise cutoff for "new set" discovery (scripts/discover-new-sets.mjs):
+--      any TCGdex set with releaseDate AFTER our most recent known release is
+--      unambiguously new, never a naming-convention alias of something we
+--      already have (the historical dataset already covers everything up to
+--      that date under some name, even if TCGdex spells the id differently).
+--
+-- Already applied to production (2026-09-07) via a direct ALTER TABLE;
+-- this file documents that change for anyone re-creating the DB from schema.
+ALTER TABLE expansions ADD COLUMN release_date TEXT;

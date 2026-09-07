@@ -155,9 +155,9 @@ async function main() {
   console.log('\nGenerazione SQL per D1...');
   const lines = [];
   lines.push(
-    `INSERT INTO expansions (id, card_count, sort_order, logo_key, published, coverage_pct) VALUES (` +
-    `${sqlString(setId)}, ${enriched.length}, 100, NULL, ${published ? 1 : 0}, ${coverage.toFixed(4)}) ` +
-    `ON CONFLICT(id) DO UPDATE SET card_count = excluded.card_count, published = excluded.published, coverage_pct = excluded.coverage_pct;`
+    `INSERT INTO expansions (id, card_count, sort_order, logo_key, published, coverage_pct, release_date) VALUES (` +
+    `${sqlString(setId)}, ${enriched.length}, 100, NULL, ${published ? 1 : 0}, ${coverage.toFixed(4)}, ${sqlString(setSummary.releaseDate)}) ` +
+    `ON CONFLICT(id) DO UPDATE SET card_count = excluded.card_count, published = excluded.published, coverage_pct = excluded.coverage_pct, release_date = excluded.release_date;`
   );
 
   const cardRows = enriched.map((e) => {
