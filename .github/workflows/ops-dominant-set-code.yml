@@ -59,7 +59,13 @@ jobs:
         run: npx wrangler r2 object get pokevault-images/it/catalog/cards.cleaned.json --file catalog-live.json --remote
 
       - name: Generate backfill SQL for dominant_set_code
-        run: node scripts/import-catalog-to-d1.mjs --catalog catalog-live.json --out backfill-dominant-set-code.sql
+        # --batch-size 50: the script's default (300) produces a single INSERT
+        # statement D1 rejects with SQLITE_TOOBIG once each card row carries its
+        # full attacchi_json blob (confirmed against the live catalog on
+        # 2026-09-07, see MIGRATION_PLAN.md -- the original one-time import used
+        # the same 50 for this reason). Even smaller here since the ON CONFLICT
+        # DO UPDATE clause added to the cards INSERT makes each row longer.
+        run: node scripts/import-catalog-to-d1.mjs --catalog catalog-live.json --out backfill-dominant-set-code.sql --batch-size 50
 
       - name: Apply backfill to D1
         env:
