@@ -2118,9 +2118,8 @@ class PokeTcgRepository {
         )
 
         val expansionId = parseItalianExpansionId(setId) ?: return Result.success(emptyList())
-        val catalog = italianCatalogRepository.getCatalog(safeContext, forceRefresh = forceRefresh)
+        val expansionCards = italianCatalogRepository.getExpansionCards(safeContext, expansionId, forceRefresh = forceRefresh)
             .getOrElse { return Result.failure(it) }
-        val expansionCards = catalog.cardsByExpansion()[expansionId].orEmpty()
         val cacheKey = setId.trim().lowercase(Locale.ROOT)
 
         if (!forceRefresh) {

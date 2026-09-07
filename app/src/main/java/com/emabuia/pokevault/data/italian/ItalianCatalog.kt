@@ -53,6 +53,37 @@ data class ItalianCatalogPayload(
     val expansions: List<ItalianExpansionManifest> = emptyList()
 )
 
+// ── /v1 API response shapes (Worker, D1-backed, per-expansion) ──
+// Field names mirror the D1 schema columns as returned verbatim by
+// GET /v1/expansions and GET /v1/expansions/{id}/cards.
+
+data class ItalianExpansionApiRecord(
+    val id: String = "",
+    val card_count: Int = 0,
+    val sort_order: Int = 100,
+    val logo_key: String? = null
+)
+
+data class ItalianExpansionsApiResponse(
+    val expansions: List<ItalianExpansionApiRecord> = emptyList()
+)
+
+data class ItalianCardApiRecord(
+    val card_id: String = "",
+    val card_number: String = "",
+    val nome: String = "",
+    val tipo: String? = null,
+    val ps: String? = null,
+    val regola_speciale: String? = null,
+    val attacchi_json: String = "[]",
+    val image_status: String = "ok"
+)
+
+data class ItalianExpansionCardsApiResponse(
+    val expansionId: String = "",
+    val cards: List<ItalianCardApiRecord> = emptyList()
+)
+
 @Immutable
 data class ItalianImageReference(
     val setCode: String,
@@ -75,6 +106,10 @@ object ItalianCatalogNormalizer {
     private val gson = Gson()
     private val cardListType = object : TypeToken<List<ItalianCardRecord>>() {}.type
     private val catalogPayloadType = object : TypeToken<ItalianCatalogPayload>() {}.type
+    private val expansionsApiResponseType = object : TypeToken<ItalianExpansionsApiResponse>() {}.type
+    private val expansionCardsApiResponseType = object : TypeToken<ItalianExpansionCardsApiResponse>() {}.type
+    private val attackListType = object : TypeToken<List<ItalianAttackRecord>>() {}.type
+    private val expansionManifestListType = object : TypeToken<List<ItalianExpansionManifest>>() {}.type
     private const val UTF8_BOM = "\uFEFF"
     private val imageIdRegex = Regex(
         "^([A-Za-z0-9]+)_IT_([A-Za-z0-9_]+)\\.(png|webp|jpe?g)$",
@@ -112,6 +147,44 @@ object ItalianCatalogNormalizer {
         }
     }
 
+    fun parseExpansionsApiResponse(json: String): List<ItalianExpansionManifest> {
+        val response = gson.fromJson<ItalianExpansionsApiResponse>(stripUtf8Bom(json), expansionsApiResponseType)
+            ?: ItalianExpansionsApiResponse()
+        return response.expansions
+            .filter { it.id.isNotBlank() }
+            .mapIndexed { index, record ->
+                ItalianExpansionManifest(
+                    espansioneId = record.id.lowercase(Locale.ROOT),
+                    cardCount = record.card_count,
+                    order = index,
+                    logoKey = record.logo_key?.takeIf { it.isNotBlank() }
+                        ?: "it/${record.id.uppercase(Locale.ROOT)}/logo.png"
+                )
+            }
+    }
+
+    fun parseExpansionCardsApiResponse(json: String, expansionIdFallback: String): List<ItalianCardRecord> {
+        val response = gson.fromJson<ItalianExpansionCardsApiResponse>(stripUtf8Bom(json), expansionCardsApiResponseType)
+            ?: ItalianExpansionCardsApiResponse()
+        val expansionId = response.expansionId.ifBlank { expansionIdFallback }.lowercase(Locale.ROOT)
+        val cards = response.cards.mapNotNull { api ->
+            if (api.card_id.isBlank() || api.nome.isBlank()) return@mapNotNull null
+            val attacchi: List<ItalianAttackRecord> = runCatching {
+                gson.fromJson<List<ItalianAttackRecord>>(api.attacchi_json, attackListType)
+            }.getOrNull() ?: emptyList()
+            ItalianCardRecord(
+                cardId = api.card_id,
+                espansioneId = expansionId,
+                nome = api.nome,
+                tipo = api.tipo,
+                ps = api.ps,
+                attacchi = attacchi,
+                regolaSpeciale = api.regola_speciale
+            )
+        }
+        return cards.sortedWith(cardComparator())
+    }
+
     fun toCatalogJson(catalog: ItalianCatalog): String {
         return gson.toJson(
             ItalianCatalogPayload(
@@ -119,6 +192,14 @@ object ItalianCatalogNormalizer {
                 expansions = catalog.expansions.sortedBy { it.order }
             )
         )
+    }
+
+    fun toExpansionManifestJson(expansions: List<ItalianExpansionManifest>): String = gson.toJson(expansions)
+
+    fun parseExpansionManifestJson(json: String): List<ItalianExpansionManifest> {
+        val raw = stripUtf8Bom(json).trim()
+        if (raw.isBlank()) return emptyList()
+        return gson.fromJson(raw, expansionManifestListType) ?: emptyList()
     }
 
     private fun stripUtf8Bom(raw: String): String = raw.removePrefix(UTF8_BOM)

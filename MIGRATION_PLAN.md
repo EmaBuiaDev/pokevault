@@ -1071,3 +1071,25 @@ Dopo aver verificato che `me05` (85% di copertura) restava correttamente nascost
 ### Cosa NON e' stato fatto (deliberatamente, fuori scope per oggi)
 
 Il vero passo successivo di M4 previsto dal piano — cambiare il **pattern di fetch** dell'app (da "scarica tutto il catalogo in un colpo" a "carica per espansione, on-demand", usando `/v1/expansions` + `/v1/expansions/{id}/cards`) — resta da fare. E' un cambiamento di codice Kotlin vero e proprio (non solo backend), con un ciclo di verifica piu' lento (build Gradle, non `curl`), e va affrontato come lavoro a se stante quando si decide di aprirlo.
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (fetch on-demand per SetDetail, parziale e motivato)
+
+Ripresa da una sessione remota (container cloud, non la macchina Windows delle sessioni precedenti). **Nessun accesso a `dl.google.com`** dalla rete di questo ambiente (bloccato dalla policy di rete del container): `./gradlew :app:compileDebugKotlin` non e' eseguibile qui, a differenza delle sessioni precedenti sulla macchina Windows. Le modifiche sotto sono state verificate a mano, rilettura riga per riga del diff e dei tipi coinvolti, **non con una build reale** — da confermare con `./gradlew :app:compileDebugKotlin` (JDK 21) prima di mergiare.
+
+### Cosa e' stato implementato
+
+Nuovi metodi `ItalianCatalogRemoteRepository.getExpansions()` (`GET /v1/expansions`) e `getExpansionCards(expansionId)` (`GET /v1/expansions/{id}/cards`), con lo stesso pattern di cache a due livelli (memoria + `SharedPreferences`, TTL 5 min, fallback su stale se la rete fallisce) gia' usato da `getCatalog()`. L'URL base e' derivato da `BuildConfig.ITALIAN_CATALOG_URL` togliendo il suffisso `ita/catalog.json` (nessun nuovo campo `BuildConfig`, nessuna modifica a `build.gradle.kts`/`local.properties` — stesso host del Worker gia' configurato).
+
+`getCardsByItalianSet()` (il percorso reale di `SetDetail`, la schermata aperta ripetutamente dagli utenti) ora chiama `getExpansionCards(expansionId)` invece di scaricare l'intero blob da 10+ MB e filtrarlo in locale con `catalog.cardsByExpansion()[expansionId]`. `expansionId` si ottiene da `parseItalianExpansionId(setId)`, un parsing di stringa puro — nessuna dipendenza dal catalogo completo lungo questo percorso, verificato leggendo tutta la funzione fino in fondo (incluso `resolveEnglishBaseSetIdForItalianSet`, che usa la cache dei set ENG, non quella ITA).
+
+### Cosa NON e' stato convertito, e perche' (non e' stato dimenticato)
+
+`mergeItalianSets()` (la lista set, aperta all'avvio app) e `getItalianOverlayCards()` restano su `getCatalog()` (blob intero). Motivo verificato leggendo il codice, non assunto: entrambe le funzioni derivano il "set base ENG" da collegare (per logo/nome/serie) contando `imageReference()?.setCode` **su tutte le carte dell'espansione**, per le ~90 espansioni storiche (`dp1`, `xy1`, `bw1`, `sm1`, `swsh1`, ...) che non hanno una entry in `preferredBaseSetCodeForItalianExpansion()` (quella mappa copre solo `me01-04`/`sv01-10` e varianti). `GET /v1/expansions` oggi restituisce solo `id, card_count, sort_order, logo_key` — non il "codice set dominante" — quindi sostituire la fonte qui perderebbe silenziosamente la corrispondenza corretta con logo/nome/serie ENG per la maggioranza storica del catalogo, un rischio non verificabile senza una build+test reale su device. Per fare questo pezzo in modo sicuro serve prima un campo aggiuntivo lato Worker/D1 (es. `dominant_set_code` precalcolato in `expansions`), lavoro non fatto oggi.
+
+### Prossimi passi
+
+1. **Verificare con una build reale** (`./gradlew :app:compileDebugKotlin`, poi test strumentato/manuale di `SetDetail` su almeno un set con mapping esplicito e uno senza, es. `sv10` e `dp1`) prima di considerare il pezzo fatto oggi definitivo
+2. Se si vuole completare anche `mergeItalianSets`/`getItalianOverlayCards`: aggiungere `dominant_set_code` a `expansions` in D1 (calcolato una volta in ingest, non a ogni richiesta), esporlo in `/v1/expansions`, poi ripetere la stessa conversione fatta oggi per queste due funzioni
+3. Le funzioni di ricerca (`searchItalianCardsByName/ByNumber`, `searchItalianScannerCandidates`) restano intenzionalmente sul catalogo completo: hanno bisogno di scansionare tutte le carte per il matching fuzzy, e il Worker non espone oggi un endpoint di ricerca full-catalog lato server
