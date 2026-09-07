@@ -16,6 +16,10 @@ interface Env {
   BACKFILL_BATCH_SIZE?: string;
   IT_IMAGE_PREFIX?: string;
   IT_CATALOG_KEY?: string;
+  // Queryable catalog store, additive alongside the legacy R2 JSON blob
+  // (it/catalog/cards.cleaned.json) served by /ita/catalog.json. New /v1/*
+  // routes read from here; nothing existing was changed to use it yet.
+  pokevault_catalog?: D1Database;
 }
 
 interface CachedResponse {
@@ -533,24 +537,39 @@ function normalizeCardNumber(raw: string): string {
 
 function buildItalianCardKeyCandidates(prefix: string, setCode: string, cardNumber: string, size: string): string[] {
   const rawCardNumber = cardNumber.trim();
-  const normalized = normalizeCardNumber(rawCardNumber);
-  const padded = normalized.padStart(3, '0');
+  // Alpha-prefixed numbers (e.g. "SV001"/"TG01" for the Shiny Vault / Trainer
+  // Gallery secret-rare sub-collections) must NEVER fall back to a
+  // digits-only candidate: normalizeCardNumber() strips letters entirely
+  // ("SV001" -> "1"), which silently collides with an unrelated card that
+  // happens to share the same base-set folder and plain numeric value --
+  // verified in production 2026-09-07 (SWSH45 "SV001" served "Yanma", the
+  // base set's card #1, instead of the real "Rowlet" secret rare). A
+  // missing image (404 / placeholder) is the correct failure mode for a
+  // sub-collection whose asset isn't uploaded under any known naming
+  // pattern -- silently swapping in a different card's artwork is not.
+  const isPureNumeric = /^\d+$/.test(rawCardNumber);
+  const normalized = isPureNumeric ? normalizeCardNumber(rawCardNumber) : rawCardNumber;
+  const padded = isPureNumeric ? normalized.padStart(3, '0') : rawCardNumber;
   const upperSetCode = setCode.toUpperCase();
   const lowerSetCode = setCode.toLowerCase();
   const setCodeTokens = [upperSetCode, lowerSetCode];
   const cardNumberTokens = [
-    normalized,
-    padded,
     rawCardNumber,
     rawCardNumber.toUpperCase(),
     rawCardNumber.toLowerCase(),
+    ...(isPureNumeric ? [normalized, padded] : []),
   ].filter(Boolean).filter((value, index, list) => list.indexOf(value) === index);
   const basePaths = [
     `${prefix}/${upperSetCode}`,
     `${prefix}/${lowerSetCode}`,
   ];
   const candidates: string[] = [];
-  const imageExtensions = ['png', 'webp', 'jpg', 'jpeg'];
+  // WebP first: the ITA image library is being migrated PNG -> WebP (same
+  // resolution, ~85-90% smaller). New uploads land as .webp alongside the
+  // existing .png; trying webp first means a card "upgrades" transparently
+  // the moment its .webp lands in R2, with .png remaining a safe fallback
+  // until the migration is verified complete.
+  const imageExtensions = ['webp', 'png', 'jpg', 'jpeg'];
 
   const pushCandidate = (key: string) => {
     if (!key) return;
@@ -583,12 +602,14 @@ function buildItalianCardKeyCandidates(prefix: string, setCode: string, cardNumb
   }
 
   // Legacy layouts kept as fallback for already-uploaded historical assets.
-  // Only add PNG fallback variants to avoid a large candidate explosion.
+  // Only add PNG/WebP fallback variants to avoid a large candidate explosion.
+  // WebP first (see imageExtensions comment above): this is the naming
+  // pattern actually used by the 15k+ existing ITA card library.
   for (const basePath of basePaths) {
     for (const setToken of setCodeTokens.slice(0, 1)) {
       for (const cardToken of cardNumberTokens.slice(0, 2)) {
-        pushCandidate(`${basePath}/${setToken}_IT_${cardToken}.png`);
         pushCandidate(`${basePath}/${setToken}_IT_${cardToken}.webp`);
+        pushCandidate(`${basePath}/${setToken}_IT_${cardToken}.png`);
       }
       for (const cardToken of cardNumberTokens.slice(0, 1)) {
         pushCandidate(`${basePath}/${cardToken}.png`);
@@ -1568,6 +1589,69 @@ async function createResponseFromCache(cached: CachedResponse, isHit: boolean, p
   });
 }
 
+// ── D1-backed /v1 catalog API ──
+// Additive, read-only routes on top of the new queryable catalog (see
+// schema/001_init.sql). Deliberately independent of the CACHE/KV binding
+// and of the legacy R2-blob catalog endpoints above: nothing existing
+// changes behavior because these routes exist. `published = 0` expansions
+// (below the IT image coverage threshold) are hidden from the listing but
+// individual cards remain resolvable by id, matching the plan's coverage
+// rule (a set can be incomplete without breaking a user's existing collection).
+
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=300' },
+  });
+}
+
+async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response | null> {
+  if (!pathname.startsWith('/v1/')) return null;
+  const db = env.pokevault_catalog;
+  if (!db) {
+    return jsonResponse({ error: 'D1 binding (pokevault_catalog) not configured in this environment' }, 500);
+  }
+
+  if (pathname === '/v1/health') {
+    const row = await db.prepare('SELECT catalog_version FROM catalog_meta WHERE id = 1').first<{ catalog_version: number }>();
+    return jsonResponse({ status: 'ok', catalog_version: row?.catalog_version ?? null });
+  }
+
+  if (pathname === '/v1/expansions') {
+    const { results } = await db
+      .prepare('SELECT id, card_count, sort_order, logo_key FROM expansions WHERE published = 1 ORDER BY sort_order, id')
+      .all();
+    return jsonResponse({ expansions: results });
+  }
+
+  const cardsMatch = pathname.match(/^\/v1\/expansions\/([A-Za-z0-9._-]+)\/cards$/);
+  if (cardsMatch) {
+    const expansionId = cardsMatch[1].toLowerCase();
+    const { results } = await db
+      .prepare(
+        `SELECT card_id, card_number, nome, tipo, ps, regola_speciale, attacchi_json, image_status
+         FROM cards WHERE expansion_id = ?1
+         ORDER BY CAST(card_number AS INTEGER), card_number`
+      )
+      .bind(expansionId)
+      .all();
+    if (results.length === 0) {
+      return jsonResponse({ error: 'expansion not found or has no cards' }, 404);
+    }
+    return jsonResponse({ expansionId, cards: results });
+  }
+
+  const cardMatch = pathname.match(/^\/v1\/cards\/([A-Za-z0-9._-]+)$/);
+  if (cardMatch) {
+    const cardId = cardMatch[1];
+    const row = await db.prepare('SELECT * FROM cards WHERE card_id = ?1').bind(cardId).first();
+    if (!row) return jsonResponse({ error: 'card not found' }, 404);
+    return jsonResponse(row);
+  }
+
+  return jsonResponse({ error: 'unknown /v1 route' }, 404);
+}
+
 /**
  * Main request handler
  */
@@ -1579,6 +1663,12 @@ export default {
     }
 
     const requestUrl = new URL(request.url);
+
+    // New D1-backed catalog API: independent of the CACHE/KV binding
+    // required below, and does not affect any existing route.
+    const v1Response = await handleV1ApiRequest(requestUrl.pathname, env);
+    if (v1Response) return v1Response;
+
     const cacheKey = generateCacheKey(request.url);
     const fallbackTtlSeconds = parseInt(env.CACHE_TTL_SECONDS || `${TTL_90_DAYS}`, 10);
     const cacheTtlSeconds = getBaseTtlSeconds(requestUrl.pathname, fallbackTtlSeconds);

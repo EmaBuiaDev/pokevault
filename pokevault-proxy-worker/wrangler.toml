@@ -14,6 +14,12 @@ r2_buckets = [
   { binding = "IMAGES_BUCKET", bucket_name = "pokevault-images" }
 ]
 
+# Queryable catalog store (2026-09-07 migration), additive alongside the
+# legacy R2 JSON blob served by /ita/catalog.json -- see schema/001_init.sql
+d1_databases = [
+  { binding = "pokevault_catalog", database_name = "pokevault-catalog", database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7" }
+]
+
 # Environment variables
 [vars]
 ORIGIN_API = "https://api.pokewallet.io"
