@@ -170,7 +170,10 @@ async function main() {
     const chunk = cardRows.slice(i, i + args.batchSize);
     lines.push(
       'INSERT INTO cards (card_id, expansion_id, card_number, nome, tipo, ps, regola_speciale, attacchi_json) VALUES\n' +
-      chunk.join(',\n') + ';'
+      chunk.join(',\n') +
+      '\nON CONFLICT(card_id) DO UPDATE SET expansion_id = excluded.expansion_id, card_number = excluded.card_number, ' +
+      'nome = excluded.nome, tipo = excluded.tipo, ps = excluded.ps, regola_speciale = excluded.regola_speciale, ' +
+      'attacchi_json = excluded.attacchi_json;'
     );
   }
 
