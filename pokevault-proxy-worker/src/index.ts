@@ -754,6 +754,51 @@ async function handleItalianR2AssetRequest(
   });
 }
 
+// Builds the exact same JSON shape the app already expects from
+// /ita/catalog.json (a flat array of {cardId, espansioneId, nome, tipo, ps,
+// attacchi, regolaSpeciale} -- see ItalianCatalogNormalizer.kt on the
+// Android side) but sourced from D1 instead of the static R2 blob. Only
+// cards belonging to `published = 1` expansions are included, matching the
+// coverage-threshold rule: a set below 90% IT image coverage (e.g. me05 at
+// ingest time) must not appear in the app until it clears the bar, exactly
+// as it's already hidden from /v1/expansions.
+//
+// ITALIAN_CATALOG_URL is baked into the app at BUILD time (BuildConfig, from
+// local.properties) -- already-installed clients can never be pointed at a
+// different URL remotely. Swapping what powers this SAME endpoint server-
+// side is the only way to get D1 (and therefore new automated ingests, e.g.
+// me05 once it clears 90%) in front of existing installs without a new
+// app release. Returns null on any failure so the caller falls back to the
+// pre-existing R2 blob behavior untouched -- this must never make the
+// catalog endpoint LESS reliable than it is today.
+async function buildCatalogJsonFromD1(db: D1Database): Promise<string | null> {
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json
+         FROM cards c JOIN expansions e ON e.id = c.expansion_id
+         WHERE e.published = 1`
+      )
+      .all<{ card_id: string; expansion_id: string; nome: string; tipo: string | null; ps: string | null; regola_speciale: string | null; attacchi_json: string }>();
+
+    if (results.length === 0) return null; // suspiciously empty -- prefer the R2 fallback over serving nothing
+
+    const cards = results.map((r) => ({
+      cardId: r.card_id,
+      espansioneId: r.expansion_id,
+      nome: r.nome,
+      tipo: r.tipo,
+      ps: r.ps,
+      attacchi: JSON.parse(r.attacchi_json || '[]'),
+      regolaSpeciale: r.regola_speciale,
+    }));
+    return JSON.stringify(cards);
+  } catch (error) {
+    console.error('buildCatalogJsonFromD1 failed, falling back to R2 blob:', error);
+    return null;
+  }
+}
+
 async function handleItalianCatalogRequest(
   requestUrl: URL,
   env: Env,
@@ -771,9 +816,7 @@ async function handleItalianCatalogRequest(
     return createResponseFromCache(cachedData, true, requestUrl.pathname, cache);
   }
 
-  const prefix = normalizeR2Prefix(env.IT_IMAGE_PREFIX);
-  const keyCandidates = buildItalianCatalogKeyCandidates(prefix, env.IT_CATALOG_KEY);
-  const hit = await getFirstExistingR2Object(env.IMAGES_BUCKET, keyCandidates);
+  const d1Json = env.pokevault_catalog ? await buildCatalogJsonFromD1(env.pokevault_catalog) : null;
 
   let status = 404;
   let statusText = 'Not Found';
@@ -783,18 +826,28 @@ async function handleItalianCatalogRequest(
   };
   let responseBodyText = '{"error":"Italian catalog not found"}';
 
-  if (hit) {
-    const text = await hit.object.text();
+  if (d1Json) {
     status = 200;
     statusText = 'OK';
-    headersToCache = {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': `public, max-age=${TTL_5_MINUTES}`,
-    };
-    if (hit.object.httpEtag) {
-      headersToCache.etag = hit.object.httpEtag;
+    responseBodyText = d1Json;
+  } else {
+    const prefix = normalizeR2Prefix(env.IT_IMAGE_PREFIX);
+    const keyCandidates = buildItalianCatalogKeyCandidates(prefix, env.IT_CATALOG_KEY);
+    const hit = await getFirstExistingR2Object(env.IMAGES_BUCKET, keyCandidates);
+
+    if (hit) {
+      const text = await hit.object.text();
+      status = 200;
+      statusText = 'OK';
+      headersToCache = {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': `public, max-age=${TTL_5_MINUTES}`,
+      };
+      if (hit.object.httpEtag) {
+        headersToCache.etag = hit.object.httpEtag;
+      }
+      responseBodyText = text;
     }
-    responseBodyText = text;
   }
 
   if (shouldCacheStatus(status)) {
