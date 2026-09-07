@@ -33,7 +33,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'  # wrangler 4.x requires Node >=22; on 20 it fails immediately
 
       - name: Install dependencies
         run: npm ci
@@ -42,7 +42,15 @@ jobs:
         id: ingest
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: node scripts/discover-new-sets.mjs --ingest | tee ingest-output.log
+        # `set -o pipefail` is required here: without it, a failing `node`
+        # invocation piped into `tee` still reports the pipeline's exit code
+        # as 0 (tee's own success), silently masking the real failure --
+        # exactly what happened on the very first manual run of this
+        # workflow (2026-09-07): the ingest crashed on Node version
+        # mismatch, but the step and the whole run still showed "success".
+        run: |
+          set -o pipefail
+          node scripts/discover-new-sets.mjs --ingest | tee ingest-output.log
 
       - name: Open an issue if a new set was ingested
         if: success()
