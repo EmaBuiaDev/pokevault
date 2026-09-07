@@ -1,0 +1,1073 @@
+# PokeVault — Piano di Aggiornamento, Migrazione a Cloudflare e Catalogo IT Proprietario
+
+> Documento operativo. Da seguire fino alla fine, milestone per milestone.
+> Ultimo aggiornamento: 2026-09-06 (revisione post-M0)
+
+---
+
+## ⚠️ Aggiornamento post-approvazione: la baseline reale non era master
+
+Il piano sotto (sezioni 1-9) e stato scritto analizzando **`master`**. Durante l'esecuzione di M0 e emerso che **`master` era il branch sbagliato da cui partire**: esisteva gia, fermo dal 11 giugno 2026, il branch **`release/R2.0.21`** con 27 commit di lavoro reale su esattamente il problema che il piano voleva risolvere.
+
+### Cosa e stato trovato e verificato
+
+| Verifica | Esito |
+|---|---|
+| `release/R2.0.21` vs `master` | 27 commit avanti, **0 dietro** — superset completo, nessun conflitto |
+| `release/R2.0.21` vs `prod/R2.0.17` | 19 commit avanti, 0 dietro — e il branch piu avanzato che esiste |
+| Versione | `versionCode 28`, `versionName 2.0.20` (master era fermo a 2.0.14) |
+| **R2 gia attivo** | Bucket `pokevault-images` collegato al Worker (`wrangler.toml`: `IMAGES_BUCKET`) |
+| **Layer italiano gia scritto** | `data/italian/ItalianCatalog.kt`, `ItalianCatalogRemoteRepository.kt`, `ItalianPriceSnapshotRepository.kt` |
+| **Copertura dichiarata** | Commit dell'11 giugno: *"snapshot ITA completo ... 105/106 espansioni"* |
+| **Worker esteso** | `src/index.ts` passato da 674 a **1798 righe**: endpoint `/ita/catalog.json`, `/ita/prices.json`, `/images/it/*` |
+| **Pipeline prezzi bulk gia implementata** | `buildItalianPriceSnapshot()`: budget di 30 fetch upstream/run, cache KV-first, cursore resumibile — esattamente il pattern "bulk invece di per-carta" che il piano (sez. 2.3) proponeva di costruire da zero |
+| **Acquisizione immagini oggi** | `pokevault-proxy-worker/scripts/upload-ita-r2.ps1`: carica su R2 da **una cartella locale sul PC**, non da alcuna fonte automatica. Le 105/106 espansioni sono frutto di lavoro manuale, non di ingest |
+| **Persistenza catalogo** | **Nessun D1**: il catalogo e un **unico blob JSON** (`it/catalog/cards.cleaned.json` su R2) scaricato per intero dal client e tenuto in `SharedPreferences` (TTL 5 min) — non interrogabile |
+| Toolchain di build | JDK 25 (JBR di Android Studio) e **incompatibile** con Kotlin 2.0.21 (`IllegalArgumentException: 25.0.2` nel parser versione). Serve **JDK 21**, trovato in `C:\Users\ASUS\.jdks\jbr-21.0.11` |
+| Build con JDK 21 | **`./gradlew :app:compileDebugKotlin` -> BUILD SUCCESSFUL** (1m40s) sulla baseline R2.0.21 |
+
+### Decisioni prese con l'utente per correggere la rotta
+
+1. **Adottare `release/R2.0.21` come baseline** — eseguito: `master` locale portato in fast-forward a `origin/release/R2.0.21` (nessuna perdita di commit, nessun force-push, non ancora pushato su origin).
+2. **Migrare il blob JSON verso D1** — confermato: si procede con l'introduzione di D1 come da sezione 2.1/2.4 del piano originale, ma **come evoluzione** dell'endpoint `/ita/catalog.json` e `/ita/prices.json` gia esistenti, non come sistema parallelo.
+
+### Come questo cambia le sezioni sotto
+
+Le sezioni 1-9 restano valide nell'**impianto** (architettura target D1+R2+Worker, regola di copertura a 3 livelli, isolamento prezzi, compliance, roadmap, bugfix) ma vanno lette con queste correzioni:
+
+| Sezione originale | Correzione |
+|---|---|
+| 1.1 "Stack reale" | Riferita a `master` (obsoleta): la baseline vera e `release/R2.0.21`, versione 2.0.20, con layer `data/italian/` gia presente |
+| 2.1 "Perche D1 e non KV" | Resta valida, ma il bersaglio non e piu un blob KV: e il **blob JSON su R2** (`it/catalog.json`, `it/prices.json`) gia servito dal Worker attuale |
+| 2.3 "Pipeline prezzi bulk" | **Gia implementata** in `buildItalianPriceSnapshot()`. Il lavoro restante e migrare la sua **destinazione di scrittura** da JSON-su-R2 a righe D1, non costruire la logica di raccolta da zero |
+| 2.5 "Migrazione step-by-step" | Il passo "Deploy Worker `pokevault-api` affiancato" non serve: **si estende il Worker `pokevault-proxy` esistente** con un nuovo backend D1 dietro gli stessi endpoint (`/ita/catalog.json`, `/ita/cards`, ecc.), mantenendo la stessa interfaccia verso il client dove possibile |
+| M1 "Fondamenta Cloudflare" | Non si parte da zero: R2 e gia provisionato. Il lavoro reale e **aggiungere D1** accanto a R2/KV esistenti e scrivere la migration del blob -> righe |
+| M2 "Ingest pilota" | L'ingest automatico da fonte IT (TCGdex, verificato gratuito e senza rate limit in sez. 1.1) **va ancora costruito**: oggi l'unica via di aggiornamento immagini e manuale (`upload-ita-r2.ps1`). Qui il piano originale resta interamente da eseguire |
+| M0 "Ripresa" | Completato per le parti fattibili offline (build, branch, versioni). Restano da fare: `wrangler whoami`/inventario risorse live (richiede Node.js, **non installato** su questa macchina — vedi sotto) e verifica di quale sia l'unica espansione mancante (105/106) |
+
+### M0 completato: inventario reale delle risorse Cloudflare
+
+Node.js LTS installato, `wrangler login` eseguito (account confermato: `emanuelebuia@live.it`, stesso `account_id` del progetto), push del fast-forward eseguito su `origin/master` (ora allineato a `release/R2.0.21`, v2.0.20).
+
+| Risorsa | Stato reale verificato |
+|---|---|
+| Worker `pokevault-proxy` | **Vivo**, ultimo deploy 10 giugno 2026 |
+| KV `pokevault-proxy-pokevault-cache-20260421` | Esiste, id coincide con `wrangler.toml` |
+| R2 `pokevault-images` | **Esiste**, creato 14 maggio 2026 |
+| **D1** | Nessun database — da creare in M1, come previsto |
+| Permessi token | `d1 (write)` gia incluso — nessun ostacolo a creare D1 |
+
+### Scoperta maggiore: la copertura italiana e MOLTO piu ampia del previsto
+
+Scaricato ed analizzato `it/catalog/cards.cleaned.json` da R2 (10,4 MB):
+
+| Metrica | Valore reale |
+|---|---|
+| Carte totali nel catalogo | **15.406** |
+| Espansioni distinte | **106** (tutte presenti, non 105/106 — il gap del commit di giugno risulta chiuso) |
+| Copertura temporale | Da **`dp1` (Diamond & Pearl, 2007)** fino a **`me04`/`sv10` (2026)** — BW, DP, HGSS, XY, SM, SWSH, SV: **quasi due decenni**, non solo i set moderni |
+| Immagini in R2 | **15.539 file, 2,49 GB**, verificate esistenti campionando 6 carte su 6 sparse in tutte le ere (`DP1`, `XY1`, `BW1`, `SM1`, `SWSH1`, `ME04`) |
+| Formato immagini | **PNG non compresso**, 245×342px, ~150-200 KB/file |
+
+**Conseguenza pratica**: il backfill storico (M8 del piano originale, previsto come lavoro "continuo" a valle) **e gia sostanzialmente fatto**. Non sappiamo ancora da quale fonte sia stato acquisito (non e TCGdex: i test diretti su TCGdex mostravano 404 su tutti i set pre-2023 in italiano) — probabilmente lavoro di raccolta/curazione manuale pregresso, coerente con lo script di upload da cartella locale.
+
+**Il problema reale da risolvere non e piu "costruire la copertura storica"**, ma:
+1. **Automatizzare l'ingresso dei set futuri** (l'unico pezzo davvero mancante — oggi richiede intervento manuale a ogni nuova espansione)
+2. **Ricomprimere le 15.539 immagini PNG in WebP** — stesso contenuto, stima **2,49 GB -> ~300-400 MB**, nessuna perdita di copertura
+3. **Migrare 15.406 righe da blob JSON a D1** (confermato dall'utente) — un file da 10,4 MB scaricato per intero ogni 5 minuti di utilizzo attivo e il costo concreto, misurato, che D1 elimina
+
+### Fonte delle immagini esistenti — chiarita dall'utente: scraping sito ufficiale + scansioni personali
+
+Le 15.539 immagini gia in R2 provengono da **scraping del sito ufficiale Pokemon** e da **scansioni personali** di carte fisiche. Questo cambia il profilo di rischio rispetto a quanto scritto in sezione 4 (che assumeva una fonte terza con licenza aperta tipo TCGdex):
+
+| Aspetto | Implicazione |
+|---|---|
+| Scraping dal sito ufficiale | E' un'esposizione **diretta** verso il detentore dei diritti (Pokemon Company/Nintendo), non una ridistribuzione di materiale di terzi con licenza propria. Il sito ufficiale ha quasi certamente ToS che vietano scraping ed estrazione massiva |
+| Scansioni personali | Restano riproduzioni di opere protette: possedere fisicamente la carta non concede diritti di riproduzione/distribuzione digitale, indipendentemente dalla fonte |
+| Le mitigazioni gia previste (sez. 4.2) | **Diventano piu importanti, non meno**: bassa risoluzione, nessun ritaglio, copyright notice intatto, kill-switch per set, procedura di notice-and-takedown. Vanno mantenute come minimo, non come opzionali |
+| Direzione futura | L'adozione di **TCGdex per i set nuovi** (M2, da costruire) riduce l'esposizione **andando avanti**: niente piu nuovo scraping del sito ufficiale, solo ingest da un dataset MIT con licenza propria. Lo storico gia acquisito resta com'e, trattato come patrimonio esistente da proteggere con le mitigazioni sopra, non da rifare |
+
+**Nessuna azione distruttiva consigliata sullo storico** (es. rimuoverlo preventivamente): rischierebbe di privare l'app di quasi 20 anni di catalogo per un rischio che le mitigazioni tecniche gia riducono concretamente. La raccomandazione e rinforzare le mitigazioni (specialmente il kill-switch per set e la pagina di takedown, sez. 4.5) prima del rilascio pubblico, non smontare il lavoro fatto.
+
+### Decisione: ricompressione WebP delle immagini esistenti (confermata dall'utente)
+
+Le 15.539 PNG (245×342px, ~150-200 KB/file, 2,49 GB totali) vengono ricompresse in WebP alla stessa risoluzione. Stima: **2,49 GB -> ~300-400 MB**, nessuna perdita di copertura, stessa qualita visiva percepita.
+
+**Approccio scelto: convivenza .webp/.png, nessun cutover a rischio.**
+
+Il codice esistente (sia Kotlin che Worker) gia usa un pattern "prova candidati in ordine, prendi il primo che esiste" per risolvere le chiavi R2 (vedi `ItalianImageReference.preferredFileName`/`fallbackFileName` in Kotlin, `buildItalianCatalogKeyCandidates`/`getFirstExistingR2Object` nel Worker). La migrazione sfrutta lo stesso pattern:
+
+1. Upload dei nuovi `.webp` **accanto** ai `.png` esistenti (stessa cartella, stesso nome base, estensione diversa) — nessuna cancellazione immediata
+2. Le liste di candidati (Kotlin + Worker) vengono estese per provare `.webp` **prima** di `.png`
+3. Verifica: l'app continua a funzionare in ogni momento della migrazione (se un `.webp` manca, il `.png` esistente e ancora li)
+4. Solo a migrazione confermata completa (tutte le 15.539 carte hanno un `.webp` funzionante), pulizia dei `.png` in un passo separato e reversibile
+
+Questo evita un taglio netto rischioso su un asset di produzione da 2,49 GB usato dall'app in questo momento.
+
+### Cosa manca ancora per proseguire
+
+- **Costruire lo script di ricompressione** — FATTO, vedi checkpoint sotto
+- **Validare su un piccolo campione** — FATTO, vedi checkpoint sotto
+- **Estendere i due punti di risoluzione chiave** per provare `.webp` prima di `.png` — fatto lato Worker, **lato Kotlin ancora da fare** (vedi checkpoint)
+- **Costruire l'automazione per i set futuri** da TCGdex (verificata gratuita, senza rate limit, aggiornata quotidianamente) — resta interamente da fare, ed e il vero cuore del lavoro residuo insieme alla migrazione D1
+- **Creare il database D1** e la migration del blob JSON (schema, script di import una tantum dei 15.406 record esistenti)
+
+---
+
+## 📍 CHECKPOINT DI FINE SESSIONE — 2026-09-06, sera
+
+> Sessione interrotta su richiesta esplicita dell'utente ("dopo di questo salviamo il punto e proseguiamo domani"). Tutto quanto sotto e verificato, non ipotizzato: ogni riga e frutto di un comando eseguito con il suo output osservato in questa sessione.
+
+### Ambiente di sviluppo — ora pronto (prima non lo era)
+
+| Cosa | Stato a fine sessione |
+|---|---|
+| Node.js | **Installato**: v24.19.0 (via winget, `OpenJS.NodeJS.LTS`) |
+| npm | 11.17.0 |
+| JDK per Android | **JDK 21** in `C:\Users\ASUS\.jdks\jbr-21.0.11` — usare SEMPRE questo per Gradle, MAI il JBR 25 di Android Studio (`C:\Program Files\Android\Android Studio\jbr`), che crasha Kotlin 2.0.21 con `IllegalArgumentException: 25.0.2` |
+| `local.properties` | Creato da `local.properties.example` con chiavi vuote (build debug non le richiede) |
+| wrangler | Autenticato via `wrangler login` (OAuth), account `emanuelebuia@live.it` = **stesso account del progetto** (`account_id e6c4d1ff864abf6dbcb4ec1e0de6b34a`). Credenziali salvate in `C:\Users\ASUS\AppData\Roaming\xdg.config\.wrangler\config\default.toml` |
+| **Attenzione wrangler su Windows** | La versione **locale del progetto (3.114.17, pinnata in `package.json`)** e' instabile su questa macchina: crash nativo intermittente (`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)`, way `src\win\async.c:94`) su **qualsiasi** comando `r2 object get/put`, sia su successo che su errore. Non e' un problema di concorrenza (fallisce anche con `--concurrency 1`). Gli errori reali (es. "The specified key does not exist") **appaiono comunque in stderr prima del crash**, quindi sono recuperabili, ma serve retry-logic per gli aborti spuri. Da valutare domani: aggiornare a wrangler 4 (`npm install --save-dev wrangler@4`, gia verificato funzionante e piu stabile in questa sessione) oppure tenere v3 con retry robusto |
+| Git | `master` locale = `origin/master` = `release/R2.0.21` (v2.0.20), pushato. Build verificata: `./gradlew :app:compileDebugKotlin` -> **BUILD SUCCESSFUL** con JDK 21 |
+
+### Lavoro svolto stasera, non ancora committato
+
+`git status` a fine sessione:
+```
+ M app/google-services.json                    <- pre-esistente, non nostro, NON toccare senza chiedere
+ M pokevault-proxy-worker/.gitignore            <- aggiunto: .recompress-tmp/, recompress-progress.ndjson, catalog-live.json
+ M pokevault-proxy-worker/package.json          <- aggiunto sharp@0.33.5 come devDependency esplicita (prima era solo transitiva)
+ M pokevault-proxy-worker/src/index.ts          <- vedi sotto: priorita .webp prima di .png
+?? pokevault-proxy-worker/scripts/recompress-webp.mjs   <- NUOVO: script di ricompressione PNG->WebP
+```
+
+**Nessun commit creato, nessun deploy del Worker eseguito.** Tutte le modifiche sono solo locali, in attesa di revisione.
+
+#### 1. `src/index.ts` — priorita WebP nella risoluzione immagini (2 modifiche, non deployate)
+
+- Riga ~553: `imageExtensions` riordinato da `['png', 'webp', 'jpg', 'jpeg']` a **`['webp', 'png', 'jpg', 'jpeg']`**
+- Blocco "Legacy layouts" (~riga 589): le due `pushCandidate(...)` per il pattern reale (`{SET}_IT_{numero}.ext`, quello usato dalle 15.539 immagini esistenti) invertite: **`.webp` provato prima di `.png`**
+- Effetto: appena un `.webp` esiste per una carta, il Worker lo serve al posto del `.png` — automaticamente, senza toccare altro codice. Se il `.webp` non esiste ancora, il `.png` resta il fallback (nessuna carta puo "sparire" durante la migrazione)
+- **Verificato**: `npm run type-check` (tsc --noEmit) passa senza errori
+- **Non deployato**: serve `wrangler deploy` esplicito, da fare solo dopo conferma (tocca il serving in produzione)
+
+#### 2. `scripts/recompress-webp.mjs` — script di ricompressione, VALIDATO funzionante
+
+Legge il catalogo JSON (non fa listing del bucket: `wrangler r2 object list` non esiste come comando), deriva la chiave R2 sorgente/destinazione da ogni `cardId` (che e' letteralmente il nome file, es. `DP1_IT_1.png` -> set `DP1`), scarica il PNG, converte in WebP (qualita 82, sharp), carica il `.webp` **accanto** al `.png` esistente (additivo, nessuna cancellazione), con log di progresso resumibile in `recompress-progress.ndjson`.
+
+**Risultato del test di validazione** (5 carte campione: DP1, DP1, XY1, SM1, SWSH1):
+```
+DP1_IT_1.png:   201.604 -> 28.622 byte  (-85,8%)
+DP1_IT_2.png:   182.392 -> 22.796 byte  (-87,5%)
+XY1_IT_1.png:   196.773 -> 25.252 byte  (-87,2%)
+SM1_IT_1.png:   154.942 -> 18.114 byte  (-88,3%)
+SWSH1_IT_1.png: fallita (crash wrangler, vedi sopra — non un problema della logica)
+```
+**4 file `.webp` reali sono gia stati caricati su R2** (produzione, bucket `pokevault-images`) come effetto collaterale della validazione: `it/DP1/DP1_IT_1.webp`, `it/DP1/DP1_IT_2.webp`, `it/XY1/XY1_IT_1.webp`, `it/SM1/SM1_IT_1.webp`. Innocuo: sono aggiunte, non hanno toccato i `.png` originali, e il Worker in produzione non li usa ancora (modifica non deployata).
+
+**Risparmio medio confermato: ~87%** — coerente con la stima (85-90%). Su 2,49 GB totali, proiezione: **~320 MB** a conversione completa.
+
+**Problema scoperto, da risolvere domani**: le espansioni **promozionali** (`svp`, `mep`, e probabilmente le altre con suffisso "p": `bwp`, `pgo`, `sma`, `smp`, `swshp`, `xya`, `xyp`) **non hanno la chiave R2 nel pattern standard** dedotto dal `cardId` — `wrangler r2 object get` risponde "The specified key does not exist" per queste. Vanno investigate separatamente (probabile naming diverso per i promo, da scoprire ispezionando come il Worker le risolve oggi in produzione, dato che l'app le mostra correttamente).
+
+### Prossimi passi per la sessione di domani, in ordine
+
+1. **Decidere su wrangler**: aggiornare a v4 (piu stabile, gia testato in questa sessione) o tenere v3 con retry. Consigliato: aggiornare, e ri-testare `npm run type-check` + un giro di validazione immagini per conferma.
+2. **Investigare la chiave R2 reale dei set promozionali** (svp, mep, ...) — probabilmente basta ispezionare 2-3 oggetti candidati o guardare come il Worker li serve oggi (endpoint `/images/it/SVP/1?size=low` in produzione, che gia funziona per l'app).
+3. **Aggiungere retry logic** allo script (pattern gia presente in `upload-ita-r2.ps1`: retry su errori transitori, non su "key not found" che e' definitivo).
+4. **Lanciare la conversione completa** (15.406 carte, esclusi promo se non ancora risolti) in background — stimata alcune ore data la CLI overhead. Monitorare via `recompress-progress.ndjson` (resumibile, si puo interrompere e riprendere).
+5. **Aggiornare `ItalianImageReference.kt`** (Kotlin) con lo stesso ordine di priorita `.webp` prima di `.png` — oggi prova solo `.png`, va allineato al Worker per coerenza (anche se il Worker e' l'unico che risolve davvero le chiavi R2 lato server; il client chiama solo l'URL del Worker, quindi questa modifica potrebbe non essere strettamente necessaria — **da verificare leggendo come il client costruisce l'URL finale prima di modificare**).
+6. **Solo dopo conferma esplicita**: `wrangler deploy` del Worker con le modifiche a `index.ts`.
+7. Poi proseguire con M1 (creazione D1) come da roadmap originale.
+
+### File di lavoro lasciati sul disco (non in git)
+
+- `pokevault-proxy-worker/scripts/recompress-progress.ndjson` — log di 5 tentativi (4 ok, 1 fallito), riprendibile domani
+- `pokevault-proxy-worker/node_modules/` — dipendenze installate (`npm install` gia eseguito, incluso `sharp` con script approvati)
+
+---
+
+## Context (piano originale — vedi correzioni sopra)
+
+PokeVault e un'app **Android nativa** (Kotlin + Jetpack Compose, `com.emabuia.pokevault`, `versionName 2.0.14`), ferma da **~4 mesi** (ultimo commit `cc44d45`, 7 maggio 2026).
+
+Il problema centrale: **il 100% del catalogo dipende da PokeWallet** (`api.pokewallet.io`) — set, carte, **immagini** e prezzi. Il Worker Cloudflare esistente (`pokevault-proxy`) non e un backend: e solo una cache KV davanti a PokeWallet. Se PokeWallet cambia prezzo, API o chiude, l'app muore. In piu le carte PokeWallet sono **in inglese**, mentre l'obiettivo di prodotto e esporre **carte italiane**.
+
+Esito voluto: un **catalogo proprietario italiano** su infrastruttura Cloudflare (D1 + R2 + Workers), alimentato da una **pipeline di ingest automatica** che si aggiorna da sola a ogni nuova espansione. PokeWallet resta **solo** come sorgente prezzi, dietro il nostro Worker, ed e sostituibile in qualsiasi momento. In coda: bugfix e pulizia del debito accumulato.
+
+### Decisioni gia prese (input utente, 2026-09-06)
+
+| Tema | Decisione |
+|---|---|
+| Catalogo | **Dataset proprietario** su D1 (schema, ID, traduzioni, conteggi = nostri) |
+| Immagini | **Self-host su R2**, WebP a bassa risoluzione |
+| Acquisizione | **Ingest automatico** da fonte IT pubblica, verificata fattibile (sotto) |
+| Prezzi | **PokeWallet mantenuto solo per i prezzi**, dietro il Worker |
+| Lingua | **Solo italiano** — coerenza e velocita prima di tutto |
+| Scope v1 | **Set moderni** (SV + SWSH + ME), storico con backfill progressivo |
+| Budget prezzi | PokeWallet **1000 richieste/giorno gratuite**: la cache va sfruttata a fondo (sez. 2.3) |
+| Asset esistenti | Quello che e gia nel KV Cloudflare va inventariato e riusato dove ha valore (sez. M0.5.1) |
+
+**Nota di inquadramento**: l'app oggi **funziona**. Questo non e un piano di salvataggio ma di consolidamento — si migra l'infrastruttura mantenendo l'app in funzione a ogni passo (flag remoto, rollback in minuti), e si chiude con una fase dedicata a sistemare tutto il debito accumulato (M7).
+
+---
+
+## 1. Analisi tecnica
+
+### 1.1 Stato attuale
+
+**Stack reale**
+- Android: Kotlin 2.0.21, AGP 8.13.2, Compose BOM 2024.09.00, `compileSdk 36` / `minSdk 26`, Java 11
+- Rete: Retrofit 2.11 + Gson + OkHttp; immagini Coil 2.6 (memory 25%, disk 256 MB)
+- Locale: Room v1 (`pokevault_cache.db`) — tabelle `sets`, `cards`, `prices`
+- Utente: Firebase Auth + Firestore (`users/{uid}/...`), cache offline illimitata
+- Background: WorkManager — `sets_sync` 24h, `cards_sync` 7g, `price_sync` 12h, `cache_cleanup` 24h
+- Edge: 1 Worker TS (`pokevault-proxy-worker/src/index.ts`, 674 righe) + 1 KV namespace, cron `*/30`
+
+**Il vincolo PokeWallet, in dettaglio**
+
+| Cosa | Dove |
+|---|---|
+| Catalogo set/carte | `data/remote/PokeTcgRepository.kt` (1735 righe) — nonostante il nome usa PokeWallet |
+| Client HTTP | `data/remote/PokeWalletApiService.kt:162` — `DIRECT_API_URL = "https://api.pokewallet.io/"` |
+| Prezzi | `data/remote/PokeWalletRepository.kt` — cache L1 memoria 24h -> L2 Room -> L3 rete |
+| **Immagini** | `PokeTcgRepository.kt:1482` `buildCardImageUrl()` -> `{base}images/{id}?size=low\|high` |
+| Loghi set | `PokeTcgRepository.kt:1491` `buildSetImageUrl()` + `SET_IMAGE_CACHE_VERSION = "setimg-v4"` |
+| API key nel client | `CardsVaultTCGApp.kt:71-77` — interceptor Coil che inietta `X-API-Key` |
+| Proxy edge | `pokevault-proxy-worker/src/index.ts` + `wrangler.toml` (`ORIGIN_API`) |
+
+**Verifiche eseguite oggi**
+
+| Verifica | Esito |
+|---|---|
+| `api.pokewallet.io/sets` | HTTP **401** — servizio vivo, richiede key valida |
+| Fonte IT — freschezza | `tcgdex/cards-database`: ultimo commit **6 set 2026**, piu commit al giorno |
+| Fonte IT — set recenti | Presenti `me05 Buio Pesto`, `me04 Caos Nascente`, `B2a Paldean Wonders`; `me03` = 27 mar 2026 |
+| Immagini **IT** set moderni | ✅ `assets.tcgdex.net/it/me/me03/001/low.webp` -> 200 (19 KB) / `high.webp` -> 200 (94 KB) |
+| Immagini IT set storici | ❌ 404 su `xy1`, `bw1`, `dp1`, `base1` (anche in EN) |
+| Buchi sparsi | ⚠️ `me05/084` -> 404 ma `me05/120` -> 200 — la copertura non e prevedibile a priori |
+| Licenza dataset | `cards-database` = **MIT**; sito TCGdex = GPL3 (non ci riguarda) |
+| **Costo fonte IT** | **Gratuita, nessuna API key.** 12 richieste consecutive -> 12× HTTP 200 a ~200 ms, nessun header di rate limit, nessun throttling. Chiedono solo di non ripetere fetch massivi: e esattamente il nostro pattern (ingest una volta, poi serviamo noi) |
+| `local.properties` | **Assente** sul disco -> oggi il progetto non builda con le chiavi |
+
+> **Conclusione sulla fattibilita dell'ingest automatico (domanda esplicita dell'utente):**
+> La fonte IT e **aggiornata quotidianamente** e ha immagini italiane native per tutti i set moderni. L'ingest automatico e la strada giusta: **niente webscraping**. Lo scraping sarebbe piu fragile (HTML che cambia), piu lento, piu esposto a blocchi/ToS e non piu legale. Il dataset resta comunque **nostro**: importiamo una volta, normalizziamo nel nostro schema, e a runtime non contattiamo mai la fonte. Se un giorno sparisse, il catalogo continuerebbe a funzionare — perderemmo solo i set futuri.
+
+### 1.2 Debito tecnico che pesa sulla migrazione
+
+| # | Problema | Impatto |
+|---|---|---|
+| 1 | Repo **327 MB** — 23 AAB in cronologia + `app/release/app-release.aab` 26 MB tracciato | Clone lentissimo, CI lenta |
+| 2 | CI gira su `main`/`develop`, **branch di default = `master`** | Nessun test gira davvero |
+| 3 | `android-advanced-tests.yml` usa **JDK 11** con AGP 8.13.2 + task `jacocoTestDebugUnitTestReport` **mai registrato** | Workflow rotto in partenza |
+| 4 | `util/AppLocale.kt` e `viewmodel/DeckLabViewModel.kt` **duplicati in root**, fuori dal source set, divergenti (577 e 908 righe di diff) | Confusione, merge sbagliati |
+| 5 | PaddleOCR + TensorFlow Lite in build ma **nessun `.tflite`**, `assets/` inesistente | ~2 librerie native inutili nell'APK |
+| 6 | 55 `AsyncImage` **senza `ImageRequest.size()`** | Decodifica a risoluzione piena: causa #1 dei consumi memoria |
+| 7 | `safeImageUrl()` duplicato **7 volte** e applicato in modo incoerente | Bug di rendering sparsi |
+| 8 | Room **v1 senza infrastruttura di migration** | Qualsiasi cambio schema = crash all'avvio |
+| 9 | i18n: `strings.xml` con **1 stringa**, 1019 righe di getter in `AppLocale.kt`, `stringResource` mai usato | Manutenzione pesante |
+| 10 | `POKETCG_API_KEY` iniettata in BuildConfig ma **mai letta** | Codice morto |
+| 11 | `HttpLoggingInterceptor` BASIC **attivo anche in release** (`LimitlessTcgRepository.kt:25-28`) | Leak di log in produzione |
+| 12 | Loop di rete sequenziali in `PokeTcgRepository.kt` (righe 438, 497, 534, 576, **600 `for (page in 1..3)`**, 801, 856) | Collo di bottiglia di scanner e ricerca |
+| 13 | `account_id`, KV id e `.wrangler/cache/wrangler-account.json` (con email) **committati** | Leak minore |
+| 14 | 12 file markdown (3848 righe), 8 sul solo testing, **nessun README di root** | Doc inutilizzabile |
+| 15 | 37 branch remoti mai eliminati, `master` indietro rispetto a `release/R2.0.21` | Confusione di versioning |
+
+---
+
+## 2. Strategia di migrazione
+
+### 2.1 Architettura target
+
+```
+  GITHUB ACTIONS  (ingest — cron giornaliero + manuale)
+  ┌──────────────────────────────────────────────────────────────┐
+  │ 1. clone dataset IT   2. diff vs manifest    3. verifica      │
+  │    (MIT, pinned)         (solo delta)           HTTP 200 IT   │
+  │ 4. WebP thumb 245px q70 + detail 600px q80                    │
+  │ 5. upload R2 (S3 API, content-hash)   6. SQL delta -> D1      │
+  └──────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+  CLOUDFLARE  (serving — nessuna dipendenza runtime da terzi)
+  ┌──────────────────────────────────────────────────────────────┐
+  │  D1  pokevault-catalog   sets · cards · card_prices ·        │
+  │                          set_map · sync_runs · takedowns      │
+  │  R2  pokevault-cards     /c/{set}/{num}/{thumb|detail}.webp  │
+  │                          -> img.pokevault.app (custom domain) │
+  │  Worker  api.pokevault.app                                    │
+  │     GET /v1/manifest          (versione catalogo, delta sync) │
+  │     GET /v1/sets                                              │
+  │     GET /v1/sets/{id}/cards                                   │
+  │     GET /v1/cards/{id}                                        │
+  │     GET /v1/prices/{id}       -> PokeWallet (key server-side) │
+  │     Cache API + KV davanti a tutto                            │
+  └──────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+  ANDROID   Retrofit -> api.pokevault.app · Coil -> img.pokevault.app
+            Room v2 (migration reale) · WorkManager delta-sync
+```
+
+**Perche D1 e non KV**: il catalogo va interrogato (filtri per set, rarita, tipo, ricerca per nome). KV e chiave-valore e non lo permette; oggi questo obbliga il client a scaricare interi set e filtrare in locale. D1 e SQLite all'edge: query vere, indici, `LIKE` per la ricerca.
+
+**Perche R2 e non Cloudflare Images**: R2 ha **egress a zero** e 10 GB nel piano gratuito. Le varianti le pre-generiamo in ingest (2 taglie fisse), quindi non serve resize a runtime. Cloudflare Images costerebbe per immagine servita senza darci nulla in piu.
+
+**Perche l'ingest in GitHub Actions e non in un Worker cron**: l'ingest scarica e ricomprime migliaia di immagini. I Workers hanno limiti di CPU-time per invocazione — il cron attuale (`*/30`, che pagina interi set) e gia a rischio. Un runner Actions non ha questo vincolo, e il log resta ispezionabile.
+
+### 2.2 Gestione della copertura IT (risposta a "esponiamo solo le carte italiane")
+
+I test mostrano che l'italiano copre bene i set moderni ma ha **buchi sparsi e imprevedibili**. La regola proposta, per ottenere "veloce e coerente" senza buchi visivi:
+
+**Regola dei tre livelli, applicata a ingest-time (mai a runtime):**
+
+1. **Livello set** — un set entra nel catalogo solo se la copertura IT verificata e **≥ 90%** delle carte ufficiali. Sotto soglia, il set resta in `sets` con `published = 0`: invisibile nel Pokedex, ma le sue carte restano risolvibili se un utente le ha gia in collezione. A ogni run l'ingest ricontrolla: quando la copertura sale, il set si pubblica **da solo**.
+2. **Livello carta** — le carte senza immagine IT restano nel catalogo con `image_status = 'missing'` (i conteggi dei set restano corretti) e ricevono un **placeholder generato da noi** (fondo neutro + nome + numero + simbolo set): coerente, nessun mix IT/EN, nessuna cella vuota.
+3. **Auto-guarigione** — ogni carta `missing` viene ricontrollata a ogni run. TCGdex aggiunge immagini nel tempo: i buchi si chiudono senza intervento e senza rilasciare una nuova versione dell'app.
+
+Conseguenza voluta: alla v1 il Pokedex mostra **solo set moderni completi in italiano**. Nessuna carta inglese, nessun badge di lingua, nessuna ambiguita. Lo storico entra progressivamente.
+
+### 2.3 Prezzi: PokeWallet isolato dietro il Worker, entro il budget di 1000 richieste/giorno
+
+I prezzi sono l'unico pezzo che resta su PokeWallet, con un vincolo preciso: **il piano gratuito da 1000 richieste/giorno**. Il design nasce attorno a quel numero.
+
+**Isolamento**
+- L'app **non conosce piu** PokeWallet: chiama solo `GET /v1/prices/{cardId}`. La API key resta secret del Worker.
+- Il Worker traduce il nostro `cardId` italiano nell'identificativo PokeWallet inglese usando la tabella **`set_map`** in D1 (`it_set_id` -> `pw_set_code`), popolata partendo dalla logica gia esistente in `data/remote/SetCodeMapper.kt`. Chiave di join: **set + numero carta** (invariante tra lingue).
+- Sostituire il fornitore prezzi in futuro = cambiare **un solo file** del Worker.
+
+**Il cambio che libera il budget: bulk invece di per-carta**
+
+Oggi `PokeWalletRepository.getCardPrices()` chiama `search` **per singola carta**: 1 richiesta = 1 prezzo. Con 10.000 carte a catalogo, il budget da 1000/giorno si esaurirebbe dopo il 10% della collezione.
+
+PokeWallet espone pero `GET sets/{setCode}` **paginato a 200 elementi** — lo usa gia il cron del Worker attuale (`index.ts`, backfill). Passando al bulk:
+
+| Approccio | Richieste per refresh completo (10.000 carte) | % del budget giornaliero |
+|---|---|---|
+| Per-carta (attuale) | ~10.000 | **1000% — impossibile** |
+| **Bulk per set (proposto)** | **~50-60** | **~6%** |
+
+Un refresh **completo** di tutti i prezzi costa ~60 richieste. Restano **~940 richieste/giorno** di margine.
+
+**Cache a 4 livelli**
+
+| Livello | Cosa | TTL | Costo PokeWallet |
+|---|---|---|---|
+| L1 | Snapshot in **`card_prices` (D1)** — servito sempre e subito, con `updatedAt` visibile in UI | — | **0** |
+| L2 | Cache API / KV sul Worker | 6h | **0** |
+| L3 | Job schedulato bulk per set | 4×/giorno | ~60/giorno |
+| L4 | On-demand, solo carte fuori catalogo | — | residuo |
+
+**Guardie sul budget** (in D1, tabella `api_budget`):
+- Contatore giornaliero delle chiamate PokeWallet, resettato a mezzanotte UTC
+- **Circuit breaker a 800/giorno**: oltre soglia il Worker serve solo L1/L2 e smette di chiamare l'origin
+- Alert (issue GitHub automatica) al superamento di 600/giorno
+- L'app mostra sempre un prezzo — al peggio l'ultimo noto, con la data accanto. **Nessuna schermata vuota, mai.**
+
+Effetto collaterale: anche se PokeWallet chiudesse domani, il catalogo e i prezzi storici restano nostri in D1.
+
+### 2.4 Migrazione lato Android
+
+L'app non viene riscritta: si introduce un'astrazione e si commuta con un feature flag.
+
+1. **Interfaccia comune** `CardCatalogSource` con due implementazioni: `PokeWalletCatalogSource` (attuale) e `PokeVaultCatalogSource` (nuova API). `data/remote/RepositoryProvider.kt` sceglie quale iniettare.
+2. **Flag remoto** servito da `GET /v1/manifest` (campo `catalog_source`): permette rollback istantaneo **senza pubblicare una release**.
+3. **Room v2** con `Migration(1,2)` **reale** — oggi non esiste alcuna infrastruttura di migration e un bump farebbe crashare l'app. Nuove colonne: `imageStatus`, `language`, `catalogVersion`, `publishedAt`.
+4. **Delta sync**: il client tiene `catalogVersion`; il worker `sets_sync` chiede solo il delta. Sostituisce il full-refresh attuale di `SetsSyncWorker` (`forceRefresh = true`).
+5. **Rinomina** al termine: `PokeTcgRepository` -> `CatalogRepository`, `PokeTcgApiService` -> `CatalogModels`, rimozione di `POKETCG_API_KEY` e `POKEWALLET_API_KEY` dal client.
+
+### 2.5 Migrazione step-by-step
+
+| # | Passo | Reversibile? |
+|---|---|---|
+| 1 | Verifica accesso Cloudflare, inventario risorse esistenti | — |
+| 2 | Crea D1 + R2 + custom domain, **senza toccare** il Worker attuale | Si |
+| 3 | Ingest pilota: 3 set (`me05`, `sv10`, `swsh12`) -> D1 + R2 | Si |
+| 4 | Deploy Worker `pokevault-api` **affiancato** al proxy esistente | Si |
+| 5 | App: `CardCatalogSource` + flag remoto, default **OFF** (nulla cambia) | Si |
+| 6 | Test interno con flag ON su build debug | Si |
+| 7 | Ingest completo set moderni (SV + SWSH + ME) | Si |
+| 8 | Beta Play Store con flag ON al 100% dei tester | Si (flag) |
+| 9 | Produzione: flag ON progressivo | Si (flag) |
+| 10 | Prezzi spostati su `/v1/prices` | Si |
+| 11 | **Spegnimento `pokevault-proxy`** e rimozione codice PokeWallet dal client | No |
+| 12 | Backfill storico progressivo | — |
+
+Nessun passo prima dell'11 e distruttivo: si puo tornare indietro in qualsiasi momento con un flag.
+
+---
+
+## 3. Automazioni
+
+### 3.1 Pipeline di ingest — `.github/workflows/catalog-ingest.yml`
+
+Trigger: `schedule: '0 4 * * *'` (04:00 UTC) + `workflow_dispatch` con input `set_id` per forzare un singolo set.
+
+| Step | Azione | Nota |
+|---|---|---|
+| 1 | Clone `tcgdex/cards-database` a **commit pinnato** | Build riproducibile; il pin si aggiorna nello stesso job |
+| 2 | Filtra lingua `it` + set nello scope configurato | `scope.json` versionato nel repo |
+| 3 | Diff contro `manifest.json` dell'ultima run (letto da R2) | Solo il delta viene processato |
+| 4 | Per ogni carta nuova/cambiata: `HEAD` sull'immagine IT | Determina `image_status` |
+| 5 | Download + `sharp`: WebP **thumb 245px q70** e **detail 600px q80** | ~12 KB + ~35 KB per carta |
+| 6 | Upload su R2 via S3 API, chiave `c/{setId}/{number}/{variant}.webp` | Skip se content-hash invariato |
+| 7 | Genera SQL `INSERT ... ON CONFLICT DO UPDATE` -> `wrangler d1 execute` | Transazionale |
+| 8 | Ricalcola copertura per set, aggiorna `published` | Auto-pubblicazione ≥ 90% |
+| 9 | Bump `catalog_version`, scrive `sync_runs`, invalida cache Worker | Sblocca il delta-sync dei client |
+| 10 | Se nuovo set rilevato -> apre **issue GitHub** automatica | Notifica umana |
+| 11 | Se copertura di un set gia pubblicato **cala** -> fallisce il job | Guardia anti-regressione |
+
+**Stima volumi**: SV + SWSH + ME ≈ 10.000 carte × ~47 KB = **~470 MB** su R2 — abbondantemente dentro i 10 GB gratuiti. Prima run completa: ~40-60 min. Run incrementali: **1-3 min**.
+
+### 3.2 Job prezzi — `.github/workflows/prices-sync.yml`
+
+Cron `0 */6 * * *` (4 run/giorno). **Non interroga per carta: itera i set** con `GET sets/{setCode}?limit=200`, come gia fa il cron del Worker attuale.
+
+| | |
+|---|---|
+| Costo per run completa | ~60 richieste (10.000 carte / 200 per pagina) |
+| Costo giornaliero | **~60-240 richieste** contro un budget di 1000 |
+| Margine residuo | **~760-940 richieste/giorno** per l'on-demand |
+| Scrittura | Snapshot in `card_prices` (D1) con `updatedAt` |
+| Guardia | Legge `api_budget`; sopra 800/giorno il job si ferma da solo |
+
+Priorita di aggiornamento: i set piu consultati (da `sync_runs`) vengono rinfrescati a ogni run, i set vecchi a rotazione giornaliera. Cosi le carte che gli utenti guardano davvero hanno prezzi al massimo di 6 ore, senza sprecare budget sullo storico.
+
+### 3.3 Rilevamento nuova espansione
+
+Nessuna configurazione manuale: quando il dataset upstream aggiunge un set con `releaseDate` nel futuro prossimo, l'ingest lo inserisce con `published = 0` e apre la issue. Man mano che le immagini IT compaiono, la copertura sale e **il set si pubblica da solo**. Nessun rilascio dell'app necessario.
+
+### 3.4 CI/CD Android da riparare
+
+| Workflow | Intervento |
+|---|---|
+| `android-tests.yml` | Aggiungere `master` ai trigger — oggi **non gira mai** |
+| `android-advanced-tests.yml` | JDK 11 -> **17**; registrare davvero il task `JacocoReport` o rimuovere lo step |
+| **Nuovo** `worker-deploy.yml` | Deploy Worker su push a `master` che tocca `cloudflare/` |
+| **Nuovo** `release-build.yml` | Build AAB firmato su tag, artefatto **non committato** |
+
+---
+
+## 4. Compliance legale
+
+> Nota: non sono un avvocato; quanto segue riduce il rischio in modo concreto ma non lo azzera. Per un'app monetizzata vale una consulenza legale prima della v3 pubblica.
+
+### 4.1 Cosa possiamo usare con serenita
+
+- **Metadati fattuali**: nomi carte, numeri, HP, tipi, rarita, date di uscita, conteggi set. Sono fatti; la loro raccolta strutturata da parte nostra e nostra. Il dataset di origine e **MIT**, che ne consente esplicitamente uso e ridistribuzione.
+- **Il nostro schema, i nostri ID, le nostre traduzioni, i nostri conteggi**: interamente proprietari.
+
+### 4.2 Immagini — il punto sensibile, trattato con onesta
+
+Le immagini delle carte sono **opere protette di The Pokémon Company / Nintendo / Creatures / GAME FREAK**. Nessuna configurazione tecnica le rende "libere". Quello che possiamo fare e ridurre concretamente l'esposizione:
+
+| Mitigazione | Perche funziona |
+|---|---|
+| **Bassa risoluzione** (thumb 245px, detail 600px) | Inutilizzabili per stampa o contraffazione: riduce il danno di mercato, il fattore piu pesante in ogni valutazione |
+| **Nessun artwork isolato** | Serviamo sempre la **carta intera** come identificatore di prodotto, mai l'illustrazione ritagliata (uso espressivo, molto meno difendibile) |
+| **Nessun export/download di massa** | Nessuna funzione "scarica tutte le immagini", niente API pubblica sul bucket |
+| **Nessuna ridistribuzione del dataset immagini** | R2 servito solo all'app, con `Referer`/token check sul custom domain |
+| **Kill-switch per set** | Tabella `takedowns` in D1: il Worker smette di servire un set in **< 5 minuti**, senza rilasciare l'app |
+| **Procedura di notice-and-takedown** | Pagina pubblica + email dedicata + SLA dichiarato di 72h |
+| **Disclaimer marchi** | Gia presente in `docs/index.html` e `SettingsScreen.kt:294-311`: mantenerlo e renderlo visibile anche in Home |
+
+### 4.3 Sul punto "carte senza firma Pokemon" — raccomandazione contraria, motivata
+
+Hai chiesto di caricare le carte **senza la firma Pokémon**. Qui devo darti un'indicazione opposta, perche l'intuizione si ritorce contro:
+
+Il testo `© 2026 Pokémon / Nintendo / Creatures / GAME FREAK` stampato sulla carta e **Copyright Management Information**. Rimuoverlo o coprirlo e un **illecito autonomo e piu grave** (DMCA §1202 nell'ordinamento USA, e trattato con analogo sfavore in UE): trasforma un uso potenzialmente tollerato in una condotta che appare deliberatamente elusiva, ed e esattamente il tipo di dettaglio che pesa in una contestazione. **Un'immagine integrale a bassa risoluzione e piu difendibile di un'immagine alterata ad alta risoluzione.**
+
+**Quindi:**
+- ✅ **Riduciamo la qualita** — questo si, ed e la mitigazione che conta davvero
+- ✅ **Manteniamo intatto il copyright notice** della carta
+- ✅ **Rimuoviamo invece i watermark di terzi** (loghi di siti/aggregatori): quelli sono marchi altrui e non c'entrano con la carta
+- ❌ Non ritagliamo, non alteriamo, non copriamo la grafica originale
+
+### 4.4 Monetizzazione — attenzione specifica
+
+L'app ha **Google Play Billing** e una `PremiumScreen`. Vendere l'accesso a contenuti protetti alza sensibilmente il profilo di rischio.
+
+**Regola da fissare in modo vincolante:** il Premium vende **funzionalita** (statistiche avanzate, album illimitati, Deck Lab, export della propria collezione). **Le immagini delle carte non devono mai stare dietro il paywall**, ne integralmente ne per qualita. Da verificare in `ui/premium/PremiumScreen.kt` e `data/billing/PremiumManager.kt` durante M7.
+
+### 4.5 Documenti da aggiornare
+
+| Documento | Intervento |
+|---|---|
+| `docs/privacy-policy/index.html` | Rimuovere il riferimento a Pokewallet come fornitore dati; aggiungere Cloudflare (R2/D1/Workers) come sub-responsabile |
+| `docs/terms/index.html` | Aggiungere sezione **Proprieta intellettuale** + procedura di takedown con contatto |
+| **Nuovo** `docs/copyright/index.html` | Pagina dedicata: fonte dei dati, natura delle immagini, come richiedere rimozione, SLA 72h |
+| `util/AppLocale.kt:719-727` | Aggiornare il disclaimer in-app (oggi cita esplicitamente Pokewallet.io) |
+| Tutte le pagine `docs/` | Sono **solo in italiano** mentre l'app e IT/EN: allineare o dichiarare l'italiano come lingua ufficiale |
+
+---
+
+## 5. Roadmap completa
+
+### M0 — Ripresa e stato dei fatti · 3-4 giorni
+**Perche prima di tutto**: lo stato di Cloudflare e oggi ignoto e `local.properties` non esiste.
+
+| Attivita | Deliverable |
+|---|---|
+| `wrangler whoami`, `wrangler kv namespace list`, `wrangler deployments list --name pokevault-proxy` | Inventario risorse Cloudflare + costi attuali |
+| Verificare se il Worker risponde e se il cron `*/30` gira ancora | Report stato edge |
+| **Inventario di cosa c'e gia nel KV** (vedi 5.1 sotto) | Report riuso: cosa salviamo, cosa no |
+| Ricreare `local.properties` da `local.properties.example`; verificare `./gradlew assembleDebug` | Build locale funzionante |
+| Allineare `master` con `release/R2.0.21`; decidere la versione di partenza | Branch unico di lavoro |
+| Aggiornare `gradle/libs.versions.toml` (4 mesi di drift) e verificare che compili | Dipendenze aggiornate |
+| Fix CI: `master` nei trigger, JDK 17 ovunque, task Jacoco | CI verde sul branch di default |
+
+**Rischi**: credenziali Cloudflare non recuperabili -> ricreare account e risorse (mezza giornata). Aggiornamenti Gradle/AGP che rompono il build -> aggiornare per gradi, un blocco alla volta.
+
+#### 5.1 Cosa recuperiamo davvero da quello che e gia su Cloudflare
+
+Il KV `CACHE` (id `14e664fe...`) contiene materiale accumulato in mesi di uso. Va inventariato, ma serve chiarezza su cosa e riutilizzabile e cosa no:
+
+| Contenuto nel KV | Riutilizzabile? | Motivo |
+|---|---|---|
+| **Metadati set e carte** (`pokewallet:/sets`, `/sets/*`, `/cards/*`) | ✅ **Si, molto utile** | Alimenta la tabella **`set_map`** (codici set, ID, numeri) che serve al mapping IT->EN per i prezzi. Ci risparmia decine di richieste PokeWallet e lavoro manuale |
+| **`pokewallet:real-totals:index:v1`** (conteggi carte reali per set, frutto di mesi di backfill) | ✅ **Si** | Diventa il valore di riferimento per validare i conteggi del nostro catalogo. E lavoro gia fatto: si importa in D1, non si ricalcola |
+| **Immagini carte** (`/images/*`, base64 dentro JSON) | ⚠️ **Solo come ponte** | Sono immagini **in inglese**, e l'obiettivo e un catalogo italiano. Inoltre sono base64 in KV (+33% di dimensione, `JSON.parse` a ogni HIT). Contraddirebbero la coerenza IT: **non migrarle in R2** |
+| Risposte `/search` | ❌ No | Cache effimera, TTL breve, nessun valore residuo |
+
+**Quindi si**, quello che c'e va sfruttato — ma il valore vero sono i **metadati e i conteggi**, non le immagini. Le immagini KV sono inglesi e sostituirle con quelle italiane e precisamente l'obiettivo del progetto. L'inventario in M0 (`wrangler kv key list --namespace-id ...`) dice esattamente quante chiavi ci sono e di che tipo, e da li si decide cosa importare in D1.
+
+Deliverable: script `cloudflare/ingest/import-kv-legacy.js` che estrae metadati e real-totals dal KV e li scrive in D1 come base di partenza.
+
+---
+
+### M1 — Fondamenta Cloudflare · 1 settimana
+
+| Attivita | Deliverable |
+|---|---|
+| Creare D1 `pokevault-catalog` + schema versionato | `cloudflare/schema/001_init.sql` |
+| Creare R2 `pokevault-cards` + custom domain `img.pokevault.app` | Bucket attivo, egress zero |
+| Scaffold Worker `pokevault-api` (nuovo, affiancato al proxy) | `cloudflare/api/` |
+| Ambienti `staging` / `production` in wrangler | Deploy isolati |
+| **Rimuovere `account_id` e `.wrangler/` da git**, spostare in secret | Leak chiuso |
+
+**Deliverable chiave**: `api-staging.pokevault.app/v1/health` risponde 200.
+**Rischio**: dominio `pokevault.app` non nel nostro account -> fallback su `*.workers.dev` (nessun blocco).
+
+---
+
+### M2 — Pipeline di ingest, pilota · 1,5 settimane
+
+| Attivita | Deliverable |
+|---|---|
+| Script ingest Node (`cloudflare/ingest/`) con `sharp` | Codice ingest |
+| Ingest di **3 set pilota**: `me05`, `sv10`, `swsh12` | ~550 carte in D1 + R2 |
+| Verifica copertura IT reale carta per carta | **Report copertura** — dato che decide lo scope |
+| Placeholder generato per le carte `missing` | Asset placeholder |
+| `manifest.json` + logica di delta | Ingest incrementale |
+
+**Deliverable chiave**: report di copertura IT. Se un set moderno risultasse sotto il 90%, si rivede la soglia qui, non dopo.
+**Rischio**: buchi IT piu ampi del previsto -> soglia abbassata a 80% + placeholder, oppure scansioni manuali mirate sui set piu usati.
+
+---
+
+### M3 — API di catalogo · 1 settimana
+
+| Attivita | Deliverable |
+|---|---|
+| `/v1/manifest`, `/v1/sets`, `/v1/sets/{id}/cards`, `/v1/cards/{id}` | API funzionante |
+| Cache API + KV, `ETag` e `Cache-Control` corretti | p95 < 100 ms |
+| Ricerca per nome con indice D1 | Sostituisce `/search` di PokeWallet |
+| Rate limiting + tabella `takedowns` operativa | Guardie attive |
+| Test automatici del Worker (oggi: **zero**) | `cloudflare/api/test/` |
+
+**Deliverable chiave**: API in staging con dati reali dei 3 set pilota.
+
+---
+
+### M4 — Integrazione Android · 2 settimane
+
+| Attivita | File principali |
+|---|---|
+| Interfaccia `CardCatalogSource` + 2 implementazioni | `data/remote/CardCatalogSource.kt` (nuovo), `RepositoryProvider.kt` |
+| Client Retrofit nuova API | `data/remote/PokeVaultApiService.kt` (nuovo) |
+| **Room v2 + `Migration(1,2)` reale** | `data/local/PokeVaultDatabase.kt`, `app/schemas/.../2.json` |
+| Coil -> `img.pokevault.app`, **rimozione interceptor `X-API-Key`** | `CardsVaultTCGApp.kt:66-103` |
+| Sostituire `buildCardImageUrl`/`buildSetImageUrl` | `PokeTcgRepository.kt:1482-1493` |
+| Delta-sync nei worker WorkManager | `workers/SetsSyncWorker.kt`, `CardsSyncWorker.kt` |
+| Flag remoto + rollback istantaneo | `data/remote/RemoteConfig.kt` (nuovo) |
+
+**Deliverable chiave**: build debug che funziona **interamente** sul catalogo proprietario.
+**Rischio (il piu serio del piano)**: la migration Room e delicata e oggi non esiste alcuna infrastruttura -> test strumentato di migrazione **obbligatorio** prima del merge; in caso di fallimento, ricostruzione della cache da zero (non e persistenza utente: i dati utente stanno su Firestore).
+
+---
+
+### M5 — Ingest completo + automazione · 1 settimana
+
+| Attivita | Deliverable |
+|---|---|
+| Ingest di tutti i set moderni (SV + SWSH + ME) | ~10.000 carte, ~470 MB su R2 |
+| `catalog-ingest.yml` schedulato + issue automatica | Automazione viva |
+| `prices-sync.yml` + `set_map` completa | Prezzi indipendenti da runtime PokeWallet |
+| Dashboard di monitoraggio (`sync_runs`) | Visibilita |
+
+**Deliverable chiave**: una nuova espansione entra nel catalogo **senza intervento umano**.
+
+---
+
+### M6 — Beta e taglio del cordone · 1,5 settimane
+
+| Attivita | Deliverable |
+|---|---|
+| Beta Play Store (internal -> closed), flag ON | Feedback reale |
+| Monitoraggio p95, error rate, costi Cloudflare | Metriche |
+| Rollout progressivo in produzione | Release stabile |
+| **Spegnimento `pokevault-proxy`**, rimozione codice PokeWallet dal client | Dipendenza catalogo azzerata |
+| Aggiornare tutti i documenti legali (sezione 4.5) | Compliance allineata |
+
+**Deliverable chiave**: PokeWallet resta **solo** come sorgente prezzi, dietro il nostro Worker.
+**Rischio**: regressioni non viste in beta -> il flag remoto consente rollback in minuti, quindi lo spegnimento del proxy avviene **solo dopo 2 settimane stabili**.
+
+---
+
+### M7 — Bugfix e pulizia · 2 settimane
+Vedi sezione 8. Include la verifica del punto 4.4 (paywall e immagini).
+
+---
+
+### M8 — Backfill storico progressivo · continuo
+Estensione dello `scope.json` era per era, in ordine di richiesta degli utenti. Nessun rilascio dell'app necessario: i set si auto-pubblicano al superamento della soglia di copertura.
+
+### Riepilogo
+
+| Milestone | Durata | Cumulato |
+|---|---|---|
+| M0 Ripresa | 3-4 gg | ~1 sett |
+| M1 Fondamenta CF | 1 sett | ~2 sett |
+| M2 Ingest pilota | 1,5 sett | ~3,5 sett |
+| M3 API | 1 sett | ~4,5 sett |
+| M4 Android | 2 sett | ~6,5 sett |
+| M5 Ingest completo | 1 sett | ~7,5 sett |
+| M6 Beta + taglio | 1,5 sett | ~9 sett |
+| M7 Bugfix | 2 sett | **~11 sett** |
+| M8 Storico | continuo | — |
+
+### Costi a regime
+
+| Voce | Costo |
+|---|---|
+| Workers Paid (10M richieste/mese) | **$5/mese** |
+| D1 | Incluso (free tier ampiamente sufficiente) |
+| R2 (~500 MB, egress zero) | **$0** (free tier 10 GB) |
+| GitHub Actions | **$0** (repo pubblico / free tier) |
+| Fonte catalogo IT | **$0** — gratuita, nessuna API key, nessun rate limit (verificato) |
+| PokeWallet (solo prezzi) | **$0** — resta dentro il piano gratuito da 1000 req/giorno usando ~60-240 (vedi 2.3) |
+| Firebase | Invariato |
+
+---
+
+## 6. Tabella pro/contro
+
+### Fonte del catalogo
+
+| Soluzione | Pro | Contro |
+|---|---|---|
+| **Dataset proprietario su D1 con ingest automatico** ✅ | Nessuna dipendenza a runtime; schema e ID nostri; query vere all'edge; costo ~$5/mese; italiano nativo | Va costruita la pipeline; dipendenza sulla fonte al momento dell'ingest |
+| Restare su PokeWallet | Zero lavoro | Catalogo inglese; costo per chiamata; single point of failure; nessun controllo |
+| Webscraping | Nessuna dipendenza da API | Fragile (HTML che cambia); lento; esposto a blocchi e ToS; **nessun vantaggio legale** |
+| Dataset 100% manuale | Controllo totale | Migliaia di inserimenti; irrealistico sullo storico |
+
+### Immagini
+
+| Soluzione | Pro | Contro |
+|---|---|---|
+| **R2 self-host low-res** ✅ | Velocissimo; egress zero; controllo totale; takedown in minuti; funziona offline via cache | Ospitiamo noi contenuti protetti (mitigato in sez. 4) |
+| Hotlink upstream | Zero storage, zero rischio hosting | Lentezza; dipendenza runtime; puo sparire da un giorno all'altro |
+| Cache on-demand | Storage minimo | Prima visualizzazione lenta; dipendenza runtime persiste |
+
+### Ingest
+
+| Soluzione | Pro | Contro |
+|---|---|---|
+| **GitHub Actions** ✅ | Nessun limite di CPU; log ispezionabili; gratis; `workflow_dispatch` manuale | Fuori da Cloudflare (accettabile: e build-time, non runtime) |
+| Worker cron | Tutto in un posto | Limiti CPU-time; il cron attuale e gia al limite; debug difficile |
+
+### Copertura linguistica
+
+| Soluzione | Pro | Contro |
+|---|---|---|
+| **Solo IT, set sopra soglia** ✅ | Coerenza totale; nessun mix; catalogo piu leggero e veloce | Catalogo iniziale piu piccolo; storico assente all'inizio |
+| IT + fallback EN | Copertura completa | Mix visivo incoerente; non e cio che vuoi |
+| Multi-lingua | Massima copertura | Storage e pipeline moltiplicati; complessita alta |
+
+---
+
+## 7. Raccomandazione finale
+
+**Procedere con: dataset proprietario su D1 + immagini low-res su R2 + ingest automatico via GitHub Actions + PokeWallet isolato ai soli prezzi dietro il Worker.**
+
+Le ragioni, in ordine di peso:
+
+1. **Risolve la causa, non il sintomo.** Oggi Cloudflare e una cache davanti a un fornitore che controlla catalogo, immagini, prezzi e lingua. Dopo la migrazione, Cloudflare **e** il backend: PokeWallet diventa un dettaglio sostituibile in un file.
+2. **L'italiano diventa possibile.** E l'obiettivo che PokeWallet non puo soddisfare: le sue carte sono inglesi. Le verifiche di oggi confermano che le immagini italiane esistono, sono native e sono aggiornate.
+3. **L'automazione e reale.** Con ingest quotidiano e auto-pubblicazione a soglia, una nuova espansione entra da sola. Nessun intervento, nessun rilascio.
+4. **I costi crollano.** Da chiamate a consumo verso un fornitore esterno a **$5/mese** di Workers Paid, con D1 e R2 nel free tier.
+5. **La velocita migliora strutturalmente**, per quattro motivi indipendenti e cumulativi:
+
+   | Oggi | Dopo | Perche |
+   |---|---|---|
+   | Il client scarica **interi set** e filtra in locale (KV non sa interrogare) | Query SQL all'edge con indici, si scarica solo cio che serve | D1 e SQLite distribuito |
+   | Immagini **full-res** decodificate sul telefono (55 `AsyncImage` senza `ImageRequest.size()`) | WebP **245px / 600px** pre-generati + `size()` impostata | Meno banda, molta meno memoria |
+   | Immagini servite come **base64 dentro JSON in KV** (+33% peso, `JSON.parse` a ogni HIT) | Byte binari diretti da R2, egress zero | Nessuna serializzazione |
+   | `SetsSyncWorker` fa **full refresh** (`forceRefresh = true`) | **Delta-sync** su `catalog_version` | Si scarica solo il cambiato |
+
+   In piu spariscono i **loop di rete sequenziali** di `PokeTcgRepository.kt` (fino a `for (page in 1..3)` in serie per risolvere una carta), oggi il collo di bottiglia di scanner e ricerca.
+6. **Il rischio legale e gestito, non ignorato.** Bassa risoluzione, carta integrale con copyright notice intatto, nessun export di massa, kill-switch per set e procedura di takedown documentata. Con l'avvertenza esplicita della sezione 4.3: **non rimuovere la firma Pokémon** — e la mossa che peggiora la posizione invece di migliorarla.
+
+**Sulla scelta ingest vs webscraping** (tua domanda diretta): l'ingest e la scelta giusta e le verifiche lo confermano — fonte aggiornata **oggi stesso**, commit multipli al giorno, dataset MIT, immagini italiane native. Lo scraping sarebbe piu fragile, piu lento e non darebbe alcun vantaggio legale. Resta comunque disponibile come piano B mirato per singoli set scoperti, senza cambiare architettura.
+
+**Il rischio maggiore del piano non e Cloudflare: e la migration Room** (M4). Oggi il database e a `version = 1` senza alcuna infrastruttura di migrazione, con un commento nel codice che avverte che ogni cambio di schema richiede una `Migration` esplicita. Va affrontata con test strumentato dedicato prima del merge.
+
+---
+
+## 8. Lista bugfix e pulizia (M7)
+
+### Priorita alta — correttezza e sicurezza
+
+| # | Intervento | Dove |
+|---|---|---|
+| 1 | **Migration Room reale** + test strumentato di migrazione | `data/local/PokeVaultDatabase.kt` |
+| 2 | `HttpLoggingInterceptor` attivo in release -> gate su `BuildConfig.DEBUG` | `LimitlessTcgRepository.kt:25-28` |
+| 3 | Rimuovere `account_id` e `.wrangler/cache/wrangler-account.json` da git; aggiungere `.wrangler/` al `.gitignore` di root | `pokevault-proxy-worker/wrangler.toml:3` |
+| 4 | Rimuovere `POKEWALLET_API_KEY` e `POKETCG_API_KEY` dal client (key mai piu nell'APK) | `app/build.gradle.kts:28-31` |
+| 5 | Set giapponesi taggati erroneamente come ENG | `viewmodel/SetsViewModel.kt:118` |
+| 6 | Verificare che le immagini non finiscano dietro paywall (sez. 4.4) | `ui/premium/PremiumScreen.kt`, `data/billing/PremiumManager.kt` |
+| 7 | **BUG PRODUZIONE confermato 2026-09-07: `normalizeCardNumber()` mostra la carta sbagliata per le sotto-collezioni "Shiny Vault"** — vedi dettaglio sotto | `pokevault-proxy-worker/src/index.ts:530-536` |
+
+#### Dettaglio bug #7 — immagine sbagliata per le carte "Shiny Vault" (preesistente, non causato dalla sessione del 2026-09-07)
+
+**Sintomo**: l'utente che apre la carta `SV001` (Rowlet) dell'espansione `swsh45sv` (Shiny Vault, secret rare di Shining Fates) vede invece l'immagine di `Yanma`, la carta numero 1 del set base `swsh45`.
+
+**Causa**: `normalizeCardNumber(raw)` (riga 530-536) fa `raw.replace(/[^0-9]/g, '')` — rimuove **tutte** le lettere dal numero carta prima di cercare la chiave immagine su R2. Per un numero come `"SV001"` il risultato e' `"1"`, che collide con qualunque carta del set base numerata `1`. Le immagini delle Shiny Vault sono salvate nella **stessa cartella R2** del set base (`it/SWSH45/`, non una cartella separata `it/SWSH45SV/`), quindi la collisione e' reale, non solo teorica — verificato in produzione: `GET /images/it/SWSH45/SV001?size=low` risponde 200 con l'immagine di Yanma (carta base #1), confermato confrontando con D1 (`SELECT nome FROM cards WHERE expansion_id='swsh45' AND card_number='1'` -> "Yanma").
+
+**Portata**: 122 carte di `swsh45sv` + **confermato anche su Trainer Gallery** (`swsh10tg` almeno, visto fallire durante la run del 2026-09-07 su carte come `SWSH10_IT_TG22.png`...`TG30.png`) — stesso identico meccanismo (prefisso letterale nel numero carta, `normalizeCardNumber()` lo rimuove). Da considerare probabile su **tutte** le sotto-collezioni a prefisso: `swsh9tg`, `swsh11tg`, `swsh12tg` (altri Trainer Gallery), `swsh12pt5gg` (Galarian Gallery). Stima totale espansioni potenzialmente coinvolte: 5-6, per qualche centinaio di carte complessive — non uno o due casi isolati ma **una categoria intera di sotto-collezioni**, tutte con lo stesso fix.
+
+**Perche' non e' stato toccato oggi**: `normalizeCardNumber()` e' condivisa da piu' percorsi (risoluzione immagini, matching prezzi via ricerca PokeWallet) — una modifica va verificata su tutti gli usi, non solo sulle immagini, prima di un deploy dedicato. Rimandato a M7 su decisione esplicita dell'utente (non e' un blocco per la migrazione D1/R2 in corso).
+
+**Spiega anche perche' la ricompressione WebP fallisce "in blocco" su queste carte**: lo script di ricompressione cerca la chiave `it/SWSH45/SWSH45_IT_SV001.png` (che non esiste — verificato con `wrangler r2 object get`, "specified key does not exist"), perche' il nome file reale non include il prefisso `SV`. Non e' un problema della pipeline di conversione: e' lo stesso bug di fondo, visto da un angolo diverso.
+
+### Priorita alta — performance
+
+| # | Intervento | Dove |
+|---|---|---|
+| 7 | **`ImageRequest.size()` su tutte le 55 `AsyncImage`** — causa #1 dei consumi memoria | Tutte le schermate con Coil |
+| 8 | Loop di rete sequenziali -> `async`/`awaitAll` (pattern gia usato nel progetto) | `PokeTcgRepository.kt` righe 438, 497, 534, 576, **600**, 801, 856 |
+| 9 | `Column + verticalScroll` su liste potenzialmente lunghe -> `LazyColumn` | `CollectionScreen.kt`, `StatsScreen.kt`, `SettingsScreen.kt` |
+| 10 | Rimuovere PaddleOCR + TensorFlow Lite (nessun `.tflite` esiste, `assets/` non c'e) | `ocr/PaddleOCREngine.kt`, `app/build.gradle.kts` |
+
+### Priorita media — pulizia
+
+| # | Intervento | Dove |
+|---|---|---|
+| 11 | **Cancellare i duplicati orfani in root** | `util/AppLocale.kt`, `viewmodel/DeckLabViewModel.kt` |
+| 12 | `safeImageUrl()` duplicato 7 volte -> utility unica in `util/` e applicata ovunque | 7 file + i 3 punti che non la usano |
+| 13 | Rinominare i file `_v2`/`_v3` e allineare nome file/classe | `MainActivity_v2.kt`, `CardsVaultTCGApp.kt`, `AppNavigation_v3.kt`, `HomeScreen_v2.kt` |
+| 14 | Logging unificato su Timber (38 usi di `Log`/`println` residui) | `PaddleOCREngine.kt`, `MLKitOCREngine.kt`, `LimitlessTcgRepository.kt` |
+| 15 | Spezzare i file monolitici (`DeckLabScreen.kt` 2240 righe, `PokeTcgRepository.kt` 1735) | — |
+| 16 | Rimuovere `FORCED_REAL_TOTALS_BY_SET_CODE = { ME03: 124 }` — i conteggi ora sono nostri in D1 | `pokevault-proxy-worker/src/index.ts:82-88` |
+| 17 | Rimuovere `TranslationService` (MyMemory) se le traduzioni arrivano dal catalogo IT | `data/remote/TranslationService.kt` |
+
+### Priorita media — repository e processo
+
+| # | Intervento | Dove |
+|---|---|---|
+| 18 | **`git filter-repo`/BFG sui 23 AAB in cronologia**: 327 MB -> pochi MB (richiede force-push coordinato) | Storia git |
+| 19 | `.gitignore` di root: aggiungere `.kotlin/`, `.wrangler/`, `app/release/`, `*.aab`, `*.apk`, `node_modules/` | `.gitignore` |
+| 20 | Eliminare i 37 branch remoti obsoleti; adottare tag di release | — |
+| 21 | Consolidare 12 markdown (3848 righe) in `README.md` + `docs/` reale; aggiornare i comandi wrangler v2 deprecati | Root |
+| 22 | Rimuovere `.kotlin/errors/*.log` e `.idea/` da git | — |
+| 23 | Sostituire `ExampleUnitTest.kt` / `ExampleInstrumentedTest.kt` (template mai toccati) | `app/src/test`, `app/src/androidTest` |
+
+### Priorita bassa — qualita
+
+| # | Intervento |
+|---|---|
+| 24 | Migrare `AppLocale.kt` (1019 righe di getter) verso `strings.xml` + `stringResource` — grosso, valutare se ne vale la pena ora che il catalogo e IT-only |
+| 25 | Portare la copertura test al 50% (target gia dichiarato in `README_TESTING.md`, mai raggiunto) |
+| 26 | Tradurre le pagine `docs/` in inglese o dichiarare l'italiano come lingua ufficiale |
+| 27 | Convenzione commit unica (oggi misto IT/EN, prefissi `- `) |
+
+---
+
+## 9. Verifica
+
+### Per milestone
+
+| Milestone | Come si verifica |
+|---|---|
+| M0 | `./gradlew assembleDebug` passa; CI verde su `master`; inventario Cloudflare scritto |
+| M1 | `curl api-staging.pokevault.app/v1/health` -> 200; `wrangler d1 execute --command "SELECT 1"` |
+| M2 | Report copertura: numero carte IT presenti/mancanti per i 3 set pilota; immagini raggiungibili su `img.pokevault.app` |
+| M3 | Confronto risposta `/v1/sets/me05/cards` vs dati attesi; p95 < 100 ms su 100 richieste |
+| M4 | Build debug con flag ON: Pokedex, SetDetail, Collection, Scanner, DeckLab tutti funzionanti; **test strumentato di migrazione Room 1->2 verde** |
+| M5 | Forzare `workflow_dispatch` su un set: il delta viene applicato e `catalog_version` incrementa |
+| M6 | Beta: crash-free rate ≥ 99,5%; costi Cloudflare entro $5/mese; nessuna regressione segnalata |
+| M7 | Suite test verde; APK piu leggero (rimozione TFLite misurabile); repo sotto i 50 MB |
+
+### Test end-to-end del sistema automatico
+
+1. Aggiungere un set fittizio a `scope.json` e lanciare `workflow_dispatch`
+2. Verificare: righe in D1, oggetti in R2, `catalog_version` incrementata, issue GitHub aperta
+3. Aprire l'app: il nuovo set compare **senza aggiornamento dell'app**
+4. Simulare copertura < 90%: il set resta `published = 0` e invisibile
+5. Portare la copertura sopra soglia: il set si pubblica da solo alla run successiva
+6. Inserire una riga in `takedowns`: il Worker smette di servire il set entro 5 minuti
+
+### Regressioni da controllare esplicitamente in M4
+
+Scanner OCR (risoluzione carta da foto), import decklist in DeckLab, conteggi di completamento set, statistiche di collezione, wishlist, album obiettivo. Sono tutti percorsi che oggi dipendono dagli ID PokeWallet: la mappatura verso i nuovi ID italiani va verificata uno per uno.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-07, mattina (M1 sostanzialmente completato)
+
+> Sessione ripresa dal checkpoint di ieri sera. Ambiente confermato intatto. Progressi sostanziali su M1 (D1) e M2 (ricompressione immagini). Tutto verificato con comandi reali, nessuna ipotesi.
+
+### D1 — creato, popolato, verificato funzionante
+
+- Database `pokevault-catalog` creato (id `2a219637-d11d-42fe-b888-8b95f2d7e6f7`), schema in **`schema/001_init.sql`** applicato: 8 tabelle (`expansions`, `cards`, `card_prices`, `set_map`, `sync_runs`, `takedowns`, `api_budget`, `catalog_meta`)
+- **Importate tutte le 15.406 carte + 106 espansioni** dal blob JSON esistente, via **`scripts/import-catalog-to-d1.mjs`** (nuovo script, genera SQL batchato — batch da 50 righe: D1 rifiuta batch da 300 con `SQLITE_TOOBIG`, e rifiuta `BEGIN TRANSACTION`/`COMMIT` espliciti, gestisce l'atomicita da solo)
+- Query verificate: **~1ms** per lettura, contro i 10,4 MB del blob attuale
+- **Binding aggiunto**: `wrangler.toml` (`d1_databases`) + `Env.pokevault_catalog` in `src/index.ts` — **non deployato**
+
+### Bug reale trovato e corretto: doppia codifica UTF-8 -> Windows-1252 (non Latin-1)
+
+Il catalogo sorgente ha ~500+ stringhe corrotte (`"PokÃ©mon"` invece di `"Pokémon"`, `"unâ€™Energia"` invece di `"un'Energia"`). Investigazione:
+- Prima ipotesi (Latin-1) sbagliata: il repair andava a vuoto su ~500 stringhe che mischiavano caratteri gia corretti e sequenze corrotte nello stesso testo
+- Causa reale: **Windows-1252**, non Latin-1 (differiscono nel blocco 0x80-0x9F: cp1252 ha lì `€ ‚ ƒ „ … † ‡ ˆ ‰ Š ‹ Œ Ž ' ' " " • – — ˜ ™ š › œ ž Ÿ`, Latin-1 ha codici di controllo)
+- Fix in **`scripts/import-catalog-to-d1.mjs`** (`repairMojibake()`): ripara solo le **sequenze** che sembrano UTF-8 mal decodificato (lead byte + continuation), non l'intera stringa — cosi non tocca i caratteri gia corretti. Include mappa esplicita CP1252 per il blocco 0x80-0x9F
+- Bug collaterale trovato durante la verifica: il campo `danno` degli attacchi (es. `"30×"` per attacchi moltiplicatori) non veniva riparato — corretto
+- **Verificato: 0 residui reali** su tutte le 15.406 carte (i 2 "falsi positivi" rilevati in verifica erano testo italiano legittimo: `abilità"` — à corretto seguito da virgolette corrette, non mojibake)
+
+### API `/v1/*` su D1 — costruite e testate, non deployate
+
+Nuove funzioni in `src/index.ts` (`handleV1ApiRequest` + helper), **puramente additive**: non toccano nessuna route esistente, non richiedono il binding KV/CACHE.
+
+| Route | Verificata con |
+|---|---|
+| `GET /v1/health` | `wrangler dev --remote` + curl -> `{"status":"ok","catalog_version":1}` |
+| `GET /v1/expansions` | Lista tutte le espansioni `published=1` |
+| `GET /v1/expansions/{id}/cards` | Testato su `me04` -> carte corrette con `attacchi_json` |
+| `GET /v1/cards/{cardId}` | Testato su `DP1_IT_1.png` -> record completo, encoding corretto |
+
+Testate con **bindings reali** (D1, R2, KV) via `wrangler dev --remote`, non mock. Type-check pulito (`npm run type-check`).
+
+### Ricompressione WebP — pipeline corretta, RUN COMPLETA IN CORSO
+
+Percorso di debug (utile se si ripresenta): wrangler v3 crashava nativamente su Windows su *qualsiasi* `r2 object get/put`; **causa reale scoperta**: non era instabilita di v3, era l'uso accidentale dello **storage locale simulato** invece di quello remoto (mancava `--remote`, obbligatorio esplicito su v4). Con `--remote` sempre presente, **concorrenza 8 e stabile e corretta** (validata su 175 carte reali, 0 fallimenti).
+
+Scoperti e risolti **3 pattern di chiavi R2 diversi** per le immagini (verificato sondando R2 direttamente, non ipotizzato):
+| Set | Pattern reale |
+|---|---|
+| Standard (DP1, XY1, SM1, SWSH1, ME04, ...) | `it/{SET}/{SET}_IT_{numero}.png` |
+| SVP (promo) | `it/SVP/{numero}.png` (cartella maiuscola, numero nudo) |
+| MEP (promo) | `it/mep/{numero}.png` (cartella **minuscola**, numero nudo) |
+
+`scripts/recompress-webp.mjs` ora prova tutte le combinazioni (2 case cartella × 2 pattern nome), con retry su errori transitori (non su "key not found", permanente).
+
+**Run completa lanciata in background** (15.406 carte, concorrenza 8, log in `recompress-full-run.log` + `scripts/recompress-progress.ndjson` per resume). A metà mattina: **>125 carte, 0 fallimenti**. Upload additivi (`.webp` accanto a `.png` esistente, nessuna cancellazione) — sicuro anche se interrotta a meta.
+
+### Non ancora fatto — decisioni in sospeso per l'utente
+
+1. **Nessun deploy del Worker**: le modifiche a `src/index.ts` (binding D1, route `/v1/*`, priorita `.webp` su `.png`) sono solo locali. Le route `/v1/*` sono a rischio zero (additive). La riscrittura priorita webp/png **cambia comportamento delle route esistenti** (in meglio, ma e' pur sempre un cambio in produzione) — da confermare prima di `wrangler deploy`
+2. **Import-catalog-to-d1.mjs e' one-shot**: se il blob JSON cambia (nuove carte caricate) va rilanciato manualmente. Non ancora integrato in un'automazione (quello e' M2/M5 dell'architettura originale: ingest automatico da TCGdex per i set futuri)
+3. **`sort_order` e `logo_key` in `expansions`**: non c'e' un manifest separato nel payload R2 attuale con l'ordine reale dei set — tutti a `100` per ora. L'ordinamento cronologico corretto e' un follow-up, non blocca la migrazione strutturale
+4. Al termine della run immagini: verificare il risparmio finale reale (stimato ~85-87% su ~2,49 GB -> ~320-370 MB) e decidere se/quando aggiornare l'ordine `imageExtensions` nel Worker per usare i `.webp` appena caricati
+
+---
+
+## 📍 CHECKPOINT — 2026-09-07, pomeriggio (deploy in produzione + run immagini completata)
+
+### Deploy eseguito (con conferma esplicita dell'utente dopo revisione diff)
+
+L'utente ha rivisto il diff completo (`wrangler.toml` + `src/index.ts`) prima di autorizzare. `wrangler deploy` eseguito con successo. **URL reale del Worker, ora noto**: `https://pokevault-proxy.pokevault-emanu.workers.dev`.
+
+Verificato in produzione, tutto confermato funzionante:
+- Route `/v1/health`, `/v1/expansions`, `/v1/cards/{id}` -> 200
+- Route esistenti (`/ita/catalog.json`, `/ita/prices.json`, `/images/it/*`) -> 200, nessuna regressione
+- **Priorita webp/png funziona esattamente come progettato**: carta gia convertita (`SVP_IT_1`) servita come `.webp`; carta non ancora convertita al momento del test (`SV10_IT_1`) servita come `.png` — fallback automatico confermato con richieste reali, non ipotizzato
+
+### Run completa di ricompressione — TERMINATA
+
+| Metrica | Valore finale |
+|---|---|
+| Carte totali | 15.406 |
+| Convertite con successo | **15.059** |
+| Fallite | 347 |
+| Peso PNG originale | 2.307,5 MB |
+| Peso WebP | 335,8 MB |
+| **Risparmio reale** | **85,4%** |
+| Durata | Circa 6 ore e mezza (avviata ~09:23, terminata ~15:53), rallentata nel tempo dall'overhead cumulativo della CLI wrangler (~60 carte/minuto in media nella seconda meta, misurato con campionamenti diretti, non stimato) |
+
+### I 347 fallimenti — analizzati a fondo, DUE cause distinte (non una sola come pensato inizialmente)
+
+**A) Bug "prefisso letterale nel numero carta" — 217 carte** (SWSH45 Shiny Vault 122, SWSH9/10/11 Trainer Gallery 30+30+30, piu singoli in ME01/SWSH12PT5/XY1/SM2/BW2). Immagine ESISTE su R2 ma sotto una chiave diversa da quella attesa (numero nudo, non `{SET}_IT_{numero}`). Causa radice gia identificata e documentata in dettaglio sopra (bugfix #7, sez. 8): `normalizeCardNumber()` nel Worker rimuove i prefissi letterali (`SV`, `TG`) prima di cercare la chiave — bug di PRODUZIONE preesistente che causa anche la visualizzazione della carta sbagliata per gli utenti, non solo il fallimento della ricompressione.
+
+**B) BW4 "Next Destinies" — 94 carte, causa DIVERSA, scoperta oggi**: non e' il bug del prefisso (i numeri sono nudi, nessun prefisso letterale coinvolto). Verificato direttamente contro il Worker live: `BW4/1` e `BW4/100` esistono (200), `BW4/2`, `BW4/5`, `BW4/50` no (404) — **copertura italiana genuinamente incompleta e a macchia di leopardo per questo set storico**, non un bug di codice. E' esattamente lo scenario che la regola di copertura a soglia (sez. 2.2 del piano: pubblica solo sopra 90%, placeholder per le mancanti, auto-guarigione ai run successivi) e' pensata per gestire.
+
+**C) 36 fallimenti transitori** (blip di rete, un timeout 504) — passaggio di pulizia lanciato subito dopo la fine della run principale, sfruttando la resumibilita' (il file di progresso segna solo le carte riuscite come "fatte": rilanciare lo stesso comando ritenta automaticamente tutte le altre 347, senza toccare le 15.059 gia buone).
+
+### Aggiornamento alla stima di rischio del bugfix #7 (sez. 8)
+
+La portata reale e' **maggiore** di quanto scritto inizialmente: non "5-6 espansioni per qualche centinaio di carte" ma **almeno 217 carte confermate su 6 espansioni diverse**, con SWSH45 (Shiny Vault) da solo per 122. Il fix resta bene isolato (una sola funzione, `normalizeCardNumber()`) ma l'impatto utente-visibile (carta sbagliata mostrata) e' piu esteso di quanto stimato.
+
+### Bugfix #7 — RISOLTO E DEPLOYATO (2026-09-07, stesso giorno della scoperta)
+
+Su richiesta esplicita dell'utente ("fixa ora"), il bug e' stato corretto lo stesso giorno invece di essere rimandato a M7.
+
+**Fix applicato** in `buildItalianCardKeyCandidates()` (`src/index.ts`): quando il numero carta contiene lettere (non e' puramente numerico, `/^\d+$/`), i candidati "solo cifre" (`normalized`, `padded`) non vengono piu generati affatto — solo le varianti che preservano il testo originale (raw, maiuscolo, minuscolo). Per i numeri puramente numerici il comportamento e' identico a prima (nessuna regressione). Confermato con `normalizeCardNumber()` usata in **un solo punto** nel file (non condivisa con la logica prezzi, che ha una funzione propria gia corretta) — blast radius piccolo come sperato.
+
+**Verificato con richieste reali** (`wrangler dev --remote`, poi in produzione dopo deploy):
+| Caso | Prima | Dopo |
+|---|---|---|
+| `SWSH45/SV001` (bug) | 200, immagine di Yanma (sbagliata) | **404** |
+| `SWSH10/TG22` (bug) | 200, immagine sbagliata | **404** |
+| `SWSH45/1` (Yanma, carta reale) | 200 | 200 (invariato) |
+| `DP1/1`, `DP1/007` (casi normali) | 200 | 200 (invariato) |
+| `SVP/1` (promo) | 200 | 200 (invariato) |
+
+**Lezione operativa importante, riemersa oggi**: il primo test in produzione post-deploy ha dato un falso negativo — `SWSH45/SV001` continuava a rispondere 200 con l'immagine sbagliata **anche dopo il deploy del fix**, perche' il Worker cachea le risposte immagine in **KV** (non Cache API — verificato leggendo il tipo, e' `env.CACHE: KVNamespace`) con TTL 90 giorni, e la risposta sbagliata era gia in cache da prima. **Deployare un fix di logica non invalida automaticamente le risposte gia cachate.** Risolto con `wrangler kv bulk delete` (162 chiavi identificate via `kv key list --prefix "pokewallet:/images/it/{SET}/"` sui set coinvolti, poi cancellate in blocco) — dopo la purge, `X-Cache-Status: MISS` confermato e risposta corretta (404) servita fresca. **Da tenere a mente per ogni futuro fix che tocca `buildItalianCardKeyCandidates`/`handleItalianR2AssetRequest`: serve sempre un purge mirato delle chiavi KV interessate dopo il deploy, altrimenti il fix resta invisibile fino a naturale scadenza TTL (90 giorni).**
+
+**Cosa resta aperto**: il fix previene la visualizzazione della carta SBAGLIATA, ma le 311 immagini (217 bug + 94 BW4) restano assenti — servono ancora gli asset reali (fonte da individuare, probabilmente la stessa usata per il resto del dataset storico) per completare la copertura, non solo il fix di codice.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-07, tardo pomeriggio (prototipo ingest automatico TCGdex, primo set reale importato)
+
+### Commit e push eseguiti
+
+Tutto il lavoro di M1/M2 di oggi (schema D1, script import/ricompressione, modifiche Worker inclusi i due fix) e' stato committato (`242ce3a`) e pushato su `origin/master`. `app/google-services.json` lasciato intenzionalmente fuori (modifica pre-esistente non correlata, non nostra).
+
+### Verifica copertura storica: confronto TCGdex vs D1
+
+Confrontati i 106 id espansione in D1 con l'elenco completo TCGdex (esclusi Pokemon TCG Pocket `A#`/`B#`, una linea di prodotto digitale separata dal cartaceo). La maggior parte delle differenze erano **falsi positivi da convenzioni di naming diverse** (es. TCGdex `sv03.5` vs nostro `sv3pt5`, TCGdex `swsh10.5` vs nostro `pgo` per lo stesso set Pokemon GO) — non vale la pena inseguire una riconciliazione perfetta di ogni alias storico. L'unico gap **reale e attuale** confermato: **`me05` "Buio Pesto" (uscito 2026-07-17) assente da D1** — esattamente il caso che l'automazione ingest deve intercettare.
+
+### Script `scripts/ingest-tcgdex-set.mjs` — creato, validato su un set reale
+
+Prototipo funzionante del job di ingest automatico (architettura sez. "Come applicarlo ai set futuri" di questa conversazione): TCGdex viene contattato **solo qui**, mai dal Worker/app.
+
+Flusso: fetch set summary + dettaglio per ogni carta da TCGdex -> verifica esistenza immagine IT (HEAD) -> calcola copertura -> se >= 90% pubblica il set, sotto soglia scrive comunque tutto ma con `published=0` -> carica immagini su R2 (gia WebP nativo da TCGdex, **zero conversione necessaria** a differenza del dataset storico) -> upsert D1 (`ON CONFLICT DO UPDATE`, idempotente, rilanciabile in sicurezza).
+
+Modalita `--apply` vs dry-run (default): permette di vedere il risultato prima di scrivere qualunque cosa.
+
+**Bug trovato e corretto durante il primo test reale**: il controllo di esistenza immagine (`headOk`, HEAD request singola) dava **falsi negativi sotto concorrenza** — due run consecutivi sullo stesso identico set hanno dato 85% e poi 43,3% di copertura, con carte segnate "missing" che in realta esistevano (verificato con curl diretto). Causa probabile: contesa sul pool di connessioni tra le fetch di dettaglio (`api.tcgdex.net`) e i controlli HEAD (`assets.tcgdex.net`) a concorrenza 6. **Fix**: retry (3 tentativi, backoff crescente) + timeout esplicito (8s, `AbortController`) su `headOk()`. Ri-testato: risultato stabile e identico su due run consecutive (102/120, stessa lista di 18 mancanti) dopo il fix.
+
+**Primo ingest reale eseguito** (`node scripts/ingest-tcgdex-set.mjs me05 --apply`):
+| Metrica | Valore |
+|---|---|
+| Carte totali | 120 |
+| Con immagine IT | 102 (85,0%) |
+| Immagini caricate su R2 | 102/102, 0 falliti |
+| `published` | **0** (sotto soglia 90%) |
+
+**Verificato end-to-end in produzione**:
+- `GET /v1/cards/ME05_IT_001.webp` -> dati completi e corretti (Tropius, tipo Erba, PS 110, attacco "Aroma Fruttato" con testo italiano integro)
+- `GET /images/it/ME05/ME05_IT_001?size=low` -> 200, immagine reale
+- `GET /v1/expansions` -> **me05 correttamente ASSENTE** dall'elenco (published=0) — la regola di soglia funziona esattamente come progettato: la carta e' gia risolvibile singolarmente, ma il set non appare nel Pokedex finche' la copertura non sale
+
+**Falso allarme, non un bug**: durante la verifica e' sembrato esserci un carattere di sostituzione (`Pok�`) nella descrizione di un attacco — indagine ha confermato che i dati in D1 sono **perfettamente puliti** (verificato con query diretta a D1, non solo via HTTP); l'artefatto era dovuto a `curl | head -c 300` che tagliava a meta un carattere UTF-8 multi-byte (`é`) nel comando di test, non ai dati reali.
+
+### Prossimi passi naturali per l'automazione
+
+1. Generalizzare lo script per iterare su **piu' set** in un colpo solo (oggi prende un solo `setId` per invocazione)
+2. Aggiungere il confronto "cosa c'e' su TCGdex che non abbiamo ancora" come step automatico (oggi fatto a mano una tantum in questa sessione)
+3. Wrappare in un GitHub Actions workflow schedulato (M5 del piano originale) — lo script stesso e le credenziali Cloudflare (API token, non piu OAuth interattivo) sono l'unico pezzo mancante per renderlo eseguibile senza intervento umano
+4. Il set `me05` va ri-controllato periodicamente (la copertura potrebbe salire sopra il 90% quando TCGdex completa le 18 carte mancanti) — oggi va rilanciato a mano, in futuro lo fara' il cron
+
+---
+
+## 📍 CHECKPOINT — 2026-09-07, sera (automazione completa: scoperta + workflow schedulato)
+
+Punti 1-3 della lista sopra completati nella stessa sessione.
+
+### `schema/002_add_release_date.sql` — nuova colonna `release_date` su `expansions`
+
+Applicata direttamente in produzione (`ALTER TABLE`), poi backfillata per `me05` (`2026-07-17`). Serve a due cose: ordinamento cronologico futuro del Pokedex (oggi `sort_order` e' fisso a 100 per tutti), e soprattutto come **cutoff per la scoperta di set nuovi**.
+
+### `scripts/discover-new-sets.mjs` — confronto TCGdex vs D1, risolto il problema degli alias storici
+
+Primo tentativo (confronto per id, escludendo Pokemon TCG Pocket `A#`/`B#`, Trainer Kit `tk-*`, promo McDonald's `20XXxx`): **61 falsi positivi** — quasi tutti alias storici dello stesso identico set gia' presente sotto un altro nome (es. TCGdex `sv03.5` = nostro `sv3pt5`, TCGdex `swsh10.5` "Pokemon GO" = nostro `pgo`). Confermato controllando le date di uscita: tutti i 61 candidati erano precedenti o uguali al 2026-07-17 (la data di `me05`, il nostro set piu' recente).
+
+**Fix strutturale, non un elenco di eccezioni**: un candidato conta come "davvero nuovo" solo se la sua `releaseDate` su TCGdex e' **successiva** alla piu' recente gia' in D1 (`SELECT MAX(release_date)`). Qualunque cosa uscita prima o nello stesso periodo del nostro storico e', per costruzione, gia' coperta sotto un nome diverso — non serve indovinare quale. Ri-testato dopo il fix: **0 falsi positivi**, i 61 candidati correttamente scartati, 0 set genuinamente nuovi trovati (corretto: `me05` e' gia' il piu' recente).
+
+### `.github/workflows/catalog-ingest.yml` — workflow schedulato, creato e validato staticamente
+
+Cron giornaliero (`0 6 * * *`) + trigger manuale (`workflow_dispatch`). Esegue `discover-new-sets.mjs --ingest`; se trova set nuovi, apre automaticamente una issue di riepilogo. YAML validato con un parser reale (`npx js-yaml`), non solo letto a occhio.
+
+**Bug trovato e corretto in fase di costruzione**: il workflow usava `npm ci`, che richiede un `package-lock.json` — assente perche' il `.gitignore` del worker lo escludeva (debito tecnico gia' segnalato in sez. 8, voce implicita). **Risolto**: lockfile generato ieri durante gli `npm install`, rimosso dal `.gitignore` e committato. Verificato in locale: `npm ci` pulito (nessun blocco sugli `allowScripts`, dato che l'approvazione e' salvata in `package.json` e viaggia con il lockfile) + `type-check` pulito con l'ambiente ricostruito da zero.
+
+### ⚠️ Azione richiesta dall'utente — unica cosa che non posso fare io
+
+Il workflow e' pronto ma **non puo' ancora girare**: serve il secret `CLOUDFLARE_API_TOKEN` nel repository GitHub, che richiede un'azione manuale sulla dashboard (stessa natura del `wrangler login` di ieri — non automatizzabile da qui):
+
+1. `dash.cloudflare.com` -> **My Profile** -> **API Tokens** -> **Create Token**
+2. Permessi minimi necessari: **Account > D1 > Edit**, **Account > Workers R2 Storage > Edit** (account: quello con id `e6c4d1ff864abf6dbcb4ec1e0de6b34a`, `emanuelebuia@live.it`)
+3. Copiare il token generato
+4. Sul repository GitHub (`EmaBuiaDev/pokevault`): **Settings** -> **Secrets and variables** -> **Actions** -> **New repository secret**, nome `CLOUDFLARE_API_TOKEN`, valore il token copiato
+
+Senza questo secret il workflow schedulato fallisce silenziosamente ogni notte (o va disabilitato/non schedulato finche' non e' pronto). Il primo run va idealmente osservato manualmente (tab Actions -> "Run workflow") per confermare che funzioni prima di fidarsi del cron automatico.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-07, sera (secret aggiunto, workflow verificato end-to-end in CI reale)
+
+L'utente ha aggiunto `CLOUDFLARE_API_TOKEN` su GitHub. Verifica fatta lanciando il workflow via API (`workflow_dispatch`, autenticato riusando la credenziale git gia' configurata in locale — nessun nuovo token creato), non solo controllando che il file YAML fosse sintatticamente corretto.
+
+### Bug reale trovato al primo run e corretto
+
+Il primo dispatch e' apparso **"success"** ma **non aveva fatto nulla**: due problemi distinti, entrambi silenziosi.
+
+1. **Wrangler 4.x richiede Node >=22**; il workflow pinnava `node-version: '20'` (mai testato in questa combinazione perche' in locale si usa Node 24). Lo script falliva al primo comando (`wrangler d1 execute`) con un errore di versione.
+2. **Il fallimento non si propagava**: `node ... | tee ingest-output.log` senza `set -o pipefail` fa si' che bash riporti l'exit code dell'**ultimo** comando della pipe (`tee`, che riesce sempre a scrivere il file anche se e' vuoto o contiene un messaggio di errore), non quello di `node`. Il job segnava "success" nonostante l'ingest non fosse mai partito — esattamente il tipo di fallimento silenzioso che rende un'automazione inaffidabile senza controlli.
+
+**Fix**: `node-version: '22'` + `set -o pipefail` prima della pipe. Committato, pushato, e **ri-verificato con un secondo dispatch reale**.
+
+### Verifica finale — output CI identico a quello del test locale
+
+```
+D1: 107 espansioni presenti, data di uscita piu' recente conosciuta: 2026-07-17
+TCGdex: 191 espansioni totali
+Candidati per id: 61
+Scartati (non piu' recenti di 2026-07-17): 61
+Set DAVVERO nuovi: 0
+```
+
+Confermato anche: **nessuna issue aperta** creata (comportamento atteso con 0 set nuovi — la condizione dello step "apri issue" e' stata valutata correttamente).
+
+**L'automazione e' ora genuinamente operativa**: gira ogni giorno alle 06:00 UTC, e la prossima volta che TCGdex pubblica un set con `releaseDate` successiva al 2026-07-17, verra' rilevato, valutato per copertura, importato in D1+R2 e segnalato con una issue — senza intervento umano, verificato end-to-end e non solo "dovrebbe funzionare".
+
+---
+
+## 📍 CHECKPOINT — 2026-09-07, sera (M4 ridimensionato: collegato l'endpoint principale a D1, zero rischio Android)
+
+### Scoperta che cambia la valutazione di rischio di M4 rispetto al piano originale
+
+Il piano originale (scritto guardando `master`, prima di adottare `release/R2.0.21`) assumeva che M4 richiedesse toccare `PokeVaultDatabase` (Room) e introdurre un flag lato client con doppia implementazione. Verificato oggi che **non e' cosi'**: il percorso dati reale in produzione (`ItalianCatalogRemoteRepository`) non usa Room affatto — cachea il JSON grezzo in `SharedPreferences` (`italian_catalog_cache_v3`, TTL 5 min). Room/`PokeVaultDatabase` resta usato da `PokeTcgRepository` per altri scopi (prezzi PokeWallet, cache set/carte legacy), ma **non e' nel percorso critico del catalogo italiano**. Il rischio piu' grosso segnalato nel piano originale (migration Room) semplicemente non si applica a questo pezzo.
+
+### Vincolo scoperto e usato a proprio vantaggio: `ITALIAN_CATALOG_URL` e' compilato nell'app
+
+E' un valore `BuildConfig` letto da `local.properties` in fase di build — **non modificabile da remoto** per chi ha gia' installato l'app (a differenza di un vero feature-flag remoto, che qui non esiste). Questo elimina l'opzione "cambiamo url o flag e basta": l'unico modo per far arrivare D1 a un'installazione esistente e' cambiare cosa risponde **la stessa identica URL** lato server.
+
+### Fix: `/ita/catalog.json` ora generato da D1, deployato e verificato
+
+`buildCatalogJsonFromD1()` in `src/index.ts`: se il binding D1 e' disponibile e la query restituisce righe, genera la risposta da li' (solo carte di espansioni `published=1`); altrimenti ripiega esattamente sul comportamento precedente (lettura del blob R2) — **impossibile che diventi meno affidabile di oggi**.
+
+**Verificato prima del deploy** (`wrangler dev --remote`), confrontando byte per byte con la produzione live:
+- 15.406 carte su entrambi i lati, stesso insieme esatto di id — 0 mancanti, 0 duplicate
+- `me05` correttamente assente (sotto soglia 90%)
+- Le uniche differenze trovate: il fix di encoding CP1252 di ieri (`PokÃ©mon` -> `Pokémon`) ora si riflette nella risposta live, cosa che il vecchio blob non aveva mai avuto — un miglioramento silenzioso, non una discrepanza
+
+**Deployato e verificato in produzione**. Nota tecnica utile per il futuro: subito dopo il deploy, la cache KV ha continuato a servire la vecchia risposta per ~20-30 secondi nonostante il purge esplicito della chiave — **KV di Cloudflare e' eventually-consistent** (fino a ~60s di propagazione dichiarati), non serve preoccuparsi se un purge non sembra avere effetto immediato, basta ri-controllare dopo una breve attesa.
+
+**Effetto pratico**: gli utenti con l'app gia' installata vedono ora testo italiano corretto (niente piu' mojibake) e, da qui in avanti, qualunque set che l'automazione pubblica (sopra soglia 90%) compare nel loro Pokedex **senza aggiornare l'app**. E' il primo punto in cui il lavoro infrastrutturale di questa sessione arriva davvero a un utente finale.
+
+### Soglia di copertura abbassata da 90% a 80% (decisione utente)
+
+Dopo aver verificato che `me05` (85% di copertura) restava correttamente nascosto sotto la vecchia soglia del 90%, l'utente ha deciso di abbassarla all'80% per vederlo comparire subito. `COVERAGE_THRESHOLD` in `scripts/ingest-tcgdex-set.mjs` aggiornato (usato per tutti i prossimi ingest); `me05` aggiornato direttamente in D1 (`published=1`, gia' a 0,85 ≥ 0,80) senza rilanciare l'ingest. **Verificato in produzione**: tutte le 120 carte di Buio Pesto ora presenti in `/ita/catalog.json` e in `/v1/expansions`. Regola non rimossa, solo ricalibrata: un set sotto l'80% resta comunque nascosto.
+
+### Cosa NON e' stato fatto (deliberatamente, fuori scope per oggi)
+
+Il vero passo successivo di M4 previsto dal piano — cambiare il **pattern di fetch** dell'app (da "scarica tutto il catalogo in un colpo" a "carica per espansione, on-demand", usando `/v1/expansions` + `/v1/expansions/{id}/cards`) — resta da fare. E' un cambiamento di codice Kotlin vero e proprio (non solo backend), con un ciclo di verifica piu' lento (build Gradle, non `curl`), e va affrontato come lavoro a se stante quando si decide di aprirlo.
