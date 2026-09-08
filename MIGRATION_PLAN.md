@@ -295,6 +295,40 @@ L'utente riporta che la ricerca (testo) e lo scanner **non trovano bene le carte
 
 **Perche' questo ordine e non "cancella e poi aggiusta quello che si rompe"**: DeckLab e Album Obiettivo sono feature attive con dati utente reali (mazzi salvati, obiettivi in corso) — romperle anche temporaneamente e' un costo evitabile pianificando la sequenza al contrario (prima le fondamenta dati, poi i consumatori, poi la cancellazione).
 
+### Rarita' in D1 — fonte scelta e mappatura completa validata (2026-09-08)
+
+Richiesta esplicita dell'utente: rarita' **precisa** (non una classificazione approssimata a fasce), ma **senza dipendenza a runtime** — importata una volta da una fonte esterna e resa nostra per sempre in D1, esattamente come il resto del catalogo.
+
+**Verificato**: TCGdex (`api.tcgdex.net/v2/en/cards/{setId}-{localId}`) espone `rarity` con precisione ("Rare Holo", "Ultra Rare", "Common", ecc.) e in piu' `category` (utile per `supertype`). Confermato su carte reali: `dp1-1` (Dialga, storico) -> `"Rare Holo"`; `swsh10tg-TG22` -> `"Ultra Rare"`.
+
+**Copertura verificata set per set: 107/107**. La maggior parte dei nostri id espansione coincide direttamente con l'id TCGdex. I 12 casi che non coincidevano sono stati risolti cercando per nome nell'elenco completo set di TCGdex (`GET /v2/en/sets`, ~35.000 set):
+
+| Nostro id | Id TCGdex | Nome set |
+|---|---|---|
+| `sv3pt5` | `sv03.5` | Pokémon 151 |
+| `sv4pt5` | `sv04.5` | Paldean Fates |
+| `sv6pt5` | `sv06.5` | Shrouded Fable |
+| `sv8pt5` | `sv08.5` | Prismatic Evolutions |
+| `zsv10pt5` | `sv10.5w` | White Flare |
+| `rsv10pt5` | `sv10.5b` | Black Bolt |
+| `swsh45sv` | `swsh4.5sv` | Shining Fates Shiny Vault |
+| `pgo` | `swsh10.5` | Pokémon GO |
+| `cel25c` | `cel25cc` | Celebrations Classic Collection |
+| `det` | `det1` | Detective Pikachu |
+| `sm35` | `sm3.5` | Shining Legends |
+| `sm75` | `sm7.5` | Dragon Majesty |
+| `swsh12pt5` | `swsh12.5` | Crown Zenith |
+| `swsh12pt5gg` | `swsh12.5gg` | Crown Zenith Galarian Gallery |
+
+Tutti gli altri ~93 id coincidono 1:1 (es. `me03`, `me04`, `svp`, `mep`, `xyp`, `swsh9tg`, `swsh10tg`, `cel25`, `col1`, `g1` risultano validi cosi' come sono).
+
+**Piano di esecuzione**:
+1. `schema/004_add_rarity.sql`: nuova colonna `cards.rarity` (e valutare `cards.category`/supertype).
+2. Script di backfill one-shot (analogo a `ingest-tcgdex-set.mjs` ma per rarita' su tutto lo storico): per ognuno dei 107 set, scarica la lista carte TCGdex (usando l'id corretto dalla tabella sopra dove serve), fa match per `card_number`/`localId` (attenzione ai formati diversi: numerico semplice, zero-paddato a 3 cifre, o con prefisso `SV`/`TG`/`GG`/`CC` — gia' visti nei dati reali sopra), scrive `rarity` in D1.
+3. Worker: aggiungere `rarity` alle risposte di `/v1/expansions/{id}/cards`, `/ita/catalog.json` (via `mapCardRow`), `/v1/cards/{id}`.
+4. Android: `ItalianCardRecord` guadagna il campo `rarity`; `toItalianTcgCard()` lo usa direttamente invece di richiamare `resolveItalianCardRarity()`/`loadStandardCardsForSet()` per prenderlo in prestito da PokeWallet — primo pezzo concreto di rimozione della glue ITA->ENG (M4.6).
+5. Una volta verificato stabile: rimuovere `resolveItalianCardRarity`, e valutare se `getEnglishBaseCardForItalianOverlay`/`loadStandardCardsForSet` restano necessarie per altro (supertype/subtypes, se non ancora coperti) o possono sparire del tutto.
+
 ---
 
 ## Context (piano originale — vedi correzioni sopra)
