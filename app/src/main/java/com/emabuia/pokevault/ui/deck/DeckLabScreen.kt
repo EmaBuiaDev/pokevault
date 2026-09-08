@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -52,6 +53,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.Deck
+import com.emabuia.pokevault.data.model.DeckAnalysis
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.data.remote.TcgCard
@@ -71,6 +73,7 @@ fun DeckLabScreen(
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSheet by remember { mutableStateOf(false) }
@@ -98,11 +101,11 @@ fun DeckLabScreen(
             onBack = { metaDeckViewModel.selectDeck(null) },
             onImport = {
                 if (premiumManager.canCreateDeck(viewModel.decks.size)) {
-                    val result = viewModel.importFromMetaDeck(winTournamentDeck)
+                    viewModel.importFromMetaDeck(winTournamentDeck)
                     metaDeckViewModel.selectDeck(null)
-                    if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
-                        showSheet = true
-                    }
+                    // Il risultato (matched/missing) e il passo successivo sono gestiti
+                    // sempre da ImportResultDialog, unico punto di controllo del flusso
+                    // post-import -- vedi il suo onDismiss/onAddMissingCards piu' sotto.
                 } else {
                     metaDeckViewModel.selectDeck(null)
                     showPremiumDeckDialog = true
@@ -120,11 +123,8 @@ fun DeckLabScreen(
             onBack = { metaDeckViewModel.selectDeck(null) },
             onImport = {
                 if (premiumManager.canCreateDeck(viewModel.decks.size)) {
-                    val result = viewModel.importFromMetaDeck(metaArchetypeDeck)
+                    viewModel.importFromMetaDeck(metaArchetypeDeck)
                     metaDeckViewModel.selectDeck(null)
-                    if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
-                        showSheet = true
-                    }
                 } else {
                     metaDeckViewModel.selectDeck(null)
                     showPremiumDeckDialog = true
@@ -306,11 +306,8 @@ fun DeckLabScreen(
                         viewModel = metaDeckViewModel,
                         onImportDeck = { metaDeck ->
                             if (premiumManager.canCreateDeck(viewModel.decks.size)) {
-                                val result = viewModel.importFromMetaDeck(metaDeck)
+                                viewModel.importFromMetaDeck(metaDeck)
                                 metaDeckViewModel.selectDeck(null)
-                                if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
-                                    showSheet = true
-                                }
                             } else {
                                 metaDeckViewModel.selectDeck(null)
                                 showPremiumDeckDialog = true
@@ -328,11 +325,8 @@ fun DeckLabScreen(
                         viewModel = metaDeckViewModel,
                         onImportDeck = { metaDeck ->
                             if (premiumManager.canCreateDeck(viewModel.decks.size)) {
-                                val result = viewModel.importFromMetaDeck(metaDeck)
+                                viewModel.importFromMetaDeck(metaDeck)
                                 metaDeckViewModel.selectDeck(null)
-                                if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
-                                    showSheet = true
-                                }
                             } else {
                                 metaDeckViewModel.selectDeck(null)
                                 showPremiumDeckDialog = true
@@ -372,12 +366,10 @@ fun DeckLabScreen(
             DeckImportDialog(
                 onDismiss = { showImportDialog = false },
                 onImport = { text ->
-                    val result = viewModel.importFromText(text)
+                    viewModel.importFromText(text)
                     showImportDialog = false
-                    if (result.missingMetaDeckCards.isEmpty() && result.matched > 0) {
-                        showSheet = true
-                    }
-                    // If missing cards exist, ImportResultDialog handles the flow
+                    // ImportResultDialog piu' sotto gestisce sempre il passo successivo
+                    // (matched/missing), qui non serve altro.
                 }
             )
         }
@@ -395,7 +387,7 @@ fun DeckLabScreen(
                     }
                 },
                 onAddMissingCards = {
-                    viewModel.addMissingCardsToCollection(importResult.missingMetaDeckCards) {
+                    viewModel.addMissingCardsToCollection(importResult.missingMetaDeckCards, context) {
                         showSheet = true
                     }
                 }
@@ -829,6 +821,22 @@ fun DeckDetailView(
         }.filter { it.second.isNotEmpty() }
     }
 
+    val deckAnalysis = remember(groupedCards) {
+        val expanded = groupedCards.flatMap { (card, qty) -> List(qty) { card } }
+        val typesCount = expanded.flatMap { it.type.split(",").map { t -> t.trim() } }
+            .filter { it.isNotEmpty() }
+            .groupingBy { it }
+            .eachCount()
+        val supertypesCount = expanded.groupingBy { classifyForDeckSections(it) }.eachCount()
+        val avgHp = expanded.filter { it.hp > 0 }.map { it.hp }
+            .let { hpValues -> if (hpValues.isNotEmpty()) hpValues.average() else 0.0 }
+        DeckAnalysis(
+            typesCount = typesCount,
+            averageHp = avgHp,
+            supertypesCount = supertypesCount
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(DarkBackground)) {
         Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
             if (deck.coverImageUrl.isNotEmpty()) {
@@ -924,6 +932,8 @@ fun DeckDetailView(
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+            item { AnalysisSection(deckAnalysis) }
+
             items(cardsByCategory, key = { (category, _) -> category }) { (category, cardsList) ->
                 Column {
                     Row(
@@ -1163,6 +1173,7 @@ fun NewDeckBottomSheetContent(
     var showSetupSection by remember { mutableStateOf(false) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
     val tabs = listOf("Pokémon", "Trainer", "Energia")
 
     var cardSearchQuery by remember { mutableStateOf("") }
@@ -1215,7 +1226,6 @@ fun NewDeckBottomSheetContent(
             .distinctBy { viewModel.getCardKey(it) }
     }
 
-    val noCollectionMatch = cardSearchQuery.isNotBlank() && filteredCards.isEmpty()
     val canSave = viewModel.newDeckName.isNotBlank() && viewModel.selectedCardsIds.isNotEmpty()
     val pendingSelectionTotal = pendingSelectedCounts.values.sum()
     val hasPendingSelection = pendingSelectionTotal > 0
@@ -1352,6 +1362,29 @@ fun NewDeckBottomSheetContent(
             }
         }
 
+        if (viewModel.isImportReviewMode) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                color = BlueCard.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.PlaylistAddCheck, contentDescription = null, tint = BlueCard, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Revisione import", color = TextWhite, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Vedi solo le carte appena importate", color = TextMuted, fontSize = 10.sp)
+                    }
+                    TextButton(onClick = { viewModel.exitImportReviewMode() }) {
+                        Text("Tutta la collezione", color = BlueCard, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
 
         SecondaryTabRow(
@@ -1479,7 +1512,47 @@ fun NewDeckBottomSheetContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Affordanza sempre visibile appena si scrive qualcosa: prima "Cerca nei set TCG"
+        // compariva solo dopo zero risultati locali, quindi la ricerca online restava
+        // scoperta finche' non si falliva prima una ricerca nella propria collezione.
+        if (cardSearchQuery.isNotBlank()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = { viewModel.searchCardsInSets(cardSearchQuery, context = context) },
+                    enabled = !viewModel.isSearchingCards,
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                ) {
+                    if (viewModel.isSearchingCards) {
+                        CircularProgressIndicator(color = PurpleCard, modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = PurpleCard, modifier = Modifier.size(14.dp))
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Cerca anche nei set TCG online", color = PurpleCard, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (viewModel.tcgSearchError != null) {
+                Text(
+                    text = viewModel.tcgSearchError!!,
+                    color = YellowCard,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
         if (filteredCards.isNotEmpty()) {
+            Text(
+                text = "Nella tua collezione",
+                color = TextMuted,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            )
             LazyVerticalGrid(
                 columns = GridCells.Fixed(5),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -1508,64 +1581,14 @@ fun NewDeckBottomSheetContent(
                     )
                 }
             }
-        } else if (noCollectionMatch) {
-            Column(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(modifier = Modifier.height(12.dp))
+        } else if (cardSearchQuery.isNotBlank()) {
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                 Text(
                     text = "Nessuna carta trovata nella tua collezione.",
                     color = TextMuted,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     textAlign = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
-                    onClick = { viewModel.searchCardsInSets(cardSearchQuery) },
-                    colors = ButtonDefaults.buttonColors(containerColor = PurpleCard),
-                    shape = RoundedCornerShape(12.dp),
-                    enabled = !viewModel.isSearchingCards
-                ) {
-                    if (viewModel.isSearchingCards) {
-                        CircularProgressIndicator(color = TextWhite, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                    } else {
-                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    Text(text = "Cerca nei set TCG", fontWeight = FontWeight.Bold)
-                }
-                if (viewModel.tcgSearchError != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = viewModel.tcgSearchError!!, color = YellowCard, fontSize = 12.sp)
-                }
-                if (viewModel.tcgSearchResults.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Risultati (${viewModel.tcgSearchResults.size}) - tocca per aggiungere al deck",
-                        color = TextMuted,
-                        fontSize = 11.sp,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(5),
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(viewModel.tcgSearchResults, key = { it.id }) { tcgCard ->
-                            TcgCardSearchItem(
-                                card = tcgCard,
-                                onClick = {
-                                    tcgCardToAdd = tcgCard
-                                    tcgAddQty = 1
-                                }
-                            )
-                        }
-                    }
-                }
             }
         } else {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -1576,6 +1599,33 @@ fun NewDeckBottomSheetContent(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(32.dp)
                 )
+            }
+        }
+
+        if (viewModel.tcgSearchResults.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Risultati online (${viewModel.tcgSearchResults.size}) - tocca per aggiungere al deck",
+                color = TextMuted,
+                fontSize = 11.sp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(5),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(viewModel.tcgSearchResults, key = { it.id }) { tcgCard ->
+                    TcgCardSearchItem(
+                        card = tcgCard,
+                        onClick = {
+                            tcgCardToAdd = tcgCard
+                            tcgAddQty = 1
+                        }
+                    )
+                }
             }
         }
 
@@ -1686,7 +1736,7 @@ fun NewDeckBottomSheetContent(
                         val card = tcgCardToAdd ?: return@Button
                         val qty = tcgAddQty
                         tcgCardToAdd = null
-                        viewModel.addTcgCardToDeck(card, qty)
+                        viewModel.addTcgCardToDeck(card, qty, context)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
                     shape = RoundedCornerShape(10.dp)
@@ -1939,8 +1989,7 @@ fun TcgCardSearchItem(
 }
 
 @Composable
-fun AnalysisSection(viewModel: DeckLabViewModel) {
-    val analysis = viewModel.currentAnalysis
+fun AnalysisSection(analysis: DeckAnalysis) {
     Column(
         modifier = Modifier
             .fillMaxWidth()

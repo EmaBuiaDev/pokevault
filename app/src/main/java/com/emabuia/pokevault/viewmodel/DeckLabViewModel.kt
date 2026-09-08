@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.viewmodel
 
+import android.content.Context
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,23 +31,7 @@ class DeckLabViewModel : ViewModel() {
     private val pokeWalletRepository = RepositoryProvider.pokeWalletRepository
 
     companion object {
-        // Cache di processo per i risultati della ricerca Pokemon TCG API.
-        // Sopravvive alla navigazione tra schermate: se l'utente reimporta
-        // lo stesso archetipo, evitiamo di rifare le stesse query.
-        // La chiave combina nome+set+numero per distinguere varianti.
-        // Usa ConcurrentHashMap perché viene acceduta da più coroutine in
-        // parallelo su Dispatchers.IO durante l'import massivo.
-        // ConcurrentHashMap non accetta valori null, quindi incapsuliamo
-        // il risultato in un Optional-like container.
-        private val tcgLookupCache =
-            java.util.concurrent.ConcurrentHashMap<String, CachedLookup>()
-
         private val legacyClassificationBackfillStarted = java.util.concurrent.atomic.AtomicBoolean(false)
-
-        private data class CachedLookup(val card: TcgCard?)
-
-        private fun lookupKey(name: String, set: String?, number: String?): String =
-            "${name.lowercase().trim()}|${set?.lowercase()?.trim() ?: ""}|${number?.trim() ?: ""}"
     }
 
     var decks by mutableStateOf<List<Deck>>(emptyList())
@@ -477,6 +462,11 @@ class DeckLabViewModel : ViewModel() {
         })
     }
 
+    /** Esce dalla modalita' revisione import: la scheda torna a mostrare tutta la collezione. */
+    fun exitImportReviewMode() {
+        isImportReviewMode = false
+    }
+
     /**
      * Importa da un MetaDeck (dalla sezione Meta Deck).
      */
@@ -705,19 +695,19 @@ class DeckLabViewModel : ViewModel() {
      * Cerca ogni carta sulla Pokemon TCG API per ottenere immagine, HP, tipo, ecc.
      * Se la ricerca API fallisce, crea la carta con dati minimi.
      */
-    fun addMissingCardsToCollection(missingCards: List<MetaDeckCard>, onComplete: () -> Unit = {}) {
+    fun addMissingCardsToCollection(missingCards: List<MetaDeckCard>, context: Context, onComplete: () -> Unit = {}) {
         if (missingCards.isEmpty()) return
         isAddingMissingCards = true
 
         viewModelScope.launch {
-            // Prima cosa, lookup di TUTTE le carte mancanti in parallelo sulla
-            // Pokemon TCG API. Prima era sequenziale: per 20 carte mancanti si
-            // sommavano 20 latenze di rete. Con async+awaitAll le chiamate
-            // partono insieme e l'import diventa ~N volte più veloce.
+            // Prima cosa, lookup di TUTTE le carte mancanti in parallelo. Prima era
+            // sequenziale: per 20 carte mancanti si sommavano 20 latenze di rete.
+            // Con async+awaitAll le chiamate partono insieme e l'import diventa
+            // ~N volte piu' veloce.
             val built = coroutineScope {
                 missingCards.map { card ->
                     async(Dispatchers.IO) {
-                        card to lookupAndCreateCard(card)
+                        card to lookupAndCreateCard(card, context)
                     }
                 }.awaitAll()
             }
@@ -735,7 +725,7 @@ class DeckLabViewModel : ViewModel() {
 
             // Se alcune carte entrano a 0, prova una hydration immediata del prezzo
             // per riallineare anche il totalValue della collezione.
-            hydrateImportedCardPrices(newIds.toSet())
+            hydrateImportedCardPrices(newIds.toSet(), context)
 
             // Aggiungi al deck corrente
             if (newIds.isNotEmpty()) {
@@ -750,18 +740,23 @@ class DeckLabViewModel : ViewModel() {
     }
 
     /**
-     * Cerca una carta su PokéWallet per set+numero (strict), con fallback
-     * a ricerca per nome filtrata sullo stesso set+numero.
+     * Cerca una carta per set+numero nel nostro catalogo ITA -- nessuna chiamata
+     * PokeWallet, mai (vedi MIGRATION_PLAN.md M4.6). Il numero carta e' indipendente
+     * dalla lingua, quindi funziona anche su decklist in inglese (import PTCGL/Limitless)
+     * senza bisogno di matchare il nome. Se la carta non e' ancora nel nostro D1, resta
+     * il fallback a dati minimi sotto (nessuna immagine) -- niente piu' PokeWallet come
+     * secondo tentativo.
      */
-    private suspend fun lookupAndCreateCard(card: MetaDeckCard): PokemonCard {
-        val tcgCard = searchPokewalletCard(card.name, card.set, card.number)
+    private suspend fun lookupAndCreateCard(card: MetaDeckCard, context: Context): PokemonCard {
+        val tcgCard = pokeTcgRepository.findExactItalianCard(card.set, card.number, context)
 
         return if (tcgCard != null) {
             val price = resolveBestPrice(
                 card = tcgCard,
                 fallbackSet = card.set,
                 fallbackNumber = card.number,
-                fallbackName = card.name
+                fallbackName = card.name,
+                context = context
             )
 
             PokemonCard(
@@ -805,7 +800,7 @@ class DeckLabViewModel : ViewModel() {
 
     // ── Card search in TCG sets ────────────────────────────────────────────
 
-    fun searchCardsInSets(query: String, targetSetId: String? = null) {
+    fun searchCardsInSets(query: String, targetSetId: String? = null, context: Context) {
         if (query.isBlank()) {
             tcgSearchResults = emptyList()
             tcgSearchError = null
@@ -815,7 +810,7 @@ class DeckLabViewModel : ViewModel() {
         isSearchingCards = true
         tcgSearchError = null
         viewModelScope.launch {
-            pokeTcgRepository.searchCardsFuzzy(query, targetSetId = targetSetId)
+            pokeTcgRepository.searchItalianCardsByName(query, context, targetSetId = targetSetId)
                 .onSuccess { cards ->
                     tcgSearchResults = cards.take(20)
                     if (cards.isEmpty()) tcgSearchError = if (query.length >= 2)
@@ -836,13 +831,14 @@ class DeckLabViewModel : ViewModel() {
         isSearchingCards = false
     }
 
-    fun addTcgCardToDeck(card: TcgCard, qty: Int, onComplete: () -> Unit = {}) {
+    fun addTcgCardToDeck(card: TcgCard, qty: Int, context: Context, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val price = resolveBestPrice(
                 card = card,
                 fallbackSet = card.set?.id ?: card.set?.name,
                 fallbackNumber = card.number,
-                fallbackName = card.name
+                fallbackName = card.name,
+                context = context
             )
             val pokemonCard = PokemonCard(
                 name = card.name,
@@ -870,7 +866,7 @@ class DeckLabViewModel : ViewModel() {
         }
     }
 
-    private suspend fun hydrateImportedCardPrices(cardDocIds: Set<String>) {
+    private suspend fun hydrateImportedCardPrices(cardDocIds: Set<String>, context: Context) {
         if (cardDocIds.isEmpty()) return
 
         for (docId in cardDocIds) {
@@ -882,7 +878,8 @@ class DeckLabViewModel : ViewModel() {
                 card = resolved,
                 fallbackSet = stored.set,
                 fallbackNumber = stored.cardNumber,
-                fallbackName = stored.name
+                fallbackName = stored.name,
+                context = context
             )
             if (hydratedPrice <= 0.0) continue
 
@@ -890,61 +887,19 @@ class DeckLabViewModel : ViewModel() {
         }
     }
 
-    private suspend fun searchPokewalletCard(name: String, setCode: String?, number: String?): TcgCard? {
-        val key = lookupKey(name, setCode, number)
-        tcgLookupCache[key]?.let { return it.card }
 
-        val found: TcgCard? = try {
-            val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(setCode)
-            val localExact = pokeTcgRepository
-                .findExactCardInCatalog(name, normalizedSet, number)
-                .getOrNull()
-
-            val direct = localExact ?: pokeTcgRepository
-                .searchPokewalletCardByNameSetAndNumber(name, normalizedSet, number)
-                .getOrNull()
-
-            val strictSetNumber = direct ?: pokeTcgRepository
-                .getPokewalletCardBySetAndNumber(normalizedSet, number)
-                .getOrNull()
-
-            strictSetNumber ?: run {
-                val candidates = pokeTcgRepository
-                    .searchByNameAndNumber(name, number, normalizedSet)
-                    .getOrDefault(emptyList())
-
-                if (candidates.isEmpty()) {
-                    null
-                } else {
-                    val scoped = if (setCode.isNullOrBlank()) {
-                        candidates
-                    } else {
-                        candidates.filter { card ->
-                            SetCodeMapper.matchesImportedSet(
-                                importedSet = setCode,
-                                cardSetName = card.set?.name,
-                                cardApiSetId = card.set?.id,
-                                cardApiId = card.id
-                            )
-                        }
-                    }
-
-                    scoped.firstOrNull() ?: candidates.firstOrNull()
-                }
-            }
-        } catch (_: Exception) {
-            null
-        }
-
-        tcgLookupCache[key] = CachedLookup(found)
-        return found
+    private fun italianPriceLookupKey(raw: String): String? {
+        val clean = raw.split("/").firstOrNull()?.trim().orEmpty()
+        if (clean.isBlank()) return null
+        return clean.toIntOrNull()?.toString() ?: clean.uppercase()
     }
 
     private suspend fun resolveBestPrice(
         card: TcgCard,
         fallbackSet: String? = null,
         fallbackNumber: String? = null,
-        fallbackName: String? = null
+        fallbackName: String? = null,
+        context: Context
     ): Double {
         val cardmarket = card.cardmarket?.prices
         val cm = cardmarket.minimumEurPriceOrZero().takeIf { it > 0.0 }
@@ -962,6 +917,26 @@ class DeckLabViewModel : ViewModel() {
             .firstOrNull { it > 0.0 }
 
         if (tcg != null) return tcg
+
+        // Carte ITA: prezzo dal nostro snapshot pre-calcolato (/ita/prices.json), mai
+        // una chiamata PokeWallet diretta -- vedi MIGRATION_PLAN.md M4.6. Se lo snapshot
+        // non ha ancora un prezzo per questa carta, resta a 0 invece di consumare budget
+        // PokeWallet: verra' popolato al prossimo giro dello snapshot lato Worker.
+        if (card.id.startsWith("ita:", ignoreCase = true)) {
+            val setCode = card.id.removePrefix("ita:").substringBefore(':').takeIf { it.isNotBlank() }
+                ?: return 0.0
+            val priceMap = RepositoryProvider.italianPriceSnapshotRepository.getPriceMap(context, setCode)
+            val snapshotPrice = italianPriceLookupKey(card.number)?.let(priceMap::get)
+            val snapshotBest = sequenceOf(
+                snapshotPrice?.eurLow,
+                snapshotPrice?.eurAvg,
+                snapshotPrice?.eurTrend,
+                snapshotPrice?.eurAvg7,
+                snapshotPrice?.eurAvg30
+            ).firstOrNull { (it ?: 0.0) > 0.0 }
+
+            return snapshotBest ?: 0.0
+        }
 
         val setCode = sequenceOf(
             card.set?.id,
