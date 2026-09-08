@@ -329,6 +329,14 @@ Tutti gli altri ~93 id coincidono 1:1 (es. `me03`, `me04`, `svp`, `mep`, `xyp`, 
 4. Android: `ItalianCardRecord` guadagna il campo `rarity`; `toItalianTcgCard()` lo usa direttamente invece di richiamare `resolveItalianCardRarity()`/`loadStandardCardsForSet()` per prenderlo in prestito da PokeWallet — primo pezzo concreto di rimozione della glue ITA->ENG (M4.6).
 5. Una volta verificato stabile: rimuovere `resolveItalianCardRarity`, e valutare se `getEnglishBaseCardForItalianOverlay`/`loadStandardCardsForSet` restano necessarie per altro (supertype/subtypes, se non ancora coperti) o possono sparire del tutto.
 
+### ✅ Fatto e deployato (2026-09-08, stessa sessione)
+
+Tutti i 5 punti sopra completati, committati (`a9e58c1`) e deployati in produzione. Risultato reale del backfill: **15.488/15.526 carte (99,76%)**, non solo i 107/107 set stimati in fase di analisi — 3 set (`me2pt5`, `swsh35`, `swsh45`) avevano un id TCGdex sbagliato nella prima stesura della mappa, scoperti dal riepilogo del giro completo e corretti con un secondo run mirato (100% su tutti e 3). I 38 residui senza rarita' sono sparsi su poche espansioni minori (l'unico set con numerazione carte anomala + qualche promo non coperta da TCGdex) — non bloccanti.
+
+`toItalianTcgCard()` ora usa `record.rarity` (da D1) come sorgente primaria, con fallback al prestito dalla carta base ENG solo per residui non coperti — verificato in produzione via `curl` e **su dispositivo reale, confermato dall'utente** ("perfetto mostra la rarita'"). Suite di test completa verde dopo la modifica.
+
+**Prossimo passo naturale in M4.6**: rimuovere `resolveItalianCardRarity()` (ora ridondante nella stragrande maggioranza dei casi) e valutare se la glue ITA->ENG (`getEnglishBaseCardForItalianOverlay`, `loadStandardCardsForSet`) serve ancora per altro (supertype/subtypes) prima di procedere al punto 2 della sequenza M4.6 (ripuntare DeckLab/Album Obiettivo sulla ricerca ITA).
+
 ---
 
 ## Context (piano originale — vedi correzioni sopra)
