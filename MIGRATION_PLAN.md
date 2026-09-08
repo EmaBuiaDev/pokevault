@@ -366,7 +366,19 @@ L'utente ha approvato un piano dedicato (vedi analisi sopra) ed e' stato eseguit
 
 ### Richiesta 2026-09-08 (dopo il rifacimento): rinnovamento visivo + ricerca carte piu' avanzata
 
-L'utente chiede, sulla stessa sezione: scritte/animazioni piu' moderne senza perdere velocita', e una ricerca carte con **piu' filtri** e **visualizzazione diversa** (oltre ai filtri rarita'/tipo appena aggiunti). Non ancora scoperto/pianificato in dettaglio — prossimo punto da affrontare con la stessa cura (analisi + eventuale piano dedicato, dato il piano gia' fatto oggi per il Pokedex).
+L'utente ha chiesto, sulla stessa sezione: scritte/animazioni piu' moderne senza perdere velocita', e una ricerca carte con **piu' filtri** e **visualizzazione diversa**, "fatta bene per non incasinare la UI" — con delega esplicita ("puoi rifare la sezione come vuoi").
+
+**Fatto e committato (`3bf8b75`)**: filtri (rarita'/tipo/categoria/sottotipo — copre esplicitamente "Strumento" richiesto dall'utente) raccolti in un unico pannello (`ModalBottomSheet`, pulsante "Filtri (N)" con badge conteggio) invece di righe di chip sempre visibili, cosi' la barra di ricerca resta pulita anche con 4 dimensioni di filtro. Aggiunto un toggle griglia/lista (`CardViewMode`) e badge rarita'/prezzo direttamente sulle card. Nuova mappa `subtypeEnToIt`/`translateSubtype` in `AppLocale.kt` (mancava del tutto). Nessuna chiamata di rete in piu' — i filtri operano sui risultati gia' scaricati, caching/budget prezzi invariati come richiesto esplicitamente dall'utente.
+
+### ⚠️ Non ancora verificato su dispositivo — causa trovata, non e' un problema del codice
+
+L'utente non e' riuscito a vedere ne' i fix nomi/rarita' ne' il rifacimento ricerca sul telefono nonostante build compilate correttamente, deploy Worker verificati via `curl`, e server WiFi locale (`http://192.168.1.13:8081/`) confermato servire il file giusto e aggiornato (timestamp verificato ad ogni giro). Causa piu' probabile, **non risolta con certezza in questa sessione**: il telefono/browser riapriva un `app-debug.apk` gia' scaricato in precedenza (stesso nome file ad ogni build) invece di riscaricare quello nuovo — un problema del **flusso di consegna locale**, non delle modifiche app/Worker/D1 (tutte verificate funzionanti server-side).
+
+**Mitigazione applicata, da verificare alla ripresa**: `apk-server.mjs` (script nello scratchpad di sessione, non nel repo) ora genera un nome file diverso ad ogni build (`app-debug-HHMMSS.apk`, calcolato dal mtime dell'APK) invece del fisso `app-debug.apk`, oltre alle intestazioni anti-cache HTTP gia' aggiunte in precedenza. Il server e' stato riavviato con questa versione e lasciato attivo, ma **lo script vive solo nello scratchpad di sessione — se la sessione/il processo Node termina, va ricreato da zero** (il contenuto e' comunque conservato in questa conversazione se serve rigenerarlo).
+
+**Primo passo della prossima sessione**: verificare che il nuovo nome-file-per-build risolva davvero il problema (chiedere all'utente di cancellare ogni `app-debug*.apk` vecchio da Download sul telefono prima di riprovare, per eliminare ogni ambiguita' residua). Se il problema persiste anche cosi', il flusso WiFi va rivisto (es. servire via `adb install` se nel frattempo si risolve il driver USB, o un altro meccanismo di consegna) prima di poter continuare a verificare qualsiasi modifica UI.
+
+**Nota**: l'utente ha menzionato la possibilita' di dare comandi da remoto durante la giornata — se la sessione riprende in quel modo, il primo comando utile e' probabilmente riavviare/verificare il server WiFi (vedi sopra) o testare direttamente l'installazione con il nuovo schema di nome file.
 
 ---
 
