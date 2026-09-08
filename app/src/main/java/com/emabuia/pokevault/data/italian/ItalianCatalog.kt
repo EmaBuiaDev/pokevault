@@ -20,7 +20,8 @@ data class ItalianCardRecord(
     val tipo: String? = null,
     val ps: String? = null,
     val attacchi: List<ItalianAttackRecord> = emptyList(),
-    val regolaSpeciale: String? = null
+    val regolaSpeciale: String? = null,
+    val rarity: String? = null
 ) {
     fun imageReference(): ItalianImageReference? = ItalianCatalogNormalizer.toImageReference(cardId)
 

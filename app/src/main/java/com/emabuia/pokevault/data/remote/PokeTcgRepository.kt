@@ -2289,7 +2289,10 @@ class PokeTcgRepository {
             types = record.tipo?.takeIf { it.isNotBlank() }?.let { listOf(it) } ?: baseCard?.types,
             set = cardSet,
             number = normalizedNumber,
-            rarity = baseCard?.rarity?.takeIf { it.isNotBlank() },
+            // Our own D1-backfilled rarity (schema/004, sourced once from TCGdex -- see
+            // MIGRATION_PLAN.md M4.6) takes priority; falls back to the borrowed English
+            // base card only for the handful of cards not yet covered by that backfill.
+            rarity = record.rarity?.takeIf { it.isNotBlank() } ?: baseCard?.rarity?.takeIf { it.isNotBlank() },
             images = CardImages(
                 small = smallImageWithBust,
                 large = largeImageWithBust
