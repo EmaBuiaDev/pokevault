@@ -8,10 +8,7 @@
 # These are used in local development; production uses Firebase config file
 
 # ── API Keys (for direct API calls, if proxy disabled) ──
-# Get these from the respective API providers:
-# - POKETCG_API_KEY: from pokemontcg.io (optional, fallback to free tier)
-# - POKEWALLET_API_KEY: from pokewallet.io (only needed if NOT using proxy)
-POKETCG_API_KEY=your_poketcg_api_key_here
+# Get this from pokewallet.io (only needed if NOT using proxy)
 POKEWALLET_API_KEY=your_pokewallet_api_key_here
 
 # ── Cloudflare Proxy Configuration ──

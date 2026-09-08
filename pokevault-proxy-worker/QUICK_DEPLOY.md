@@ -97,7 +97,6 @@ Edit `local.properties` (from project root):
 ```properties
 POKEWALLET_PROXY_ENABLED=true
 POKEWALLET_PROXY_URL=https://pokevault-proxy.ACCOUNT_ID.workers.dev/
-POKETCG_API_KEY=your_key_here
 POKEWALLET_API_KEY=your_key_here
 ```
 

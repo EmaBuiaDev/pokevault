@@ -161,7 +161,6 @@ POKEWALLET_PROXY_ENABLED=true
 POKEWALLET_PROXY_URL=https://pokevault-proxy.<YOUR_ACCOUNT_ID>.workers.dev/
 
 # Keep these for fallback (if proxy disabled):
-POKETCG_API_KEY=your_key_here
 POKEWALLET_API_KEY=your_key_here
 ```
 

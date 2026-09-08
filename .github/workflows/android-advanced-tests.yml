@@ -31,8 +31,7 @@ jobs:
 
       - name: Create local.properties
         run: |
-          echo "POKETCG_API_KEY=" > local.properties
-          echo "POKEWALLET_API_KEY=" >> local.properties
+          echo "POKEWALLET_API_KEY=" > local.properties
           echo "POKEWALLET_PROXY_ENABLED=false" >> local.properties
           echo "POKEWALLET_PROXY_URL=" >> local.properties
 
@@ -78,8 +77,7 @@ jobs:
 
       - name: Create local.properties
         run: |
-          echo "POKETCG_API_KEY=" > local.properties
-          echo "POKEWALLET_API_KEY=" >> local.properties
+          echo "POKEWALLET_API_KEY=" > local.properties
           echo "POKEWALLET_PROXY_ENABLED=false" >> local.properties
           echo "POKEWALLET_PROXY_URL=" >> local.properties
 
@@ -123,8 +121,7 @@ jobs:
 
       - name: Create local.properties
         run: |
-          echo "POKETCG_API_KEY=" > local.properties
-          echo "POKEWALLET_API_KEY=" >> local.properties
+          echo "POKEWALLET_API_KEY=" > local.properties
           echo "POKEWALLET_PROXY_ENABLED=false" >> local.properties
           echo "POKEWALLET_PROXY_URL=" >> local.properties
 
@@ -159,8 +156,7 @@ jobs:
 
       - name: Create local.properties
         run: |
-          echo "POKETCG_API_KEY=" > local.properties
-          echo "POKEWALLET_API_KEY=" >> local.properties
+          echo "POKEWALLET_API_KEY=" > local.properties
           echo "POKEWALLET_PROXY_ENABLED=false" >> local.properties
           echo "POKEWALLET_PROXY_URL=" >> local.properties
 

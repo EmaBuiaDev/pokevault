@@ -1,15 +1,21 @@
 *.iml
 .gradle
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+.idea/
 .DS_Store
 /build
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+.kotlin/
+node_modules/
+
+# Cloudflare Wrangler local cache — contains account email + request
+# metadata (geolocation, ISP, TLS fingerprint), must never be committed
+.wrangler/
+
+# Build outputs — regenerate locally, never track in git
+app/release/
+*.aab
+*.apk
