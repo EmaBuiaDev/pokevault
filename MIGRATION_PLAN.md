@@ -219,6 +219,45 @@ Per verificare modifiche al Worker **prima** del deploy in produzione senza pass
 
 ---
 
+## M4.5 — Catalogo ITA-only "pulito" + isolamento budget PokeWallet + fix ricerca/scanner (NUOVO, aggiunto 2026-09-08)
+
+> Richiesta esplicita dell'utente: ripartire da una base pulita dove l'app mostra **solo carte ITA** dal nostro D1, PokeWallet resta **esclusivamente** sorgente prezzi (il budget richieste e' scarso e va riservato a quello), e si sistemano lentezza/rarita' mancante sulle carte ITA insieme alla qualita' di ricerca testuale e scanner.
+
+### Cosa e' gia' cosi' (verificato oggi, non serve rifare)
+
+- **Il Pokedex ha gia' un filtro lingua che di default e' ITA**: `SetsViewModel.kt` — `selectedLanguageMacro = "ITA"` di default, con switcher ITA/ENG/JAP/CHN (`languageMacros`, `buildMacroGroups()`). Il "solo ITA" nel Pokedex e' quindi in gran parte gia' li' come default; il pezzo mancante e' semmai decidere se **nascondere del tutto** lo switcher verso ENG/JAP/CHN o lasciarlo (vedi decisione da prendere sotto) — coerente con la decisione gia' presa il 6/9 ("Scope v1: Solo italiano") ma mai realmente chiusa a livello di UI.
+- La pipeline prezzi bulk (`buildItalianPriceSnapshot()`, cron) e' gia' quella "giusta" per il budget (sez. 2.3 del piano originale): non chiama PokeWallet per singola carta per i prezzi.
+
+### Il problema reale sul budget PokeWallet: non e' solo prezzi
+
+`toItalianTcgCard()` (in `PokeTcgRepository.kt`) oggi arricchisce ogni carta ITA con `rarity`, `supertype`, `subtypes` **presi a runtime dalla carta base ENG corrispondente** (via `loadStandardCardsForSet`/`getEnglishBaseCardForItalianOverlay`, che a loro volta possono innescare chiamate PokeWallet per risolvere il set base inglese). Questo consuma budget PokeWallet **non per i prezzi** ma per metadati — e se il matching fallisce (numero non allineato, set base non risolto), la carta ITA resta **senza rarita' visibile**, che e' esattamente il sintomo "rarita'" segnalato dall'utente.
+
+**Causa strutturale**: lo schema D1 (`cards`) non ha affatto una colonna `rarity` (ne' `supertype`/`subtypes`) — verificato in `schema/001_init.sql` e nello script di ingest TCGdex (`scripts/ingest-tcgdex-set.mjs`, che oggi non legge/scrive rarita'). Il dato non e' mai stato nostro: viene sempre "preso in prestito" da PokeWallet ad ogni caricamento.
+
+**Direzione proposta** (da confermare prima di implementare): portare `rarity` **dentro il nostro dataset**, cosi' da eliminare la dipendenza runtime da PokeWallet per questo dato:
+1. Aggiungere `rarity` (e valutare `supertype`/`subtypes` se utili alla UI) come colonne in `cards`.
+2. Per i set futuri: `ingest-tcgdex-set.mjs` gia' chiama l'API dettaglio carta TCGdex, che espone `rarity` — basta leggerlo e scriverlo, nessuna chiamata in piu'.
+3. Per lo storico (15.526 carte gia' in D1): serve una fonte per il backfill one-shot. Candidati da valutare: (a) un unico giro di matching PokeWallet fatto **una volta sola** invece che ad ogni apertura carta (stesso risultato finale, budget speso una volta e non ad ogni utente/apertura), (b) TCGdex stesso se copre anche lo storico in altre lingue con lo stesso numero/set, da incrociare per numero+set. Da verificare quale sia piu' completa prima di scegliere.
+
+### Nascondere ENG/JAP/CHN dall'esperienza utente
+
+Da decidere col dettaglio: rimuovere del tutto lo switcher lingua dal Pokedex (nessun accesso a set ENG/JAP/CHN), o lasciarlo ma **disattivato/nascosto per ora** (piu' reversibile, coerente con lo stile "flag, mai un taglio netto" gia' usato nel resto del piano). Riguarda anche: ricerca (`searchCards`/ricerca generica oggi non risulta scoperta per lingua — da verificare) e Scanner (`ScannerViewModel.kt` + `searchItalianScannerCandidates`, che e' gia' ITA-only lato dati ma va verificato lato UI/flusso).
+
+**Nota importante**: gli utenti hanno gia' collezioni/carte salvate che potrebbero includere carte ENG/JAP prese prima di oggi (Firestore, `users/{uid}/...`). Nascondere la sfoglia ENG/JAP non deve rompere la visualizzazione di carte gia' possedute — va verificato in Collection/Album/WishList/DeckLab separatamente dal Pokedex/ricerca/scanner "di scoperta".
+
+### Fix ricerca testuale e scanner — segnalato come rotto oggi, non solo da riorganizzare
+
+L'utente riporta che la ricerca (testo) e lo scanner **non trovano bene le carte** oggi, indipendentemente dal tema ITA-only. Questo e' un bug/qualita' da diagnosticare con casi concreti (non ipotizzabile a tavolino) prima di cambiare euristiche di matching in `searchItalianCardsByName`, `searchItalianScannerCandidates`, `searchItalianCardsByNumber`, `scoreItalianNameMatch`, `scannerNameScore` — serve raccogliere esempi reali di ricerche che falliscono (nome cercato, cosa ci si aspettava, cosa e' uscito) prima di intervenire.
+
+### Ordine di lavoro proposto (proposta, da confermare)
+
+1. **Ricerca e scanner**: diagnosi con casi concreti + fix — e' l'unico dei quattro filoni gia' segnalato come rotto (non solo da migliorare), quindi il piu' urgente.
+2. **Rarita' in D1**: elimina sia il sintomo (rarita' mancante) sia la causa strutturale (consumo budget PokeWallet non-prezzo) in un colpo solo.
+3. **Nascondere ENG/JAP/CHN**: cambio piu' "meccanico" una volta chiari i punti 1-2, e quello con piu' superficie UI da testare (Pokedex, ricerca, scanner, collection).
+4. **Verifica lentezza residua**: da ripetere a valle di 1-3, perche' buona parte della lentezza percepita puo' gia' venire dalle chiamate ENG-per-carta eliminate al punto 2.
+
+---
+
 ## Context (piano originale — vedi correzioni sopra)
 
 PokeVault e un'app **Android nativa** (Kotlin + Jetpack Compose, `com.emabuia.pokevault`, `versionName 2.0.14`), ferma da **~4 mesi** (ultimo commit `cc44d45`, 7 maggio 2026).
