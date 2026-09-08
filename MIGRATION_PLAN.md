@@ -337,6 +337,24 @@ Tutti i 5 punti sopra completati, committati (`a9e58c1`) e deployati in produzio
 
 **Prossimo passo naturale in M4.6**: rimuovere `resolveItalianCardRarity()` (ora ridondante nella stragrande maggioranza dei casi) e valutare se la glue ITA->ENG (`getEnglishBaseCardForItalianOverlay`, `loadStandardCardsForSet`) serve ancora per altro (supertype/subtypes) prima di procedere al punto 2 della sequenza M4.6 (ripuntare DeckLab/Album Obiettivo sulla ricerca ITA).
 
+### Pokedex "confusionario" — segnalazione utente 2026-09-08, stessa causa architetturale
+
+Dopo il fix rarita', l'utente ha chiesto di sistemare il Pokedex: espansioni ordinate/raggruppate male e che "si muovono" durante lo scroll, loghi assenti su parecchie espansioni, Buio Pesto (me05) apparentemente non presente. Analisi: **stessa identica causa strutturale della rarita'** — data di uscita e logo dei set ITA venivano anche loro "presi in prestito" dal set base ENG a runtime, con lo stesso tasso di fallimento.
+
+- **Buio Pesto**: verificato `published=1` in D1, presente in `/v1/expansions` — non e' un bug del catalogo. Ipotesi piu' probabile: build testata prima del fix data di uscita, con date quasi tutte vuote non c'era un ordine affidabile. Da riconfermare con l'utente sulla build corrente (ora dovrebbe comparire per primo, essendo il piu' recente: 2026-07-17).
+- **Ordinamento/"si muovono durante lo scroll"**: il comparatore che ordina per data DESC (`setDisplayComparator`, gia' corretto) semplicemente non aveva quasi mai un dato reale da ordinare. Risolto dalla stessa `release_date` backfill del punto sotto — nessuna modifica UI necessaria.
+- **Loghi assenti**: causa identica (linking runtime a un set ENG fragile). **Non serviva pero' nessuna nuova infrastruttura**: il Worker gia' sapeva servire `GET /sets/{CODICE}/image` cercando prima in R2 (`buildItalianSetLogoCandidates`/`handleItalianR2AssetRequest`, gia' scritto, mai popolato) prima di ricadere su PokeWallet. Bastava caricare i file.
+
+**Fatto, in un'unica sessione**:
+1. `expansions.release_date` (colonna gia' esistente da schema/002, popolata solo per me05) backfillata per **tutte le 107 espansioni** da TCGdex (`scripts/backfill-release-date-tcgdex.mjs`) — piu' semplice della rarita', un solo campo per SET non per carta, 107/107 al primo giro. `/v1/expansions` la espone; `buildItalianTcgSet()` la usa come sorgente primaria.
+2. Loghi set: `scripts/backfill-set-logos-tcgdex.mjs` scarica il logo TCGdex di ogni espansione e lo carica su R2 sotto lo stesso `SETCODE` che il client gia' costruisce (`base_set_code` di schema/003, o l'override manuale `preferredBaseSetCodeForItalianExpansion` quando presente — la mappa e' duplicata nello script perche' e' Kotlin-only, con nota per tenerle sincronizzate). **92/107 caricati**; i 15 mancanti sono quasi tutti sottocollezioni senza logo distinto su TCGdex (Trainer Gallery, Shiny Vault, promo) — restano sul fallback PokeWallet esistente, comportamento invariato rispetto a prima, nessuna regressione. Un solo vero buco isolato: `sv05` (Temporal Forces), TCGdex non ha il campo `logo` per quel set specifico.
+3. **Purge KV mirato** delle 92 chiavi cache (`pokewallet:/sets/{CODICE}/image`) subito dopo l'upload — stessa lezione del bugfix SWSH45 di stamattina, senza purge il fix sarebbe rimasto invisibile fino a scadenza naturale della cache (fino a 90 giorni).
+4. Estratta `scripts/lib/tcgdex-set-id-map.mjs`: la mappa id-nostro -> id-TCGdex (17 casi divergenti) ora e' condivisa tra i tre script di backfill (rarita', data, loghi), non puo' piu' derivare.
+
+**Nessuna modifica Android necessaria per i loghi** (il codice che costruisce l'URL esisteva gia'); per la data di uscita si', committata insieme a rarita' in precedenza. Deploy Worker + D1 fatti, verificati in produzione via `curl`. Test unitari verdi.
+
+**Da riverificare con l'utente sulla build corrente**: Buio Pesto in prima posizione, stabilita' dell'ordine durante lo scroll, presenza dei loghi (92/107 attesi, gli altri restano sul fallback come prima).
+
 ---
 
 ## Context (piano originale — vedi correzioni sopra)
