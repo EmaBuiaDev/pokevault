@@ -32,6 +32,12 @@ class ItalianCatalogRemoteRepository {
     private val memoryExpansionCards = HashMap<String, List<ItalianCardRecord>>()
     private val memoryExpansionCardsUpdatedAt = HashMap<String, Long>()
 
+    private val expansionsSummaryMutex = Mutex()
+    @Volatile
+    private var memoryExpansionsSummary: List<ItalianExpansionSummary>? = null
+    @Volatile
+    private var memoryExpansionsSummaryUpdatedAt: Long = 0L
+
     suspend fun getCatalog(context: Context, forceRefresh: Boolean = false): Result<ItalianCatalog> = mutex.withLock {
         if (!forceRefresh) {
             val memoryAge = System.currentTimeMillis() - memoryCatalogUpdatedAt
@@ -128,6 +134,41 @@ class ItalianCatalogRemoteRepository {
                 error("Risposta espansione ITA vuota")
             }
         }
+    }
+
+    // Fetches the lightweight expansion manifest (GET /v1/expansions) instead of the
+    // full catalog -- used to build the Pokedex sets list. Memory-only cache, same TTL
+    // as getCatalog(). Callers must fall back to getCatalog() on failure/empty result.
+    suspend fun getExpansionsSummary(
+        baseUrl: String,
+        forceRefresh: Boolean = false
+    ): Result<List<ItalianExpansionSummary>> = expansionsSummaryMutex.withLock {
+        if (!forceRefresh) {
+            val updatedAt = memoryExpansionsSummaryUpdatedAt
+            val age = System.currentTimeMillis() - updatedAt
+            if (updatedAt > 0L && age <= CACHE_TTL_MS) {
+                memoryExpansionsSummary?.let { return@withLock Result.success(it) }
+            }
+        }
+
+        val normalizedBase = baseUrl.trim().trimEnd('/')
+        if (normalizedBase.isBlank()) {
+            return@withLock Result.failure(IllegalStateException("Base URL non configurato"))
+        }
+
+        val result = runCatching {
+            val rawJson = fetchExpansionCardsJson("$normalizedBase/v1/expansions")
+            withContext(Dispatchers.Default) {
+                ItalianCatalogNormalizer.parseExpansionsResponse(rawJson)
+            }
+        }
+
+        result.onSuccess { summaries ->
+            memoryExpansionsSummary = summaries
+            memoryExpansionsSummaryUpdatedAt = System.currentTimeMillis()
+        }
+
+        result
     }
 
     private suspend fun loadFromPrefs(context: Context, ignoreExpiry: Boolean = false): ItalianCatalog? =

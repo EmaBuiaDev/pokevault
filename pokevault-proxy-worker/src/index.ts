@@ -1689,10 +1689,26 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
   }
 
   if (pathname === '/v1/expansions') {
+    // base_set_code: precomputed dominant English set code (schema/003), lets
+    // the app build the Pokedex list (name/series/logo/release date, borrowed
+    // from the linked English base set) from this one lightweight response
+    // instead of fetching every card of every expansion to compute it itself.
     const { results } = await db
-      .prepare('SELECT id, card_count, sort_order, logo_key FROM expansions WHERE published = 1 ORDER BY sort_order, id')
-      .all();
-    return jsonResponse({ expansions: results });
+      .prepare(
+        'SELECT id, card_count, sort_order, logo_key, base_set_code FROM expansions WHERE published = 1 ORDER BY sort_order, id'
+      )
+      .all<{ id: string; card_count: number; sort_order: number; logo_key: string | null; base_set_code: string | null }>();
+    // Remapped to camelCase to match ItalianExpansionSummary on the Android side
+    // (same reasoning as mapCardRow: raw D1 column names must never leak into the
+    // client contract, so the two can't silently drift apart).
+    const expansions = results.map((r) => ({
+      id: r.id,
+      cardCount: r.card_count,
+      sortOrder: r.sort_order,
+      logoKey: r.logo_key,
+      baseSetCode: r.base_set_code,
+    }));
+    return jsonResponse({ expansions });
   }
 
   const cardsMatch = pathname.match(/^\/v1\/expansions\/([A-Za-z0-9._-]+)\/cards$/);

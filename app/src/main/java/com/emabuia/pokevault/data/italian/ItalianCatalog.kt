@@ -59,6 +59,19 @@ data class ItalianExpansionCardsResponse(
 )
 
 @Immutable
+data class ItalianExpansionSummary(
+    val id: String = "",
+    val cardCount: Int = 0,
+    val sortOrder: Int = 0,
+    val logoKey: String? = null,
+    val baseSetCode: String? = null
+)
+
+data class ItalianExpansionsResponse(
+    val expansions: List<ItalianExpansionSummary> = emptyList()
+)
+
+@Immutable
 data class ItalianImageReference(
     val setCode: String,
     val cardNumber: String
@@ -81,6 +94,7 @@ object ItalianCatalogNormalizer {
     private val cardListType = object : TypeToken<List<ItalianCardRecord>>() {}.type
     private val catalogPayloadType = object : TypeToken<ItalianCatalogPayload>() {}.type
     private val expansionCardsResponseType = object : TypeToken<ItalianExpansionCardsResponse>() {}.type
+    private val expansionsResponseType = object : TypeToken<ItalianExpansionsResponse>() {}.type
     private const val UTF8_BOM = "\uFEFF"
     private val imageIdRegex = Regex(
         "^([A-Za-z0-9]+)_IT_([A-Za-z0-9_]+)\\.(png|webp|jpe?g)$",
@@ -129,6 +143,19 @@ object ItalianCatalogNormalizer {
         return payload.cards
             .filter { it.cardId.isNotBlank() && it.espansioneId.isNotBlank() && it.nome.isNotBlank() }
             .sortedWith(cardComparator())
+    }
+
+    // Parses the response of GET /v1/expansions ({expansions: [{id, cardCount,
+    // sortOrder, logoKey, baseSetCode}, ...]}) -- lightweight expansion manifest
+    // (a few KB for ~107 expansions) used to build the Pokedex list without
+    // fetching the whole card catalog just to compute each expansion's dominant
+    // base set code (baseSetCode is precomputed server-side, see schema/003).
+    fun parseExpansionsResponse(json: String): List<ItalianExpansionSummary> {
+        val raw = stripUtf8Bom(json).trim()
+        if (raw.isBlank()) return emptyList()
+        val payload = gson.fromJson<ItalianExpansionsResponse>(raw, expansionsResponseType)
+            ?: ItalianExpansionsResponse()
+        return payload.expansions.filter { it.id.isNotBlank() }
     }
 
     fun toCatalogJson(catalog: ItalianCatalog): String {

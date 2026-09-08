@@ -2007,15 +2007,6 @@ class PokeTcgRepository {
         val nonItalianSets = baseSets.filterNot { isItalianSetId(it.id) }
         if (context == null) return nonItalianSets
 
-        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = forceRefresh)
-            .getOrElse {
-                Timber.w(it, "mergeItalianSets: catalogo ITA non disponibile")
-                return nonItalianSets
-            }
-
-        val cardsByExpansion = catalog.cardsByExpansion()
-        if (cardsByExpansion.isEmpty()) return nonItalianSets
-
         // Pre-index nonItalianSets once: raw setRef (uppercase) → newest set, and
         // canonical (normalized) setRef → first set. Avoids O(N*M) linear scans per expansion.
         // We prefer ENG sets so that ITA expansions always inherit ENG logos/series (never JAP/CHN);
@@ -2055,12 +2046,44 @@ class PokeTcgRepository {
             map
         }
 
+        // Fast path: the lightweight /v1/expansions manifest (a few KB for ~107 expansions)
+        // already carries the precomputed dominant base set code (schema/003), so building
+        // the Pokedex list doesn't need the full ~15k-card catalog at all. Falls back to the
+        // full-catalog computation below on any failure so this can never regress.
+        val summaries = italianCatalogRepository
+            .getExpansionsSummary(baseUrl = PokeWalletRetrofitClient.imageBaseUrl, forceRefresh = forceRefresh)
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+
+        if (summaries != null) {
+            val italianSets = summaries.mapNotNull { summary ->
+                val expansionId = summary.id.trim().lowercase(Locale.ROOT)
+                if (expansionId.isBlank()) return@mapNotNull null
+                buildItalianTcgSet(
+                    expansionId = expansionId,
+                    cardCount = summary.cardCount,
+                    computedBaseSetCode = summary.baseSetCode?.trim()?.uppercase(Locale.ROOT)?.takeIf { it.isNotBlank() },
+                    setsByRawRef = setsByRawRef,
+                    setsByCanonicalRef = setsByCanonicalRef
+                )
+            }
+            return (nonItalianSets + italianSets).distinctBy { it.id }
+        }
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = forceRefresh)
+            .getOrElse {
+                Timber.w(it, "mergeItalianSets: catalogo ITA non disponibile")
+                return nonItalianSets
+            }
+
+        val cardsByExpansion = catalog.cardsByExpansion()
+        if (cardsByExpansion.isEmpty()) return nonItalianSets
+
         val italianSets = catalog.expansions.mapNotNull { manifest ->
             val expansionId = manifest.espansioneId.trim().lowercase(Locale.ROOT)
             if (expansionId.isBlank()) return@mapNotNull null
 
             val expansionCards = cardsByExpansion[expansionId].orEmpty()
-            val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
             val dominantRawSetCode = expansionCards
                 .asSequence()
                 .mapNotNull { record -> record.imageReference()?.setCode }
@@ -2070,42 +2093,62 @@ class PokeTcgRepository {
                 .maxByOrNull { it.value }
                 ?.key
 
-            val baseRawSetCode = preferredBaseSetCode ?: dominantRawSetCode ?: expansionId.uppercase(Locale.ROOT)
-            val dominantCanonicalSetCode = normalizeItalianSetCode(baseRawSetCode)
-
-            val linkedBase = setsByRawRef[baseRawSetCode.trim().uppercase(Locale.ROOT)]
-                ?: setsByCanonicalRef[dominantCanonicalSetCode]
-
-            val linkedPrintedTotal = linkedBase?.printedTotal?.takeIf { it > 0 }
-            val cardCount = linkedPrintedTotal ?: manifest.cardCount.takeIf { it > 0 } ?: expansionCards.size
-            val setName = linkedBase?.name?.takeIf { it.isNotBlank() }
-                ?: baseRawSetCode
-                ?: expansionId.uppercase(Locale.ROOT)
-            val setSeries = linkedBase?.series?.takeIf { it.isNotBlank() }
-                ?: deriveSeriesName(
-                    setCode = baseRawSetCode,
-                    language = "ITA",
-                    setName = setName
-                )
-            val setImages = linkedBase?.images ?: SetImages(
-                symbol = buildSetImageUrl(baseRawSetCode),
-                logo = buildSetImageUrl(baseRawSetCode)
-            )
-
-            TcgSet(
-                id = buildItalianSetId(expansionId),
-                name = setName,
-                series = setSeries,
-                language = "ITA",
-                printedTotal = cardCount,
-                total = cardCount,
-                releaseDate = linkedBase?.releaseDate.orEmpty(),
-                images = setImages
+            buildItalianTcgSet(
+                expansionId = expansionId,
+                cardCount = manifest.cardCount.takeIf { it > 0 } ?: expansionCards.size,
+                computedBaseSetCode = dominantRawSetCode,
+                setsByRawRef = setsByRawRef,
+                setsByCanonicalRef = setsByCanonicalRef
             )
         }
 
         return (nonItalianSets + italianSets)
             .distinctBy { it.id }
+    }
+
+    // Shared by mergeItalianSets's fast path (/v1/expansions) and its full-catalog
+    // fallback: resolves an Italian expansion's English base set (for logo/series/
+    // release date) and builds the TcgSet the Pokedex list shows for it.
+    private fun buildItalianTcgSet(
+        expansionId: String,
+        cardCount: Int,
+        computedBaseSetCode: String?,
+        setsByRawRef: Map<String, TcgSet>,
+        setsByCanonicalRef: Map<String, TcgSet>
+    ): TcgSet {
+        val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
+        val baseRawSetCode = preferredBaseSetCode ?: computedBaseSetCode ?: expansionId.uppercase(Locale.ROOT)
+        val dominantCanonicalSetCode = normalizeItalianSetCode(baseRawSetCode)
+
+        val linkedBase = setsByRawRef[baseRawSetCode.trim().uppercase(Locale.ROOT)]
+            ?: setsByCanonicalRef[dominantCanonicalSetCode]
+
+        val linkedPrintedTotal = linkedBase?.printedTotal?.takeIf { it > 0 }
+        val resolvedCardCount = linkedPrintedTotal ?: cardCount
+        val setName = linkedBase?.name?.takeIf { it.isNotBlank() }
+            ?: baseRawSetCode
+            ?: expansionId.uppercase(Locale.ROOT)
+        val setSeries = linkedBase?.series?.takeIf { it.isNotBlank() }
+            ?: deriveSeriesName(
+                setCode = baseRawSetCode,
+                language = "ITA",
+                setName = setName
+            )
+        val setImages = linkedBase?.images ?: SetImages(
+            symbol = buildSetImageUrl(baseRawSetCode),
+            logo = buildSetImageUrl(baseRawSetCode)
+        )
+
+        return TcgSet(
+            id = buildItalianSetId(expansionId),
+            name = setName,
+            series = setSeries,
+            language = "ITA",
+            printedTotal = resolvedCardCount,
+            total = resolvedCardCount,
+            releaseDate = linkedBase?.releaseDate.orEmpty(),
+            images = setImages
+        )
     }
 
     private suspend fun getCardsByItalianSet(
