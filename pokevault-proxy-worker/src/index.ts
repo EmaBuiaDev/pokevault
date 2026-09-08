@@ -771,6 +771,32 @@ async function handleItalianR2AssetRequest(
 // app release. Returns null on any failure so the caller falls back to the
 // pre-existing R2 blob behavior untouched -- this must never make the
 // catalog endpoint LESS reliable than it is today.
+type D1CardRow = {
+  card_id: string;
+  expansion_id: string;
+  nome: string;
+  tipo: string | null;
+  ps: string | null;
+  regola_speciale: string | null;
+  attacchi_json: string;
+};
+
+// Shared row -> payload mapping, used by both /ita/catalog.json (buildCatalogJsonFromD1)
+// and /v1/expansions/{id}/cards, so the two endpoints can never drift apart on field
+// names -- both must match ItalianCardRecord on the Android side (cardId, espansioneId,
+// nome, tipo, ps, attacchi, regolaSpeciale).
+function mapCardRow(r: D1CardRow) {
+  return {
+    cardId: r.card_id,
+    espansioneId: r.expansion_id,
+    nome: r.nome,
+    tipo: r.tipo,
+    ps: r.ps,
+    attacchi: JSON.parse(r.attacchi_json || '[]'),
+    regolaSpeciale: r.regola_speciale,
+  };
+}
+
 async function buildCatalogJsonFromD1(db: D1Database): Promise<string | null> {
   try {
     const { results } = await db
@@ -779,19 +805,11 @@ async function buildCatalogJsonFromD1(db: D1Database): Promise<string | null> {
          FROM cards c JOIN expansions e ON e.id = c.expansion_id
          WHERE e.published = 1`
       )
-      .all<{ card_id: string; expansion_id: string; nome: string; tipo: string | null; ps: string | null; regola_speciale: string | null; attacchi_json: string }>();
+      .all<D1CardRow>();
 
     if (results.length === 0) return null; // suspiciously empty -- prefer the R2 fallback over serving nothing
 
-    const cards = results.map((r) => ({
-      cardId: r.card_id,
-      espansioneId: r.expansion_id,
-      nome: r.nome,
-      tipo: r.tipo,
-      ps: r.ps,
-      attacchi: JSON.parse(r.attacchi_json || '[]'),
-      regolaSpeciale: r.regola_speciale,
-    }));
+    const cards = results.map(mapCardRow);
     return JSON.stringify(cards);
   } catch (error) {
     console.error('buildCatalogJsonFromD1 failed, falling back to R2 blob:', error);
@@ -1680,18 +1698,25 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
   const cardsMatch = pathname.match(/^\/v1\/expansions\/([A-Za-z0-9._-]+)\/cards$/);
   if (cardsMatch) {
     const expansionId = cardsMatch[1].toLowerCase();
+    // Same field shape as /ita/catalog.json (see mapCardRow), scoped to one
+    // expansion -- lets the app fetch a single set's ~100-200 cards instead of
+    // the full ~15k-card blob when opening a set detail screen. Joins on
+    // published = 1 for parity with /ita/catalog.json: a set hidden by the
+    // coverage-threshold rule must stay hidden here too, not just from the
+    // /v1/expansions listing.
     const { results } = await db
       .prepare(
-        `SELECT card_id, card_number, nome, tipo, ps, regola_speciale, attacchi_json, image_status
-         FROM cards WHERE expansion_id = ?1
-         ORDER BY CAST(card_number AS INTEGER), card_number`
+        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json
+         FROM cards c JOIN expansions e ON e.id = c.expansion_id
+         WHERE c.expansion_id = ?1 AND e.published = 1
+         ORDER BY CAST(c.card_number AS INTEGER), c.card_number`
       )
       .bind(expansionId)
-      .all();
+      .all<D1CardRow>();
     if (results.length === 0) {
       return jsonResponse({ error: 'expansion not found or has no cards' }, 404);
     }
-    return jsonResponse({ expansionId, cards: results });
+    return jsonResponse({ expansionId, cards: results.map(mapCardRow) });
   }
 
   const cardMatch = pathname.match(/^\/v1\/cards\/([A-Za-z0-9._-]+)$/);

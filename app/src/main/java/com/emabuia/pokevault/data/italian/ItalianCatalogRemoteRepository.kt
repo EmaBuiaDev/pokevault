@@ -21,12 +21,16 @@ class ItalianCatalogRemoteRepository {
     }
 
     private val mutex = Mutex()
+    private val expansionCardsMutex = Mutex()
     private val httpClient = OkHttpClient.Builder().build()
 
     @Volatile
     private var memoryCatalog: ItalianCatalog? = null
     @Volatile
     private var memoryCatalogUpdatedAt: Long = 0L
+
+    private val memoryExpansionCards = HashMap<String, List<ItalianCardRecord>>()
+    private val memoryExpansionCardsUpdatedAt = HashMap<String, Long>()
 
     suspend fun getCatalog(context: Context, forceRefresh: Boolean = false): Result<ItalianCatalog> = mutex.withLock {
         if (!forceRefresh) {
@@ -70,6 +74,60 @@ class ItalianCatalogRemoteRepository {
         }
 
         networkResult
+    }
+
+    // Fetches just one expansion's cards (GET /v1/expansions/{id}/cards) instead of the
+    // whole ~15k-card catalog blob -- used by set detail screens, which only need the
+    // cards of the set being opened. Memory-only cache (no SharedPreferences): this is
+    // a small, session-scoped payload, not the heavyweight blob getCatalog() persists.
+    // Callers must fall back to getCatalog() + cardsByExpansion() on failure so this
+    // path can never make card resolution less reliable than before it existed.
+    suspend fun getExpansionCards(
+        baseUrl: String,
+        expansionId: String,
+        forceRefresh: Boolean = false
+    ): Result<List<ItalianCardRecord>> = expansionCardsMutex.withLock {
+        val key = expansionId.trim().lowercase(java.util.Locale.ROOT)
+        if (key.isBlank()) return@withLock Result.success(emptyList())
+
+        if (!forceRefresh) {
+            val updatedAt = memoryExpansionCardsUpdatedAt[key] ?: 0L
+            val age = System.currentTimeMillis() - updatedAt
+            if (updatedAt > 0L && age <= CACHE_TTL_MS) {
+                memoryExpansionCards[key]?.let { return@withLock Result.success(it) }
+            }
+        }
+
+        val normalizedBase = baseUrl.trim().trimEnd('/')
+        if (normalizedBase.isBlank()) {
+            return@withLock Result.failure(IllegalStateException("Base URL non configurato"))
+        }
+
+        val result = runCatching {
+            val rawJson = fetchExpansionCardsJson("$normalizedBase/v1/expansions/$key/cards")
+            withContext(Dispatchers.Default) {
+                ItalianCatalogNormalizer.parseExpansionCardsResponse(rawJson)
+            }
+        }
+
+        result.onSuccess { cards ->
+            memoryExpansionCards[key] = cards
+            memoryExpansionCardsUpdatedAt[key] = System.currentTimeMillis()
+        }
+
+        result
+    }
+
+    private suspend fun fetchExpansionCardsJson(url: String): String = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url(url).get().build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                error("Espansione ITA non disponibile: HTTP ${response.code}")
+            }
+            response.body?.string()?.trim().orEmpty().ifBlank {
+                error("Risposta espansione ITA vuota")
+            }
+        }
     }
 
     private suspend fun loadFromPrefs(context: Context, ignoreExpiry: Boolean = false): ItalianCatalog? =

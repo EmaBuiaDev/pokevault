@@ -53,6 +53,11 @@ data class ItalianCatalogPayload(
     val expansions: List<ItalianExpansionManifest> = emptyList()
 )
 
+data class ItalianExpansionCardsResponse(
+    val expansionId: String = "",
+    val cards: List<ItalianCardRecord> = emptyList()
+)
+
 @Immutable
 data class ItalianImageReference(
     val setCode: String,
@@ -75,6 +80,7 @@ object ItalianCatalogNormalizer {
     private val gson = Gson()
     private val cardListType = object : TypeToken<List<ItalianCardRecord>>() {}.type
     private val catalogPayloadType = object : TypeToken<ItalianCatalogPayload>() {}.type
+    private val expansionCardsResponseType = object : TypeToken<ItalianExpansionCardsResponse>() {}.type
     private const val UTF8_BOM = "\uFEFF"
     private val imageIdRegex = Regex(
         "^([A-Za-z0-9]+)_IT_([A-Za-z0-9_]+)\\.(png|webp|jpe?g)$",
@@ -110,6 +116,19 @@ object ItalianCatalogNormalizer {
                 buildCatalog(normalizedCards)
             }
         }
+    }
+
+    // Parses the response of GET /v1/expansions/{id}/cards ({expansionId, cards: [...]}),
+    // used to fetch a single set's ~100-200 cards instead of the whole catalog blob when
+    // opening a set detail screen. Same field shape as parseCatalogJson's card array.
+    fun parseExpansionCardsResponse(json: String): List<ItalianCardRecord> {
+        val raw = stripUtf8Bom(json).trim()
+        if (raw.isBlank()) return emptyList()
+        val payload = gson.fromJson<ItalianExpansionCardsResponse>(raw, expansionCardsResponseType)
+            ?: ItalianExpansionCardsResponse()
+        return payload.cards
+            .filter { it.cardId.isNotBlank() && it.espansioneId.isNotBlank() && it.nome.isNotBlank() }
+            .sortedWith(cardComparator())
     }
 
     fun toCatalogJson(catalog: ItalianCatalog): String {

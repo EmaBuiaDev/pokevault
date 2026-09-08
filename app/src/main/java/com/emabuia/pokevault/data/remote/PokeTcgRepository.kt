@@ -2118,9 +2118,21 @@ class PokeTcgRepository {
         )
 
         val expansionId = parseItalianExpansionId(setId) ?: return Result.success(emptyList())
-        val catalog = italianCatalogRepository.getCatalog(safeContext, forceRefresh = forceRefresh)
-            .getOrElse { return Result.failure(it) }
-        val expansionCards = catalog.cardsByExpansion()[expansionId].orEmpty()
+
+        // Fast path: fetch just this expansion's cards (~100-200) instead of the whole
+        // ~15k-card catalog blob. Falls back to the full catalog on any failure (network,
+        // endpoint not yet deployed, etc.) so opening a set can never become less reliable.
+        val expansionCards = italianCatalogRepository
+            .getExpansionCards(
+                baseUrl = PokeWalletRetrofitClient.imageBaseUrl,
+                expansionId = expansionId,
+                forceRefresh = forceRefresh
+            )
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+            ?: italianCatalogRepository.getCatalog(safeContext, forceRefresh = forceRefresh)
+                .getOrElse { return Result.failure(it) }
+                .cardsByExpansion()[expansionId].orEmpty()
         val cacheKey = setId.trim().lowercase(Locale.ROOT)
 
         if (!forceRefresh) {

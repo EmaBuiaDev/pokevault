@@ -64,4 +64,45 @@ class ItalianCatalogNormalizerTest {
         assertEquals("SVP", imageReference?.folderName)
         assertEquals("SVP_IT_1.png", imageReference?.preferredFileName)
     }
+
+    @Test
+    fun parseExpansionCardsResponse_parsesSingleExpansionPayload() {
+        // Shape returned by GET /v1/expansions/{id}/cards on the Worker.
+        val rawJson = """
+            {
+              "expansionId": "me04",
+              "cards": [
+                {
+                  "cardId": "ME04_IT_1.png",
+                  "espansioneId": "me04",
+                  "nome": "Weedle",
+                  "tipo": null,
+                  "ps": "50",
+                  "attacchi": [
+                    {
+                      "nome": "Attacco a Sorpresa",
+                      "danno": "30",
+                      "descrizione": "Lancia una moneta. Se esce croce, questo attacco non ha effetto."
+                    }
+                  ],
+                  "regolaSpeciale": null
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val cards = ItalianCatalogNormalizer.parseExpansionCardsResponse(rawJson)
+
+        assertEquals(1, cards.size)
+        assertEquals("me04", cards[0].espansioneId)
+        assertEquals("Weedle", cards[0].nome)
+        assertEquals("50", cards[0].ps)
+        assertEquals(1, cards[0].attacchi.size)
+        assertEquals("Attacco a Sorpresa", cards[0].attacchi.first().nome)
+    }
+
+    @Test
+    fun parseExpansionCardsResponse_blankInputReturnsEmptyList() {
+        assertEquals(emptyList<ItalianCardRecord>(), ItalianCatalogNormalizer.parseExpansionCardsResponse("  "))
+    }
 }
