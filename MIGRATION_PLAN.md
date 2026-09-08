@@ -355,6 +355,19 @@ Dopo il fix rarita', l'utente ha chiesto di sistemare il Pokedex: espansioni ord
 
 **Da riverificare con l'utente sulla build corrente**: Buio Pesto in prima posizione, stabilita' dell'ordine durante lo scroll, presenza dei loghi (92/107 attesi, gli altri restano sul fallback come prima).
 
+### ✅ Rifacimento completato + 2 bug scoperti e corretti sul dispositivo (2026-09-08, stessa sessione)
+
+L'utente ha approvato un piano dedicato (vedi analisi sopra) ed e' stato eseguito interamente: tab lingua rimossi, chip serie sostituite da sezioni comprimibili ordinate per data, `hasPrioritizedLogo` rimosso dai criteri di ordinamento/filtro, filtri rarita'/tipo aggiunti alla ricerca carte. Committato in `d2fe722` insieme a due bug reali scoperti testando la build sul telefono, stessa causa architetturale (dato preso in prestito da PokeWallet a runtime invece che nostro in D1):
+
+1. **Nomi set giapponesi/cinesi mischiati a carte italiane**: `linkedBase?.name` (set PokeWallet collegato) poteva risolvere a un set JAP/CHN quando non esisteva un match ENG per quel raw set code — la lingua non era mai stata garantita ITA/ENG. Fix: `expansions.name` da TCGdex locale IT (107/107, es. "Buio Pesto" per me05 — verificato identico a come l'utente stesso chiama il set).
+2. **Colori/etichette rarita' sbagliati su alcune carte**: la mappatura (`RarityUtils.kt`) era tarata sul vocabolario PokeWallet ("Rare Holo") e non riconosceva quello reale di TCGdex ("Holo Rare", ordine invertito) ne' "Secret Rare" (577 carte — il piu' grande buco), "LEGEND", "Rare PRIME", "Radiant Rare", "Amazing Rare", "Black White Rare". Diagnosticato interrogando i valori distinti REALMENTE presenti in D1 (`SELECT DISTINCT rarity, COUNT(*) ...`), non ipotizzato — ~1200 carte coinvolte.
+
+**Metodo confermato efficace**: ogni volta che un problema di visualizzazione ITA riemerge, la causa e' quasi sempre la stessa — qualcosa preso in prestito da PokeWallet a runtime invece che backfillato una volta da TCGdex in D1. Prima di patchare a vista, verificare cosa c'e' davvero nei dati (`SELECT DISTINCT ...`) invece di ipotizzare.
+
+### Richiesta 2026-09-08 (dopo il rifacimento): rinnovamento visivo + ricerca carte piu' avanzata
+
+L'utente chiede, sulla stessa sezione: scritte/animazioni piu' moderne senza perdere velocita', e una ricerca carte con **piu' filtri** e **visualizzazione diversa** (oltre ai filtri rarita'/tipo appena aggiunti). Non ancora scoperto/pianificato in dettaglio — prossimo punto da affrontare con la stessa cura (analisi + eventuale piano dedicato, dato il piano gia' fatto oggi per il Pokedex).
+
 ---
 
 ## Context (piano originale — vedi correzioni sopra)
