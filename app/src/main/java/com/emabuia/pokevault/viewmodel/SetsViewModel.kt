@@ -287,35 +287,20 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             delay(250)
             uiState = uiState.copy(isSearchingCards = true)
             val context = getApplication<Application>().applicationContext
-            val isFullNumberQuery = FLEX_CARD_NUMBER_REGEX.matches(query)
 
-            // Prefer local ITA catalog + direct search first; use translation only as fallback.
-            val directDeferred = async { repository.searchCards(query) }
-            val italianDeferred = async {
-                repository.searchItalianCardsByName(
-                    query = query,
-                    context = context,
-                    exactMode = exactMode,
-                    limit = 60
-                )
-            }
+            // ITA-only: PokeWallet's direct/translated English search used to run in
+            // parallel and get merged in, so results mixed our ITA cards with raw
+            // English PokeWallet ones. Besides being the reported cause of "search
+            // doesn't find cards well", that burned PokeWallet request budget on every
+            // keystroke -- budget that should go only to prices (see MIGRATION_PLAN.md M4.5).
+            val italianCards = repository.searchItalianCardsByName(
+                query = query,
+                context = context,
+                exactMode = exactMode,
+                limit = 60
+            ).getOrDefault(emptyList())
 
-            val directCards = directDeferred.await().getOrDefault(emptyList())
-            val italianCards = italianDeferred.await().getOrDefault(emptyList())
-
-            val translatedCards = if (isFullNumberQuery || directCards.isNotEmpty() || italianCards.isNotEmpty()) {
-                emptyList()
-            } else {
-                val translated = TranslationService.translateItToEn(query, context)
-                if (translated != null && translated.lowercase() != query.lowercase()) {
-                    repository.searchCards(translated).getOrDefault(emptyList())
-                } else {
-                    emptyList()
-                }
-            }
-
-            val allCards = (italianCards + directCards + translatedCards).distinctBy { it.id }
-            val filteredCards = if (exactMode) applyExactCardFilter(query, allCards) else allCards
+            val filteredCards = if (exactMode) applyExactCardFilter(query, italianCards) else italianCards
             val rankedCards = rankCardSearchResults(query, filteredCards)
             val finalCards = enrichItalianCardsWithSnapshotPrices(rankedCards, context)
             uiState = uiState.copy(searchedCards = finalCards, isSearchingCards = false)

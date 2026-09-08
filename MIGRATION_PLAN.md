@@ -256,6 +256,45 @@ L'utente riporta che la ricerca (testo) e lo scanner **non trovano bene le carte
 3. **Nascondere ENG/JAP/CHN**: cambio piu' "meccanico" una volta chiari i punti 1-2, e quello con piu' superficie UI da testare (Pokedex, ricerca, scanner, collection).
 4. **Verifica lentezza residua**: da ripetere a valle di 1-3, perche' buona parte della lentezza percepita puo' gia' venire dalle chiamate ENG-per-carta eliminate al punto 2.
 
+**Aggiornamento 2026-09-08 (dopo il fix ricerca)**: primo pezzo del punto 1 fatto e verificato su dispositivo — `SetsViewModel.searchCardsByName()` non chiama piu' `repository.searchCards()`/traduzione IT->EN, cerca solo tra le carte ITA. Risultato confermato dall'utente: la ricerca testuale ora restituisce solo risultati ITA e trova le carte correttamente. Lo scanner era gia' ITA-only (verificato, non modificato). Resta aperto il punto 2 (rarita' in D1) e il punto 3 (nascondere ENG/JAP/CHN) — vedi M4.6 sotto, che estende l'obiettivo a una rimozione completa, non solo un default nascosto.
+
+---
+
+## M4.6 — Rimozione completa del catalogo carte/immagini PokeWallet (NUOVO, aggiunto 2026-09-08)
+
+> Richiesta esplicita dell'utente, che estende M4.5: non solo *nascondere* ENG/JAP/CHN di default, ma **cancellare** il codice che sfoglia/mostra il catalogo carte e immagini di PokeWallet, ripartendo da una base pulita con **solo carte ITA dal nostro D1** nel Pokedex. Motivazione dell'utente: "abbiamo troppo codice confusionario delle rarita' [e] organizzazione delle espansioni" — ora che il D1 e' una base dati coerente (M1-M4.5), il codice di compatibilita' con PokeWallet-come-catalogo e' debito puro, non piu' necessario.
+
+### Cosa resta (non tocca questa milestone)
+
+- **Prezzi**: gia' isolati oggi. `ItalianPriceSnapshotRepository` legge `/ita/prices.json` dal nostro Worker; l'app non chiama mai PokeWallet direttamente per i prezzi. PokeWallet resta dietro il Worker esattamente come da sez. 2.3 del piano originale — questa milestone non lo tocca.
+- **Le collezioni utente gia' esistenti**: verificato in `data/model/PokemonCard.kt` — `imageUrl`, `rarity`, `name`, `supertype`, `subtypes` sono salvati come **snapshot su Firestore al momento dell'aggiunta della carta**, non come riferimenti live al catalogo. Cancellare il codice di sfoglia PokeWallet **non fa sparire ne' rompe visivamente nessuna carta gia' posseduta** in Collection/Album/WishList.
+
+### Cosa va rimosso (analisi di oggi, `PokeTcgRepository.kt` e dintorni)
+
+| Area | Cosa | Note |
+|---|---|---|
+| Sfoglia catalogo | `getSets()`/`getCardsBySet()` percorso non-ITA, `fetchAllCardsForSet`, Room `SetEntity`/`CardEntity` + DAO, `SetsSyncWorker`/`CardsSyncWorker` (WorkManager) | Cache di un catalogo che non si vuole piu' mostrare |
+| Ricerca/matching | `searchCards`, `searchCardsFuzzy`, `performGenericSearch`, `performPreciseNumberSearch`, `performSetNumberSearch`, `performApiSearch`, `performAdaptiveApiSearch`, `searchCardsFromLocalCache`, `rankSearchResults` e le funzioni di query-building associate (~15 funzioni) | Gran parte del "codice confusionario" citato dall'utente |
+| Glue ITA->ENG | `getEnglishBaseCardForItalianOverlay`, `resolveEnglishBaseSetIdForItalianSet`, `loadStandardCardsForSet`, `resolveItalianCardRarity` | **Bloccante**: va rimossa solo dopo che rarity/supertype/subtypes vivono in D1 (M4.5 punto 2), altrimenti questi campi spariscono per tutte le carte ITA |
+| Immagini/URL | `buildCardImageUrl`/`buildSetImageUrl` per PokeWallet diretto | Le immagini ITA sono gia' self-hosted via Worker/R2 |
+| Config/wiring | `PokeWalletApiService`/`PokeWalletRetrofitClient` (client Retrofit diretto), `POKEWALLET_API_KEY`/`POKETCG_API_KEY` in `local.properties`/`BuildConfig` | Coerente con l'item 4 gia' presente in sez. 8 (bugfix M7): "rimuovere le key dal client" |
+
+**Nota su `PokeWalletRetrofitClient.imageBaseUrl`**: non e' solo "roba PokeWallet" — e' anche la base URL del nostro Worker, gia' riusata oggi per `/v1/expansions` e `/v1/expansions/{id}/cards` (vedi checkpoint M4 sopra). Va **rinominato/isolato concettualmente** (es. `PokeVaultApiClient`), non cancellato — il binding verso il Worker resta, cambia solo il fatto che non serve piu' anche per chiamare PokeWallet direttamente.
+
+### Il vincolo che decide l'ordine: DeckLab e Album Obiettivo dipendono anche loro dalla ricerca PokeWallet
+
+`DeckLabViewModel.searchCardsInSets()` (→ `searchCardsFuzzy`) e le schermate Album Obiettivo (`GoalAlbumViewModel`, `CreateGoalAlbumScreen`, `GoalAlbumDetailScreen`, via `searchCards` con query tipo `rarity:"..."`/`supertype:"..."`) usano la ricerca sul catalogo PokeWallet per funzioni proprie (suggerimenti mazzo, ricerca carte per obiettivo). **Vanno ripuntate su una ricerca ITA-only prima di cancellare le funzioni PokeWallet corrispondenti**, altrimenti quelle due feature si rompono. Le query per `rarity:`/`supertype:` in particolare presuppongono che quei campi esistano e siano interrogabili — altro motivo per cui servono prima in D1 (vedi punto sotto).
+
+### Sequenza proposta (dipendenze, non solo priorita')
+
+1. **Rarita' (+ supertype/subtypes se serve) dentro D1** — gia' identificato in M4.5 come prossimo passo naturale, ora e' anche un **prerequisito bloccante** per tutto il resto di questa milestone, non solo un miglioramento isolato.
+2. **Ripuntare DeckLab e Album Obiettivo sulla ricerca ITA** (una volta che rarity/supertype sono interrogabili in D1, si puo' costruire una ricerca ITA che copre anche i loro casi d'uso, es. filtro per rarita').
+3. **Nascondere ENG/JAP/CHN dal Pokedex** (gia' pianificato in M4.5) — a questo punto e' un passo sicuro perche' nessuna feature attiva dipende piu' dal catalogo PokeWallet.
+4. **Cancellazione del codice**: sfoglia/ricerca/matching PokeWallet, Room `SetEntity`/`CardEntity`/DAO, `SetsSyncWorker`/`CardsSyncWorker`, glue ITA->ENG, key dal client. Ultimo passo, quando 1-3 sono verificati stabili.
+5. **Rinomina finale** (coerente con sez. 2.4 del piano originale): `PokeTcgRepository` -> nome che non menzioni piu' ne' PokeWallet ne' TCG generico (es. `CatalogRepository`), `PokeWalletRetrofitClient` -> `PokeVaultApiClient`.
+
+**Perche' questo ordine e non "cancella e poi aggiusta quello che si rompe"**: DeckLab e Album Obiettivo sono feature attive con dati utente reali (mazzi salvati, obiettivi in corso) — romperle anche temporaneamente e' un costo evitabile pianificando la sequenza al contrario (prima le fondamenta dati, poi i consumatori, poi la cancellazione).
+
 ---
 
 ## Context (piano originale — vedi correzioni sopra)
