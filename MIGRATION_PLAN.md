@@ -382,6 +382,63 @@ L'utente non e' riuscito a vedere ne' i fix nomi/rarita' ne' il rifacimento rice
 
 ---
 
+## 📍 CHECKPOINT — 2026-09-08, notte (M4.6 punto 2 completato: DeckLab e Album Obiettivo staccati da PokeWallet + rifacimento DeckLab)
+
+Sessione ripresa dal checkpoint sopra: nome-file-per-build confermato dall'utente funzionante ("ok già va bene"), ricerca carte in DeckLab confermata funzionante dopo il fix del punto 1. Poi due richieste nuove nella stessa sessione, entrambe completate.
+
+### Bug reale trovato e risolto: import decklist senza immagini
+
+L'utente ha segnalato che l'aggiunta automatica delle carte mancanti dopo un import (testo o Meta Deck) mostrava carte senza immagine. **Causa verificata con una chiamata diretta al Worker in produzione**, non ipotizzata:
+
+```
+curl "https://pokevault-proxy.pokevault-emanu.workers.dev/search?q=Pikachu"
+-> {"error":"Rate limit exceeded","message":"Daily limit exceeded","limits":{"daily":{"limit":1000,"used":1317,"remaining":0}}}
+```
+
+Il budget giornaliero PokeWallet (1000 richieste/giorno) era esaurito. `lookupAndCreateCard()` (DeckLabViewModel) cercava le carte mancanti su PokeWallet per nome+set+numero: con budget a zero la ricerca falliva sempre, la carta veniva creata con dati minimi e **nessuna immagine**.
+
+### M4.6 punto 2 — completato: DeckLab e Album Obiettivo non chiamano piu' PokeWallet
+
+Estesa `PokeTcgRepository` con due funzioni nuove, entrambe operanti solo sul catalogo ITA gia' in cache locale (nessuna chiamata di rete oltre al fetch del catalogo stesso, gia' esistente):
+- `searchItalianCardsByAttribute(RARITY|SUPERTYPE|TYPE, valore, context)` — sostituisce le vecchie query `searchCards("rarity:\"...\"")` ecc.
+- `findExactItalianCard(setCode, number, context)` — matcha per set+numero (indipendente dalla lingua, funziona anche su decklist in inglese) invece che per nome.
+
+Applicate a:
+- **DeckLab**: `lookupAndCreateCard` (aggiunta automatica carte mancanti) ora usa solo `findExactItalianCard` — **rimosso del tutto** il fallback PokeWallet (`searchPokewalletCard` e la sua cache dedicata `tcgLookupCache`/`CachedLookup`/`lookupKey`, ~50 righe di codice morto cancellate). Se una carta non e' nel nostro D1 (raro, ~15.500 carte coperte su 107 espansioni), resta con dati minimi e nessuna immagine, ma non tenta piu' PokeWallet.
+- **`resolveBestPrice`**: le carte ITA leggono il prezzo dallo snapshot precalcolato (`/ita/prices.json`, gia' costruito lato Worker dal cron prezzi) invece di una chiamata PokeWallet diretta per carta. Vale sia per l'aggiunta automatica sia per l'aggiunta manuale dalla ricerca (`searchCardsInSets`, gia' passata al catalogo ITA nel fix precedente della stessa sessione).
+- **Album Obiettivo** (`GoalAlbumViewModel`, `CreateGoalAlbumScreen`, `GoalAlbumDetailScreen`): stessi rami ripuntati. **Scoperta collaterale**: i criteri RARITY/SUPERTYPE/TYPE/CUSTOM per gli Album Obiettivo sono codice morto lato UI — `CreateGoalAlbumScreen` forza sempre `GoalCriteriaType.SET` alla creazione, `CustomCardSearch` e' definita ma mai chiamata. Ripuntati comunque (zero rischio, non eseguiti oggi) per coerenza e per sbloccare la futura cancellazione del codice PokeWallet (M4.6 punto 4).
+
+Commit: `f2eea29` (catalogo/Album Obiettivo), `32b520b` (DeckLab).
+
+### Rifacimento DeckLab — 3 problemi UX concreti risolti
+
+Su richiesta esplicita dell'utente ("fixa tutta la struttura DeckLab"), identificati leggendo il codice (non ipotizzati) e confermati dall'utente prima di procedere:
+
+1. **Analisi mazzo mai mostrata**: `AnalysisSection` (HP medio, tipi, ripartizione Pokemon/Trainer/Energia) esisteva gia' completa nel ViewModel (`analyzeDeck()`/`currentAnalysis`) ma nessuna schermata la richiamava — codice orfano. Resa pura (riceve un `DeckAnalysis` invece del ViewModel) e agganciata alla vista dettaglio mazzo, che la calcola localmente dalle carte del mazzo visualizzato.
+2. **Flusso post-import duplicato in 4 punti** (import testo, import Meta Deck da 3 schermate diverse) con la stessa logica `if (missing.isEmpty() && matched > 0) showSheet = true` ripetuta — causava il dialog risultati e il foglio di modifica ad aprirsi **contemporaneamente** quando l'import matchava tutto. Rimossa la duplicazione: `ImportResultDialog` resta l'unico punto che decide il passo successivo.
+3. **Ricerca online scoperta solo per caso**: il bottone "Cerca nei set TCG" compariva solo dopo zero risultati nella collezione locale. Ora e' sempre visibile appena si scrive una query. Aggiunto anche un banner quando si e' in modalita' revisione import (post-import), con bottone per tornare a vedere tutta la collezione.
+
+Commit incluso in `32b520b` sopra.
+
+### Verificato e non verificato
+
+**Verificato**: compila pulito (`compileDebugKotlin`), build APK riuscita (`app-debug-225855.apk`, 56.67 MB), servita correttamente dal server WiFi locale.
+**Non ancora verificato su device fisico**: nessuna delle modifiche di stasera (fix immagini import, analisi mazzo, flusso import, ricerca online) e' stata confermata sul telefono prima della fine sessione.
+
+### Cosa resta aperto per M4.6
+
+1. ~~Rarita' in D1~~ — fatto (sessione precedente).
+2. ~~Ripuntare DeckLab e Album Obiettivo sulla ricerca ITA~~ — **fatto in questa sessione**.
+3. Nascondere ENG/JAP/CHN dal Pokedex — sostanzialmente gia' fatto (tab lingua rimossi in `d2fe722`), da riverificare che Collection/Album/WishList con carte ENG/JAP gia' possedute non si siano rotte (mai verificato esplicitamente).
+4. Cancellazione del codice PokeWallet (sfoglia/matching catalogo, Room `SetEntity`/`CardEntity`/DAO, `SetsSyncWorker`/`CardsSyncWorker`, glue ITA->ENG, chiavi API dal client) — **ora sbloccata** per la parte DeckLab/Album Obiettivo (punto 2 completato), ma da fare solo dopo conferma su device che tutto funziona stabile.
+5. Rinomina finale (`PokeTcgRepository` -> `CatalogRepository`, `PokeWalletRetrofitClient` -> `PokeVaultApiClient`).
+
+### Nota sul budget PokeWallet
+
+A fine sessione: **0/1000 richieste residue** per oggi (si resetta a mezzanotte, fuso orario non verificato con certezza — probabile UTC). Non blocca il testing di domani per i flussi DeckLab (non lo usano piu'), ma altre funzioni non ancora migrate (prezzi diretti per carte fuori dal nostro catalogo, eventuale sfoglia catalogo legacy) potrebbero restare limitate finche' il budget non si resetta.
+
+---
+
 ## Context (piano originale — vedi correzioni sopra)
 
 PokeVault e un'app **Android nativa** (Kotlin + Jetpack Compose, `com.emabuia.pokevault`, `versionName 2.0.14`), ferma da **~4 mesi** (ultimo commit `cc44d45`, 7 maggio 2026).
