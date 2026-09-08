@@ -1172,6 +1172,16 @@ Non toccato: contenuto dei test stessi (16 file reali in `app/src/test`+`app/src
 ### Non fatto, deliberatamente (troppo rischioso senza build/deploy disponibili qui)
 
 - `FORCED_REAL_TOTALS_BY_SET_CODE` (voce #16): verificato che e' ancora nel percorso attivo dei conteggi PokeWallet legacy, non un residuo isolato come assumeva la voce -- rimuoverlo senza poter testare con wrangler e' rischioso, lasciato per una sessione con credenziali
+
+### Approfondimento successivo: `FORCED_REAL_TOTALS_BY_SET_CODE`, indagine conclusa -- **non rimovibile**
+
+Tracciata l'intera catena: `FORCED_REAL_TOTALS_BY_SET_CODE`/`BY_SET_ID` alimentano `resolveRealTotal()`, usata solo da `enrichSetsPayload()`/`enrichSetDetailPayload()` -- funzioni che intercettano le risposte delle route **legacy** `/sets` e `/sets/{code}` (sia sul path cache-HIT via `createResponseFromCache()` che su quello cache-MISS nel fetch handler principale). Queste route non sono mai state toccate dalla migrazione D1: la voce #16 del piano ("i conteggi ora sono nostri in D1") era basata su un'assunzione sbagliata -- il forcing non ha niente a che fare col catalogo italiano.
+
+**Ancora chiamate dal client oggi**: `PokeWalletApiService.getSets()` -> `PokeTcgRepository.getSets()` e' il percorso reale del Pokedex multi-lingua. `SetsViewModel.languageMacros` gestisce esplicitamente `ITA, ENG, JAP, CHN` -- solo ITA e' stata migrata a D1, **ENG/JAP/CHN restano serviti da PokeWallet** attraverso queste stesse route del Worker.
+
+**Il forcing corregge un problema di dati upstream reale**: `computeRealSetTotal()` pagina `/sets/{setCode}` e filtra con `isActualCard()` (esclude righe senza `card_number` o con nome che matcha `PRODUCT_PATTERNS`, es. box/tin/blister). Per `ME03` ("Perfect Order") questo filtro automatico non basta -- PokeWallet restituisce comunque 207 elementi contro le 124 carte reali (verificato dal commento nel codice, non riprodotto qui per assenza di API key).
+
+**Conclusione**: rimuoverlo oggi farebbe tornare `GET /sets`/`GET /sets/ME03` a mostrare 207 invece di 124 per gli utenti che guardano quel set nelle schede ENG/JAP/CHN -- una regressione visibile, non pulizia di codice morto. **Voce #16 chiusa come "non applicabile com'era scritta"**: resta valida solo l'osservazione che, una volta che anche ENG/JAP/CHN passassero a un catalogo proprietario (fuori scope attuale, mai pianificato), l'intero blocco `enrichSetsPayload`/`resolveRealTotal`/backfill diventerebbe rimovibile in un colpo solo.
 - Bug "set giapponesi taggati come ENG" (voce #5, `SetsViewModel.kt:118`): rileggendo il file risulta **gia' risolto** in un commit precedente a questa migrazione (`226cefd`), la lista di `languageNameOverrides` copre gia' i casi noti -- la voce nel piano era stata semplicemente non aggiornata
 - PaddleOCR/TensorFlow Lite (perf #10), dedup `safeImageUrl` (#12), rinomina file `_v2`/`_v3` (#13), split file monolitici (#15): toccano piu' file o comportamento runtime, richiedono build per essere sicuri
 - `git filter-repo`/BFG sui 23 AAB storici (#18) ed eliminazione dei 37 branch remoti (#20): operazioni distruttive con force-push, fuori scope senza conferma esplicita dell'utente
