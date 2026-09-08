@@ -186,6 +186,39 @@ SWSH1_IT_1.png: fallita (crash wrangler, vedi sopra — non un problema della lo
 
 ---
 
+## 📍 CHECKPOINT — 2026-09-08 (M4: fine del fetch "tutto il catalogo ogni volta")
+
+Ripresa dal checkpoint del 7/9 sera, che lasciava aperto esattamente questo: "cambiare il pattern di fetch dell'app da 'scarica tutto il catalogo' a 'carica per espansione'". Fatto in due passi, entrambi committati e deployati in produzione, verificati end-to-end su dispositivo reale (non solo `curl`).
+
+### 1. Dettaglio set (`c03799e`) — `/v1/expansions/{id}/cards`
+
+L'endpoint esisteva gia' (dal 7/9) ma con nomi di colonna D1 grezzi (`card_number`, `regola_speciale`, ...), mai realmente consumato dal client. Portato allo stesso shape di `/ita/catalog.json` (`cardId`, `espansioneId`, `attacchi` come array, ecc.) tramite un mapper condiviso `mapCardRow()`, e aggiunto il filtro `published = 1` che gia' aveva `/ita/catalog.json` ma mancava qui.
+
+Lato Android, `getCardsByItalianSet()` (il path attivato ogni volta che si apre il dettaglio di un set ITA) ora prova prima `ItalianCatalogRemoteRepository.getExpansionCards()` — **~40 KB invece di ~4,6 MB** per aprire un set — e ricade sul catalogo completo solo se quel fetch fallisce. Nessuna regressione possibile per costruzione.
+
+### 2. Lista Pokedex (`f4c2da9`) — `/v1/expansions` + `base_set_code` precalcolato
+
+Problema diverso: `mergeItalianSets()` (che costruisce la lista set del Pokedex) non usava le carte di *un* set ma doveva scandire le carte di *ogni* espansione per calcolarne il "codice set inglese dominante" (serve per agganciare logo/serie/data uscita al set base ENG) — quindi non bastava spostare la chiamata su un endpoint per-espansione, serviva **precalcolare quel valore lato server**.
+
+- `schema/003_add_base_set_code.sql`: nuova colonna `expansions.base_set_code`, popolata con una query D1 (CTE + window function) che replica esattamente la logica Kotlin (moda del prefisso set estratto da `card_id` prima di `_IT_`, per espansione). Validata prima su dati di test in locale, poi applicata in produzione: **107/107 espansioni popolate, 0 NULL**.
+- Worker: `/v1/expansions` la espone (rimappata in camelCase, stesso principio di `mapCardRow`).
+- Android: `mergeItalianSets()` usa `/v1/expansions` (poche KB per tutte le 107 espansioni) come fast path; la logica di risoluzione set-base/logo/serie e' stata estratta in `buildItalianTcgSet()` e condivisa col fallback (catalogo completo, invariato) cosi' il comportamento resta identico in entrambi i casi.
+
+**Bug trovato e corretto prima del deploy definitivo**: il primo deploy di `/v1/expansions` restituiva i nomi colonna D1 grezzi (snake_case) invece di camelCase — Gson lato Android avrebbe silenziosamente prodotto zeri/null su tutti i campi (nessun crash, solo dati sbagliati). Preso solo perche' verificato manualmente il payload con `curl` prima di ricompilare l'app, non dal type-check (che non poteva saperlo). Corretto con lo stesso mapper esplicito gia' usato per le carte.
+
+### Ambiente di test locale, ora impostato
+
+Per verificare modifiche al Worker **prima** del deploy in produzione senza passare da PokeWallet/prod: `wrangler dev --remote --ip 0.0.0.0` sul PC (dati D1/R2 reali, solo letture, nessun impatto su prod) + un piccolo server Node (`apk-server.mjs`, nello scratchpad di sessione) che serve l'ultimo APK debug compilato su `http://192.168.1.13:8081/` — il telefono scarica e installa da li' via browser, niente cavo/ADB. Aggiunta anche `app/src/debug/res/xml/network_security_config_debug.xml` (solo build debug, mai release) per permettere all'app di parlare in HTTP con un Worker locale in LAN durante i test.
+
+**Nota operativa**: il debug via USB/ADB e il debug wireless di Android Studio si sono rivelati inaffidabili su questa macchina (interfaccia USB sana ma mai autorizzata, build Studio-deployate che non rileggevano `local.properties` nonostante Invalidate Caches + clean). Il metodo file-over-WiFi sopra e' quello che funziona in modo consistente ed e' da preferire per i test futuri.
+
+### Cosa resta aperto per M4
+
+- `getItalianOverlayCards()` e le funzioni di ricerca/scanner (`searchItalianCardsByName`, `searchItalianScannerCandidates`, `searchItalianCardsByNumber`) restano sul catalogo completo: richiedono match cross-espansione senza un set noto a priori, quindi il fetch per-espansione non si applica. Un endpoint di ricerca server-side (`/v1/search?q=`) risolverebbe anche questi, ma e' lavoro nuovo, non un porting — da valutare come step separato.
+- Con questi due cambi, il traffico dell'uso quotidiano (aprire il Pokedex, aprire un set) non tocca piu' il blob da 4,6 MB. Il blob resta necessario solo per ricerca globale e scanner.
+
+---
+
 ## Context (piano originale — vedi correzioni sopra)
 
 PokeVault e un'app **Android nativa** (Kotlin + Jetpack Compose, `com.emabuia.pokevault`, `versionName 2.0.14`), ferma da **~4 mesi** (ultimo commit `cc44d45`, 7 maggio 2026).
