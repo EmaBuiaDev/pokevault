@@ -27,6 +27,8 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
+enum class ItalianCardAttribute { RARITY, SUPERTYPE, TYPE }
+
 class PokeTcgRepository {
 
     private val api = PokeWalletRetrofitClient.create(com.emabuia.pokevault.BuildConfig.POKEWALLET_API_KEY)
@@ -769,6 +771,52 @@ class PokeTcgRepository {
         }
     }
 
+    /**
+     * Cerca le carte ITA per rarita/supertype/tipo elementale, interamente sul catalogo
+     * locale gia' scaricato (nessuna chiamata PokeWallet) -- sostituisce le vecchie query
+     * generiche `searchCards("rarity:\"...\"")` usate da Album Obiettivo (vedi MIGRATION_PLAN.md M4.6).
+     */
+    suspend fun searchItalianCardsByAttribute(
+        attribute: ItalianCardAttribute,
+        value: String,
+        context: Context,
+        limit: Int = 300
+    ): Result<List<TcgCard>> {
+        val cleanValue = value.trim()
+        if (cleanValue.isBlank()) return Result.success(emptyList())
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
+            .getOrElse { return Result.success(emptyList()) }
+
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                val matches = catalog.cards.asSequence()
+                    .filter { record ->
+                        when (attribute) {
+                            ItalianCardAttribute.RARITY -> record.rarity?.equals(cleanValue, ignoreCase = true) == true
+                            ItalianCardAttribute.SUPERTYPE -> deriveItalianSupertype(record).equals(cleanValue, ignoreCase = true)
+                            ItalianCardAttribute.TYPE -> record.tipo?.equals(cleanValue, ignoreCase = true) == true
+                        }
+                    }
+                    .take(limit)
+                    .toList()
+
+                if (matches.isEmpty()) return@withContext emptyList()
+
+                matches.map { record ->
+                    val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+                    val setInfo = TcgSet(
+                        id = buildItalianSetId(expansionId),
+                        name = expansionId.uppercase(Locale.ROOT),
+                        series = deriveSeriesName(setCode = expansionId, language = "ITA", setName = expansionId),
+                        language = "ITA"
+                    )
+                    toItalianTcgCard(record = record, setInfo = setInfo)
+                }.distinctBy { it.id }
+            }
+        }
+    }
+
     suspend fun searchCardsFuzzy(name: String, page: Int = 1, targetSetId: String? = null): Result<List<TcgCard>> {
         val clean = sanitizeQuery(name)
         if (clean.isBlank()) return Result.success(emptyList())
@@ -880,6 +928,46 @@ class PokeTcgRepository {
             ?: return Result.success(null)
 
         return Result.success(remoteCard.toTcgCard())
+    }
+
+    /**
+     * Cerca una carta per set+numero nel nostro catalogo ITA locale (nessuna chiamata
+     * PokeWallet). Il numero carta e' indipendente dalla lingua, quindi funziona anche
+     * per decklist in inglese (es. import da PTCGL/Limitless) senza bisogno di matchare
+     * il nome -- vedi MIGRATION_PLAN.md M4.6, lookupAndCreateCard in DeckLabViewModel.
+     */
+    suspend fun findExactItalianCard(
+        setCode: String?,
+        number: String?,
+        context: Context
+    ): TcgCard? {
+        val normalizedNumber = number?.trim()?.substringBefore('/')?.trim()?.trimStart('0')?.ifBlank { "0" }
+            ?: return null
+        val normalizedTargetSet = setCode
+            ?.let(SetCodeMapper::normalizeDecklistSetCode)
+            ?.lowercase(Locale.ROOT)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false).getOrNull() ?: return null
+
+        val record = catalog.cards.firstOrNull { rec ->
+            matchesItalianExpansionHint(rec.espansioneId.trim().lowercase(Locale.ROOT), normalizedTargetSet) &&
+                run {
+                    val ref = rec.imageReference()
+                    val cardNum = (ref?.cardNumber ?: extractCardNumber(rec.cardId)).trimStart('0').ifBlank { "0" }
+                    cardNum.equals(normalizedNumber, ignoreCase = true)
+                }
+        } ?: return null
+
+        val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+        val setInfo = TcgSet(
+            id = buildItalianSetId(expansionId),
+            name = expansionId.uppercase(Locale.ROOT),
+            series = deriveSeriesName(setCode = expansionId, language = "ITA", setName = expansionId),
+            language = "ITA"
+        )
+        return toItalianTcgCard(record = record, setInfo = setInfo)
     }
 
     suspend fun findExactCardInCatalog(

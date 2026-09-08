@@ -108,6 +108,7 @@ fun CreateGoalAlbumScreen(
 ) {
     var showPremiumDialog by remember { mutableStateOf(false) }
     var setSearchQuery by remember { mutableStateOf("") }
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         viewModel.loadAvailableSets()
@@ -120,7 +121,7 @@ fun CreateGoalAlbumScreen(
     // Aggiorna la preview quando cambia criterio
     LaunchedEffect(viewModel.formCriteriaType, viewModel.formCriteriaValue) {
         if (viewModel.formCriteriaValue.isNotBlank()) {
-            viewModel.loadPreview()
+            viewModel.loadPreview(context)
         }
     }
 
@@ -196,7 +197,7 @@ fun CreateGoalAlbumScreen(
                         showPremiumDialog = true
                         return@Button
                     }
-                    viewModel.saveGoalAlbum(onSuccess = onSaved)
+                    viewModel.saveGoalAlbum(context, onSuccess = onSaved)
                 },
                 enabled = viewModel.formName.isNotBlank()
                     && viewModel.formCriteriaValue.isNotBlank()
@@ -534,6 +535,7 @@ private fun CustomCardSearch(viewModel: GoalAlbumViewModel) {
     var searchResults by remember { mutableStateOf<List<TcgCard>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val tcgRepo = remember { com.emabuia.pokevault.data.remote.RepositoryProvider.tcgRepository }
 
     // Api ids selezionati, separati da virgola in formCriteriaValue
@@ -563,7 +565,7 @@ private fun CustomCardSearch(viewModel: GoalAlbumViewModel) {
                     if (query.isNotBlank()) {
                         isSearching = true
                         scope.launch {
-                            searchResults = tcgRepo.searchCards("name:\"$query\"").getOrElse { emptyList() }
+                            searchResults = tcgRepo.searchItalianCardsByName(query, context).getOrElse { emptyList() }
                             isSearching = false
                         }
                     }

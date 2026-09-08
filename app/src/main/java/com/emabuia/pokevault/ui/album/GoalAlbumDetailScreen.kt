@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,6 +31,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.model.GoalAlbum
+import com.emabuia.pokevault.data.model.GoalCriteriaType
+import com.emabuia.pokevault.data.remote.ItalianCardAttribute
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
@@ -105,16 +108,29 @@ fun GoalAlbumDetailScreen(
     // Carichiamo le TcgCard per il dettaglio (da cache/api progressivamente)
     var targetCards by remember { mutableStateOf<List<TcgCard>>(emptyList()) }
     var isLoadingCards by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val tcgRepo = remember { com.emabuia.pokevault.data.remote.RepositoryProvider.tcgRepository }
 
     LaunchedEffect(album) {
         if (album == null) return@LaunchedEffect
         isLoadingCards = true
         targetCards = when (album.criteriaType) {
-            com.emabuia.pokevault.data.model.GoalCriteriaType.SET ->
+            GoalCriteriaType.SET ->
                 tcgRepo.getCardsBySet(album.criteriaValue).getOrElse { emptyList() }
-            else ->
-                tcgRepo.searchCards(buildTcgQuery(album)).getOrElse { emptyList() }
+            GoalCriteriaType.RARITY ->
+                tcgRepo.searchItalianCardsByAttribute(ItalianCardAttribute.RARITY, album.criteriaValue, context)
+                    .getOrElse { emptyList() }
+            GoalCriteriaType.SUPERTYPE ->
+                tcgRepo.searchItalianCardsByAttribute(ItalianCardAttribute.SUPERTYPE, album.criteriaValue, context)
+                    .getOrElse { emptyList() }
+            GoalCriteriaType.TYPE ->
+                tcgRepo.searchItalianCardsByAttribute(ItalianCardAttribute.TYPE, album.criteriaValue, context)
+                    .getOrElse { emptyList() }
+            GoalCriteriaType.CUSTOM ->
+                album.criteriaValue.split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .mapNotNull { apiId -> tcgRepo.getCard(apiId).getOrNull() }
         }
         isLoadingCards = false
     }
@@ -376,13 +392,6 @@ private fun ChaseCardItem(card: TcgCard, isOwned: Boolean, onAddTap: () -> Unit)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-private fun buildTcgQuery(album: GoalAlbum): String = when (album.criteriaType) {
-    com.emabuia.pokevault.data.model.GoalCriteriaType.RARITY -> "rarity:\"${album.criteriaValue}\""
-    com.emabuia.pokevault.data.model.GoalCriteriaType.SUPERTYPE -> "supertype:\"${album.criteriaValue}\""
-    com.emabuia.pokevault.data.model.GoalCriteriaType.TYPE -> "types:\"${album.criteriaValue}\""
-    else -> ""
-}
 
 private fun ChaseTab.toLabel(progress: GoalProgress): String = when (this) {
     ChaseTab.ALL -> "Tutte (${progress.total})"
