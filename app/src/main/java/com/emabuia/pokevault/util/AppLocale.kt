@@ -72,7 +72,10 @@ object AppLocale {
         "alt art" to "Arte Alternativa",
         "ace spec rare" to "ACE SPEC Rara",
         "promo" to "Promo",
-        "radiant rare" to "Rara Radiante"
+        "radiant rare" to "Rara Radiante",
+        "rare prime" to "Rara Prime",
+        "legend" to "LEGEND",
+        "black white rare" to "Rara B/W"
     )
 
     fun translateRarity(rarity: String): String {

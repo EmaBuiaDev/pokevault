@@ -62,11 +62,13 @@ data class ItalianExpansionCardsResponse(
 @Immutable
 data class ItalianExpansionSummary(
     val id: String = "",
+    val name: String? = null,
     val cardCount: Int = 0,
     val sortOrder: Int = 0,
     val logoKey: String? = null,
     val baseSetCode: String? = null,
-    val releaseDate: String? = null
+    val releaseDate: String? = null,
+    val series: String? = null
 )
 
 data class ItalianExpansionsResponse(

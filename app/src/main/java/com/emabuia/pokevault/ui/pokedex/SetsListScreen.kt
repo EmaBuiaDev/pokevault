@@ -20,7 +20,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -167,17 +166,10 @@ fun SetsListScreen(
     val state = viewModel.uiState
     var isSearchingCards by remember { mutableStateOf(false) }
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
-    var pendingTopReset by remember { mutableIntStateOf(0) }
+    var collapsedSeriesKeys by remember { mutableStateOf(emptySet<String>()) }
     val setsGridState = rememberLazyGridState()
-    val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val lifecycleOwner = LocalLifecycleOwner.current
-
-    LaunchedEffect(pendingTopReset, state.selectedLanguageMacro, state.selectedSeries) {
-        if (pendingTopReset > 0 && !isSearchingCards) {
-            setsGridState.scrollToItem(0)
-        }
-    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -319,6 +311,34 @@ fun SetsListScreen(
                         )
                     )
                 }
+
+                // Filtri rarita'/tipo: valori reali del risultato corrente (rarity ora
+                // nostra in D1, vedi MIGRATION_PLAN.md M4.6) -- nessuna chip vuota.
+                if (state.availableCardRarities.isNotEmpty() || state.availableCardTypes.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.availableCardRarities, key = { "rarity::$it" }) { rarity ->
+                            SeriesFilterChip(
+                                label = rarity,
+                                count = 0,
+                                showCount = false,
+                                isSelected = rarity in state.cardRarityFilter,
+                                onClick = { viewModel.toggleCardRarityFilter(rarity) }
+                            )
+                        }
+                        items(state.availableCardTypes, key = { "type::$it" }) { type ->
+                            SeriesFilterChip(
+                                label = type,
+                                count = 0,
+                                showCount = false,
+                                isSelected = type in state.cardTypeFilter,
+                                onClick = { viewModel.toggleCardTypeFilter(type) }
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -334,66 +354,12 @@ fun SetsListScreen(
                 query = state.cardSearchQuery,
                 setReleaseDateById = setReleaseDateById,
                 onCardClick = { card -> selectedCard = card },
-                onCardSetClick = { setId -> onSetClick(setId, state.selectedLanguageMacro) }
+                onCardSetClick = { setId -> onSetClick(setId, "ITA") }
             )
         } else {
-            val languageMacros = listOf("ITA", "ENG", "JAP", "CHN")
-
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(languageMacros, key = { it }) { macro ->
-                    val count = state.languageCountByMacro[macro] ?: 0
-                    SeriesFilterChip(
-                        label = languageMacroToFlag(macro),
-                        count = count,
-                        showCount = false,
-                        isSelected = state.selectedLanguageMacro == macro,
-                        onClick = {
-                            pendingTopReset++
-                            viewModel.filterByLanguageMacro(macro)
-                        }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // ── Filtri serie migliorati ──
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item {
-                    val languageCount = state.languageCountByMacro[state.selectedLanguageMacro] ?: 0
-                    SeriesFilterChip(
-                        label = AppLocale.all,
-                        count = languageCount,
-                        isSelected = state.selectedSeries == null,
-                        onClick = {
-                            pendingTopReset++
-                            viewModel.filterBySeries(null)
-                        }
-                    )
-                }
-                items(state.seriesList) { series ->
-                    val count = state.seriesCountByLabel[series] ?: 0
-                    SeriesFilterChip(
-                        label = series,
-                        count = count,
-                        isSelected = state.selectedSeries == series,
-                        onClick = {
-                            pendingTopReset++
-                            viewModel.filterBySeries(series)
-                        }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // ── Contenuto ──
+            // ── Contenuto: lista unica con intestazioni di sezione per serie,
+            // ordinate dalla piu' recente (vedi buildSeriesGroups/setDisplayComparator
+            // in SetsViewModel.kt) -- niente piu' tab lingua/chip serie da selezionare.
             if (state.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     PokeballLoadingAnimation(message = AppLocale.loadingSets)
@@ -412,9 +378,11 @@ fun SetsListScreen(
                         ) { Text(AppLocale.retry) }
                     }
                 }
+            } else if (state.seriesGroups.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(AppLocale.noResults, color = TextMuted, fontSize = 14.sp)
+                }
             } else {
-                val displayedSets = remember(state.filteredSets) { state.filteredSets }
-
                 LazyVerticalGrid(
                     state = setsGridState,
                     columns = GridCells.Fixed(2),
@@ -422,12 +390,30 @@ fun SetsListScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(items = displayedSets, key = { it.id }) { set ->
-                        SetCard(
-                            set = set,
-                            onClick = { onSetClick(set.id, state.selectedLanguageMacro) },
-                            onLogoLoadError = { viewModel.onSetLogoLoadFailed(it) }
-                        )
+                    state.seriesGroups.forEach { group ->
+                        val isCollapsed = group.seriesKey in collapsedSeriesKeys
+                        item(span = { GridItemSpan(2) }, key = "header::${group.seriesKey}") {
+                            SeriesSectionHeader(
+                                label = group.seriesLabel,
+                                count = group.sets.size,
+                                isCollapsed = isCollapsed,
+                                onToggle = {
+                                    collapsedSeriesKeys = if (isCollapsed) {
+                                        collapsedSeriesKeys - group.seriesKey
+                                    } else {
+                                        collapsedSeriesKeys + group.seriesKey
+                                    }
+                                }
+                            )
+                        }
+                        if (!isCollapsed) {
+                            items(items = group.sets, key = { "${group.seriesKey}::${it.id}" }) { set ->
+                                SetCard(
+                                    set = set,
+                                    onClick = { onSetClick(set.id, "ITA") }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -440,12 +426,37 @@ fun SetsListScreen(
     }
 }
 
-private fun languageMacroToFlag(macro: String): String = when (macro) {
-    "ITA" -> "🇮🇹"
-    "ENG" -> "🇺🇸"
-    "JAP" -> "🇯🇵"
-    "CHN" -> "🇨🇳"
-    else -> macro
+// ── Intestazione di sezione (serie), con conteggio e toggle espandi/comprimi ──
+@Composable
+private fun SeriesSectionHeader(label: String, count: Int, isCollapsed: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp, bottom = 2.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label.uppercase(Locale.ROOT),
+            color = TextWhite,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            letterSpacing = 0.5.sp
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("$count", color = TextMuted, fontSize = 12.sp)
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                contentDescription = null,
+                tint = TextMuted,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
 }
 
 // ── Tab item ──
@@ -511,10 +522,14 @@ fun SeriesFilterChip(
 
 // ── Set Card con logo, nome e data formattata ──
 @Composable
-fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoLoadError: (String) -> Unit = {}) {
+fun SetCard(set: TcgSet, onClick: () -> Unit) {
     val context = LocalContext.current
     val logoUrl = set.images.logo.trim()
     val shouldLoadLogo = logoUrl.isNotBlank()
+    // Per-card only: a missing/broken logo just shows the text fallback below,
+    // it never affects the set's position in the list (see setDisplayComparator
+    // in SetsViewModel.kt for why that used to be the cause of sets visibly
+    // "jumping" while scrolling).
     var showFallback by remember(logoUrl) { mutableStateOf(!shouldLoadLogo) }
 
     Box(
@@ -551,10 +566,7 @@ fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoLoadError: (String) -> Unit 
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(58.dp),
-                        onError = {
-                            showFallback = true
-                            onLogoLoadError(logoUrl)
-                        }
+                        onError = { showFallback = true }
                     )
                 }
             }
@@ -565,12 +577,18 @@ fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoLoadError: (String) -> Unit 
                     fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 15.sp
                 )
                 Spacer(modifier = Modifier.height(3.dp))
-                // Data formattata GG/MM/AAAA
-                Text(
-                    text = formatDate(set.releaseDate),
-                    color = TextMuted,
-                    fontSize = 10.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = formatDate(set.releaseDate),
+                        color = TextMuted,
+                        fontSize = 10.sp
+                    )
+                    val cardCount = maxOf(set.printedTotal, set.total)
+                    if (cardCount > 0) {
+                        Text(" · ", color = TextMuted, fontSize = 10.sp)
+                        Text("$cardCount carte", color = TextMuted, fontSize = 10.sp)
+                    }
+                }
             }
         }
     }

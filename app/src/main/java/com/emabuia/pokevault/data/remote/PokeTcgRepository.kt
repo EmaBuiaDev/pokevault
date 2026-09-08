@@ -2065,7 +2065,9 @@ class PokeTcgRepository {
                     computedBaseSetCode = summary.baseSetCode?.trim()?.uppercase(Locale.ROOT)?.takeIf { it.isNotBlank() },
                     setsByRawRef = setsByRawRef,
                     setsByCanonicalRef = setsByCanonicalRef,
-                    ourReleaseDate = summary.releaseDate
+                    ourReleaseDate = summary.releaseDate,
+                    ourSeries = summary.series,
+                    ourName = summary.name
                 )
             }
             return (nonItalianSets + italianSets).distinctBy { it.id }
@@ -2116,7 +2118,9 @@ class PokeTcgRepository {
         computedBaseSetCode: String?,
         setsByRawRef: Map<String, TcgSet>,
         setsByCanonicalRef: Map<String, TcgSet>,
-        ourReleaseDate: String? = null
+        ourReleaseDate: String? = null,
+        ourSeries: String? = null,
+        ourName: String? = null
     ): TcgSet {
         val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
         val baseRawSetCode = preferredBaseSetCode ?: computedBaseSetCode ?: expansionId.uppercase(Locale.ROOT)
@@ -2127,10 +2131,22 @@ class PokeTcgRepository {
 
         val linkedPrintedTotal = linkedBase?.printedTotal?.takeIf { it > 0 }
         val resolvedCardCount = linkedPrintedTotal ?: cardCount
-        val setName = linkedBase?.name?.takeIf { it.isNotBlank() }
+        // Our own D1-backfilled Italian name (schema/006, TCGdex's Italian locale --
+        // see MIGRATION_PLAN.md M4.6) takes priority. linkedBase?.name is a real bug
+        // source: when no ENG PokeWallet set matched this raw code, the language-
+        // priority fallback (see langPriority() above) could pick a JAP/CHN set
+        // instead, silently showing its name on an otherwise all-Italian card list.
+        val setName = ourName?.takeIf { it.isNotBlank() }
+            ?: linkedBase?.name?.takeIf { it.isNotBlank() }
             ?: baseRawSetCode
             ?: expansionId.uppercase(Locale.ROOT)
-        val setSeries = linkedBase?.series?.takeIf { it.isNotBlank() }
+        // Our own D1-backfilled series (schema/005, TCGdex's own `serie.name`
+        // taxonomy -- see MIGRATION_PLAN.md M4.6) takes priority over both the
+        // fuzzy name-matching fallback and the borrowed ENG set's series: that
+        // matching guessed from a name that was often empty/wrong for ITA sets,
+        // which is exactly what misclassified sets into the wrong (or no) group.
+        val setSeries = ourSeries?.takeIf { it.isNotBlank() }?.let { ItalianTranslations.translateSeriesName(it) }
+            ?: linkedBase?.series?.takeIf { it.isNotBlank() }
             ?: deriveSeriesName(
                 setCode = baseRawSetCode,
                 language = "ITA",
