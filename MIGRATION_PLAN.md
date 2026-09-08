@@ -1140,3 +1140,38 @@ Eseguiti i punti 1-3 sopra tramite `.github/workflows/ops-dominant-set-code.yml`
 **Verificato in produzione** (non solo "il job e' verde"): lo step di verifica ha confermato `"populated": 106` su 106 espansioni; lo smoke test su `/v1/expansions` mostra `dominant_set_code` popolato correttamente per ogni riga (es. `dp1` -> `"DP1"`, `bw4` -> `"BW4"`). Il Worker deployato mostra tutti i binding attesi (CACHE, pokevault_catalog, IMAGES_BUCKET). `release/R3.0.0` e `claude/continue-plan-fxtrod` sono allineati (fast-forward) con tutti questi fix.
 
 **Cosa resta**: solo il punto 4 -- build Android reale (`./gradlew :app:compileDebugKotlin`) e verifica manuale/strumentata su device o emulatore, che questa sessione non puo' fare (nessun accesso a `dl.google.com`). Il codice Kotlin di oggi (`mergeItalianSets`, `getItalianOverlayCards`, `getEnglishBaseCardForItalianOverlay`) ora legge `dominant_set_code` da un backend che lo popola davvero -- il percorso "felice" del fallback e' quindi gia' coperto, ma la build resta da confermare prima di un rilascio.
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (M7: pulizia git/repo + consolidamento documentazione)
+
+Sessione remota, stesse limitazioni di quella precedente (nessuna credenziale Cloudflare, nessun accesso a `dl.google.com`). Lavoro scelto deliberatamente per non richiedere build Android ne' deploy: voci di sez. 8 verificabili per lettura/grep, non per compilazione.
+
+### Git/repo hygiene (sez. 8, voci #3, #19, #22)
+
+Rimossi dal tracking futuro (history esistente intatta, nessun `filter-repo`/BFG eseguito -- resta voce #18, esplicitamente rimandata: richiede force-push coordinato):
+- `.wrangler/cache/wrangler-account.json` e `cf.json` -- **leak reale, non solo teorico**: il primo conteneva l'email dell'account Cloudflare, il secondo geolocalizzazione (Napoli), ISP (Vodafone Italia) e fingerprint TLS della sessione `wrangler login` di una sessione precedente
+- `.kotlin/errors/*.log` (4 file), `.idea/` (13 file), `app/release/app-release.aab` (26 MB)
+- `.gitignore` di root aggiornato con `.kotlin/`, `.wrangler/`, `.idea/`, `node_modules/`, `app/release/`, `*.aab`, `*.apk`
+
+### Bugfix isolati (sez. 8, priorita' alta)
+
+- `LimitlessTcgRepository`: `HttpLoggingInterceptor` ora `NONE` in release, `BASIC` solo in `BuildConfig.DEBUG` -- chiudeva il leak di log in produzione (voce #2)
+- Rimossa `POKETCG_API_KEY`: campo `BuildConfig` mai letto in nessun punto del client (verificato con grep sull'intero `app/src`), coerente con debito #10 (sez. 1.2, "codice morto"). Ripulita anche da `local.properties.example`, dai workflow CI (`android-tests.yml`, `android-advanced-tests.yml`) e dai doc del worker. **`POKEWALLET_API_KEY` non toccata**: e' ancora attivamente letta (`CardsVaultTCGApp.kt`, `PokeTcgRepository.kt`, `PokeWalletRepository.kt`) -- rimuoverla ora, prima del taglio del cordone PokeWallet (M6), romperebbe funzionalita' live.
+
+### Consolidamento documentazione (sez. 8 voce #21)
+
+I 12 markdown ridondanti descritti in quella voce (3848 righe circa, in gran parte AI-slop con playbook duplicati) sono stati sostituiti da:
+- **`README.md`** di root (non esisteva -- debito #14 chiuso): overview, struttura repo, stack, setup locale
+- **`docs/TESTING.md`**: consolidamento di `TESTING_GUIDE.md`, `README_TESTING.md`, `TESTING_COMPLETE.md`, `TESTING_SUMMARY.md`, `QUICK_REFERENCE.md`, `TESTING_START_HERE.md`, `QUICK_START_TESTING.md`, `GITHUB_SETUP.md` -- comandi Gradle, template di test, setup branch protection, e il debito CI reale (sez. 1.2 #2/#3) citato esplicitamente invece di essere ripetuto in modo impreciso
+- **`pokevault-proxy-worker/README.md`** riscritto da zero: la versione precedente (insieme a `DEPLOYMENT_GUIDE.md` e `QUICK_DEPLOY.md`, entrambi eliminati) descriveva il Worker come un semplice proxy-cache KV per PokeWallet `/sets` -- non rifletteva affatto D1, R2, le route `/v1/*` ne' gli script di ingest costruiti nelle sessioni precedenti. Il nuovo README descrive lo stato attuale reale e rimanda qui per la storia
+- `CLOUDFLARE_PROXY_IMPLEMENTATION.md` (root) eliminato: descriveva un'architettura (proxy KV puro) ampiamente superata da questo stesso documento
+
+Non toccato: contenuto dei test stessi (16 file reali in `app/src/test`+`app/src/androidTest`, molti di piu' dei "5 file/19 test" che i vecchi doc dichiaravano -- erano scritti prima che la suite crescesse).
+
+### Non fatto, deliberatamente (troppo rischioso senza build/deploy disponibili qui)
+
+- `FORCED_REAL_TOTALS_BY_SET_CODE` (voce #16): verificato che e' ancora nel percorso attivo dei conteggi PokeWallet legacy, non un residuo isolato come assumeva la voce -- rimuoverlo senza poter testare con wrangler e' rischioso, lasciato per una sessione con credenziali
+- Bug "set giapponesi taggati come ENG" (voce #5, `SetsViewModel.kt:118`): rileggendo il file risulta **gia' risolto** in un commit precedente a questa migrazione (`226cefd`), la lista di `languageNameOverrides` copre gia' i casi noti -- la voce nel piano era stata semplicemente non aggiornata
+- PaddleOCR/TensorFlow Lite (perf #10), dedup `safeImageUrl` (#12), rinomina file `_v2`/`_v3` (#13), split file monolitici (#15): toccano piu' file o comportamento runtime, richiedono build per essere sicuri
+- `git filter-repo`/BFG sui 23 AAB storici (#18) ed eliminazione dei 37 branch remoti (#20): operazioni distruttive con force-push, fuori scope senza conferma esplicita dell'utente
