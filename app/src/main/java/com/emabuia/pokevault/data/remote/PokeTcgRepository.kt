@@ -2064,7 +2064,8 @@ class PokeTcgRepository {
                     cardCount = summary.cardCount,
                     computedBaseSetCode = summary.baseSetCode?.trim()?.uppercase(Locale.ROOT)?.takeIf { it.isNotBlank() },
                     setsByRawRef = setsByRawRef,
-                    setsByCanonicalRef = setsByCanonicalRef
+                    setsByCanonicalRef = setsByCanonicalRef,
+                    ourReleaseDate = summary.releaseDate
                 )
             }
             return (nonItalianSets + italianSets).distinctBy { it.id }
@@ -2114,7 +2115,8 @@ class PokeTcgRepository {
         cardCount: Int,
         computedBaseSetCode: String?,
         setsByRawRef: Map<String, TcgSet>,
-        setsByCanonicalRef: Map<String, TcgSet>
+        setsByCanonicalRef: Map<String, TcgSet>,
+        ourReleaseDate: String? = null
     ): TcgSet {
         val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
         val baseRawSetCode = preferredBaseSetCode ?: computedBaseSetCode ?: expansionId.uppercase(Locale.ROOT)
@@ -2146,7 +2148,11 @@ class PokeTcgRepository {
             language = "ITA",
             printedTotal = resolvedCardCount,
             total = resolvedCardCount,
-            releaseDate = linkedBase?.releaseDate.orEmpty(),
+            // Our own D1-backfilled release date (schema/002 + backfill-release-date-
+            // tcgdex.mjs, sourced once from TCGdex -- see MIGRATION_PLAN.md M4.6) takes
+            // priority; falls back to the borrowed English base set's date only for
+            // expansions not yet covered (there are none as of the 2026-09-08 backfill).
+            releaseDate = ourReleaseDate?.takeIf { it.isNotBlank() } ?: linkedBase?.releaseDate.orEmpty(),
             images = setImages
         )
     }

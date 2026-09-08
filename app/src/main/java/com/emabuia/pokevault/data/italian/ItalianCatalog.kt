@@ -65,7 +65,8 @@ data class ItalianExpansionSummary(
     val cardCount: Int = 0,
     val sortOrder: Int = 0,
     val logoKey: String? = null,
-    val baseSetCode: String? = null
+    val baseSetCode: String? = null,
+    val releaseDate: String? = null
 )
 
 data class ItalianExpansionsResponse(
