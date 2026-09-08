@@ -1185,3 +1185,16 @@ Tracciata l'intera catena: `FORCED_REAL_TOTALS_BY_SET_CODE`/`BY_SET_ID` alimenta
 - Bug "set giapponesi taggati come ENG" (voce #5, `SetsViewModel.kt:118`): rileggendo il file risulta **gia' risolto** in un commit precedente a questa migrazione (`226cefd`), la lista di `languageNameOverrides` copre gia' i casi noti -- la voce nel piano era stata semplicemente non aggiornata
 - PaddleOCR/TensorFlow Lite (perf #10), dedup `safeImageUrl` (#12), rinomina file `_v2`/`_v3` (#13), split file monolitici (#15): toccano piu' file o comportamento runtime, richiedono build per essere sicuri
 - `git filter-repo`/BFG sui 23 AAB storici (#18) ed eliminazione dei 37 branch remoti (#20): operazioni distruttive con force-push, fuori scope senza conferma esplicita dell'utente
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (M7: rimossi i duplicati orfani in root, voce #11)
+
+Rimossi `util/AppLocale.kt` (593 righe) e `viewmodel/DeckLabViewModel.kt` (268 righe), presenti a livello di root del repo, fuori da qualunque source set Gradle (nessun `sourceSets`/`srcDir` custom in `app/build.gradle.kts` -- solo `app/src/main/java/` e' compilato).
+
+**Verificato prima di cancellare, non assunto**:
+- Entrambi introdotti nello **stesso commit iniziale** del repo (`6d6aeba`, 7 maggio 2026, il piu' vecchio dei 53 commit totali) e mai piu' toccati -- debris della prima importazione, non lavoro in corso
+- Stesso `package` delle versioni vere (`com.emabuia.pokevault.util`/`.viewmodel`), quindi non erano varianti intenzionali ma copie divergenti (501 e 849 righe di diff contro `app/src/main/java/com/emabuia/pokevault/{util,viewmodel}/...` rispettivamente -- coerente con le "577 e 908 righe" gia' stimate in sez. 1.2 #4)
+- Nessun riferimento in nessun punto del repo (grep su `.kts`, `.yml`, `.md`, `.kt`): non erano importati, non erano citati in build script, CI o documentazione
+
+Cancellazione innocua per costruzione: file mai compilati, mai referenziati. Le cartelle `util/` e `viewmodel/` vuote in root sono state rimosse insieme ai file (git non traccia cartelle vuote).
