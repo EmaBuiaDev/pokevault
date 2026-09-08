@@ -131,6 +131,35 @@ object AppLocale {
         }
     }
 
+    private val subtypeEnToIt = mapOf(
+        "pokémon tool" to "Strumento",
+        "pokemon tool" to "Strumento",
+        "item" to "Oggetto",
+        "supporter" to "Supporter",
+        "stadium" to "Stadio",
+        "basic" to "Base",
+        "stage 1" to "Livello 1",
+        "stage 2" to "Livello 2",
+        "vmax" to "VMAX",
+        "vstar" to "VSTAR",
+        "v-union" to "V-UNION",
+        "tera" to "Tera",
+        "restored" to "Ripristinato",
+        "ex" to "ex",
+        "special energy" to "Energia Speciale",
+        "basic energy" to "Energia Base"
+    )
+
+    fun translateSubtype(subtype: String): String {
+        if (subtype.isBlank()) return subtype
+        val key = subtype.lowercase().trim()
+        return if (current == Language.IT) {
+            subtypeEnToIt[key] ?: subtype
+        } else {
+            subtype
+        }
+    }
+
     // ══════════════════════════════════════
     // TRADUZIONI NOMI SET / ESPANSIONI
     // ══════════════════════════════════════

@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,6 +48,9 @@ import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.RarityUtils
+import com.emabuia.pokevault.util.minimumEurPriceOrZero
+import com.emabuia.pokevault.viewmodel.SetsUiState
 import com.emabuia.pokevault.viewmodel.SetsViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -167,9 +171,23 @@ fun SetsListScreen(
     var isSearchingCards by remember { mutableStateOf(false) }
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     var collapsedSeriesKeys by remember { mutableStateOf(emptySet<String>()) }
+    var showFilterSheet by remember { mutableStateOf(false) }
+    var cardViewMode by remember { mutableStateOf(CardViewMode.GRID) }
     val setsGridState = rememberLazyGridState()
     val haptic = LocalHapticFeedback.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    if (showFilterSheet) {
+        CardFilterSheet(
+            state = state,
+            onDismiss = { showFilterSheet = false },
+            onToggleRarity = viewModel::toggleCardRarityFilter,
+            onToggleType = viewModel::toggleCardTypeFilter,
+            onToggleSupertype = viewModel::toggleCardSupertypeFilter,
+            onToggleSubtype = viewModel::toggleCardSubtypeFilter,
+            onReset = viewModel::clearCardResultFilters
+        )
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -284,7 +302,18 @@ fun SetsListScreen(
 
             if (isSearchingCards) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                val activeFilterCount = state.cardRarityFilter.size + state.cardTypeFilter.size +
+                    state.cardSupertypeFilter.size + state.cardSubtypeFilter.size
+                val hasFilterOptions = state.availableCardRarities.isNotEmpty() ||
+                    state.availableCardTypes.isNotEmpty() ||
+                    state.availableCardSupertypes.isNotEmpty() ||
+                    state.availableCardSubtypes.isNotEmpty()
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     FilterChip(
                         selected = state.isExactCardSearch,
                         onClick = { viewModel.setExactCardSearch(!state.isExactCardSearch) },
@@ -310,33 +339,43 @@ fun SetsListScreen(
                             iconColor = TextMuted
                         )
                     )
-                }
 
-                // Filtri rarita'/tipo: valori reali del risultato corrente (rarity ora
-                // nostra in D1, vedi MIGRATION_PLAN.md M4.6) -- nessuna chip vuota.
-                if (state.availableCardRarities.isNotEmpty() || state.availableCardTypes.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(state.availableCardRarities, key = { "rarity::$it" }) { rarity ->
-                            SeriesFilterChip(
-                                label = rarity,
-                                count = 0,
-                                showCount = false,
-                                isSelected = rarity in state.cardRarityFilter,
-                                onClick = { viewModel.toggleCardRarityFilter(rarity) }
+                    // Filtri rarita'/tipo/categoria/sottotipo raccolti in un unico
+                    // pannello (invece di piu' righe di chip sempre visibili) per non
+                    // affollare la barra di ricerca -- valori reali dal risultato
+                    // corrente (rarity ora nostra in D1, vedi MIGRATION_PLAN.md M4.6).
+                    if (hasFilterOptions) {
+                        FilterChip(
+                            selected = activeFilterCount > 0,
+                            onClick = { showFilterSheet = true },
+                            label = {
+                                Text(
+                                    text = if (activeFilterCount > 0) "Filtri ($activeFilterCount)" else "Filtri",
+                                    fontSize = 12.sp
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(16.dp))
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = BlueCard,
+                                selectedLabelColor = TextWhite,
+                                selectedLeadingIconColor = TextWhite,
+                                containerColor = DarkCard,
+                                labelColor = TextMuted,
+                                iconColor = TextMuted
                             )
-                        }
-                        items(state.availableCardTypes, key = { "type::$it" }) { type ->
-                            SeriesFilterChip(
-                                label = type,
-                                count = 0,
-                                showCount = false,
-                                isSelected = type in state.cardTypeFilter,
-                                onClick = { viewModel.toggleCardTypeFilter(type) }
-                            )
-                        }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    IconButton(onClick = { cardViewMode = cardViewMode.toggled() }) {
+                        Icon(
+                            imageVector = if (cardViewMode == CardViewMode.GRID) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                            contentDescription = "Cambia visualizzazione",
+                            tint = TextMuted
+                        )
                     }
                 }
             }
@@ -352,6 +391,7 @@ fun SetsListScreen(
                 cards = state.searchedCards,
                 isLoading = state.isSearchingCards,
                 query = state.cardSearchQuery,
+                viewMode = cardViewMode,
                 setReleaseDateById = setReleaseDateById,
                 onCardClick = { card -> selectedCard = card },
                 onCardSetClick = { setId -> onSetClick(setId, "ITA") }
@@ -456,6 +496,133 @@ private fun SeriesSectionHeader(label: String, count: Int, isCollapsed: Boolean,
                 modifier = Modifier.size(18.dp)
             )
         }
+    }
+}
+
+// ── Visualizzazione risultati ricerca carte: griglia (default) o lista (piu' dettagli per riga) ──
+enum class CardViewMode {
+    GRID, LIST;
+
+    fun toggled(): CardViewMode = if (this == GRID) LIST else GRID
+}
+
+// ── Pannello filtri ricerca carte: rarita'/tipo/categoria/sottotipo raccolti in un
+// unico bottom sheet (invece di piu' righe di chip sempre visibili) cosi' la barra di
+// ricerca resta pulita anche con molte dimensioni di filtro disponibili. ──
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun CardFilterSheet(
+    state: SetsUiState,
+    onDismiss: () -> Unit,
+    onToggleRarity: (String) -> Unit,
+    onToggleType: (String) -> Unit,
+    onToggleSupertype: (String) -> Unit,
+    onToggleSubtype: (String) -> Unit,
+    onReset: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = DarkBackground
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Filtri", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                val activeCount = state.cardRarityFilter.size + state.cardTypeFilter.size +
+                    state.cardSupertypeFilter.size + state.cardSubtypeFilter.size
+                if (activeCount > 0) {
+                    Text(
+                        text = "Azzera",
+                        color = BlueCard,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable(onClick = onReset)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (state.availableCardSupertypes.isNotEmpty()) {
+                FilterSection(title = "Categoria") {
+                    state.availableCardSupertypes.forEach { supertype ->
+                        SeriesFilterChip(
+                            label = AppLocale.translateSupertype(supertype),
+                            count = 0,
+                            showCount = false,
+                            isSelected = supertype in state.cardSupertypeFilter,
+                            onClick = { onToggleSupertype(supertype) }
+                        )
+                    }
+                }
+            }
+
+            if (state.availableCardTypes.isNotEmpty()) {
+                FilterSection(title = "Tipo") {
+                    state.availableCardTypes.forEach { type ->
+                        SeriesFilterChip(
+                            label = AppLocale.translateType(type),
+                            count = 0,
+                            showCount = false,
+                            isSelected = type in state.cardTypeFilter,
+                            onClick = { onToggleType(type) }
+                        )
+                    }
+                }
+            }
+
+            if (state.availableCardSubtypes.isNotEmpty()) {
+                FilterSection(title = "Sottotipo") {
+                    state.availableCardSubtypes.forEach { subtype ->
+                        SeriesFilterChip(
+                            label = AppLocale.translateSubtype(subtype),
+                            count = 0,
+                            showCount = false,
+                            isSelected = subtype in state.cardSubtypeFilter,
+                            onClick = { onToggleSubtype(subtype) }
+                        )
+                    }
+                }
+            }
+
+            if (state.availableCardRarities.isNotEmpty()) {
+                FilterSection(title = "Rarità") {
+                    state.availableCardRarities.forEach { rarity ->
+                        val info = RarityUtils.getRarityInfo(rarity)
+                        SeriesFilterChip(
+                            label = "${info.emoji} ${AppLocale.translateRarity(rarity)}",
+                            count = 0,
+                            showCount = false,
+                            isSelected = rarity in state.cardRarityFilter,
+                            onClick = { onToggleRarity(rarity) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterSection(title: String, content: @Composable FlowRowScope.() -> Unit) {
+    Column(modifier = Modifier.padding(top = 12.dp)) {
+        Text(title, color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(8.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = content
+        )
     }
 }
 
@@ -626,6 +793,7 @@ fun CardSearchResults(
     isLoading: Boolean,
     query: String,
     setReleaseDateById: Map<String, String>,
+    viewMode: CardViewMode = CardViewMode.GRID,
     onCardClick: (TcgCard) -> Unit = {},
     onCardSetClick: (String) -> Unit
 ) {
@@ -661,20 +829,21 @@ fun CardSearchResults(
                     entry.value.firstOrNull()?.set?.name?.lowercase(Locale.ROOT) ?: ""
                 }
             )
+        val columns = if (viewMode == CardViewMode.GRID) 3 else 1
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
+            columns = GridCells.Fixed(columns),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item(span = { GridItemSpan(3) }) {
+            item(span = { GridItemSpan(columns) }) {
                 Text(AppLocale.resultsCountInExpansions(cards.size, grouped.size), color = TextMuted, fontSize = 13.sp)
             }
             orderedGroups.forEach { (setId, setCards) ->
                 val setName = setCards.firstOrNull()?.set?.name ?: AppLocale.unknown
                 val formattedReleaseDate = formatReleaseDateUi(setReleaseDateById[setId].orEmpty())
-                item(span = { GridItemSpan(3) }) {
+                item(span = { GridItemSpan(columns) }) {
                     Row(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DarkCard)
                             .clickable {
@@ -700,48 +869,143 @@ fun CardSearchResults(
                     setCards.sortedBy { extractCardNumberForUi(it.number).toIntOrNull() ?: Int.MAX_VALUE },
                     key = { "${it.id}_$setId" }
                 ) { card ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(0.72f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onCardClick(card) }
-                    ) {
-                        if (card.images.small.isNotBlank()) {
-                            AsyncImage(
-                                model = card.images.small,
-                                contentDescription = card.name,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomStart)
-                                    .fillMaxWidth()
-                                    .background(Color.Black.copy(alpha = 0.55f))
-                                    .padding(horizontal = 6.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = "#${extractCardNumberForUi(card.number)} ${card.name}",
-                                    color = TextWhite,
-                                    fontSize = 10.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(DarkSurface),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(AppLocale.noImage, color = TextMuted, fontSize = 10.sp)
-                            }
-                        }
+                    if (viewMode == CardViewMode.GRID) {
+                        SearchResultGridCard(card = card, onClick = { onCardClick(card) })
+                    } else {
+                        SearchResultListRow(card = card, onClick = { onCardClick(card) })
                     }
                 }
             }
+        }
+    }
+}
+
+// ── Card di ricerca, vista griglia: immagine + badge rarita' + prezzo ──
+@Composable
+private fun SearchResultGridCard(card: TcgCard, onClick: () -> Unit) {
+    val price = card.cardmarket?.prices.minimumEurPriceOrZero()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.72f)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+    ) {
+        if (card.images.small.isNotBlank()) {
+            AsyncImage(
+                model = card.images.small,
+                contentDescription = card.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            if (!card.rarity.isNullOrBlank()) {
+                val info = RarityUtils.getRarityInfo(card.rarity)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(info.color.copy(alpha = 0.85f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                ) {
+                    Text(info.emoji, fontSize = 10.sp)
+                }
+            }
+            if (price > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                ) {
+                    Text("${"%.2f".format(price)} €", color = Color(0xFF4ADE80), fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = "#${extractCardNumberForUi(card.number)} ${card.name}",
+                    color = TextWhite,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(DarkSurface),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(AppLocale.noImage, color = TextMuted, fontSize = 10.sp)
+            }
+        }
+    }
+}
+
+// ── Card di ricerca, vista lista: piu' dettagli leggibili per riga ──
+@Composable
+private fun SearchResultListRow(card: TcgCard, onClick: () -> Unit) {
+    val price = card.cardmarket?.prices.minimumEurPriceOrZero()
+    val rarityInfo = card.rarity?.takeIf { it.isNotBlank() }?.let { RarityUtils.getRarityInfo(it) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(DarkCard)
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(48.dp)
+                .aspectRatio(0.72f)
+                .clip(RoundedCornerShape(6.dp))
+                .background(DarkSurface)
+        ) {
+            if (card.images.small.isNotBlank()) {
+                AsyncImage(
+                    model = card.images.small,
+                    contentDescription = card.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "#${extractCardNumberForUi(card.number)} ${card.name}",
+                color = TextWhite,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (rarityInfo != null) {
+                    Text("${rarityInfo.emoji} ${rarityInfo.label}", color = TextMuted, fontSize = 11.sp)
+                }
+                if (rarityInfo != null && card.set?.name?.isNotBlank() == true) {
+                    Text("  •  ", color = TextMuted, fontSize = 11.sp)
+                }
+                card.set?.name?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        if (price > 0) {
+            Text("${"%.2f".format(price)} €", color = Color(0xFF4ADE80), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

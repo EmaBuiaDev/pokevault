@@ -50,8 +50,12 @@ data class SetsUiState(
     val isExactCardSearch: Boolean = false,
     val cardRarityFilter: Set<String> = emptySet(),
     val cardTypeFilter: Set<String> = emptySet(),
+    val cardSupertypeFilter: Set<String> = emptySet(),
+    val cardSubtypeFilter: Set<String> = emptySet(),
     val availableCardRarities: List<String> = emptyList(),
     val availableCardTypes: List<String> = emptyList(),
+    val availableCardSupertypes: List<String> = emptyList(),
+    val availableCardSubtypes: List<String> = emptyList(),
     val searchedCards: List<TcgCard> = emptyList(),
     val isSearchingCards: Boolean = false,
     val isLoading: Boolean = true,
@@ -208,8 +212,12 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                 isSearchingCards = false,
                 availableCardRarities = emptyList(),
                 availableCardTypes = emptyList(),
+                availableCardSupertypes = emptyList(),
+                availableCardSubtypes = emptyList(),
                 cardRarityFilter = emptySet(),
-                cardTypeFilter = emptySet()
+                cardTypeFilter = emptySet(),
+                cardSupertypeFilter = emptySet(),
+                cardSubtypeFilter = emptySet()
             )
             return
         }
@@ -236,16 +244,20 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             val finalCards = enrichItalianCardsWithSnapshotPrices(rankedCards, context)
             lastUnfilteredSearchCards = finalCards
 
-            // New search results -> the rarita'/tipo chips reset to what's actually
-            // available in this result set (real values from D1, see MIGRATION_PLAN.md
-            // M4.6), rather than carrying over a filter that may no longer apply.
+            // New search results -> filter chips reset to what's actually available
+            // in this result set (real values from D1, see MIGRATION_PLAN.md M4.6),
+            // rather than carrying over a filter that may no longer apply.
             uiState = uiState.copy(
                 searchedCards = finalCards,
                 isSearchingCards = false,
                 availableCardRarities = finalCards.mapNotNull { it.rarity?.trim()?.takeIf(String::isNotBlank) }.distinct().sorted(),
                 availableCardTypes = finalCards.flatMap { it.types.orEmpty() }.map { it.trim() }.filter { it.isNotBlank() }.distinct().sorted(),
+                availableCardSupertypes = finalCards.map { it.supertype.trim() }.filter { it.isNotBlank() }.distinct().sorted(),
+                availableCardSubtypes = finalCards.flatMap { it.subtypes.orEmpty() }.map { it.trim() }.filter { it.isNotBlank() }.distinct().sorted(),
                 cardRarityFilter = emptySet(),
-                cardTypeFilter = emptySet()
+                cardTypeFilter = emptySet(),
+                cardSupertypeFilter = emptySet(),
+                cardSubtypeFilter = emptySet()
             )
         }
     }
@@ -272,12 +284,38 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         applyCardResultFilters()
     }
 
+    fun toggleCardSupertypeFilter(supertype: String) {
+        val current = uiState.cardSupertypeFilter
+        uiState = uiState.copy(cardSupertypeFilter = if (supertype in current) current - supertype else current + supertype)
+        applyCardResultFilters()
+    }
+
+    fun toggleCardSubtypeFilter(subtype: String) {
+        val current = uiState.cardSubtypeFilter
+        uiState = uiState.copy(cardSubtypeFilter = if (subtype in current) current - subtype else current + subtype)
+        applyCardResultFilters()
+    }
+
+    fun clearCardResultFilters() {
+        uiState = uiState.copy(
+            cardRarityFilter = emptySet(),
+            cardTypeFilter = emptySet(),
+            cardSupertypeFilter = emptySet(),
+            cardSubtypeFilter = emptySet()
+        )
+        applyCardResultFilters()
+    }
+
     private fun applyCardResultFilters() {
         val rarityFilter = uiState.cardRarityFilter
         val typeFilter = uiState.cardTypeFilter
+        val supertypeFilter = uiState.cardSupertypeFilter
+        val subtypeFilter = uiState.cardSubtypeFilter
         val filtered = lastUnfilteredSearchCards.filter { card ->
             (rarityFilter.isEmpty() || card.rarity?.trim() in rarityFilter) &&
-                (typeFilter.isEmpty() || card.types.orEmpty().any { it.trim() in typeFilter })
+                (typeFilter.isEmpty() || card.types.orEmpty().any { it.trim() in typeFilter }) &&
+                (supertypeFilter.isEmpty() || card.supertype.trim() in supertypeFilter) &&
+                (subtypeFilter.isEmpty() || card.subtypes.orEmpty().any { it.trim() in subtypeFilter })
         }
         uiState = uiState.copy(searchedCards = filtered)
     }
@@ -291,8 +329,12 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             isSearchingCards = false,
             availableCardRarities = emptyList(),
             availableCardTypes = emptyList(),
+            availableCardSupertypes = emptyList(),
+            availableCardSubtypes = emptyList(),
             cardRarityFilter = emptySet(),
-            cardTypeFilter = emptySet()
+            cardTypeFilter = emptySet(),
+            cardSupertypeFilter = emptySet(),
+            cardSubtypeFilter = emptySet()
         )
     }
 
