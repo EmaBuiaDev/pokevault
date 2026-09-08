@@ -736,6 +736,7 @@ Le ragioni, in ordine di peso:
 | 5 | Set giapponesi taggati erroneamente come ENG | `viewmodel/SetsViewModel.kt:118` |
 | 6 | Verificare che le immagini non finiscano dietro paywall (sez. 4.4) | `ui/premium/PremiumScreen.kt`, `data/billing/PremiumManager.kt` |
 | 7 | **BUG PRODUZIONE confermato 2026-09-07: `normalizeCardNumber()` mostra la carta sbagliata per le sotto-collezioni "Shiny Vault"** — vedi dettaglio sotto | `pokevault-proxy-worker/src/index.ts:530-536` |
+| 8 | **BUG segnalato dall'utente: loghi delle espansioni sbagliati o assenti nel Pokedex** — logo giapponese/cinese su alcune espansioni ITA, nessun logo su molte altre — vedi dettaglio sotto | `PokeTcgRepository.kt` (`mergeItalianSets`, `buildSetImageUrl`), `pokevault-proxy-worker/src/index.ts` (`buildItalianSetLogoCandidates`, `handleItalianR2AssetRequest`) |
 
 #### Dettaglio bug #7 — immagine sbagliata per le carte "Shiny Vault" (preesistente, non causato dalla sessione del 2026-09-07)
 
@@ -748,6 +749,26 @@ Le ragioni, in ordine di peso:
 **Perche' non e' stato toccato oggi**: `normalizeCardNumber()` e' condivisa da piu' percorsi (risoluzione immagini, matching prezzi via ricerca PokeWallet) — una modifica va verificata su tutti gli usi, non solo sulle immagini, prima di un deploy dedicato. Rimandato a M7 su decisione esplicita dell'utente (non e' un blocco per la migrazione D1/R2 in corso).
 
 **Spiega anche perche' la ricompressione WebP fallisce "in blocco" su queste carte**: lo script di ricompressione cerca la chiave `it/SWSH45/SWSH45_IT_SV001.png` (che non esiste — verificato con `wrangler r2 object get`, "specified key does not exist"), perche' il nome file reale non include il prefisso `SV`. Non e' un problema della pipeline di conversione: e' lo stesso bug di fondo, visto da un angolo diverso.
+
+#### Dettaglio bug #8 — loghi delle espansioni: giapponesi/cinesi su alcune, assenti su molte (segnalato dall'utente 2026-09-08, causa root tracciata per intero via lettura codice -- nessuna build disponibile per riprodurlo visivamente)
+
+**Sintomo riportato**: nella sezione espansioni del Pokedex, alcune espansioni mostrano un logo in giapponese o cinese; molte altre non mostrano alcun logo.
+
+**Come funziona oggi, tracciato riga per riga**:
+
+1. Per ogni espansione ITA, `mergeItalianSets()` (`PokeTcgRepository.kt:~2060`) calcola un `baseRawSetCode` (da `preferredBaseSetCodeForItalianExpansion()` se l'espansione e' tra le poche mappate esplicitamente — solo `me01-04`/`sv01-10` e varianti — altrimenti da `dominant_set_code`, gia' arrivato da D1) e chiede il logo con `buildSetImageUrl(baseRawSetCode)` -> `GET {worker}/sets/{CODE}/image`.
+2. **Questa e' la stessa identica route usata anche per i set ENG/JAP/CHN** (`PokeWalletSet.toTcgSet()`, riga 2532): non c'e' distinzione lato URL tra "voglio il logo italiano" e "voglio il logo del set PokeWallet generico".
+3. Lato Worker, `parseItalianAssetRequest()` (riga 500) intercetta `^/sets/([^/]+)/image$` e lo instrada come `kind: 'setLogo'` a `handleItalianR2AssetRequest()`: prova prima `buildItalianSetLogoCandidates()` in R2 (`{prefix}/{SET}/set-logo.png`, `set_logo.png`, `logo.png`, `cover.png`, `{SET}_IT_logo.png`) — **l'infrastruttura per servire un logo italiano self-hosted esiste gia' ed e' corretta**. Se non trova nulla in R2, ritorna `null` esplicitamente (riga 691-692, commento: *"fall through to the PokeWallet proxy so the upstream API can serve the image"*) e la richiesta prosegue verso il passthrough generico PokeWallet, che restituisce l'immagine associata a quel codice **senza alcuna selezione di lingua**.
+
+**Causa del logo giapponese/cinese**: il lavoro di raccolta immagini fatto finora (`upload-ita-r2.ps1`, poi la ricompressione WebP) si e' concentrato **solo sulle carte**, mai sui loghi dei set — verificato che `buildItalianSetLogoCandidates()` non ha mai un candidato popolato per la stragrande maggioranza delle 106 espansioni, quindi il fallback a PokeWallet scatta quasi sempre. Quando scatta, PokeWallet restituisce quello che ha per quel codice esatto, senza preferenza di lingua: se un set e' stato pubblicato da PokeWallet solo in giapponese o cinese (es. i set esclusivamente giapponesi gia' noti da `SetsViewModel.languageNameOverrides` — "Mega Evolution All-Stars", "Pokémon Card Game Classic", ecc. — mai localizzati in inglese), il logo restituito e' in quella lingua. Non e' un errore di matching: e' l'unico logo che esiste upstream per quel codice.
+
+**Causa del logo assente**: per le ~90 espansioni storiche senza una entry esplicita in `preferredBaseSetCodeForItalianExpansion()`, `dominant_set_code` e' un valore euristico — il prefisso piu' frequente tra i `card_id` di quell'espansione nel nostro dataset (`dominantSetCode()` in `scripts/import-catalog-to-d1.mjs`), **non garantito coincidere con un `set_code` realmente indicizzato da PokeWallet**. Quando non coincide, sia R2 (nessun logo caricato) sia il fallback PokeWallet (nessun set con quel codice) rispondono vuoto/404 — nessun logo mostrato, senza errori visibili in log lato client.
+
+**Perche' non e' stato toccato ora**: sistemarlo bene richiede due cose che questa sessione non ha:
+1. **Contenuto**: caricare loghi ITA reali in R2 per le espansioni che li vogliono (stesso tipo di lavoro fatto per le 15.539 immagini carte — acquisizione, non solo codice), oppure decidere un placeholder coerente (stesso principio gia' adottato per le carte senza immagine IT, sez. 2.2: "nessun mix IT/EN, nessuna cella vuota") per i set senza logo proprio, invece di mostrare un logo in lingua sbagliata o niente
+2. **Verifica visiva**: qualunque modifica a `mergeItalianSets()`/`buildSetImageUrl()` (es. distinguere esplicitamente il caso ITA da ENG/JAP/CHN, o non richiedere affatto il logo PokeWallet quando manca quello R2) cambia cosa vede l'utente nel Pokedex — va controllata su device/emulatore, non solo per lettura di codice, prima di un deploy
+
+**Direzione raccomandata per la prossima sessione con build disponibile**: trattare il logo dei set ITA come le immagini delle carte — self-hosted in R2 con soglia di pubblicazione, mai un fallback silenzioso a una fonte in lingua diversa. Concretamente: se `buildItalianSetLogoCandidates()` non trova nulla in R2 per un'espansione ITA, il Worker dovrebbe rispondere con un placeholder proprio (o 404 esplicito) invece di innescare il passthrough PokeWallet — lo stesso pattern "mai un mix di lingue" gia' applicato con successo alle carte.
 
 ### Priorita alta — performance
 
