@@ -1198,3 +1198,21 @@ Rimossi `util/AppLocale.kt` (593 righe) e `viewmodel/DeckLabViewModel.kt` (268 r
 - Nessun riferimento in nessun punto del repo (grep su `.kts`, `.yml`, `.md`, `.kt`): non erano importati, non erano citati in build script, CI o documentazione
 
 Cancellazione innocua per costruzione: file mai compilati, mai referenziati. Le cartelle `util/` e `viewmodel/` vuote in root sono state rimosse insieme ai file (git non traccia cartelle vuote).
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (M7: audit paywall, dead-code check TranslationService, pulizia test placeholder)
+
+Tre verifiche a rischio zero (nessuna richiede build), su richiesta esplicita "cosa possiamo fare senza buildare".
+
+### Audit paywall vs immagini (sez. 4.4) -- **nessuna violazione trovata**
+
+Letto per intero `PremiumManager.kt`: tutti i gate premium (`canCreateDeck`, `canCreateAlbum`, `canCreateGoalAlbum`, `canCreateWishlist`, `canCreateTournament`, `canViewMetaDeck`, `canExportDecklist`, `canRunHandSimulator`, `canChooseHomeSprite`, `canViewPrices`) riguardano funzionalita' o i **prezzi** -- mai le immagini delle carte. Grep incrociato `isPremium` con `image`/`AsyncImage`/`highRes`/`resolution` su tutto `app/src/main`: zero risultati. La regola "le immagini non stanno mai dietro paywall" (sez. 4.4) e' rispettata oggi. Voce #6 (sez. 8) chiusa come verificata, nessun codice da toccare.
+
+### `TranslationService` (voce #17) -- **non rimovibile, stessa storia di `FORCED_REAL_TOTALS_BY_SET_CODE`**
+
+Ancora referenziato in `SetDetailViewModel.kt` e `SetsViewModel.kt`: `translateItToEn()` traduce le query di ricerca dall'italiano per interrogare il catalogo PokeWallet (ENG/JAP/CHN), non e' legato al testo del catalogo ITA (che e' gia' nativo in italiano nel nostro D1, indipendentemente da questo servizio). La premessa della voce #17 ("se le traduzioni arrivano dal catalogo IT") non si applica: e' un componente di ricerca cross-lingua ancora attivo, non un residuo. Nessun codice toccato.
+
+### Rimossi i template placeholder mai scritti (voce #23)
+
+`ExampleUnitTest.kt` (`assertEquals(4, 2+2)`) e `ExampleInstrumentedTest.kt` (verifica il nome del package) sono i default generati da Android Studio alla creazione del progetto, mai sostituiti con test reali. Non testano nulla dell'app: cancellati senza sostituirli, dato che scrivere test nuovi e verificarne la compilazione richiede una sessione con build disponibile. La suite reale (16 file in `app/src/test`+`app/src/androidTest`, elencata in `docs/TESTING.md`) non e' toccata.
