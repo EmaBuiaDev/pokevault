@@ -788,7 +788,7 @@ Le ragioni, in ordine di peso:
 | # | Intervento | Dove |
 |---|---|---|
 | 11 | **Cancellare i duplicati orfani in root** | `util/AppLocale.kt`, `viewmodel/DeckLabViewModel.kt` |
-| 12 | `safeImageUrl()` duplicato 7 volte -> utility unica in `util/` e applicata ovunque | 7 file + i 3 punti che non la usano — **le 7 duplicazioni consolidate 2026-09-09, vedi checkpoint in fondo; i punti che non la usano ancora restano aperti** |
+| 12 | `safeImageUrl()` duplicato 7 volte -> utility unica in `util/` e applicata ovunque | 7 file + i 3 punti che non la usano — **fatto per intero il 2026-09-09 (dedup + i 14 punti reali), vedi checkpoint in fondo** |
 | 13 | Rinominare i file `_v2`/`_v3` e allineare nome file/classe | `MainActivity_v2.kt`, `CardsVaultTCGApp.kt`, `AppNavigation_v3.kt`, `HomeScreen_v2.kt` — **fatto 2026-09-09, vedi checkpoint in fondo** |
 | 14 | Logging unificato su Timber (38 usi di `Log`/`println` residui) | `PaddleOCREngine.kt`, `MLKitOCREngine.kt`, `LimitlessTcgRepository.kt` — **fatto 2026-09-09, vedi checkpoint in fondo** |
 | 15 | Spezzare i file monolitici (`DeckLabScreen.kt` 2240 righe, `PokeTcgRepository.kt` 1735) | — |
@@ -1393,3 +1393,29 @@ Su 22 chiamate totali (`LimitlessTcgRepository.kt` escluso, gia' tutte guardate)
 ### Verificato dopo la conversione
 
 Grep sull'intero `app/src/main` per `android.util.Log`/`Log\.(d|w|e|i|v)(`/`System.out.print`/`println(`: **zero risultati**. Parentesi e graffe ricontate per ognuno degli 8 file (aperte = chiuse), nessuna asimmetria introdotta. Non compilato (nessun accesso a `dl.google.com` qui).
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, ottava parte (sez. 8 #12, chiusura completa: i 14 punti senza `safeImageUrl`)
+
+Rifatta la ricerca dei call site `.data(...)` su URL immagine/logo non ancora incapsulati (stessa query del checkpoint di dedup, sui file aggiornati nel frattempo: `WelcomeHeader_v2.kt` -> `WelcomeHeader.kt` dopo la voce #13). Confermati gli stessi **14** punti: `AlbumDetailScreen.kt` (2), `AlbumListScreen.kt` (1), `CreateGoalAlbumScreen.kt` (2, loghi set), `DeckLabScreen.kt` (6), `WelcomeHeader.kt` (1), `SetsListScreen.kt` (1).
+
+### Non un wrap uniforme: due funzioni diverse a seconda del tipo, verificato per ognuno
+
+Prima di editare, risalita al tipo di dato/funzione di ogni call site (non assunto dal nome del parametro):
+
+| Sorgente | Tipo | Funzione usata | Perche' |
+|---|---|---|---|
+| `card.imageUrl` (`AlbumDetailScreen.kt` x2, `AlbumListScreen.kt` via `cards.firstOrNull()?.imageUrl`, `DeckLabScreen.kt` x3) | `PokemonCard` | `ImageUrlUtils.safeProxiedImageUrl` | Stesso campo che `CollectionScreen.kt` gia' passava per il proxy PokeWallet (voce #12 originale) — URL grezzo salvato in Room, non ancora passato dal Worker |
+| `deck.coverImageUrl`/`coverUrls.first()`/`coverUrl` (`DeckLabScreen.kt` x3) | derivano da `PokemonCard.imageUrl` (`DeckLabViewModel.addCardToDeck(card: PokemonCard)` -> `displayCoverImageUrls()`) | `ImageUrlUtils.safeProxiedImageUrl` | Stessa origine di `card.imageUrl`, solo passata attraverso il modello `Deck` invece che letta direttamente |
+| `set.images.logo`/`set.images.symbol` (`CreateGoalAlbumScreen.kt` x2, `SetsListScreen.kt` x1) | `TcgSet` | `ImageUrlUtils.safeImageUrl` (no proxy) | Stesso campo gia' incapsulato altrove (`SetDetailScreen.kt`, ecc.) — URL gia' servito dal Worker, non un host PokeWallet grezzo |
+| `card.images.small` (`DeckLabScreen.kt` x1, `TcgCardSearchItem`) | `TcgCard` | `ImageUrlUtils.safeImageUrl` | Stesso pattern degli altri 6 file gia' fatti nel checkpoint di dedup |
+| `pokemonImageUrl` (`WelcomeHeader.kt`) | stringa costruita da `PokeAPI/sprites` (GitHub raw, ID Pokemon numerico da una pool fissa) | `ImageUrlUtils.safeImageUrl` | Non e' un URL di carta/PokeWallet — verificato che l'ID e' sempre numerico (`pokemonIds`), quindi l'encoding non cambia mai nulla in pratica; applicato comunque per coerenza e a rischio zero (nessun carattere da incapsulare puo' mai comparire) |
+
+`album.coverImageUrl` (il campo diretto, non il fallback): verificato con grep che **nessun punto del codice lo valorizza mai** a qualcosa di non vuoto — resta sempre il fallback `PokemonCard.imageUrl` in pratica, coerente con la scelta sopra.
+
+### Verificato dopo l'edit
+
+Stessa query di ricerca dei 14 punti rilanciata su tutto `app/src/main/java/com/emabuia/pokevault/ui`: **zero residui**. Parentesi ricontate su tutti e 6 i file toccati (aperte = chiuse). Non compilato (nessun accesso a `dl.google.com` qui): ogni sostituzione verificata a mano confrontando il tipo del parametro con gli usi analoghi gia' fatti nel checkpoint di dedup, non per pattern-matching cieco sul nome della variabile.
+
+**Voce #12 ora chiusa per intero**: dedup delle 7 copie + applicazione ai 14 punti mancanti, in due sessioni separate dello stesso giorno.

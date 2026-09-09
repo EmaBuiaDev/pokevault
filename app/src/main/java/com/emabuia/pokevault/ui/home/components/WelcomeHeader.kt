@@ -31,6 +31,7 @@ import com.emabuia.pokevault.ui.theme.DarkCard
 import com.emabuia.pokevault.ui.theme.TextGray
 import com.emabuia.pokevault.ui.theme.TextMuted
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import kotlin.random.Random
 
 @Composable
@@ -87,7 +88,7 @@ fun WelcomeHeader(
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(pokemonImageUrl)
+                    .data(ImageUrlUtils.safeImageUrl(pokemonImageUrl))
                     .crossfade(true)
                     .build(),
                 imageLoader = imageLoader,

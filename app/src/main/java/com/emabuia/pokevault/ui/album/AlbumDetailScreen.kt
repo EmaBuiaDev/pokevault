@@ -30,6 +30,7 @@ import com.emabuia.pokevault.data.model.Album
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.AlbumViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -197,7 +198,7 @@ private fun AlbumCardItem(
     ) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
-                .data(card.imageUrl)
+                .data(ImageUrlUtils.safeProxiedImageUrl(card.imageUrl))
                 .crossfade(true)
                 .build(),
             contentDescription = card.name,
@@ -364,7 +365,7 @@ private fun AddCardsBottomSheet(
                         ) {
                             AsyncImage(
                                 model = ImageRequest.Builder(LocalContext.current)
-                                    .data(card.imageUrl)
+                                    .data(ImageUrlUtils.safeProxiedImageUrl(card.imageUrl))
                                     .crossfade(true)
                                     .build(),
                                 contentDescription = card.name,

@@ -57,6 +57,7 @@ import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.DeckLabViewModel
 import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
 
@@ -579,7 +580,7 @@ fun DeckItem(
                 )
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(coverUrls.first())
+                        .data(ImageUrlUtils.safeProxiedImageUrl(coverUrls.first()))
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
@@ -699,7 +700,7 @@ fun DeckItem(
                         coverUrls.forEach { coverUrl ->
                             AsyncImage(
                                 model = ImageRequest.Builder(LocalContext.current)
-                                    .data(coverUrl)
+                                    .data(ImageUrlUtils.safeProxiedImageUrl(coverUrl))
                                     .size(120, 168)
                                     .build(),
                                 contentDescription = null,
@@ -834,7 +835,7 @@ fun DeckDetailView(
             if (deck.coverImageUrl.isNotEmpty()) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(deck.coverImageUrl)
+                        .data(ImageUrlUtils.safeProxiedImageUrl(deck.coverImageUrl))
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
@@ -967,7 +968,7 @@ fun DeckDetailView(
                                 ) {
                                     AsyncImage(
                                         model = ImageRequest.Builder(LocalContext.current)
-                                            .data(card.imageUrl)
+                                            .data(ImageUrlUtils.safeProxiedImageUrl(card.imageUrl))
                                             .crossfade(true)
                                             .size(250, 350)
                                             .build(),
@@ -1736,7 +1737,7 @@ fun NewDeckBottomSheetContent(
                             ) {
                                 AsyncImage(
                                     model = ImageRequest.Builder(LocalContext.current)
-                                        .data(card.imageUrl)
+                                        .data(ImageUrlUtils.safeProxiedImageUrl(card.imageUrl))
                                         .size(140, 200)
                                         .build(),
                                     contentDescription = AppLocale.selectCover(card.name),
@@ -1809,7 +1810,7 @@ fun CardSelectionItem(
     ) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
-                .data(card.imageUrl)
+                .data(ImageUrlUtils.safeProxiedImageUrl(card.imageUrl))
                 .size(200, 280)
                 .build(),
             contentDescription = card.name,
@@ -1898,7 +1899,7 @@ fun TcgCardSearchItem(
     ) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
-                .data(card.images.small)
+                .data(ImageUrlUtils.safeImageUrl(card.images.small))
                 .crossfade(true)
                 .size(200, 280)
                 .build(),

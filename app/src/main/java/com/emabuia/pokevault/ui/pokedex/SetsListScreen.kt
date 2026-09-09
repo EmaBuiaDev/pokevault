@@ -48,6 +48,7 @@ import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.SetsViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -543,7 +544,7 @@ fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoLoadError: (String) -> Unit 
                 } else if (shouldLoadLogo) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
-                            .data(logoUrl)
+                            .data(ImageUrlUtils.safeImageUrl(logoUrl))
                             .crossfade(false)
                             .build(),
                         contentDescription = set.name,

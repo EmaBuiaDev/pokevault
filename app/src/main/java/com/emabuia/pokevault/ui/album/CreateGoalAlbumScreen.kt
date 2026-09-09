@@ -291,7 +291,7 @@ private fun SetPicker(
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(selectedSet.images.logo.ifBlank { selectedSet.images.symbol })
+                            .data(ImageUrlUtils.safeImageUrl(selectedSet.images.logo.ifBlank { selectedSet.images.symbol }))
                             .crossfade(true)
                             .build(),
                         contentDescription = selectedSet.name,
@@ -407,7 +407,7 @@ private fun SetPicker(
                                 ) {
                                     AsyncImage(
                                         model = ImageRequest.Builder(LocalContext.current)
-                                            .data(set.images.symbol)
+                                            .data(ImageUrlUtils.safeImageUrl(set.images.symbol))
                                             .crossfade(true)
                                             .build(),
                                         contentDescription = set.name,
