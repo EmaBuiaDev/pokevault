@@ -1903,17 +1903,24 @@ class CatalogRepository {
      */
     private suspend fun italianExpansionDisplayName(expansionId: String): String {
         val normalized = expansionId.trim().lowercase(Locale.ROOT)
-        val fallback = normalized.uppercase(Locale.ROOT)
+        return italianExpansionNamesById()[normalized] ?: normalized.uppercase(Locale.ROOT)
+    }
+
+    /**
+     * Mappa `id espansione minuscolo -> nome reale` (es. "sv08" -> "Scintille
+     * Folgoranti"), dal manifest D1. Vuota se il manifest non e' raggiungibile:
+     * i chiamanti devono trattare l'assenza come "non so", mai come "nessun nome".
+     */
+    suspend fun italianExpansionNamesById(): Map<String, String> {
         val summaries = italianCatalogRepository
             .getExpansionsSummary(baseUrl = PokeVaultApiClient.imageBaseUrl)
             .getOrNull()
-            ?: return fallback
-        return summaries
-            .firstOrNull { it.id.trim().lowercase(Locale.ROOT) == normalized }
-            ?.name
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?: fallback
+            .orEmpty()
+        return summaries.mapNotNull { summary ->
+            val id = summary.id.trim().lowercase(Locale.ROOT).takeIf { it.isNotBlank() }
+            val name = summary.name?.trim()?.takeIf { it.isNotBlank() }
+            if (id != null && name != null) id to name else null
+        }.toMap()
     }
 
     private fun parseItalianExpansionId(setId: String): String? {

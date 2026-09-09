@@ -363,6 +363,25 @@ class FirestoreRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    /**
+     * Aggiorna SOLO il nome dell'espansione di una carta.
+     *
+     * Deliberatamente separata da updateCard(): quella scrive un insieme fisso di
+     * campi che non include `set`, e ricalcola i totali dell'utente da un vecchio
+     * valore letto dalla cache locale -- se il documento non e' in cache assume
+     * quantita' e valore a zero e i delta risultano positivi, gonfiando
+     * `totalCards`/`totalValue`. Per una correzione di massa sarebbe stato un
+     * effetto collaterale grave: qui si scrive un solo campo e nessun contatore.
+     */
+    suspend fun updateCardSetName(cardId: String, setName: String): Result<Unit> {
+        return try {
+            cardsCollection.document(cardId).update("set", setName).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteCard(cardId: String): Result<Unit> {
         return try {
             // Leggiamo quantità e valore dalla cache locale (istantaneo) per

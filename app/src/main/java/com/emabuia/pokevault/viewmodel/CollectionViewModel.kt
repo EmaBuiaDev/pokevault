@@ -48,6 +48,10 @@ class CollectionViewModel : ViewModel() {
     // e questi insiemi tracciano lo stato condiviso fra di esse.
     private val hydratedPriceCardIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val hydratingPriceCardIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    // Il Flow di Firestore riemette a ogni scrittura: senza questa guardia la
+    // correzione dei codici espansione ripartirebbe sopra se stessa a ogni update.
+    @Volatile
+    private var legacyExpansionFixRunning = false
 
     var uiState by mutableStateOf(CollectionUiState())
         private set
@@ -69,6 +73,7 @@ class CollectionViewModel : ViewModel() {
                     applyCardsSnapshot(cards)
 
                     hydrateMissingPrices(cards)
+                    fixLegacyExpansionCodes(cards)
                 }
         }
     }
@@ -114,6 +119,41 @@ class CollectionViewModel : ViewModel() {
                     hydratingPriceCardIds -= card.id
                     hydratedPriceCardIds += card.id
                 }
+            }
+        }
+    }
+
+    /**
+     * Corregge le carte salvate con il CODICE dell'espansione al posto del nome
+     * (es. "SV08" invece di "Scintille Folgoranti"): fino al fix in
+     * CatalogRepository, tutto cio' che nasceva da ricerca/scanner/import portava
+     * con se' il codice, e quel valore finiva scritto in `PokemonCard.set`.
+     *
+     * Riscrive SOLO i valori che corrispondono esattamente a un id di espansione
+     * noto: un nome vero ("Scintille Folgoranti") o un nome inglese ("Surging
+     * Sparks") non combaciano con nessun id, quindi non vengono mai toccati.
+     * Di conseguenza e' anche idempotente -- dopo la correzione nessuna carta
+     * combacia piu', e le esecuzioni successive non scrivono nulla.
+     */
+    private fun fixLegacyExpansionCodes(cards: List<PokemonCard>) {
+        if (legacyExpansionFixRunning) return
+        val candidates = cards.filter { it.set.isNotBlank() }
+        if (candidates.isEmpty()) return
+
+        viewModelScope.launch {
+            legacyExpansionFixRunning = true
+            try {
+                val namesById = tcgRepository.italianExpansionNamesById()
+                if (namesById.isEmpty()) return@launch // manifest non raggiungibile: non indovinare
+
+                candidates.forEach { card ->
+                    val realName = namesById[card.set.trim().lowercase()] ?: return@forEach
+                    if (realName != card.set) {
+                        repository.updateCardSetName(card.id, realName)
+                    }
+                }
+            } finally {
+                legacyExpansionFixRunning = false
             }
         }
     }
