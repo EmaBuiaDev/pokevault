@@ -50,7 +50,10 @@ data class ItalianExpansionManifest(
 data class ItalianCatalog(
     val cards: List<ItalianCardRecord> = emptyList(),
     val expansions: List<ItalianExpansionManifest> = emptyList()
-)
+) {
+    fun cardsByExpansion(): Map<String, List<ItalianCardRecord>> =
+        cards.groupBy { it.espansioneId.lowercase(Locale.ROOT) }
+}
 
 data class ItalianCatalogPayload(
     val cards: List<ItalianCardRecord> = emptyList(),
