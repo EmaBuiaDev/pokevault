@@ -779,7 +779,7 @@ Le ragioni, in ordine di peso:
 | # | Intervento | Dove |
 |---|---|---|
 | 7 | **`ImageRequest.size()` su tutte le 55 `AsyncImage`** — causa #1 dei consumi memoria | Tutte le schermate con Coil |
-| 8 | Loop di rete sequenziali -> `async`/`awaitAll` (pattern gia usato nel progetto) | `PokeTcgRepository.kt` righe 438, 497, 534, 576, **600**, 801, 856 |
+| 8 | Loop di rete sequenziali -> `async`/`awaitAll` (pattern gia usato nel progetto) | `PokeTcgRepository.kt` righe 438, 497, 534, 576, **600**, 801, 856 — **investigato 2026-09-09, sospeso su decisione utente, vedi checkpoint in fondo** |
 | 9 | `Column + verticalScroll` su liste potenzialmente lunghe -> `LazyColumn` | `CollectionScreen.kt`, `StatsScreen.kt`, `SettingsScreen.kt` |
 | 10 | Rimuovere PaddleOCR + TensorFlow Lite (nessun `.tflite` esiste, `assets/` non c'e) | `ocr/PaddleOCREngine.kt`, `app/build.gradle.kts` — **fatto 2026-09-09, vedi checkpoint in fondo** |
 
@@ -1419,3 +1419,24 @@ Prima di editare, risalita al tipo di dato/funzione di ogni call site (non assun
 Stessa query di ricerca dei 14 punti rilanciata su tutto `app/src/main/java/com/emabuia/pokevault/ui`: **zero residui**. Parentesi ricontate su tutti e 6 i file toccati (aperte = chiuse). Non compilato (nessun accesso a `dl.google.com` qui): ogni sostituzione verificata a mano confrontando il tipo del parametro con gli usi analoghi gia' fatti nel checkpoint di dedup, non per pattern-matching cieco sul nome della variabile.
 
 **Voce #12 ora chiusa per intero**: dedup delle 7 copie + applicazione ai 14 punti mancanti, in due sessioni separate dello stesso giorno.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, nona parte (voce perf #8: loop rete->async, investigato e sospeso)
+
+Su richiesta esplicita "continua sui punti grandi e rischiosi, controlla pero' che non ci siano regressioni". Prima di scrivere codice, letti per intero i 14 `for (...)` di `PokeTcgRepository.kt` (i riferimenti di riga della voce erano gia' superati, il file e' cambiato molte volte da quando furono scritti) per capire cosa fa davvero ciascuno, non solo se contiene una chiamata di rete.
+
+### Nessuno dei 14 e' un candidato pulito per `async`/`awaitAll`
+
+- **8 loop non fanno I/O di rete**: distanza di Levenshtein locale (2 loop annidati), raggruppamento/matching set (2), lookup Room/cache con fallback locale (2), matching stringhe (2) — etichettati "loop di rete" nella voce originale ma non lo sono
+- **3 loop hanno un early-exit intenzionale** (`for page in 1..3` con `break` su 404 in `searchByName`, ricerca candidati con `break` al raggiungimento di N risultati, ricerca a token con `return` al primo match utile): parallelizzare li farebbe sempre eseguire tutte le richieste anche quando la prima basta gia' — **piu' chiamate API, non meno**, il contrario dell'obiettivo della voce
+- **1 loop ha una dipendenza tra iterazioni reale** (`enrichMissingMegaSetsFromSearch`): ogni iterazione controlla `presentIds`/`presentCodes`, mutati dalle iterazioni precedenti dello stesso loop, per evitare di aggiungere lo stesso set due volte. Parallelizzare rischia **set doppi visibili nel Pokedex** — non un dettaglio interno, un bug utente-visibile
+- **2 loop sono puliti in teoria** (`buildStrictSetNumberQueries`/`buildStrictNameSetNumberQueries`: nessun early-exit, oggi eseguono comunque tutte le query della lista) **ma** il numero di query e' il prodotto di combinazioni di varianti (nome × token set × numero, fino a 3 pattern per combinazione in `buildStrictNameSetNumberQueries`) — puo' arrivare a diverse decine per una singola ricerca. Un `awaitAll` senza limite di concorrenza spara tutte insieme: rischia di **innescare il rate-limit (`429`) che il progetto lavora attivamente per evitare** (vedi `guardedApiCall`/`globalRateLimitUntil`), l'esatta regressione da evitare, non misurabile qui senza un device reale
+
+### Rischio aggiuntivo scoperto in `guardedApiCall` (righe ~2911), condiviso da tutte le chiamate di rete del file
+
+Stato mutabile non pensato per accessi concorrenti: `globalRateLimitUntil` e' un `var: Long` letto/scritto senza sincronizzazione (race benigna nel caso peggiore: un 429 concorrente puo' accorciare la finestra di cooldown), e i contatori diagnostici (`cacheHitCount`/`cacheMissCount`/`networkCallCount`) fanno `++` non atomico nonostante siano `@Volatile` (`@Volatile` garantisce visibilita', non atomicita' del read-modify-write). Impatto verificato basso: `lastNetworkAttempt` e' gia' `ConcurrentHashMap` (l'unica struttura dati vera, thread-safe), e `getDiagnostics()`/`CacheDiagnostics` non ha **nessun consumatore** in tutto `app/src/main` fuori da questo file (grep verificato) — quindi i contatori sono diagnostica morta oggi, non un problema funzionale. Non e' pero' un motivo per introdurre nuove race condition senza necessita'.
+
+### Decisione dell'utente: sospendere la voce
+
+Esposte tre opzioni (salta, parallelizza i 2 loop puliti con un limite di concorrenza, parallelizza senza limite accettando il rischio) — **scelto di saltare**. Nessun codice toccato in `PokeTcgRepository.kt` per questa voce. La voce originale ("loop di rete sequenziali -> async/awaitAll, pattern gia' usato nel progetto") era una descrizione troppo generica: il progetto usa gia' il pattern altrove (`LimitlessTcgRepository.kt`, verificato in un checkpoint precedente) ma li' i loop non hanno le stesse dipendenze di early-exit/stato condiviso trovate qui. Se si vuole riprendere in futuro con build disponibile: i 2 candidati puliti restano `buildStrictSetNumberQueries`/`buildStrictNameSetNumberQueries`, da convertire con un limite di concorrenza esplicito (semaforo, non `awaitAll` piatto), misurando prima il numero reale di query generate su casi tipici.
