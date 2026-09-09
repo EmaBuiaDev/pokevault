@@ -770,6 +770,8 @@ Le ragioni, in ordine di peso:
 
 **Direzione raccomandata per la prossima sessione con build disponibile**: trattare il logo dei set ITA come le immagini delle carte — self-hosted in R2 con soglia di pubblicazione, mai un fallback silenzioso a una fonte in lingua diversa. Concretamente: se `buildItalianSetLogoCandidates()` non trova nulla in R2 per un'espansione ITA, il Worker dovrebbe rispondere con un placeholder proprio (o 404 esplicito) invece di innescare il passthrough PokeWallet — lo stesso pattern "mai un mix di lingue" gia' applicato con successo alle carte.
 
+**Aggiornamento 2026-09-09**: il punto 2 sopra (distinguere ITA da ENG/JAP/CHN, mai un fallback silenzioso) e' stato implementato — vedi checkpoint in fondo al documento. Resta aperto solo il punto 1 (contenuto: loghi ITA reali da caricare in R2), che il fix di oggi non affronta e non puo' affrontare senza acquisizione immagini.
+
 ### Priorita alta — performance
 
 | # | Intervento | Dove |
@@ -1237,3 +1239,32 @@ Ancora referenziato in `SetDetailViewModel.kt` e `SetsViewModel.kt`: `translateI
 ### Rimossi i template placeholder mai scritti (voce #23)
 
 `ExampleUnitTest.kt` (`assertEquals(4, 2+2)`) e `ExampleInstrumentedTest.kt` (verifica il nome del package) sono i default generati da Android Studio alla creazione del progetto, mai sostituiti con test reali. Non testano nulla dell'app: cancellati senza sostituirli, dato che scrivere test nuovi e verificarne la compilazione richiede una sessione con build disponibile. La suite reale (16 file in `app/src/test`+`app/src/androidTest`, elencata in `docs/TESTING.md`) non e' toccata.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09 (bug #8: rimosso il fallback silenzioso PokeWallet per i loghi ITA)
+
+Sessione remota, stesse limitazioni delle precedenti: nessun accesso a `dl.google.com` (confermato di nuovo con un test diretto — `curl` bloccato dalla policy di rete), nessuna credenziale Cloudflare (`wrangler whoami` -> "You are not authenticated"). Ripreso da qui il branch di ieri (`claude/migration-plan-review-ma7dgr`, fast-forward pulito sullo stesso commit di base), poi affrontato il punto 2 del bug #8 (sez. 8): quello risolvibile senza contenuto nuovo ne' build.
+
+### Cosa e' stato cambiato
+
+Il problema (letto per intero nel checkpoint di ieri): `buildSetImageUrl()` in `PokeTcgRepository.kt` e la route Worker `/sets/{code}/image` sono **condivise** tra il percorso ITA (`mergeItalianSets()`) e quello ENG/JAP/CHN generico. Quando un'espansione ITA non ha un logo proprio in R2, il Worker faceva fallthrough al proxy PokeWallet generico, che risponde con qualunque lingua abbia quel codice upstream — spesso giapponese o cinese per set storici mai pubblicati in inglese.
+
+**Fix**: reso il fallback condizionale, non rimosso il meccanismo (serve ancora per ENG/JAP/CHN, dove il logo PokeWallet e' quello corretto).
+- `PokeTcgRepository.kt`: `buildSetImageUrl(setRef, italianOnly = false)` — quando `italianOnly = true` (solo nel branch `mergeItalianSets()`, riga ~2069, quando non c'e' un `linkedBase` gia' risolto da un set PokeWallet reale) appende `&source=ita` all'URL. Il branch generico (ENG/JAP/CHN, riga ~2532) resta invariato — nessun parametro, nessun cambio di comportamento.
+- `pokevault-proxy-worker/src/index.ts`: `parseItalianAssetRequest()` legge il marcatore (`italianOnly: urlObj.searchParams.get('source') === 'ita'`); `handleItalianR2AssetRequest()` fa fallthrough al proxy PokeWallet solo quando `!italianOnly` — per una richiesta marcata ITA senza hit in R2, ora risponde **404 esplicito** invece di innescare il passthrough.
+- `npm run type-check` pulito (installato `node_modules/` via `npm ci`, prima assente in questa sessione).
+
+### Perche' e' un fix a rischio contenuto, anche senza build/deploy disponibili qui
+
+Verificato leggendo `SetCard` (`SetsListScreen.kt:510-556`) prima di procedere: un logo mancante o che fallisce il caricamento (`onError` di Coil) mostra gia' oggi `MissingSetLogoFallback(setName = set.name)` — un placeholder testuale esistente, usato ogni volta che `images.logo` e' vuoto. Il fix di oggi **non introduce un nuovo stato UI**: sposta soltanto quali casi attivano quello gia' esistente (da "a volte logo in lingua sbagliata, a volte niente" a "sempre niente logo quando R2 non ce l'ha"), coerente con la regola gia' applicata alle carte (sez. 2.2: mai un mix di lingue). Inoltre l'URL cambia (`&source=ita` in coda) solo per le richieste ITA senza `linkedBase`, quindi la chiave di cache KV lato Worker e' automaticamente nuova per questi casi — nessun purge manuale necessario al deploy, a differenza del bugfix #7 di due sessioni fa.
+
+### Cosa NON risolve (resta il punto 1 del bug #8)
+
+Le ~90 espansioni storiche senza logo proprio in R2 ora mostreranno il placeholder col nome invece di un logo (giusto o sbagliato che fosse). Caricare i loghi ITA reali resta lavoro di acquisizione contenuti, non di codice — fuori scope per questa sessione, come gia' notato ieri.
+
+### Cosa resta da fare (richiede l'utente)
+
+1. **Deploy del Worker**: `src/index.ts` non e' stato deployato (nessuna credenziale qui). La modifica e' additiva e a basso rischio (vedi sopra) ma va comunque rivista e deployata con `wrangler deploy` come ogni cambio precedente di questa migrazione.
+2. **Build Android reale**: `./gradlew :app:compileDebugKotlin` non eseguibile qui. Le due righe toccate in `PokeTcgRepository.kt` sono state rilette con attenzione (firma di default parameter, unico altro call site invariato), ma non compilate.
+3. **Verifica visiva**: dopo build+deploy, controllare su device/emulatore che le espansioni storiche senza logo (es. `dp1`, `bw4`) mostrino il placeholder col nome invece del logo sbagliato di prima, e che le espansioni con `linkedBase` risolto (es. `sv10`) restino invariate.

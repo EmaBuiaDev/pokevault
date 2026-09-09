@@ -2066,8 +2066,8 @@ class PokeTcgRepository {
                     setName = setName
                 )
             val setImages = linkedBase?.images ?: SetImages(
-                symbol = buildSetImageUrl(baseRawSetCode),
-                logo = buildSetImageUrl(baseRawSetCode)
+                symbol = buildSetImageUrl(baseRawSetCode, italianOnly = true),
+                logo = buildSetImageUrl(baseRawSetCode, italianOnly = true)
             )
 
             TcgSet(
@@ -2702,8 +2702,14 @@ class PokeTcgRepository {
             .replace("+", "%20")
     }
 
-    private fun buildSetImageUrl(setRef: String): String {
-        return "${PokeWalletRetrofitClient.imageBaseUrl}sets/$setRef/image?v=$SET_IMAGE_CACHE_VERSION"
+    // italianOnly marks a request as belonging to the Italian catalog (mergeItalianSets()).
+    // The Worker uses this to stop falling back to PokeWallet's logo for that set code when
+    // no Italian logo is uploaded to R2 -- PokeWallet's logo is whatever language the product
+    // actually shipped in upstream (often JAP/CHN for historical sets), which would silently
+    // mix languages in an Italian Pokedex entry. See MIGRATION_PLAN.md sez. 8, bug #8.
+    private fun buildSetImageUrl(setRef: String, italianOnly: Boolean = false): String {
+        val base = "${PokeWalletRetrofitClient.imageBaseUrl}sets/$setRef/image?v=$SET_IMAGE_CACHE_VERSION"
+        return if (italianOnly) "$base&source=ita" else base
     }
 
     private fun mapSubTypeNameToKey(subTypeName: String?): String {
