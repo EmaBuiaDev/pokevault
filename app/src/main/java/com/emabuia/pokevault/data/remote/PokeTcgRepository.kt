@@ -2526,12 +2526,18 @@ class PokeTcgRepository {
     }
 
     private fun deriveItalianSupertype(record: ItalianCardRecord): String {
-        val tipo = record.tipo?.trim()?.lowercase(Locale.ROOT).orEmpty()
-        return when {
-            tipo.contains("allenator") || tipo.contains("trainer") -> "Trainer"
-            tipo.contains("energ") -> "Energy"
-            else -> if (record.ps?.toIntOrNull() ?: 0 > 0) "Pokémon" else "Trainer"
-        }
+        // record.tipo is the elemental type (Fuoco/Acqua/...), only ever populated for
+        // Pokemon cards -- Trainer/Energy cards always have tipo = NULL (confirmed via
+        // D1: `SELECT COUNT(*) FROM cards WHERE nome LIKE 'Energia %' AND ps IS NOT NULL`
+        // returns 0). Checking tipo.contains("energ")/"allenator" here never matched
+        // anything, so every Energy card fell through to the ps-based else branch below
+        // with ps also null -- misclassified as "Trainer", never "Energy".
+        if ((record.ps?.toIntOrNull() ?: 0) > 0) return "Pokémon"
+        // Every real (basic or special) energy card name in the catalog starts with
+        // "Energia" (verified against the full distinct-name list); item cards that merely
+        // mention energy, e.g. "Recupero di Energia Plus", do not start with it.
+        val nome = record.nome.trim()
+        return if (nome.startsWith("Energia", ignoreCase = true)) "Energy" else "Trainer"
     }
 
     private suspend fun resolveItalianCardRarity(canonicalSetCode: String, normalizedNumber: String): String? {
