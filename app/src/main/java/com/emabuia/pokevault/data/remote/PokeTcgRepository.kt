@@ -2233,8 +2233,8 @@ class PokeTcgRepository {
                 setName = setName
             )
         val setImages = linkedBase?.images ?: SetImages(
-            symbol = buildSetImageUrl(baseRawSetCode),
-            logo = buildSetImageUrl(baseRawSetCode)
+            symbol = buildSetImageUrl(baseRawSetCode, italianOnly = true),
+            logo = buildSetImageUrl(baseRawSetCode, italianOnly = true)
         )
 
         return TcgSet(
