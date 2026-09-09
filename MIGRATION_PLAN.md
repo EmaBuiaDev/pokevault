@@ -985,9 +985,9 @@ Le ragioni, in ordine di peso:
 | # | Intervento | Dove |
 |---|---|---|
 | 1 | **Migration Room reale** + test strumentato di migrazione | `data/local/PokeVaultDatabase.kt` |
-| 2 | `HttpLoggingInterceptor` attivo in release -> gate su `BuildConfig.DEBUG` | `LimitlessTcgRepository.kt:25-28` |
-| 3 | Rimuovere `account_id` e `.wrangler/cache/wrangler-account.json` da git; aggiungere `.wrangler/` al `.gitignore` di root | `pokevault-proxy-worker/wrangler.toml:3` |
-| 4 | Rimuovere `POKEWALLET_API_KEY` e `POKETCG_API_KEY` dal client (key mai piu nell'APK) | `app/build.gradle.kts:28-31` |
+| 2 | `HttpLoggingInterceptor` attivo in release -> gate su `BuildConfig.DEBUG` | `LimitlessTcgRepository.kt:25-28` — **gia' fatto, verificato 2026-09-09 (non si sa quando)** |
+| 3 | Rimuovere `account_id` e `.wrangler/cache/wrangler-account.json` da git; aggiungere `.wrangler/` al `.gitignore` di root | `pokevault-proxy-worker/wrangler.toml:3` — **fatto (merge del 2026-09-09)** |
+| 4 | Rimuovere `POKEWALLET_API_KEY` e `POKETCG_API_KEY` dal client (key mai piu nell'APK) | `app/build.gradle.kts:28-31` — **fatto 2026-09-09**: `POKETCG_API_KEY` gia' assente dal sorgente; `POKEWALLET_API_KEY` ora forzata a `""` (e proxy forzato `true`) in `buildTypes.release`, verificato sul `BuildConfig.java` generato + `assembleRelease` verde. Vedi checkpoint in fondo |
 | 5 | Set giapponesi taggati erroneamente come ENG | `viewmodel/SetsViewModel.kt:118` |
 | 6 | Verificare che le immagini non finiscano dietro paywall (sez. 4.4) | `ui/premium/PremiumScreen.kt`, `data/billing/PremiumManager.kt` |
 | 7 | **BUG PRODUZIONE confermato 2026-09-07: `normalizeCardNumber()` mostra la carta sbagliata per le sotto-collezioni "Shiny Vault"** — vedi dettaglio sotto | `pokevault-proxy-worker/src/index.ts:530-536` |
@@ -1810,6 +1810,21 @@ Verificato con l'elenco ufficiale TCGdex (`GET /v2/it/types`): i nomi italiani r
 
 ### Non fatto, richiede l'utente
 
-1. **Deploy del Worker**: il fix `italianOnly` in `src/index.ts` esiste da sessioni precedenti ma, come ogni modifica a `index.ts` finora, non e' mai stato deployato -- il fix Kotlin di oggi (punto 2 sopra) non ha effetto finche' non gira `wrangler deploy`.
+1. ~~Deploy del Worker~~ **fatto**, vedi sotto.
 2. **Badge sbagliato sulle carte a doppio tipo reale** (vedi sopra) -- poche carte, fix rimandato in attesa di decidere il compromesso conteggio-vs-badge.
 3. **Verifica visiva su device** dei fix di oggi (loghi, Tipi in Analisi Lab) -- il codice e i dati sono verificati (D1, build, grep), ma non ancora rivisti a schermo dall'utente dopo l'ultima build.
+
+### Deploy del Worker eseguito, verificato dal vivo
+
+`wrangler deploy` (dopo `npm run type-check` pulito) -- prima volta in questa sessione con accesso diretto a `wrangler` (autenticato, account gia' collegato). Version ID `0bbe7d32`. Verificato con curl reale, non solo "deploy riuscito":
+- `GET /v1/expansions` risponde gia' nella forma nuova (`name`/`series`/`baseSetCode`/`releaseDate`)
+- `GET /sets/DP1/image?source=ita` -> 200 (DP1 ha davvero un logo proprio in R2, `it/DP1/logo.png` -- confermato con `wrangler r2 object get`)
+- `GET /sets/SV05/image?source=ita` -> 404 pulito (nessun logo ne' in R2 ne' su PokeWallet per quel codice)
+
+### Bug #7 (Shiny Vault): la parte pericolosa era gia' risolta, il piano non lo sapeva
+
+Prima di scrivere codice nuovo, verificato lo stato attuale: `buildItalianCardKeyCandidates` (righe ~556-558) gia' non fa piu' fallback a `normalizeCardNumber()` per numeri alfa-prefissati (`isPureNumeric` guard) -- il fix era stato scritto in una sessione precedente ma mai ricollegato a questa voce del piano ne' verificato dal vivo. Verificato ora con curl reale dopo il deploy: `GET /images/it/SWSH45/SV001?size=low` risponde `404 Asset not found`, non piu' l'immagine di Yanma. Controllato anche in R2 (`wrangler r2 object get` su tutti i pattern di chiave provati) che l'immagine vera non esiste sotto **nessuno** di essi -- quello che resta e' un buco di contenuto (acquisizione immagini Shiny Vault/Trainer Gallery), stessa natura del bug #8 punto 1, non un fix di codice.
+
+### Sez. 8 #4 (API key mai nell'APK) -- fatto
+
+`POKETCG_API_KEY` gia' assente dal sorgente (rimossa in una sessione precedente, non registrato nel piano). `POKEWALLET_API_KEY`: verificato che il client la allega solo se il proxy e' disattivato (`PokeWalletRepository` fallisce gia' chiuso altrimenti) -- ma restava comunque scritta in chiaro nell'APK di release via `BuildConfig`, estraibile decompilando anche se mai usata a runtime in produzione. `buildTypes.release` in `app/build.gradle.kts` ora forza `POKEWALLET_API_KEY = ""` e `POKEWALLET_PROXY_ENABLED = true` indipendentemente da `local.properties`, cosi' una release non puo' piu' finire nella configurazione pericolosa (proxy spento + chiave presente). Build debug invariata. Verificato sul `BuildConfig.java` generato (non solo per lettura del gradle script) + `:app:assembleRelease` verde.
