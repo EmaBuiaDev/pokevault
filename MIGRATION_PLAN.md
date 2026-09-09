@@ -789,7 +789,7 @@ Le ragioni, in ordine di peso:
 |---|---|---|
 | 11 | **Cancellare i duplicati orfani in root** | `util/AppLocale.kt`, `viewmodel/DeckLabViewModel.kt` |
 | 12 | `safeImageUrl()` duplicato 7 volte -> utility unica in `util/` e applicata ovunque | 7 file + i 3 punti che non la usano — **le 7 duplicazioni consolidate 2026-09-09, vedi checkpoint in fondo; i punti che non la usano ancora restano aperti** |
-| 13 | Rinominare i file `_v2`/`_v3` e allineare nome file/classe | `MainActivity_v2.kt`, `CardsVaultTCGApp.kt`, `AppNavigation_v3.kt`, `HomeScreen_v2.kt` |
+| 13 | Rinominare i file `_v2`/`_v3` e allineare nome file/classe | `MainActivity_v2.kt`, `CardsVaultTCGApp.kt`, `AppNavigation_v3.kt`, `HomeScreen_v2.kt` — **fatto 2026-09-09, vedi checkpoint in fondo** |
 | 14 | Logging unificato su Timber (38 usi di `Log`/`println` residui) | `PaddleOCREngine.kt`, `MLKitOCREngine.kt`, `LimitlessTcgRepository.kt` |
 | 15 | Spezzare i file monolitici (`DeckLabScreen.kt` 2240 righe, `PokeTcgRepository.kt` 1735) | — |
 | 16 | Rimuovere `FORCED_REAL_TOTALS_BY_SET_CODE = { ME03: 124 }` — i conteggi ora sono nostri in D1 | `pokevault-proxy-worker/src/index.ts:82-88` |
@@ -1357,3 +1357,21 @@ Prima domanda dell'utente prima di procedere: "poi funzionera' lo scanner?". Ver
 **Verificato con grep sull'intero repo** (non solo sui file toccati) che non resta alcun riferimento a `Paddle`/`tensorflow`/`tflite` fuori da questo checkpoint del piano stesso. Non compilato (nessun accesso a `dl.google.com` in questa sessione remota): diff riletto per intero, incluse le graffe del blocco `initialize()` semplificato.
 
 **Beneficio atteso** (da confermare a build fatta): APK piu' leggero di due librerie native (`tensorflow-lite`, `tensorflow-lite-gpu`) mai state raggiungibili a runtime.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, sesta parte (sez. 8 #13: rinominati i file `_v2`/`_v3`)
+
+Verificato prima di rinominare, non assunto: in tutti e cinque i file la classe/funzione top-level **non aveva mai il suffisso** `_v2`/`_v3` — solo il nome del file. Kotlin non richiede che file e classe combacino (a differenza di Java), quindi ogni riferimento nel resto del repo e' gia' per nome di classe/funzione (import, `AndroidManifest.xml` con `.MainActivity`/`.PokeVaultApp`), mai per path del file. Un rename di file quindi **non tocca alcun import esistente** — confermato con `git mv` (preserva la history) seguito da un grep sull'intero repo per i vecchi nomi file: zero residui fuori da questo piano.
+
+| File vecchio | File nuovo | Classe/funzione dentro (invariata) |
+|---|---|---|
+| `MainActivity_v2.kt` | `MainActivity.kt` | `class MainActivity` |
+| `CardsVaultTCGApp.kt` | `PokeVaultApp.kt` | `class PokeVaultApp` (mismatch file/classe, non solo un suffisso `_v2`) |
+| `ui/home/HomeScreen_v2.kt` | `ui/home/HomeScreen.kt` | `fun HomeScreen` |
+| `ui/home/components/WelcomeHeader_v2.kt` | `ui/home/components/WelcomeHeader.kt` | `fun WelcomeHeader` |
+| `ui/navigation/AppNavigation_v3.kt` | `ui/navigation/AppNavigation.kt` | `fun AppNavigation` |
+
+Trovato un quinto file oltre ai quattro elencati nel piano originale: `WelcomeHeader_v2.kt` (stesso pattern, emerso durante la ricerca dei 14 punti mancanti per la voce #12). Nessun conflitto di nome verificato prima di ogni `git mv` (`find` sul nome di destinazione, zero risultati per tutti e cinque).
+
+Non compilato (nessun accesso a `dl.google.com` qui), ma il rischio e' strutturalmente basso: un rename puro senza alcuna modifica al contenuto dei file.
