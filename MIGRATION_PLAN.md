@@ -1773,3 +1773,41 @@ L'app **non segue la lingua del telefono**. `AppLocale` implementa un selettore 
 Esposta la portata reale (512 simboli, 693 call site, 41 funzioni di lookup non banali, 7 consumer non-Composable incluso il repository dati, il rischio concreto di rompere il selettore lingua) e le opzioni (salta, fallo comunque per intero, fanne solo una parte scoped). L'utente ha lasciato la decisione a me ("nessuna preferenza") — scelto **di sospendere**, stessa logica delle voci #7/#9: senza compilatore ne' device per verificare che il selettore lingua continui a funzionare dopo il cambio, il rischio di una regressione utente-visibile (un'intera funzionalita' che smette di rispettare la scelta salvata) supera il beneficio di manutenibilita' a lungo termine. Nessun codice toccato.
 
 **Se si vuole riprendere in futuro**: la sessione dovrebbe avere accesso a build + emulatore/device per verificare concretamente che `AppCompatDelegate.setApplicationLocales()` (o l'alternativa scelta) preservi il comportamento attuale del selettore lingua ad ogni ricomposizione, prima di toccare anche solo il primo dei 693 call site.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, tredicesima parte (merge di `origin/claude/piano-lavoro-remoto-1422cy` in `R3.0.0` + prima verifica reale su build/device)
+
+Sessione con, per la prima volta, build Gradle e device disponibili (`:app:assembleDebug` funzionante da riga di comando dopo aver aggiornato il Gradle wrapper 8.13 -> 9.5.0, incompatibile col JDK 25 imbottito nella build di Android Studio installata). Questo ha permesso di **trovare e correggere bug che nessuna sessione precedente poteva vedere**, non solo procedere sul piano.
+
+### Il merge in se': due branch che avevano fatto la stessa migrazione in parallelo
+
+`R3.0.0` e `piano-lavoro-remoto-1422cy` erano divergenti dallo stesso punto (`f4d0b5e`) e avevano entrambi convertito il fetch del catalogo da "blob intero" a "per-espansione via `/v1/*`", con implementazioni diverse. Conflitti risolti tenendo la versione `R3.0.0` (piu' recente, con `name`/`baseSetCode`/`releaseDate`/`series` su `/v1/expansions` e fallback al catalogo intero se il fast path fallisce); riportate su di essa le modifiche non in conflitto di piano-lavoro (consolidamento `ImageUrlUtils`, logging Timber, rimozione PaddleOCR/TFLite, rename `_v2`/`_v3`, consolidamento docs). Lo split di `DeckLabScreen.kt` in 6 file (voce #15, sez. 8) e' stato **scartato**: operava sulla versione del file precedente alla riscrittura R3.0.0 del giorno prima, avrebbe duplicato ogni simbolo.
+
+### Tre "conflitti semantici" — bug che git non poteva vedere, trovati solo grazie alla build reale
+
+Un ramo aveva rimosso/modificato qualcosa credendolo sicuro nel proprio branch; l'altro ramo, in parallelo, ne dipendeva ancora. Git unisce senza conflitto (righe diverse), il risultato non compila o si comporta male:
+
+1. **`ItalianCatalog.cardsByExpansion()` rimossa**: piano-lavoro l'aveva tolta (commit `6c50223`, "nessun chiamante" -- vero nel suo branch) ma R3.0.0 ne aveva nel frattempo aggiunti 5 usi nel proprio percorso di fallback. `Unresolved reference` alla prima build reale. Ripristinata.
+2. **`buildSetImageUrl` senza `italianOnly=true` nel fast path**: piano-lavoro aveva aggiunto il parametro (per marcare `source=ita` verso il Worker, bug #8 punto 2), ma `buildItalianTcgSet` (il fast path R3.0.0, l'unico usato ora) continuava a chiamarla a un argomento -- compilava (il parametro ha un default), ma il client non mandava mai il marcatore. Segnalato dall'utente ("loghi giapponesi ancora visibili"), trovato leggendo il diff, corretto.
+3. Questi due punti non erano nel piano: **nessuna quantita' di lettura del codice li avrebbe trovati senza compilare ed eseguire**.
+
+### Bug trovato per segnalazione utente, causa radice diversa da quella ipotizzata
+
+Utente: *"in DeckLab i Tipi sono errati anche quando metto piu' tipo"* (riquadro "Analisi Lab"). Prima ipotesi (sbagliata, poi scartata dopo verifica): `PokeTcgRepository.toItalianTcgCard` incolla `record.tipo` come UN solo elemento di `types` invece di splittarlo -- plausibile ma **verificato con una query D1 diretta** (`SELECT DISTINCT tipo FROM cards`) che all'epoca **zero carte avevano una virgola in `tipo`**, quindi quel percorso non era la causa. Scartata la fix speculativa (avrebbe anche rotto il conteggio "Tipi" per i pochi casi doppi, che oggi funziona per coincidenza tramite lo split su virgola in `analyzeDeck()`).
+
+**Causa reale, trovata sempre con una query D1** (`SELECT expansion_id, COUNT(*) FROM cards WHERE tipo IS NOT NULL GROUP BY expansion_id`): **106 espansioni su 107 avevano `tipo` sempre `NULL`** (15.431 carte) -- solo `me05` (95 carte, ingerita col nuovo script) lo aveva. Il vecchio import in blocco (`import-catalog-to-d1.mjs`, dal blob JSON originale) non aveva mai portato un campo tipo. L'app ripiegava silenziosamente sul tipo del set INGLESE abbinato via PokeWallet, o su `"Colorless"` -- da cui l'incoerenza segnalata.
+
+**Fix**: `scripts/backfill-tipo-tcgdex.mjs` (nuovo, ricalcato su `backfill-rarity-tcgdex.mjs`), locale IT di TCGdex (non EN come la rarita', per restare coerenti col principio "mai un mix di lingue" e coi valori italiani gia' presenti su `me05`). Verificato con un dry-run su tutte le 107 espansioni prima di scrivere. **Applicato in produzione**: 11.181/15.431 carte nuove (**72,5%**, vicino al massimo teorico dato che solo le carte Pokemon hanno un tipo, mai le Trainer/Energia). 22 espansioni restano a 0% -- confermato con curl diretto che TCGdex non ha **alcuna** traduzione italiana per quei set (`/it/sets/dp1` risponde `cards:[]`, `/it/cards/dp1-1` risponde 404, mentre `/en/` ha entrambi): non e' un bug dello script, e' un buco di copertura TCGdex sui set piu' vecchi. Nessuna regressione: quelle espansioni restano sul fallback preesistente.
+
+**Scoperta collaterale dalla stessa query**: la query di verifica post-backfill ha rivelato che esistono davvero poche carte a doppio tipo (es. `"Metallo, Lotta"`) -- quindi il bug ipotizzato all'inizio (e scartato) *esiste*, solo su una manciata di carte reali invece che ovunque: per quelle specifiche, `TypeBadge` riceve l'intera stringa incollata e mostra il badge generico invece del primo tipo. **Non ancora corretto** (interagisce con lo stesso compromesso gia' notato: splittare `types` correttamente sistema il badge ma toglierebbe il secondo tipo dal conteggio "Tipi" in Analisi Lab, perche' quel conteggio dipende dal trucco della virgola in `PokemonCard.type`). Follow-up aperto, non bloccante (poche carte coinvolte).
+
+### Altro bug trovato per lettura, non per segnalazione: nomi tipo italiani sbagliati in `TypeBadge`
+
+Verificato con l'elenco ufficiale TCGdex (`GET /v2/it/types`): i nomi italiani reali sono **"Lampo"** (Lightning) e **"Incolore"** (Colorless) -- gli stessi gia' presenti in D1 per `me05` -- ma `TypeBadge` cercava `"elettro"`/`"normale"`, che non combaciano con nessuno dei due. Ogni carta Lampo o Incolore cadeva nel caso `else` (badge generico). Corretto, tenendo `"elettro"`/`"normale"` come alias di fallback.
+
+### Non fatto, richiede l'utente
+
+1. **Deploy del Worker**: il fix `italianOnly` in `src/index.ts` esiste da sessioni precedenti ma, come ogni modifica a `index.ts` finora, non e' mai stato deployato -- il fix Kotlin di oggi (punto 2 sopra) non ha effetto finche' non gira `wrangler deploy`.
+2. **Badge sbagliato sulle carte a doppio tipo reale** (vedi sopra) -- poche carte, fix rimandato in attesa di decidere il compromesso conteggio-vs-badge.
+3. **Verifica visiva su device** dei fix di oggi (loghi, Tipi in Analisi Lab) -- il codice e i dati sono verificati (D1, build, grep), ma non ancora rivisti a schermo dall'utente dopo l'ultima build.
