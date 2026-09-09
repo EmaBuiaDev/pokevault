@@ -1035,7 +1035,7 @@ Le ragioni, in ordine di peso:
 |---|---|---|
 | 7 | **`ImageRequest.size()` su tutte le 55 `AsyncImage`** — causa #1 dei consumi memoria | Tutte le schermate con Coil — **investigata 2026-09-09, chiusa come non necessaria, vedi checkpoint in fondo** |
 | 8 | Loop di rete sequenziali -> `async`/`awaitAll` (pattern gia usato nel progetto) | `PokeTcgRepository.kt` righe 438, 497, 534, 576, **600**, 801, 856 — **investigato 2026-09-09, sospeso su decisione utente, vedi checkpoint in fondo** |
-| 9 | `Column + verticalScroll` su liste potenzialmente lunghe -> `LazyColumn` | `CollectionScreen.kt`, `StatsScreen.kt`, `SettingsScreen.kt` |
+| 9 | ~~`Column + verticalScroll` su liste potenzialmente lunghe -> `LazyColumn`~~ | `CollectionScreen.kt`, `StatsScreen.kt`, `SettingsScreen.kt` — **chiusa 2026-09-09, premessa non piu' valida**: la lista carte di Collection e' gia' `LazyColumn`; il `verticalScroll` rimasto e' il pannello filtri (~5 sezioni fisse, chip gia' in liste lazy). StatsScreen e' limitata per costruzione (`.take(10)` sui due elenchi che crescono, rarita'/tipi sono vocabolari fissi: ~60 righe max a prescindere dalla collezione). SettingsScreen ha voci fisse + selettore sprite gia' `LazyVerticalGrid`. Convertirle sarebbe rimaneggiamento senza guadagno |
 | 10 | Rimuovere PaddleOCR + TensorFlow Lite (nessun `.tflite` esiste, `assets/` non c'e) | `ocr/PaddleOCREngine.kt`, `app/build.gradle.kts` — **fatto 2026-09-09, vedi checkpoint in fondo** |
 
 ### Priorita media — pulizia
