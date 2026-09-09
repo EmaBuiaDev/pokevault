@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PokeVault — Copyright &amp; Takedown</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1A1A2E;
+            color: #B0B0C0;
+            line-height: 1.7;
+            padding: 24px;
+        }
+        .container { max-width: 720px; margin: 0 auto; }
+        h1 {
+            color: #FFFFFF;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #6B6B8D;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+        h2 {
+            color: #4A6CF7;
+            font-size: 18px;
+            margin-top: 32px;
+            margin-bottom: 12px;
+        }
+        p, li { font-size: 14px; margin-bottom: 12px; }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 6px; }
+        a { color: #4A6CF7; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .card {
+            background: #232342;
+            border-radius: 16px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .badge {
+            display: inline-block;
+            background: #E74C3C;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .footer {
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid #2A2A4A;
+            font-size: 12px;
+            color: #6B6B8D;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <h1>Copyright &amp; Takedown</h1>
+    <p class="subtitle">Ultimo aggiornamento: Settembre 2026</p>
+
+    <div class="card">
+        <span class="badge">IN BREVE</span>
+        <p>Se ritieni che PokeVault stia mostrando un contenuto su cui detieni diritti in modo inappropriato, scrivici: rispondiamo entro 72 ore e possiamo rimuovere il contenuto contestato rapidamente, anche prima di completare la verifica.</p>
+    </div>
+
+    <h2>1. A cosa si applica questa pagina</h2>
+    <p>PokeVault mostra nomi, numeri, statistiche e immagini delle carte del gioco collezionabile Pokemon TCG. Pokemon, Pokemon TCG e tutti i marchi, nomi e immagini correlati sono proprieta di <strong>Nintendo, The Pokemon Company e The Pokemon Company International</strong> (di seguito "i Titolari"). PokeVault non e affiliata, sponsorizzata o approvata dai Titolari: e un'app indipendente di gestione della collezione personale.</p>
+
+    <h2>2. Da dove vengono i dati e le immagini</h2>
+    <ul>
+        <li><strong>Metadati delle carte</strong> (nomi, numeri, tipi, punti salute, rarita, date di uscita) sono fatti pubblici, raccolti e normalizzati nel nostro schema proprietario.</li>
+        <li><strong>Immagini delle espansioni piu recenti</strong> provengono da <a href="https://github.com/tcgdex/cards-database" target="_blank" rel="noopener">TCGdex</a>, un dataset con licenza MIT, importato automaticamente e ospitato sulla nostra infrastruttura (Cloudflare R2/D1/Workers).</li>
+        <li><strong>Immagini delle espansioni storiche</strong> (precedenti al 2023 circa) sono state raccolte da fonti eterogenee, incluse scansioni del sito ufficiale Pokemon e scansioni di carte fisiche possedute personalmente dallo sviluppatore. Restano opere protette dei Titolari indipendentemente dalla fonte da cui sono state acquisite.</li>
+        <li><strong>Prezzi di mercato</strong> sono recuperati da Pokewallet.io tramite la nostra infrastruttura server-side, mai contattata direttamente dal dispositivo dell'utente.</li>
+    </ul>
+
+    <h2>3. Come riduciamo l'esposizione sulle immagini</h2>
+    <p>Non esiste una configurazione tecnica che renda "libere" le immagini delle carte. Applichiamo pero mitigazioni concrete su tutte le immagini servite dall'App:</p>
+    <ul>
+        <li><strong>Bassa risoluzione</strong> — le immagini sono servite in dimensioni ridotte, non adatte a stampa o riproduzione fisica.</li>
+        <li><strong>Nessun ritaglio</strong> — mostriamo sempre la carta intera come identificatore di prodotto, mai l'illustrazione isolata dal resto della carta.</li>
+        <li><strong>Copyright intatto</strong> — la dicitura di copyright stampata sulla carta non viene mai rimossa o coperta.</li>
+        <li><strong>Nessun export di massa</strong> — non esiste nell'App alcuna funzione per scaricare o esportare le immagini in blocco, ne un'API pubblica sul nostro archivio immagini.</li>
+        <li><strong>Nessuna ridistribuzione del dataset</strong> — le immagini sono servite solo all'App, per uso individuale di consultazione della propria collezione.</li>
+    </ul>
+
+    <h2>4. Come richiedere la rimozione di un contenuto</h2>
+    <p>Se sei il titolare dei diritti (o un suo rappresentante autorizzato) e ritieni che un contenuto specifico dell'App debba essere rimosso, scrivici a <a href="mailto:devteam.vaultcards@hotmail.com">devteam.vaultcards@hotmail.com</a> indicando:</p>
+    <ul>
+        <li>Il contenuto specifico contestato (nome della carta o dell'espansione, e se possibile una schermata).</li>
+        <li>Il motivo della richiesta e, se applicabile, la tua qualifica di titolare dei diritti o rappresentante.</li>
+        <li>Un recapito per la risposta.</li>
+    </ul>
+    <div class="card">
+        <p><strong>SLA dichiarato: rispondiamo entro 72 ore</strong> dalla ricezione della segnalazione. Per richieste motivate possiamo sospendere la visibilita del contenuto contestato nell'App gia durante la verifica, senza attendere una release pubblicata sugli store.</p>
+    </div>
+
+    <h2>5. Nessuna azione contro chi segnala in buona fede</h2>
+    <p>Non intraprendiamo alcuna azione contro chi ci contatta in buona fede per segnalare un problema di copyright, anche qualora la segnalazione risultasse infondata dopo la verifica.</p>
+
+    <h2>6. Rapporto con Privacy Policy e Termini di Servizio</h2>
+    <p>Questa pagina integra, senza sostituirla, la sezione "Proprieta intellettuale" dei <a href="/pokevault/terms">Termini di Servizio</a>. Per il trattamento dei dati personali consulta la <a href="/pokevault/privacy-policy">Privacy Policy</a>.</p>
+
+    <h2>7. Modifiche a questa pagina</h2>
+    <p>Ci riserviamo il diritto di aggiornare questa pagina. Le modifiche saranno pubblicate qui con la data di aggiornamento.</p>
+
+    <h2>8. Contatti</h2>
+    <p>Per qualsiasi segnalazione relativa al copyright, contattaci all'indirizzo: <a href="mailto:devteam.vaultcards@hotmail.com">devteam.vaultcards@hotmail.com</a></p>
+
+    <div class="footer">
+        <p>PokeVault &mdash; <a href="/pokevault/terms">Termini di Servizio</a> | <a href="/pokevault/privacy-policy">Privacy Policy</a> | <a href="/pokevault/copyright">Copyright &amp; Takedown</a></p>
+        <p style="margin-top: 8px;">Questa app non e affiliata a Nintendo, The Pokemon Company o The Pokemon Company International.</p>
+        <p style="margin-top: 8px;">Questa pagina e disponibile solo in italiano, lingua ufficiale della documentazione PokeVault. Per chiarimenti in altre lingue, contattaci.</p>
+    </div>
+
+</div>
+</body>
+</html>

@@ -490,13 +490,13 @@ L'app ha **Google Play Billing** e una `PremiumScreen`. Vendere l'accesso a cont
 
 ### 4.5 Documenti da aggiornare
 
-| Documento | Intervento |
-|---|---|
-| `docs/privacy-policy/index.html` | Rimuovere il riferimento a Pokewallet come fornitore dati; aggiungere Cloudflare (R2/D1/Workers) come sub-responsabile |
-| `docs/terms/index.html` | Aggiungere sezione **Proprieta intellettuale** + procedura di takedown con contatto |
-| **Nuovo** `docs/copyright/index.html` | Pagina dedicata: fonte dei dati, natura delle immagini, come richiedere rimozione, SLA 72h |
-| `util/AppLocale.kt:719-727` | Aggiornare il disclaimer in-app (oggi cita esplicitamente Pokewallet.io) |
-| Tutte le pagine `docs/` | Sono **solo in italiano** mentre l'app e IT/EN: allineare o dichiarare l'italiano come lingua ufficiale |
+| Documento | Intervento | Stato |
+|---|---|---|
+| `docs/privacy-policy/index.html` | Rimuovere il riferimento a Pokewallet come fornitore dati; aggiungere Cloudflare (R2/D1/Workers) come sub-responsabile | **Fatto 2026-09-09** — vedi checkpoint in fondo |
+| `docs/terms/index.html` | Aggiungere sezione **Proprieta intellettuale** + procedura di takedown con contatto | **Fatto 2026-09-09** |
+| **Nuovo** `docs/copyright/index.html` | Pagina dedicata: fonte dei dati, natura delle immagini, come richiedere rimozione, SLA 72h | **Fatto 2026-09-09** |
+| `util/AppLocale.kt:719-727` | Aggiornare il disclaimer in-app (oggi cita esplicitamente Pokewallet.io) | **Fatto 2026-09-09** |
+| Tutte le pagine `docs/` | Sono **solo in italiano** mentre l'app e IT/EN: allineare o dichiarare l'italiano come lingua ufficiale | **Fatto 2026-09-09** — dichiarato l'italiano lingua ufficiale, non tradotto (resta voce #26 sez. 8) |
 
 ---
 
@@ -1289,3 +1289,37 @@ I 6 file "semplici" ora chiamano `ImageUrlUtils.safeImageUrl(...)`; `CollectionS
 Cercati tutti gli `.data(...)` di Coil su URL di immagini/loghi (`AsyncImage`/`SubcomposeAsyncImage`, grep su `\.data\(` filtrato per campi `image`/`logo`/`symbol`/`url`) che **non** passano da nessuna delle due funzioni. Trovati **14** punti, non 3: `AlbumDetailScreen.kt` (2), `AlbumListScreen.kt` (1), `CreateGoalAlbumScreen.kt` (2, loghi set — diversi dai 2 call site di card gia' migrati sopra), `DeckLabScreen.kt` (6), `WelcomeHeader_v2.kt` (1), `SetsListScreen.kt` (1). La stima originale del piano era imprecisa (come gia' successo per la voce #5, gia' corretta in un checkpoint precedente) — non e' stata aggiornata qui perche' contarli non e' lo stesso lavoro che applicarci il fix.
 
 **Perche' non toccati ora**: a differenza delle 7 duplicazioni (spostare codice identico, comportamento zero-rischio), aggiungere l'encoding a 14 punti nuovi — 6 dei quali in `DeckLabScreen.kt`, il file monolitico da 2240 righe della voce #15 — e' un cambio di comportamento reale (per URL che oggi non vengono mai incapsulati) su un file grande, senza modo di compilare o verificare qui. Voce #12 lasciata **parzialmente chiusa**: dedup fatto, copertura estesa ancora da fare in una sessione successiva (idealmente con build disponibile, dato il numero di punti coinvolti).
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, terza parte (sez. 4.5: documenti di compliance aggiornati)
+
+Su richiesta esplicita dell'utente. Lavoro interamente in HTML statico + una stringa Kotlin — nessun rischio di build, nessuna credenziale necessaria (a differenza di tutto il resto della sez. 4, che riguarda solo contenuti/testo, non infrastruttura).
+
+### `docs/privacy-policy/index.html` (sez. 6, "Condivisione dei dati")
+
+Il testo diceva ancora "Pokewallet.io ... per il recupero di dati pubblici sulle carte", non aggiornato da quando il catalogo ITA e migrato su D1/R2. Sostituito con tre voci distinte e verificate contro cosa succede davvero oggi (non assunte): **Cloudflare (R2/D1/Workers)** come sub-responsabile che ospita il catalogo ITA, **Pokewallet.io** ridimensionato a "prezzi + catalogo altre lingue, contattato solo dai nostri server" (mai dal dispositivo dell'utente — coerente con l'isolamento gia' implementato lato Worker), **TCGdex** aggiunto come fonte dati per l'ingest automatico (licenza MIT, nessun dato utente coinvolto). Data di aggiornamento portata a Settembre 2026.
+
+### `docs/terms/index.html` (sez. 7, "Proprieta intellettuale")
+
+Paragrafo esteso per menzionare esplicitamente le mitigazioni gia' descritte in sez. 4.2 di questo piano (bassa risoluzione, nessun ritaglio, copyright intatto) e aggiunto un rimando alla nuova pagina copyright per la procedura di segnalazione.
+
+### Nuova `docs/copyright/index.html`
+
+Pagina dedicata (stesso stile CSS delle altre due, badge rosso per distinguerla): da dove vengono dati e immagini (metadati fattuali, TCGdex MIT per i set recenti, scraping sito ufficiale + scansioni personali per lo storico — dichiarato esplicitamente, non nascosto), le 5 mitigazioni di sez. 4.2, procedura di segnalazione con contatto e **SLA dichiarato di 72 ore**.
+
+**Scelta deliberata sull'SLA**: la pagina promette solo "rispondiamo entro 72 ore" e "possiamo sospendere la visibilita... senza attendere una release" — **non** promette un kill-switch tecnico automatico "sotto i 5 minuti" come ipotizzato in sez. 4.2 del piano originale. Verificato prima di scrivere la pagina: la tabella `takedowns` esiste nello schema D1 (`schema/001_init.sql`) ma **non e referenziata da nessuna parte in `src/index.ts`** — non e' collegata alla logica di serving, quindi quel kill-switch non esiste ancora davvero. Pubblicare una promessa di 5 minuti per un meccanismo non implementato sarebbe stato un rischio reale, non solo impreciso. **Follow-up aperto, non fatto qui**: wire-are `takedowns` nel path `handleItalianR2AssetRequest` (check `WHERE expansion_id = ?` prima di servire, TTL cache basso o bypass) per rendere vera la sospensione rapida — finche' non e' fatto, una richiesta di rimozione urgente va gestita a mano (rimozione oggetti R2 o `wrangler deploy` con un filtro ad-hoc), comunque dentro l'SLA di 72h dichiarato.
+
+**Contatto riusato, non inventato**: la pagina usa `devteam.vaultcards@hotmail.com`, lo stesso indirizzo gia' presente in privacy-policy/terms — non esiste un'email dedicata separata nel repo, e inventarne una che non riceve posta sarebbe stato peggio che riusare quella esistente. Se si vuole un indirizzo dedicato (es. `copyright@...`) va creato fuori da questa sessione.
+
+### `util/AppLocale.kt` — disclaimer in-app allineato (righe ~722-737)
+
+`disclaimerBody` (IT ed EN, unica fonte usata sia da `LegalDialogs.kt` che da `SettingsScreen.kt` — verificato con grep, nessun secondo posto da aggiornare) ora rispecchia lo stesso quadro delle pagine web: Cloudflare per il catalogo ITA, Pokewallet.io ridimensionato a prezzi/altre lingue via server, link alla pagina copyright per le segnalazioni. Aggiunta anche una costante `copyrightUrl` accanto a `privacyPolicyUrl`/`termsUrl` per coerenza — **non ancora collegata a una riga cliccabile in `SettingsScreen.kt`** (che oggi ha righe solo per Privacy Policy e Termini): aggiungerla e' una modifica di layout UI vera, lasciata a una sessione con build per la verifica visiva, non fatta alla cieca qui.
+
+### Lingua della documentazione (ultima riga della tabella sez. 4.5)
+
+Scelta l'opzione "dichiarare l'italiano lingua ufficiale" (non tradurre): aggiunta la stessa riga di nota in fondo a tutte e tre le pagine `docs/`. Tradurre i contenuti resta la voce #26 (sez. 8, bassa priorita), esplicitamente non toccata qui.
+
+### Non modificato, verificato prima di escludere
+
+Il footer di tutte e tre le pagine `docs/` ora linka anche `/pokevault/copyright` (aggiunto in `docs/index.html`, `privacy-policy/index.html`, `terms/index.html`). Nessun link rotto: tutti e tre i file sono in `docs/<slug>/index.html`, stesso schema di routing gia' usato dalle due pagine esistenti (GitHub Pages serve `docs/` come root del sito).

@@ -65,7 +65,7 @@
 <div class="container">
 
     <h1>Informativa sulla Privacy</h1>
-    <p class="subtitle">Ultimo aggiornamento: Maggio 2026</p>
+    <p class="subtitle">Ultimo aggiornamento: Settembre 2026</p>
 
     <div class="card">
         <span class="badge">IN BREVE</span>
@@ -117,7 +117,9 @@
     <ul>
         <li><strong>Google Firebase</strong> — per l'archiviazione e l'autenticazione.</li>
         <li><strong>Google Play Billing</strong> — per la gestione degli acquisti in-app.</li>
-        <li><strong>Pokewallet.io (api.pokewallet.io)</strong> — per il recupero di dati pubblici sulle carte (nessun dato utente viene inviato).</li>
+        <li><strong>Cloudflare (R2, D1, Workers)</strong> — infrastruttura di nostra proprietà che ospita il catalogo italiano delle carte (dati e immagini) e fa da intermediario verso i fornitori terzi sotto, cosi che nessuna richiesta parta mai direttamente dal tuo dispositivo verso di loro.</li>
+        <li><strong>Pokewallet.io (api.pokewallet.io)</strong> — per il recupero di prezzi di mercato e del catalogo carte in altre lingue, contattato solo dalla nostra infrastruttura Cloudflare, mai direttamente dal tuo dispositivo. Nessun dato utente viene inviato.</li>
+        <li><strong>TCGdex (tcgdex/cards-database, licenza MIT)</strong> — fonte dati per l'aggiornamento automatico del catalogo italiano con le nuove espansioni; nessun dato utente e coinvolto, l'importazione avviene una tantum lato server.</li>
     </ul>
     <p>PokeVault non utilizza SDK pubblicitari, non effettua data brokering e non usa i dati personali per profilazione pubblicitaria.</p>
 
@@ -157,8 +159,9 @@
     <p>Per qualsiasi domanda relativa alla privacy o per esercitare i tuoi diritti, contattaci all'indirizzo: <a href="mailto:devteam.vaultcards@hotmail.com">devteam.vaultcards@hotmail.com</a></p>
 
     <div class="footer">
-        <p>PokeVault &mdash; <a href="/pokevault/terms">Termini di Servizio</a> | <a href="/pokevault/privacy-policy">Privacy Policy</a></p>
+        <p>PokeVault &mdash; <a href="/pokevault/terms">Termini di Servizio</a> | <a href="/pokevault/privacy-policy">Privacy Policy</a> | <a href="/pokevault/copyright">Copyright &amp; Takedown</a></p>
         <p style="margin-top: 8px;">Questa app non e affiliata a Nintendo, The Pokemon Company o The Pokemon Company International.</p>
+        <p style="margin-top: 8px;">Questa pagina e disponibile solo in italiano, lingua ufficiale della documentazione PokeVault. Per chiarimenti in altre lingue, contattaci.</p>
     </div>
 
 </div>
