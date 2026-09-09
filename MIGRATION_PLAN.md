@@ -89,6 +89,8 @@ Le 15.539 immagini gia in R2 provengono da **scraping del sito ufficiale Pokemon
 
 **Nessuna azione distruttiva consigliata sullo storico** (es. rimuoverlo preventivamente): rischierebbe di privare l'app di quasi 20 anni di catalogo per un rischio che le mitigazioni tecniche gia riducono concretamente. La raccomandazione e rinforzare le mitigazioni (specialmente il kill-switch per set e la pagina di takedown, sez. 4.5) prima del rilascio pubblico, non smontare il lavoro fatto.
 
+**Correzione 2026-09-09**: il dettaglio "scraping del sito ufficiale Pokemon" sopra e' stato corretto dall'utente durante la stesura della pagina `docs/copyright/index.html` (sez. 4.5). Fonte reale delle immagini storiche: **scansioni condivise dalla community di collezionisti** (non uno scraping del sito ufficiale) **e immagini scaricate dal catalogo di Pokewallet.io**. Non cambia la conclusione pratica del blocco sopra (restano opere protette indipendentemente dalla fonte, le mitigazioni di sez. 4.2 restano necessarie), ma cambia il profilo di rischio descritto in tabella: niente esposizione diretta verso il sito ufficiale Pokemon Company/Nintendo. La tabella sopra e la sez. 4.2/4.3 sotto restano nel testo cosi' come scritte il 2026-09-06 (record storico di quella sessione), corrette qui invece di riscritte silenziosamente.
+
 ### Decisione: ricompressione WebP delle immagini esistenti (confermata dall'utente)
 
 Le 15.539 PNG (245×342px, ~150-200 KB/file, 2,49 GB totali) vengono ricompresse in WebP alla stessa risoluzione. Stima: **2,49 GB -> ~300-400 MB**, nessuna perdita di copertura, stessa qualita visiva percepita.
@@ -1306,7 +1308,7 @@ Paragrafo esteso per menzionare esplicitamente le mitigazioni gia' descritte in 
 
 ### Nuova `docs/copyright/index.html`
 
-Pagina dedicata (stesso stile CSS delle altre due, badge rosso per distinguerla): da dove vengono dati e immagini (metadati fattuali, TCGdex MIT per i set recenti, scraping sito ufficiale + scansioni personali per lo storico — dichiarato esplicitamente, non nascosto), le 5 mitigazioni di sez. 4.2, procedura di segnalazione con contatto e **SLA dichiarato di 72 ore**.
+Pagina dedicata (stesso stile CSS delle altre due, badge rosso per distinguerla): da dove vengono dati e immagini (metadati fattuali, TCGdex MIT per i set recenti, scansioni community + catalogo Pokewallet.io per lo storico — vedi correzione 2026-09-09 in sez. 1.1 sopra), le 5 mitigazioni di sez. 4.2, procedura di segnalazione con contatto e **SLA dichiarato di 72 ore**.
 
 **Scelta deliberata sull'SLA**: la pagina promette solo "rispondiamo entro 72 ore" e "possiamo sospendere la visibilita... senza attendere una release" — **non** promette un kill-switch tecnico automatico "sotto i 5 minuti" come ipotizzato in sez. 4.2 del piano originale. Verificato prima di scrivere la pagina: la tabella `takedowns` esiste nello schema D1 (`schema/001_init.sql`) ma **non e referenziata da nessuna parte in `src/index.ts`** — non e' collegata alla logica di serving, quindi quel kill-switch non esiste ancora davvero. Pubblicare una promessa di 5 minuti per un meccanismo non implementato sarebbe stato un rischio reale, non solo impreciso. **Follow-up aperto, non fatto qui**: wire-are `takedowns` nel path `handleItalianR2AssetRequest` (check `WHERE expansion_id = ?` prima di servire, TTL cache basso o bypass) per rendere vera la sospensione rapida — finche' non e' fatto, una richiesta di rimozione urgente va gestita a mano (rimozione oggetti R2 o `wrangler deploy` con un filtro ad-hoc), comunque dentro l'SLA di 72h dichiarato.
 
@@ -1323,3 +1325,16 @@ Scelta l'opzione "dichiarare l'italiano lingua ufficiale" (non tradurre): aggiun
 ### Non modificato, verificato prima di escludere
 
 Il footer di tutte e tre le pagine `docs/` ora linka anche `/pokevault/copyright` (aggiunto in `docs/index.html`, `privacy-policy/index.html`, `terms/index.html`). Nessun link rotto: tutti e tre i file sono in `docs/<slug>/index.html`, stesso schema di routing gia' usato dalle due pagine esistenti (GitHub Pages serve `docs/` come root del sito).
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, quarta parte (correzione: fonte reale delle immagini storiche)
+
+L'utente ha chiesto di togliere il riferimento allo "scraping sito ufficiale" dalla pagina copyright, sostituendolo con Pokewallet. **Non eseguito alla lettera**: sostituire con "solo Pokewallet" sarebbe stata una dichiarazione falsa in un documento legale pubblico — rischio maggiore, non minore, di quello che si voleva ridurre (un'incoerenza tra dichiarazione pubblica e fatti reali, se mai verificata, pesa piu' della disclosure onesta). Chiesta conferma con `AskUserQuestion` su tre punti separati (fonte immagini storiche, fonte immagini set nuovi, fonte prezzi) prima di scrivere qualunque cosa in un documento di compliance.
+
+**Risposta dell'utente, la fonte corretta**:
+- Immagini storiche (~15.539, pre-2023): **scansioni condivise dalla community di collezionisti + immagini scaricate dal catalogo di Pokewallet.io** — non "scraping del sito ufficiale Pokemon" come scritto il 2026-09-06 (quella sessione aveva chiesto la stessa domanda e ricevuto una risposta diversa; la correzione di oggi e' quella da considerare valida)
+- Immagini set nuovi (automazione TCGdex): **invariato**, confermato dall'utente
+- Prezzi: **invariato**, solo Pokewallet, confermato dall'utente
+
+**Modificato**: `docs/copyright/index.html` sez. 2 (bullet "Immagini delle espansioni storiche"), aggiunta una nota di correzione datata in questo documento subito dopo il blocco originale del 2026-09-06 sez. 1.1 (**non riscritto silenziosamente** — il record storico resta leggibile, la correzione e' visibilmente sovrapposta con data). Verificato che "scraping" non compariva in nessun'altra pagina `docs/` ne' in `AppLocale.kt` (grep mirato prima di dichiarare finito): nessun'altra modifica necessaria. HTML ribilanciato dopo l'edit (stesso controllo tag-per-tag di prima, nessuna asimmetria).
