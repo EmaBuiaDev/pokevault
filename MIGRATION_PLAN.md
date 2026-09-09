@@ -808,12 +808,12 @@ Le ragioni, in ordine di peso:
 
 ### Priorita bassa — qualita
 
-| # | Intervento |
-|---|---|
-| 24 | Migrare `AppLocale.kt` (1019 righe di getter) verso `strings.xml` + `stringResource` — grosso, valutare se ne vale la pena ora che il catalogo e IT-only |
-| 25 | Portare la copertura test al 50% (target gia dichiarato in `README_TESTING.md`, mai raggiunto) |
-| 26 | Tradurre le pagine `docs/` in inglese o dichiarare l'italiano come lingua ufficiale |
-| 27 | Convenzione commit unica (oggi misto IT/EN, prefissi `- `) |
+| # | Intervento | Stato |
+|---|---|---|
+| 24 | Migrare `AppLocale.kt` (1019 righe di getter) verso `strings.xml` + `stringResource` — grosso, valutare se ne vale la pena ora che il catalogo e IT-only | **Investigata 2026-09-09, sospesa su decisione utente — portata reale molto piu' grande del previsto, vedi checkpoint in fondo** |
+| 25 | Portare la copertura test al 50% (target gia dichiarato in `README_TESTING.md`, mai raggiunto) | Non toccata |
+| 26 | Tradurre le pagine `docs/` in inglese o dichiarare l'italiano come lingua ufficiale | **Fatto 2026-09-09** — dichiarato l'italiano lingua ufficiale, vedi checkpoint sez. 4.5 |
+| 27 | Convenzione commit unica (oggi misto IT/EN, prefissi `- `) | Non toccata — nessun rischio ad adottarla da qui in avanti, non tocca commit passati |
 
 ---
 
@@ -1496,3 +1496,27 @@ Ogni nuovo file ha lo stesso `package com.emabuia.pokevault.ui.deck` e lo stesso
 4. **Import esterni**: solo `AppNavigation.kt` importa da questo package (`DeckLabScreen`, il composable principale) -- rimasto nel file con lo stesso nome, import ancora valido. Nessun altro file nel repo importa per nome uno degli altri 12 composable spostati (grep mirato, zero risultati) -- se lo avesse fatto sarebbe stato comunque valido, dato che Kotlin risolve per package non per file, ma verificato lo stesso per essere sicuri
 
 Non compilato (nessun accesso a `dl.google.com` qui): le quattro verifiche sopra sono il sostituto piu' rigoroso possibile di un compilatore reale con gli strumenti disponibili in questa sessione, ma **restano da confermare con `./gradlew :app:compileDebugKotlin`** prima di considerare la voce definitivamente chiusa.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, dodicesima parte (voce #24: `AppLocale.kt` -> `strings.xml`, investigata e sospesa)
+
+Su richiesta esplicita "fai #24". Fatta una ricognizione della portata reale prima di editare, come per le voci #7/#9 -- la riga del piano ("1019 righe di getter") descriveva solo la dimensione del file, non la complessita' del lavoro.
+
+### I numeri reali
+
+- **512** proprieta'/funzioni esposte da `AppLocale.kt` (oggi 1034 righe), **693** call site `AppLocale.*` nel resto del codice (contati con grep, non stimati)
+- **41** di quelle 512 sono **funzioni di lookup/traduzione con parametri** (`translateRarity(rarity)`, `translateType(type)`, `getConditions()`, `getRarities()`, ecc.), non stringhe statiche -- non si convertono 1:1 in una entry di `strings.xml`, servirebbero array di risorse (`string-array`) + una funzione di mappatura indice, un pattern diverso da quello semplice `stringResource(R.string.x)`
+- **7 file non-`@Composable`** chiamano `AppLocale.*` direttamente: 6 ViewModel + **`PokeTcgRepository.kt`**, il repository dati. `stringResource()` e' una funzione `@Composable` -- non e' chiamabile li' per costruzione (errore di compilazione, non un dettaglio a runtime), servirebbe `Context.getString()` con un `Context` che `PokeTcgRepository` oggi non ha e non e' pensato per avere
+
+### Il problema architetturale reale, trovato leggendo `AppLocale.kt` riga per riga
+
+L'app **non segue la lingua del telefono**. `AppLocale` implementa un selettore di lingua manuale in-app (`Language.IT`/`Language.EN`, salvato in `SharedPreferences` via `toggle()`/`setLanguage()`), completamente indipendente dalla configurazione di sistema -- verosimilmente un'opzione nelle Impostazioni dell'app.
+
+`stringResource()` di Android risolve automaticamente tra `res/values/` e `res/values-it/` in base alla **lingua di sistema del dispositivo**, non a una preferenza salvata dall'app. Una migrazione diretta (senza altro intervento) **romperebbe il selettore lingua in-app**: un utente con telefono in inglese che ha scelto italiano nell'app tornerebbe a vedere l'inglese, perche' la risoluzione delle risorse seguirebbe il sistema, non la sua scelta salvata in `SharedPreferences`. Per preservare il comportamento servirebbe `AppCompatDelegate.setApplicationLocales()` (l'API Android corretta per un selettore lingua in-app con risorse standard, disponibile da AppCompat 1.6+) -- un cambio architetturale reale, che tocca il ciclo di vita delle Activity/ricomposizione, non verificabile senza un device o almeno un emulatore.
+
+### Decisione dell'utente
+
+Esposta la portata reale (512 simboli, 693 call site, 41 funzioni di lookup non banali, 7 consumer non-Composable incluso il repository dati, il rischio concreto di rompere il selettore lingua) e le opzioni (salta, fallo comunque per intero, fanne solo una parte scoped). L'utente ha lasciato la decisione a me ("nessuna preferenza") — scelto **di sospendere**, stessa logica delle voci #7/#9: senza compilatore ne' device per verificare che il selettore lingua continui a funzionare dopo il cambio, il rischio di una regressione utente-visibile (un'intera funzionalita' che smette di rispettare la scelta salvata) supera il beneficio di manutenibilita' a lungo termine. Nessun codice toccato.
+
+**Se si vuole riprendere in futuro**: la sessione dovrebbe avere accesso a build + emulatore/device per verificare concretamente che `AppCompatDelegate.setApplicationLocales()` (o l'alternativa scelta) preservi il comportamento attuale del selettore lingua ad ogni ricomposizione, prima di toccare anche solo il primo dei 693 call site.
