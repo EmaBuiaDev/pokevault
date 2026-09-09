@@ -13,7 +13,7 @@ import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.emabuia.pokevault.data.remote.CardMarket
 import com.emabuia.pokevault.data.remote.CardMarketPrices
-import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.CatalogRepository
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgPlayer

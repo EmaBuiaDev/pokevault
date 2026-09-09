@@ -9,7 +9,7 @@ import com.emabuia.pokevault.data.firebase.CollectionStats
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.collectionGroupKey
-import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.CatalogRepository
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.flow.catch
@@ -43,7 +43,7 @@ data class CollectionUiState(
 class CollectionViewModel : ViewModel() {
 
     private val repository = FirestoreRepository()
-    private val tcgRepository = PokeTcgRepository()
+    private val tcgRepository = CatalogRepository()
     // Synchronized perché emissioni rapide del Flow possono lanciare hydration concorrenti
     // e questi insiemi tracciano lo stato condiviso fra di esse.
     private val hydratedPriceCardIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())

@@ -13,7 +13,7 @@ object RepositoryProvider {
         database = PokeVaultDatabase.getInstance(context)
     }
 
-    val tcgRepository: PokeTcgRepository by lazy { PokeTcgRepository() }
+    val tcgRepository: CatalogRepository by lazy { CatalogRepository() }
     val pokeWalletRepository: PokeWalletRepository by lazy { PokeWalletRepository() }
     val italianPriceSnapshotRepository: ItalianPriceSnapshotRepository by lazy { ItalianPriceSnapshotRepository() }
 }

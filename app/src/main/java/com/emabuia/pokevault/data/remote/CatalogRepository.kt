@@ -29,9 +29,9 @@ import kotlin.math.abs
 
 enum class ItalianCardAttribute { RARITY, SUPERTYPE, TYPE }
 
-class PokeTcgRepository {
+class CatalogRepository {
 
-    private val api = PokeWalletRetrofitClient.create(com.emabuia.pokevault.BuildConfig.POKEWALLET_API_KEY)
+    private val api = PokeVaultApiClient.create(com.emabuia.pokevault.BuildConfig.POKEWALLET_API_KEY)
     private val db get() = RepositoryProvider.database
     private val italianCatalogRepository = ItalianCatalogRemoteRepository()
     private val gson = Gson()
@@ -443,7 +443,7 @@ class PokeTcgRepository {
                             )
 
                         val expansionCards = italianCatalogRepository
-                            .getExpansionCards(baseUrl = PokeWalletRetrofitClient.imageBaseUrl, expansionId = expansionId, forceRefresh = forceRefresh)
+                            .getExpansionCards(baseUrl = PokeVaultApiClient.imageBaseUrl, expansionId = expansionId, forceRefresh = forceRefresh)
                             .getOrNull()
                             ?.takeIf { it.isNotEmpty() }
                             ?: context?.let { safeContext ->
@@ -2131,7 +2131,7 @@ class PokeTcgRepository {
         // the Pokedex list doesn't need the full ~15k-card catalog at all. Falls back to the
         // full-catalog computation below on any failure so this can never regress.
         val summaries = italianCatalogRepository
-            .getExpansionsSummary(baseUrl = PokeWalletRetrofitClient.imageBaseUrl, forceRefresh = forceRefresh)
+            .getExpansionsSummary(baseUrl = PokeVaultApiClient.imageBaseUrl, forceRefresh = forceRefresh)
             .getOrNull()
             ?.takeIf { it.isNotEmpty() }
 
@@ -2269,7 +2269,7 @@ class PokeTcgRepository {
         // endpoint not yet deployed, etc.) so opening a set can never become less reliable.
         val expansionCards = italianCatalogRepository
             .getExpansionCards(
-                baseUrl = PokeWalletRetrofitClient.imageBaseUrl,
+                baseUrl = PokeVaultApiClient.imageBaseUrl,
                 expansionId = expansionId,
                 forceRefresh = forceRefresh
             )
@@ -2369,10 +2369,10 @@ class PokeTcgRepository {
         val imageRef = record.imageReference()
         val normalizedSetCode = imageRef?.setCode ?: normalizeItalianSetCode(record.espansioneId)
         val normalizedNumber = imageRef?.cardNumber ?: extractCardNumber(record.cardId)
-        val smallImage = record.imageUrl(PokeWalletRetrofitClient.imageBaseUrl, size = "low")
-            ?: "${PokeWalletRetrofitClient.imageBaseUrl}images/it/$normalizedSetCode/$normalizedNumber?size=low"
-        val largeImage = record.imageUrl(PokeWalletRetrofitClient.imageBaseUrl, size = "high")
-            ?: "${PokeWalletRetrofitClient.imageBaseUrl}images/it/$normalizedSetCode/$normalizedNumber?size=high"
+        val smallImage = record.imageUrl(PokeVaultApiClient.imageBaseUrl, size = "low")
+            ?: "${PokeVaultApiClient.imageBaseUrl}images/it/$normalizedSetCode/$normalizedNumber?size=low"
+        val largeImage = record.imageUrl(PokeVaultApiClient.imageBaseUrl, size = "high")
+            ?: "${PokeVaultApiClient.imageBaseUrl}images/it/$normalizedSetCode/$normalizedNumber?size=high"
         val smallImageWithBust = appendItalianImageCacheBuster(smallImage)
         val largeImageWithBust = appendItalianImageCacheBuster(largeImage)
         val cardSet = TcgCardSet(
@@ -2437,7 +2437,7 @@ class PokeTcgRepository {
         // full catalog already loaded above; falls back to it on any failure, same pattern
         // as getCardsByItalianSet.
         val records = italianCatalogRepository
-            .getExpansionCards(baseUrl = PokeWalletRetrofitClient.imageBaseUrl, expansionId = expansionId, forceRefresh = refreshItalianCatalog)
+            .getExpansionCards(baseUrl = PokeVaultApiClient.imageBaseUrl, expansionId = expansionId, forceRefresh = refreshItalianCatalog)
             .getOrNull()
             ?.takeIf { it.isNotEmpty() }
             ?: catalog.cardsByExpansion()[expansionId].orEmpty()
@@ -2850,7 +2850,7 @@ class PokeTcgRepository {
         cardNumber: String? = null
     ): String {
         val encodedCardId = encodeUrlPathSegment(cardId)
-        return "${PokeWalletRetrofitClient.imageBaseUrl}images/$encodedCardId?size=$size"
+        return "${PokeVaultApiClient.imageBaseUrl}images/$encodedCardId?size=$size"
     }
 
     private suspend fun adaptPilotImagesForCurrentLocale(
@@ -2871,12 +2871,12 @@ class PokeTcgRepository {
         return cards.map { card ->
             val normalizedNumber = extractCardNumber(card.number)
             val smallUrl = if (useItalianPilotImages && normalizedNumber.isNotBlank()) {
-                "${PokeWalletRetrofitClient.imageBaseUrl}images/it/ME03/$normalizedNumber?size=low"
+                "${PokeVaultApiClient.imageBaseUrl}images/it/ME03/$normalizedNumber?size=low"
             } else {
                 buildCardImageUrl(card.id, "low")
             }
             val largeUrl = if (useItalianPilotImages && normalizedNumber.isNotBlank()) {
-                "${PokeWalletRetrofitClient.imageBaseUrl}images/it/ME03/$normalizedNumber?size=high"
+                "${PokeVaultApiClient.imageBaseUrl}images/it/ME03/$normalizedNumber?size=high"
             } else {
                 buildCardImageUrl(card.id, "high")
             }
@@ -2913,7 +2913,7 @@ class PokeTcgRepository {
     // actually shipped in upstream (often JAP/CHN for historical sets), which would silently
     // mix languages in an Italian Pokedex entry. See MIGRATION_PLAN.md sez. 8, bug #8.
     private fun buildSetImageUrl(setRef: String, italianOnly: Boolean = false): String {
-        val base = "${PokeWalletRetrofitClient.imageBaseUrl}sets/$setRef/image?v=$SET_IMAGE_CACHE_VERSION"
+        val base = "${PokeVaultApiClient.imageBaseUrl}sets/$setRef/image?v=$SET_IMAGE_CACHE_VERSION"
         return if (italianOnly) "$base&source=ita" else base
     }
 

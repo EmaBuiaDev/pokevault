@@ -11,7 +11,7 @@ import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.PokeWalletRepository
-import com.emabuia.pokevault.data.remote.PokeTcgRepository
+import com.emabuia.pokevault.data.remote.CatalogRepository
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.CardMarket
 import com.emabuia.pokevault.data.remote.CardMarketPrices

@@ -160,7 +160,7 @@ interface PokeWalletApiService {
 
 // ── Retrofit Client ──
 
-object PokeWalletRetrofitClient {
+object PokeVaultApiClient {
     private const val DIRECT_API_URL = "https://api.pokewallet.io/"
     val imageBaseUrl: String
         get() = resolveBaseUrl()
