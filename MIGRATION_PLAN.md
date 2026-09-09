@@ -790,7 +790,7 @@ Le ragioni, in ordine di peso:
 | 11 | **Cancellare i duplicati orfani in root** | `util/AppLocale.kt`, `viewmodel/DeckLabViewModel.kt` |
 | 12 | `safeImageUrl()` duplicato 7 volte -> utility unica in `util/` e applicata ovunque | 7 file + i 3 punti che non la usano — **le 7 duplicazioni consolidate 2026-09-09, vedi checkpoint in fondo; i punti che non la usano ancora restano aperti** |
 | 13 | Rinominare i file `_v2`/`_v3` e allineare nome file/classe | `MainActivity_v2.kt`, `CardsVaultTCGApp.kt`, `AppNavigation_v3.kt`, `HomeScreen_v2.kt` — **fatto 2026-09-09, vedi checkpoint in fondo** |
-| 14 | Logging unificato su Timber (38 usi di `Log`/`println` residui) | `PaddleOCREngine.kt`, `MLKitOCREngine.kt`, `LimitlessTcgRepository.kt` |
+| 14 | Logging unificato su Timber (38 usi di `Log`/`println` residui) | `PaddleOCREngine.kt`, `MLKitOCREngine.kt`, `LimitlessTcgRepository.kt` — **fatto 2026-09-09, vedi checkpoint in fondo** |
 | 15 | Spezzare i file monolitici (`DeckLabScreen.kt` 2240 righe, `PokeTcgRepository.kt` 1735) | — |
 | 16 | Rimuovere `FORCED_REAL_TOTALS_BY_SET_CODE = { ME03: 124 }` — i conteggi ora sono nostri in D1 | `pokevault-proxy-worker/src/index.ts:82-88` |
 | 17 | Rimuovere `TranslationService` (MyMemory) se le traduzioni arrivano dal catalogo IT | `data/remote/TranslationService.kt` |
@@ -1375,3 +1375,21 @@ Verificato prima di rinominare, non assunto: in tutti e cinque i file la classe/
 Trovato un quinto file oltre ai quattro elencati nel piano originale: `WelcomeHeader_v2.kt` (stesso pattern, emerso durante la ricerca dei 14 punti mancanti per la voce #12). Nessun conflitto di nome verificato prima di ogni `git mv` (`find` sul nome di destinazione, zero risultati per tutti e cinque).
 
 Non compilato (nessun accesso a `dl.google.com` qui), ma il rischio e' strutturalmente basso: un rename puro senza alcuna modifica al contenuto dei file.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, settima parte (sez. 8 #14: logging unificato su Timber)
+
+`PaddleOCREngine.kt` era gia' sparito (voce #10, checkpoint precedente). Cercato `android.util.Log`/`System.out.print`/`println(` sull'intero `app/src/main` (non solo sui tre file indicati dal piano, che erano incompleti): **8 file**, non 3 — `ScannerScreen.kt`, `LimitlessTcgRepository.kt` (18 chiamate, il grosso del totale), `SetDetailViewModel.kt`, `AuthViewModel.kt`, `HomeViewModel.kt`, `CardFieldParser.kt`, `ImagePreprocessor.kt` (solo un import morto, zero chiamate reali), `MLKitOCREngine.kt`.
+
+### Conversione, non solo sostituzione 1:1
+
+Ogni `Log.LEVEL(TAG, "msg"[, e])` -> `Timber.LEVEL("msg")` o `Timber.LEVEL(e, "msg")` (Timber vuole il `Throwable` come primo argomento posizionale, non ultimo come `Log`; il tag si toglie, Timber lo deduce automaticamente dalla classe chiamante). Rimossi anche gli import `android.util.Log`/`com.emabuia.pokevault.BuildConfig` diventati inutili e le costanti `TAG` companion ormai senza chiamanti, verificato file per file con grep mirato prima di ogni rimozione (non assunto).
+
+### Scoperta reale, non solo pulizia cosmetica
+
+Su 22 chiamate totali (`LimitlessTcgRepository.kt` escluso, gia' tutte guardate), **5 non avevano `if (BuildConfig.DEBUG)`**: `AuthViewModel.kt` (2, mai guardate), `SetDetailViewModel.kt` e `HomeViewModel.kt` (1 ciascuna, guardate ma con un blocco `if` invece dell'espressione inline usata altrove). Queste **loggavano gia' in release** prima di oggi — un piccolo leak reale della stessa famiglia di quello gia' chiuso per `HttpLoggingInterceptor` (voce #2). La conversione a Timber le chiude automaticamente, non per una guardia aggiunta caso per caso: `PokeVaultApp.kt` pianta un `Timber.DebugTree()` **solo se `BuildConfig.DEBUG`** (unico `Timber.plant` nel repo, verificato con grep) — senza nessun tree piantato in release, ogni chiamata `Timber.*` in tutto il codebase e' gia' un no-op silenzioso, guardia o meno. Le chiamate gia' guardate con `if (BuildConfig.DEBUG)` diventano ridondanti (Timber lo fa gia' da solo) e la guardia e' stata rimossa insieme alla conversione, coerente con come `OCRManager.kt` usava gia' Timber prima di questa voce.
+
+### Verificato dopo la conversione
+
+Grep sull'intero `app/src/main` per `android.util.Log`/`Log\.(d|w|e|i|v)(`/`System.out.print`/`println(`: **zero risultati**. Parentesi e graffe ricontate per ognuno degli 8 file (aperte = chiuse), nessuna asimmetria introdotta. Non compilato (nessun accesso a `dl.google.com` qui).

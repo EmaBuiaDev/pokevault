@@ -1,7 +1,6 @@
 package com.emabuia.pokevault.viewmodel
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -11,13 +10,13 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.firebase.FirebaseAuthManager
 import com.emabuia.pokevault.util.AppLocale
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 data class AuthUiState(
     val isLoading: Boolean = false,
@@ -193,7 +192,7 @@ class AuthViewModel : ViewModel() {
         } catch (e: NoCredentialException) {
             null // Nessun account autorizzato: fallback al picker completo
         } catch (e: Exception) {
-            Log.w("AuthViewModel", "GetGoogleIdOption fallito, provo fallback", e)
+            Timber.w(e, "GetGoogleIdOption fallito, provo fallback")
             null
         }
     }
@@ -211,7 +210,7 @@ class AuthViewModel : ViewModel() {
             uiState = uiState.copy(isLoading = false)
             null
         } catch (e: Exception) {
-            Log.e("AuthViewModel", "Google Sign-In fallito", e)
+            Timber.e(e, "Google Sign-In fallito")
             uiState = uiState.copy(
                 isLoading = false,
                 errorMessage = if (AppLocale.isItalian)

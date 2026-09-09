@@ -6,8 +6,6 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Rect as AndroidRect
 import android.graphics.YuvImage
-import android.util.Log
-import com.emabuia.pokevault.BuildConfig
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -65,6 +63,7 @@ import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import timber.log.Timber
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.ui.theme.*
@@ -817,7 +816,7 @@ private fun CameraPreview(
                     camera.cameraControl.enableTorch(flashEnabled)
                     camera.cameraControl.cancelFocusAndMetering()
                 } catch (e: Exception) {
-                    if (BuildConfig.DEBUG) Log.e("ScannerScreen", "Camera bind failed", e)
+                    Timber.e(e, "Camera bind failed")
                 }
             }, ContextCompat.getMainExecutor(ctx))
 

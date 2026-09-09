@@ -1,6 +1,5 @@
 package com.emabuia.pokevault.data.remote
 
-import android.util.Log
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.model.MetaArchetype
 import com.emabuia.pokevault.data.model.MetaDeck
@@ -16,6 +15,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
 object LimitlessRetrofitClient {
@@ -55,7 +55,6 @@ class LimitlessTcgRepository {
     )
 
     companion object {
-        private const val TAG = "LimitlessTcgRepo"
         private const val CACHE_DURATION = 30 * 60 * 1000L // 30 minuti
 
         // Cache in memoria condivisa a livello di processo: sopravvive alla
@@ -105,13 +104,13 @@ class LimitlessTcgRepository {
             }
 
             // 1. Recupera tornei recenti
-            if (BuildConfig.DEBUG) Log.d(TAG, "Fetching tournaments format=$apiFormat")
+            Timber.d("Fetching tournaments format=$apiFormat")
             val tournaments = api.getTournaments(
                 game = "PTCG",
                 format = apiFormat,
                 limit = 10
             )
-            if (BuildConfig.DEBUG) Log.d(TAG, "Trovati ${tournaments.size} tornei")
+            Timber.d("Trovati ${tournaments.size} tornei")
 
             if (tournaments.isEmpty()) {
                 return Result.success(emptyList())
@@ -127,7 +126,7 @@ class LimitlessTcgRepository {
                 tournaments.map { tournament ->
                     async(Dispatchers.IO) {
                         try {
-                            if (BuildConfig.DEBUG) Log.d(TAG, "Fetching standings per torneo: ${tournament.name} (${tournament.id})")
+                            Timber.d("Fetching standings per torneo: ${tournament.name} (${tournament.id})")
                             val standings = api.getTournamentStandings(tournament.id)
 
                             standings
@@ -137,14 +136,14 @@ class LimitlessTcgRepository {
                                 .map { mapToMetaDeck(it, tournament) }
                                 .filter { it.cards.isNotEmpty() }
                         } catch (e: Exception) {
-                            if (BuildConfig.DEBUG) Log.w(TAG, "Errore caricamento standings per torneo ${tournament.id}: ${e.message}", e)
+                            Timber.w(e, "Errore caricamento standings per torneo ${tournament.id}: ${e.message}")
                             emptyList()
                         }
                     }
                 }.awaitAll().flatten()
             }
 
-            if (BuildConfig.DEBUG) Log.d(TAG, "Totale meta decks trovati: ${allMetaDecks.size}")
+            Timber.d("Totale meta decks trovati: ${allMetaDecks.size}")
 
             // Ordina per placement e data
             val sorted = allMetaDecks
@@ -157,7 +156,7 @@ class LimitlessTcgRepository {
 
             Result.success(sorted)
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.e(TAG, "Errore fetch meta decks: ${e.message}", e)
+            Timber.e(e, "Errore fetch meta decks: ${e.message}")
 
             // Fallback su cache scaduta
             metaDecksCache[cacheKey]?.let {
@@ -235,7 +234,7 @@ class LimitlessTcgRepository {
                                 )
                             }
                         } catch (e: Exception) {
-                            if (BuildConfig.DEBUG) Log.w(TAG, "Errore standings per archetypes: ${e.message}")
+                            Timber.w("Errore standings per archetypes: ${e.message}")
                             emptyList()
                         }
                     }
@@ -273,7 +272,7 @@ class LimitlessTcgRepository {
             archetypeCache[cacheKey] = CachedArchetypes(archetypes, System.currentTimeMillis())
             Result.success(archetypes)
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.e(TAG, "Errore fetch archetypes: ${e.message}", e)
+            Timber.e(e, "Errore fetch archetypes: ${e.message}")
             archetypeCache[cacheKey]?.let { return Result.success(it.archetypes) }
             Result.failure(e)
         }
@@ -299,7 +298,7 @@ class LimitlessTcgRepository {
 
         try {
             val json = gson.toJson(decklist)
-            if (BuildConfig.DEBUG) Log.d(TAG, "Decklist raw JSON (troncato): ${json.take(500)}")
+            Timber.d("Decklist raw JSON (troncato): ${json.take(500)}")
 
             // Prova Formato 1: Mappa con chiavi "pokemon", "trainer", "energy"
             try {
@@ -321,7 +320,7 @@ class LimitlessTcgRepository {
                 }
 
                 if (cards.isNotEmpty()) {
-                    if (BuildConfig.DEBUG) Log.d(TAG, "Parsed ${cards.size} carte (formato mappa per categoria)")
+                    Timber.d("Parsed ${cards.size} carte (formato mappa per categoria)")
                     return cards
                 }
 
@@ -331,7 +330,7 @@ class LimitlessTcgRepository {
                     val deckJson = gson.toJson(deckData)
                     val deckCards = parseCardList(deckJson, null)
                     if (deckCards.isNotEmpty()) {
-                        if (BuildConfig.DEBUG) Log.d(TAG, "Parsed ${deckCards.size} carte (formato deck array)")
+                        Timber.d("Parsed ${deckCards.size} carte (formato deck array)")
                         return deckCards
                     }
                 }
@@ -343,7 +342,7 @@ class LimitlessTcgRepository {
             try {
                 val listCards = parseCardList(json, null)
                 if (listCards.isNotEmpty()) {
-                    if (BuildConfig.DEBUG) Log.d(TAG, "Parsed ${listCards.size} carte (formato lista piatta)")
+                    Timber.d("Parsed ${listCards.size} carte (formato lista piatta)")
                     return listCards
                 }
             } catch (_: Exception) {
@@ -351,7 +350,7 @@ class LimitlessTcgRepository {
             }
 
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Errore parsing decklist: ${e.message}")
+            Timber.w("Errore parsing decklist: ${e.message}")
         }
 
         return cards
@@ -421,7 +420,7 @@ class LimitlessTcgRepository {
                 )
             }
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Errore parseCardList: ${e.message}")
+            Timber.w("Errore parseCardList: ${e.message}")
         }
 
         return cards
@@ -529,7 +528,7 @@ class LimitlessTcgRepository {
             }
 
             val tournaments = api.getTournaments(game = "PTCG", format = apiFormat, limit = limit)
-            if (BuildConfig.DEBUG) Log.d(TAG, "TournamentResults: trovati ${tournaments.size} tornei")
+            Timber.d("TournamentResults: trovati ${tournaments.size} tornei")
             if (tournaments.isEmpty()) return Result.success(emptyList())
 
             val results = coroutineScope {
@@ -554,7 +553,7 @@ class LimitlessTcgRepository {
                                 .map { mapToMetaDeck(it, tournament) }
                                 .filter { it.cards.isNotEmpty() }
 
-                            if (BuildConfig.DEBUG) Log.d(TAG, "TournamentResults ${tournament.name}: ${mappedDecks.size} top placings")
+                            Timber.d("TournamentResults ${tournament.name}: ${mappedDecks.size} top placings")
 
                             TournamentResult(
                                 tournamentId = tournament.id,
@@ -564,7 +563,7 @@ class LimitlessTcgRepository {
                                 top3 = mappedDecks
                             )
                         } catch (e: Exception) {
-                            if (BuildConfig.DEBUG) Log.w(TAG, "Errore standings torneo ${tournament.id}: ${e.message}")
+                            Timber.w("Errore standings torneo ${tournament.id}: ${e.message}")
                             null
                         }
                     }
@@ -579,7 +578,7 @@ class LimitlessTcgRepository {
             tournamentResultsCache[cacheKey] = CachedTournamentResults(sorted, System.currentTimeMillis())
             Result.success(sorted)
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.e(TAG, "Errore fetch tournament results: ${e.message}", e)
+            Timber.e(e, "Errore fetch tournament results: ${e.message}")
             tournamentResultsCache[cacheKey]?.let { return Result.success(it.results) }
             Result.failure(e)
         }
