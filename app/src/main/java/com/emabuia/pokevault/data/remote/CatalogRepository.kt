@@ -437,7 +437,7 @@ class CatalogRepository {
                             ?: loadSetsFromRoom(ignoreExpiry = true)?.firstOrNull { it.id == italianSetId }
                             ?: TcgSet(
                                 id = italianSetId,
-                                name = expansionId.uppercase(Locale.ROOT),
+                                name = italianExpansionDisplayName(expansionId),
                                 series = deriveSeriesName(setCode = expansionId, language = "ENG", setName = expansionId),
                                 language = "ITA"
                             )
@@ -592,7 +592,7 @@ class CatalogRepository {
                     val italianSetId = buildItalianSetId(expansionId)
                     val setInfo = TcgSet(
                         id = italianSetId,
-                        name = expansionId.uppercase(Locale.ROOT),
+                        name = italianExpansionDisplayName(expansionId),
                         series = deriveSeriesName(
                             setCode = expansionId,
                             language = "ITA",
@@ -700,7 +700,7 @@ class CatalogRepository {
                         record = record,
                         setInfo = TcgSet(
                             id = buildItalianSetId(expansionId),
-                            name = expansionId.uppercase(Locale.ROOT),
+                            name = italianExpansionDisplayName(expansionId),
                             series = deriveSeriesName(setCode = expansionId, language = "ITA", setName = expansionId),
                             printedTotal = printedTotal ?: 0,
                             language = "ITA"
@@ -763,7 +763,7 @@ class CatalogRepository {
                     val italianSetId = buildItalianSetId(expansionId)
                     val setInfo = TcgSet(
                         id = italianSetId,
-                        name = expansionId.uppercase(Locale.ROOT),
+                        name = italianExpansionDisplayName(expansionId),
                         series = deriveSeriesName(
                             setCode = expansionId,
                             language = "ITA",
@@ -813,7 +813,7 @@ class CatalogRepository {
                     val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
                     val setInfo = TcgSet(
                         id = buildItalianSetId(expansionId),
-                        name = expansionId.uppercase(Locale.ROOT),
+                        name = italianExpansionDisplayName(expansionId),
                         series = deriveSeriesName(setCode = expansionId, language = "ITA", setName = expansionId),
                         language = "ITA"
                     )
@@ -969,7 +969,7 @@ class CatalogRepository {
         val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
         val setInfo = TcgSet(
             id = buildItalianSetId(expansionId),
-            name = expansionId.uppercase(Locale.ROOT),
+            name = italianExpansionDisplayName(expansionId),
             series = deriveSeriesName(setCode = expansionId, language = "ITA", setName = expansionId),
             language = "ITA"
         )
@@ -1888,6 +1888,34 @@ class CatalogRepository {
         return "${expansionId.trim().lowercase(Locale.ROOT)}$ITALIAN_SET_SUFFIX"
     }
 
+    /**
+     * Nome reale dell'espansione ITA (es. "Scintille Folgoranti"), dalla stessa fonte
+     * D1 che usa il Pokedex (`expansions.name`, schema/006), non il codice ("SV08").
+     *
+     * Serve perche' ogni carta che nasce da ricerca/scanner/import portava con se' un
+     * `TcgSet.name` costruito con `expansionId.uppercase()`: finendo in collezione,
+     * quel valore veniva salvato in `PokemonCard.set` e l'utente vedeva il codice al
+     * posto del nome, mentre le carte aggiunte dal Pokedex mostravano il nome giusto.
+     *
+     * `getExpansionsSummary()` tiene una cache in memoria con TTL, quindi la chiamata
+     * per record e' economica dopo la prima. Ripiega sul codice, come fa gia' il
+     * Pokedex, solo se il manifest non e' raggiungibile.
+     */
+    private suspend fun italianExpansionDisplayName(expansionId: String): String {
+        val normalized = expansionId.trim().lowercase(Locale.ROOT)
+        val fallback = normalized.uppercase(Locale.ROOT)
+        val summaries = italianCatalogRepository
+            .getExpansionsSummary(baseUrl = PokeVaultApiClient.imageBaseUrl)
+            .getOrNull()
+            ?: return fallback
+        return summaries
+            .firstOrNull { it.id.trim().lowercase(Locale.ROOT) == normalized }
+            ?.name
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: fallback
+    }
+
     private fun parseItalianExpansionId(setId: String): String? {
         val normalized = setId.trim().lowercase(Locale.ROOT)
         if (!normalized.endsWith(ITALIAN_SET_SUFFIX)) return null
@@ -2295,7 +2323,7 @@ class CatalogRepository {
             ?.firstOrNull { it.id == setId }
             ?: TcgSet(
                 id = setId,
-                name = expansionId.uppercase(Locale.ROOT),
+                name = italianExpansionDisplayName(expansionId),
                 series = deriveSeriesName(setCode = expansionId, language = "ENG", setName = expansionId),
                 language = "ENG"
             )
