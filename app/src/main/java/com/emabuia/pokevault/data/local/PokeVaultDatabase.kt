@@ -29,10 +29,16 @@ abstract class PokeVaultDatabase : RoomDatabase() {
                     PokeVaultDatabase::class.java,
                     "pokevault_cache.db"
                 )
-                    // Allow rebuilding the local cache only on downgrade to avoid silently
-                    // wiping user data when the schema is bumped without an explicit Migration.
-                    // Any future schema change MUST add a real Migration here.
-                    .fallbackToDestructiveMigrationOnDowngrade(false)
+                    // This database holds ONLY CachedSetEntity/CachedCardEntity/CachedPriceEntity
+                    // -- a local cache of catalog data fetched from the network (PokeWallet/D1),
+                    // always fully reconstructible. The user's actual data (owned cards, decks,
+                    // albums, wishlists) lives in Firestore (FirestoreRepository), never here.
+                    // A schema bump with no Migration is therefore safe to handle by wiping and
+                    // rebuilding this cache from scratch -- the alternative (no fallback) is Room
+                    // throwing and crashing the app at startup for a table with nothing
+                    // irreplaceable in it. Revisit this if this database ever stores anything
+                    // that isn't a reconstructible cache of remote data.
+                    .fallbackToDestructiveMigration(true)
                     .build()
                     .also { INSTANCE = it }
             }
