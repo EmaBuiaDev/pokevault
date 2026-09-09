@@ -53,7 +53,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private val appContext: Application get() = getApplication()
     private var searchJob: Job? = null
 
-    private val ocrManager = OCRManager(application)
+    private val ocrManager = OCRManager()
 
     private val recentlyAddedIds = mutableSetOf<String>()
     private val recentSearchAttempts = mutableMapOf<String, Long>()

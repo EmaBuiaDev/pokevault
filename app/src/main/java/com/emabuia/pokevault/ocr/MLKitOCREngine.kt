@@ -24,8 +24,6 @@ import kotlin.coroutines.resume
  * - Meno accurato su testo molto piccolo o ruotato
  * - Non personalizzabile
  *
- * Usato come fallback quando PaddleOCR TFLite non e disponibile,
- * oppure come engine primario durante lo sviluppo.
  */
 class MLKitOCREngine : OCREngine {
 

@@ -781,7 +781,7 @@ Le ragioni, in ordine di peso:
 | 7 | **`ImageRequest.size()` su tutte le 55 `AsyncImage`** — causa #1 dei consumi memoria | Tutte le schermate con Coil |
 | 8 | Loop di rete sequenziali -> `async`/`awaitAll` (pattern gia usato nel progetto) | `PokeTcgRepository.kt` righe 438, 497, 534, 576, **600**, 801, 856 |
 | 9 | `Column + verticalScroll` su liste potenzialmente lunghe -> `LazyColumn` | `CollectionScreen.kt`, `StatsScreen.kt`, `SettingsScreen.kt` |
-| 10 | Rimuovere PaddleOCR + TensorFlow Lite (nessun `.tflite` esiste, `assets/` non c'e) | `ocr/PaddleOCREngine.kt`, `app/build.gradle.kts` |
+| 10 | Rimuovere PaddleOCR + TensorFlow Lite (nessun `.tflite` esiste, `assets/` non c'e) | `ocr/PaddleOCREngine.kt`, `app/build.gradle.kts` — **fatto 2026-09-09, vedi checkpoint in fondo** |
 
 ### Priorita media — pulizia
 
@@ -1338,3 +1338,22 @@ L'utente ha chiesto di togliere il riferimento allo "scraping sito ufficiale" da
 - Prezzi: **invariato**, solo Pokewallet, confermato dall'utente
 
 **Modificato**: `docs/copyright/index.html` sez. 2 (bullet "Immagini delle espansioni storiche"), aggiunta una nota di correzione datata in questo documento subito dopo il blocco originale del 2026-09-06 sez. 1.1 (**non riscritto silenziosamente** — il record storico resta leggibile, la correzione e' visibilmente sovrapposta con data). Verificato che "scraping" non compariva in nessun'altra pagina `docs/` ne' in `AppLocale.kt` (grep mirato prima di dichiarare finito): nessun'altra modifica necessaria. HTML ribilanciato dopo l'edit (stesso controllo tag-per-tag di prima, nessuna asimmetria).
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, quinta parte (sez. 8 #10: rimossi PaddleOCR + TensorFlow Lite)
+
+Prima domanda dell'utente prima di procedere: "poi funzionera' lo scanner?". Verificato **prima** di toccare codice, non assunto: lo scanner oggi funziona **gia' solo con ML Kit**. `OCRManager.hasTFLiteModels()` cercava `det_model.tflite`/`rec_model.tflite` in `context.assets.list("")`, ma `app/src/main/assets/` **non esiste affatto nel repo** (confermato con `find`) — quindi il ramo PaddleOCR non veniva mai eseguito, `initialize()` cadeva sempre sul fallback ML Kit. Confermato anche che la UI dello scanner (`ScannerScreen.kt`) fa la sua stessa passata di riconoscimento live **direttamente con ML Kit** (`TextRecognition.getClient`), indipendente da `OCRManager` — un secondo percorso che non tocca PaddleOCR in nessun modo. Rimuovere il codice morto non cambia quindi alcun comportamento osservabile.
+
+### Rimosso
+
+- `ocr/PaddleOCREngine.kt` (537 righe) — file eliminato per intero, unico consumer era `OCRManager.kt`
+- `OCRManager.kt`: tolto il branch PaddleOCR da `initialize()` (ora prova solo ML Kit, nessun parametro `preferPaddleOCR` piu' necessario), rimossa `hasTFLiteModels()`, rimosso il parametro costruttore `context: Context` (diventato inutile senza quella funzione) e l'import `android.content.Context`. Aggiornati i commenti che descrivevano l'architettura a doppio motore
+- `ScannerViewModel.kt`: `OCRManager(application)` -> `OCRManager()`, unico call site nel repo (verificato con grep)
+- `app/build.gradle.kts`: rimosse le dipendenze `tensorflow-lite`/`tensorflow-lite-gpu`, il blocco `androidResources { noCompress += "tflite" }` (non serve piu' comprimere nulla), e le due entry `libtensorflowlite_*_jni.so` da `keepDebugSymbols` — **lasciate** invece le entry `liblitert_*_jni.so`: LiteRT (il nuovo nome di TFLite) potrebbe arrivare transitivamente da ML Kit stesso, non solo dalla nostra dipendenza esplicita rimossa; toglierle senza una build per verificare avrebbe rischiato di far tornare i warning di strip che quel blocco esiste apposta per evitare
+- `gradle/libs.versions.toml`: rimossi `tensorflowLite` (version) e le due entry `tensorflow-lite`/`tensorflow-lite-gpu`
+- Commenti residui in `OCREngine.kt` e `MLKitOCREngine.kt` che citavano PaddleOCR, aggiornati
+
+**Verificato con grep sull'intero repo** (non solo sui file toccati) che non resta alcun riferimento a `Paddle`/`tensorflow`/`tflite` fuori da questo checkpoint del piano stesso. Non compilato (nessun accesso a `dl.google.com` in questa sessione remota): diff riletto per intero, incluse le graffe del blocco `initialize()` semplificato.
+
+**Beneficio atteso** (da confermare a build fatta): APK piu' leggero di due librerie native (`tensorflow-lite`, `tensorflow-lite-gpu`) mai state raggiungibili a runtime.
