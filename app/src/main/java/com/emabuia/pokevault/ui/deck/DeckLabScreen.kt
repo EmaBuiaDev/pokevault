@@ -1103,7 +1103,7 @@ fun TypeBadge(type: String, small: Boolean = false) {
     val emoji = when (type.lowercase()) {
         "fuoco", "fire" -> "🔥"
         "acqua", "water" -> "💧"
-        "elettro", "lightning" -> "⚡"
+        "lampo", "elettro", "lightning" -> "⚡"
         "psico", "psychic" -> "🔮"
         "erba", "grass" -> "🌿"
         "lotta", "fighting" -> "👊"
@@ -1111,7 +1111,7 @@ fun TypeBadge(type: String, small: Boolean = false) {
         "metallo", "metal" -> "⚙️"
         "folletto", "fairy" -> "✨"
         "drago", "dragon" -> "🐲"
-        "normale", "colorless" -> "⚪"
+        "incolore", "normale", "colorless" -> "⚪"
         else -> "🔘"
     }
     Surface(
