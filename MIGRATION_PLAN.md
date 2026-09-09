@@ -791,7 +791,7 @@ Le ragioni, in ordine di peso:
 | 12 | `safeImageUrl()` duplicato 7 volte -> utility unica in `util/` e applicata ovunque | 7 file + i 3 punti che non la usano — **fatto per intero il 2026-09-09 (dedup + i 14 punti reali), vedi checkpoint in fondo** |
 | 13 | Rinominare i file `_v2`/`_v3` e allineare nome file/classe | `MainActivity_v2.kt`, `CardsVaultTCGApp.kt`, `AppNavigation_v3.kt`, `HomeScreen_v2.kt` — **fatto 2026-09-09, vedi checkpoint in fondo** |
 | 14 | Logging unificato su Timber (38 usi di `Log`/`println` residui) | `PaddleOCREngine.kt`, `MLKitOCREngine.kt`, `LimitlessTcgRepository.kt` — **fatto 2026-09-09, vedi checkpoint in fondo** |
-| 15 | Spezzare i file monolitici (`DeckLabScreen.kt` 2240 righe, `PokeTcgRepository.kt` 1735) | — |
+| 15 | Spezzare i file monolitici (`DeckLabScreen.kt` 2240 righe, `PokeTcgRepository.kt` 1735) | — **`DeckLabScreen.kt` fatto 2026-09-09 (2241 -> 6 file), `PokeTcgRepository.kt` non è lo stesso tipo di lavoro, vedi checkpoint in fondo** |
 | 16 | Rimuovere `FORCED_REAL_TOTALS_BY_SET_CODE = { ME03: 124 }` — i conteggi ora sono nostri in D1 | `pokevault-proxy-worker/src/index.ts:82-88` |
 | 17 | Rimuovere `TranslationService` (MyMemory) se le traduzioni arrivano dal catalogo IT | `data/remote/TranslationService.kt` |
 
@@ -1462,3 +1462,37 @@ Aggiungere `.size()` esplicito su 34 punti a mano richiede convertire dp -> pixe
 ### Decisione dell'utente
 
 Esposto il rischio, scelto di **chiudere la voce come non necessaria** invece di applicarla comunque. Nessun codice toccato.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, undicesima parte (voce #15: `DeckLabScreen.kt` spezzato in 6 file)
+
+### `PokeTcgRepository.kt` NON e' lo stesso lavoro di `DeckLabScreen.kt` — verificato prima di iniziare
+
+Kotlin non ha classi parziali (a differenza di C#): l'intero corpo di una `class` deve stare in un solo file. `PokeTcgRepository.kt` (2958 righe oggi, non 1735 -- conteggio della voce obsoleto come altri oggi) e' **una singola classe** con tutti i metodi come membri privati/pubblici della stessa `class PokeTcgRepository { ... }`. "Spezzarlo in piu' file" nel senso letterale della voce e' impossibile senza prima estrarre porzioni di logica in classi/object separati che la classe principale userebbe per composizione -- un refactoring architetturale vero (decidere confini di responsabilita', spostare stato condiviso), non uno spostamento meccanico di codice. Fuori scope per questa sessione: **non toccato**, resta un lavoro a se' per una sessione dedicata con build disponibile per verificare che la composizione risultante si comporti in modo identico.
+
+### `DeckLabScreen.kt` invece e' un caso pulito: verificato prima di procedere
+
+`grep "^private "` sull'intero file: **zero risultati**. Il file era gia' strutturato come 13 funzioni `@Composable` top-level, tutte visibilita' di default (pubblica) -- nessuna dipendenza da stato o helper `private` a livello di file che lo spostamento avrebbe rotto. Le funzioni top-level in Kotlin possono stare in file diversi dello stesso package senza bisogno di import (risoluzione per package, non per file) -- a differenza di `PokeTcgRepository.kt`, questo *e'* uno spostamento meccanico sicuro.
+
+### Split eseguito, raggruppato per responsabilita' (non per lunghezza arbitraria)
+
+| File nuovo | Contenuto | Righe |
+|---|---|---|
+| `DeckLabScreen.kt` (stesso file, ridotto) | `DeckLabScreen` (schermo principale), `TypeBadge`, `EmptyDecksPlaceholder` | 519 (da 2241) |
+| `DeckListItem.kt` | `DeckItem` (card nella lista mazzi) | 345 |
+| `DeckDetailComponents.kt` | `DeckDetailView`, `DeckExportDialog`, `AnalysisSection`, `AnalysisInfoItem` | 463 |
+| `NewDeckBottomSheet.kt` | `NewDeckBottomSheetContent` (il piu' grande, form di creazione/modifica mazzo) | 692 |
+| `DeckCardPickers.kt` | `CardSelectionItem`, `TcgCardSearchItem` | 221 |
+| `DeckImportDialogs.kt` | `DeckImportDialog`, `ImportResultDialog` | 322 |
+
+Ogni nuovo file ha lo stesso `package com.emabuia.pokevault.ui.deck` e lo stesso blocco di import completo del file originale (nessun tentativo di potare gli import per file: un import in eccesso e' solo un warning in Kotlin, uno **mancante** e' un errore di compilazione che non posso vedere qui -- scelta deliberatamente conservativa). Gli `@OptIn` (`ExperimentalMaterial3Api` su `NewDeckBottomSheetContent`, `ExperimentalFoundationApi` su `CardSelectionItem`) portati con la funzione a cui erano applicati.
+
+### Verifica di correttezza, non solo "sembra giusto"
+
+1. **Confronto graffe/parentesi**: contate su tutto il file originale prima dello split (420 `{`/420 `}`, 1134 `(`/1134 `)`) e sommate sui 6 file nuovi dopo lo split: **identiche**, 420/420 e 1134/1134
+2. **Diff riga per riga**: ricostruito un file "virtuale" concatenando solo le porzioni di corpo estratte (senza gli header duplicati) nell'ordine originale, e confrontato con `diff` contro l'originale (che nel frattempo avevo gia' sovrascritto -- fatto **prima** di scrivere i file nel progetto, non dopo): unica differenza le righe vuote di separazione che ho aggiunto io tra le sezioni, **zero righe di codice diverse, spostate o perse**
+3. **Zero duplicati**: `grep` di tutte le dichiarazioni `^fun` nell'intero package `ui/deck` (inclusi i 2 file preesistenti non toccati, `MetaArchetypeScreen.kt`/`MetaDeckScreen.kt`) -- ogni nome compare esattamente una volta
+4. **Import esterni**: solo `AppNavigation.kt` importa da questo package (`DeckLabScreen`, il composable principale) -- rimasto nel file con lo stesso nome, import ancora valido. Nessun altro file nel repo importa per nome uno degli altri 12 composable spostati (grep mirato, zero risultati) -- se lo avesse fatto sarebbe stato comunque valido, dato che Kotlin risolve per package non per file, ma verificato lo stesso per essere sicuri
+
+Non compilato (nessun accesso a `dl.google.com` qui): le quattro verifiche sopra sono il sostituto piu' rigoroso possibile di un compilatore reale con gli strumenti disponibili in questa sessione, ma **restano da confermare con `./gradlew :app:compileDebugKotlin`** prima di considerare la voce definitivamente chiusa.
