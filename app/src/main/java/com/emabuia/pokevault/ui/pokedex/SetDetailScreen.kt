@@ -54,6 +54,7 @@ import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.ui.wishlist.CreateWishlistDialog
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.util.RarityInfo
 import com.emabuia.pokevault.util.RarityUtils
 import com.emabuia.pokevault.viewmodel.SetDetailViewModel
@@ -138,13 +139,6 @@ private fun resolveDisplayPriceText(card: TcgCard): String? {
 
 private fun formatPriceEur(price: Double): String {
     return "€ ${String.format(Locale.ITALY, "%.2f", price)}"
-}
-
-private fun safeImageUrl(url: String): String {
-    return url
-        .replace(" ", "%20")
-        .replace("(", "%28")
-        .replace(")", "%29")
 }
 
 private val ITALIAN_TYPE_MAP = mapOf(
@@ -1129,7 +1123,7 @@ fun TcgCardCompactItem(
         ) {
             if (!imageLoadFailed && currentImageUrl.isNotBlank()) {
                 SubcomposeAsyncImage(
-                    model = safeImageUrl(currentImageUrl),
+                    model = ImageUrlUtils.safeImageUrl(currentImageUrl),
                     contentDescription = card.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -1424,7 +1418,7 @@ fun TcgCardListRow(
             .clip(RoundedCornerShape(6.dp))) {
             if (!imageLoadFailed && currentImageUrl.isNotBlank()) {
                 SubcomposeAsyncImage(
-                    model = safeImageUrl(currentImageUrl),
+                    model = ImageUrlUtils.safeImageUrl(currentImageUrl),
                     contentDescription = card.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),

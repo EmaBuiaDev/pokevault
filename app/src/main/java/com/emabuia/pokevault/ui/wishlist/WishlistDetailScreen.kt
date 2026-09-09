@@ -54,18 +54,12 @@ import com.emabuia.pokevault.ui.theme.TextGray
 import com.emabuia.pokevault.ui.theme.TextMuted
 import com.emabuia.pokevault.ui.theme.TextWhite
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.SetDetailViewModel
 import com.emabuia.pokevault.viewmodel.WishlistViewModel
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.rememberCoroutineScope
-
-private fun safeImageUrl(url: String): String {
-    return url
-        .replace(" ", "%20")
-        .replace("(", "%28")
-        .replace(")", "%29")
-}
 
 @Composable
 private fun WishlistCardImageFallback(card: TcgCard) {
@@ -303,7 +297,7 @@ private fun WishlistCardRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         SubcomposeAsyncImage(
-            model = safeImageUrl(card.images.small),
+            model = ImageUrlUtils.safeImageUrl(card.images.small),
             contentDescription = card.name,
             contentScale = ContentScale.Crop,
             modifier = Modifier

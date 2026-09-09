@@ -786,7 +786,7 @@ Le ragioni, in ordine di peso:
 | # | Intervento | Dove |
 |---|---|---|
 | 11 | **Cancellare i duplicati orfani in root** | `util/AppLocale.kt`, `viewmodel/DeckLabViewModel.kt` |
-| 12 | `safeImageUrl()` duplicato 7 volte -> utility unica in `util/` e applicata ovunque | 7 file + i 3 punti che non la usano |
+| 12 | `safeImageUrl()` duplicato 7 volte -> utility unica in `util/` e applicata ovunque | 7 file + i 3 punti che non la usano — **le 7 duplicazioni consolidate 2026-09-09, vedi checkpoint in fondo; i punti che non la usano ancora restano aperti** |
 | 13 | Rinominare i file `_v2`/`_v3` e allineare nome file/classe | `MainActivity_v2.kt`, `CardsVaultTCGApp.kt`, `AppNavigation_v3.kt`, `HomeScreen_v2.kt` |
 | 14 | Logging unificato su Timber (38 usi di `Log`/`println` residui) | `PaddleOCREngine.kt`, `MLKitOCREngine.kt`, `LimitlessTcgRepository.kt` |
 | 15 | Spezzare i file monolitici (`DeckLabScreen.kt` 2240 righe, `PokeTcgRepository.kt` 1735) | — |
@@ -1268,3 +1268,24 @@ Le ~90 espansioni storiche senza logo proprio in R2 ora mostreranno il placehold
 1. **Deploy del Worker**: `src/index.ts` non e' stato deployato (nessuna credenziale qui). La modifica e' additiva e a basso rischio (vedi sopra) ma va comunque rivista e deployata con `wrangler deploy` come ogni cambio precedente di questa migrazione.
 2. **Build Android reale**: `./gradlew :app:compileDebugKotlin` non eseguibile qui. Le due righe toccate in `PokeTcgRepository.kt` sono state rilette con attenzione (firma di default parameter, unico altro call site invariato), ma non compilate.
 3. **Verifica visiva**: dopo build+deploy, controllare su device/emulatore che le espansioni storiche senza logo (es. `dp1`, `bw4`) mostrino il placeholder col nome invece del logo sbagliato di prima, e che le espansioni con `linkedBase` risolto (es. `sv10`) restino invariate.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, seconda parte (voce #12: dedup di `safeImageUrl()`)
+
+Su richiesta esplicita dell'utente, dopo il fix del bug #8 sopra. Stesse limitazioni di sempre (nessun `dl.google.com`, nessuna credenziale Cloudflare) — lavoro scelto perche' e' un refactor puramente meccanico (spostare codice identico, non riscriverlo), a rischio piu' basso di un refactor comportamentale anche senza build.
+
+### Cosa e' stato fatto
+
+Trovate le 7 definizioni **identiche** di `private fun safeImageUrl(url: String): String` (percent-encoding di spazio/parentesi, char per char uguali in tutti e 7 i file: `SetDetailScreen.kt`, `WishlistDetailScreen.kt`, `ScannerScreen.kt`, `CreateGoalAlbumScreen.kt`, `GoalAlbumDetailScreen.kt`, `CardDetailScreen.kt`, `CollectionScreen.kt`) e le 15 call site che le usano. Consolidate in un nuovo `util/ImageUrlUtils.kt`:
+- `safeImageUrl(url)` — la funzione di encoding, identica alle 7 copie
+- `proxyPokeWalletUrl(url)` — la logica *aggiuntiva* che solo `CollectionScreen.kt` aveva (riscrive un URL diretto `api.pokewallet.io` verso il proxy Cloudflare quando configurato): non era un duplicato, era una variante con un passo in piu', **verificata leggendo il codice prima di consolidare** — non assunta uguale alle altre 6 solo perche' aveva lo stesso nome
+- `safeProxiedImageUrl(url)` — le due combinate, usata nei 3 call site di `CollectionScreen.kt` al posto della vecchia `safeImageUrl()` locale (che gia' chiamava `maybeProxyPokeWalletUrl()` al suo interno)
+
+I 6 file "semplici" ora chiamano `ImageUrlUtils.safeImageUrl(...)`; `CollectionScreen.kt` chiama `ImageUrlUtils.safeProxiedImageUrl(...)` e non ha piu' ne' `safeImageUrl` ne' `maybeProxyPokeWalletUrl` locali (rimossi anche gli import `android.net.Uri` e `com.emabuia.pokevault.BuildConfig`, diventati inutilizzati). Nessun comportamento cambiato: stesso identico output per lo stesso identico input in tutti e 15 i call site, solo spostato in un posto solo.
+
+### La voce #12 diceva "7 file + i 3 punti che non la usano" — verificato: sono di piu'
+
+Cercati tutti gli `.data(...)` di Coil su URL di immagini/loghi (`AsyncImage`/`SubcomposeAsyncImage`, grep su `\.data\(` filtrato per campi `image`/`logo`/`symbol`/`url`) che **non** passano da nessuna delle due funzioni. Trovati **14** punti, non 3: `AlbumDetailScreen.kt` (2), `AlbumListScreen.kt` (1), `CreateGoalAlbumScreen.kt` (2, loghi set — diversi dai 2 call site di card gia' migrati sopra), `DeckLabScreen.kt` (6), `WelcomeHeader_v2.kt` (1), `SetsListScreen.kt` (1). La stima originale del piano era imprecisa (come gia' successo per la voce #5, gia' corretta in un checkpoint precedente) — non e' stata aggiornata qui perche' contarli non e' lo stesso lavoro che applicarci il fix.
+
+**Perche' non toccati ora**: a differenza delle 7 duplicazioni (spostare codice identico, comportamento zero-rischio), aggiungere l'encoding a 14 punti nuovi — 6 dei quali in `DeckLabScreen.kt`, il file monolitico da 2240 righe della voce #15 — e' un cambio di comportamento reale (per URL che oggi non vengono mai incapsulati) su un file grande, senza modo di compilare o verificare qui. Voce #12 lasciata **parzialmente chiusa**: dedup fatto, copertura estesa ancora da fare in una sessione successiva (idealmente con build disponibile, dato il numero di punti coinvolti).
