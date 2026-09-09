@@ -778,7 +778,7 @@ Le ragioni, in ordine di peso:
 
 | # | Intervento | Dove |
 |---|---|---|
-| 7 | **`ImageRequest.size()` su tutte le 55 `AsyncImage`** — causa #1 dei consumi memoria | Tutte le schermate con Coil |
+| 7 | **`ImageRequest.size()` su tutte le 55 `AsyncImage`** — causa #1 dei consumi memoria | Tutte le schermate con Coil — **investigata 2026-09-09, chiusa come non necessaria, vedi checkpoint in fondo** |
 | 8 | Loop di rete sequenziali -> `async`/`awaitAll` (pattern gia usato nel progetto) | `PokeTcgRepository.kt` righe 438, 497, 534, 576, **600**, 801, 856 — **investigato 2026-09-09, sospeso su decisione utente, vedi checkpoint in fondo** |
 | 9 | `Column + verticalScroll` su liste potenzialmente lunghe -> `LazyColumn` | `CollectionScreen.kt`, `StatsScreen.kt`, `SettingsScreen.kt` |
 | 10 | Rimuovere PaddleOCR + TensorFlow Lite (nessun `.tflite` esiste, `assets/` non c'e) | `ocr/PaddleOCREngine.kt`, `app/build.gradle.kts` — **fatto 2026-09-09, vedi checkpoint in fondo** |
@@ -1440,3 +1440,25 @@ Stato mutabile non pensato per accessi concorrenti: `globalRateLimitUntil` e' un
 ### Decisione dell'utente: sospendere la voce
 
 Esposte tre opzioni (salta, parallelizza i 2 loop puliti con un limite di concorrenza, parallelizza senza limite accettando il rischio) — **scelto di saltare**. Nessun codice toccato in `PokeTcgRepository.kt` per questa voce. La voce originale ("loop di rete sequenziali -> async/awaitAll, pattern gia' usato nel progetto") era una descrizione troppo generica: il progetto usa gia' il pattern altrove (`LimitlessTcgRepository.kt`, verificato in un checkpoint precedente) ma li' i loop non hanno le stesse dipendenze di early-exit/stato condiviso trovate qui. Se si vuole riprendere in futuro con build disponibile: i 2 candidati puliti restano `buildStrictSetNumberQueries`/`buildStrictNameSetNumberQueries`, da convertire con un limite di concorrenza esplicito (semaforo, non `awaitAll` piatto), misurando prima il numero reale di query generate su casi tipici.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, decima parte (voce perf #7: `ImageRequest.size()`, investigata e chiusa come non necessaria)
+
+Stesso approccio della voce precedente: investigato prima di editare 34-55 punti. Il conteggio "55" della voce era gia' obsoleto — contate le chiamate reali oggi: **23 `AsyncImage(` + 11 `SubcomposeAsyncImage(` = 34**.
+
+### La premessa della voce non regge per questo progetto: Coil 2.6.0 (verificato in `gradle/libs.versions.toml`) auto-dimensiona gia' la decodifica dai vincoli di layout Compose
+
+La sua integrazione Compose usa un `SizeResolver` basato sui `Constraints` effettivi al momento della misura — non serve chiamare `.size()` esplicitamente perche' Coil lo fa gia' da solo, a meno che il contenitore sia genuinamente senza vincoli su nessun asse. Controllati tutti e 34 i call site (grep + lettura del `Modifier` circostante, non solo della riga della chiamata):
+
+- La maggioranza ha gia' un vincolo esplicito: `.size(Xdp, Ydp)` fisso, o `.fillMaxSize()` dentro un `Box`/cella di griglia di dimensione fissa
+- 3 casi (`GoalAlbumDetailScreen.kt`, `CreateGoalAlbumScreen.kt` x2) usano solo `.fillMaxWidth()` con `ContentScale.FillWidth` senza altezza esplicita — verificato che questo e' comunque un vincolo valido per Coil: larghezza vincolata + `FillWidth` fa decodificare all'altezza proporzionale corretta, non a piena risoluzione
+- In `DeckLabScreen.kt` (griglia di selezione copertine mazzo, il punto a piu' alta densita' di immagini) **qualcuno ha gia' aggiunto `.size(140, 200)`/`.size(200, 280)` espliciti in pixel** sulla `ImageRequest.Builder` — la voce era gia' stata affrontata selettivamente dove contava di piu', non ignorata
+
+### Perche' non l'ho applicata comunque "per sicurezza"
+
+Aggiungere `.size()` esplicito su 34 punti a mano richiede convertire dp -> pixel (`density.toPx()`) per ognuno. Un errore di conversione (facile senza poter vedere il risultato su schermo) produce **decodifica piu' piccola del dovuto — immagini sfocate**, una regressione visiva reale, l'opposto di un miglioramento performance. Senza device/profiler per verificare, il rischio di introdurre questa regressione era piu' concreto del beneficio (probabilmente gia' ottenuto) di aggiungerla.
+
+### Decisione dell'utente
+
+Esposto il rischio, scelto di **chiudere la voce come non necessaria** invece di applicarla comunque. Nessun codice toccato.
