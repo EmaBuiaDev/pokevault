@@ -984,7 +984,7 @@ Le ragioni, in ordine di peso:
 
 | # | Intervento | Dove |
 |---|---|---|
-| 1 | **Migration Room reale** + test strumentato di migrazione | `data/local/PokeVaultDatabase.kt` |
+| 1 | ~~Migration Room reale~~ + test strumentato di migrazione | `data/local/PokeVaultDatabase.kt` — **rivalutata e chiusa 2026-09-09**: il database e' solo cache (dati utente veri su Firestore), fallback distruttivo su upgrade invece di Migration incrementali. Vedi checkpoint in fondo |
 | 2 | `HttpLoggingInterceptor` attivo in release -> gate su `BuildConfig.DEBUG` | `LimitlessTcgRepository.kt:25-28` — **gia' fatto, verificato 2026-09-09 (non si sa quando)** |
 | 3 | Rimuovere `account_id` e `.wrangler/cache/wrangler-account.json` da git; aggiungere `.wrangler/` al `.gitignore` di root | `pokevault-proxy-worker/wrangler.toml:3` — **fatto (merge del 2026-09-09)** |
 | 4 | Rimuovere `POKEWALLET_API_KEY` e `POKETCG_API_KEY` dal client (key mai piu nell'APK) | `app/build.gradle.kts:28-31` — **fatto 2026-09-09**: `POKETCG_API_KEY` gia' assente dal sorgente; `POKEWALLET_API_KEY` ora forzata a `""` (e proxy forzato `true`) in `buildTypes.release`, verificato sul `BuildConfig.java` generato + `assembleRelease` verde. Vedi checkpoint in fondo |
@@ -1828,3 +1828,9 @@ Prima di scrivere codice nuovo, verificato lo stato attuale: `buildItalianCardKe
 ### Sez. 8 #4 (API key mai nell'APK) -- fatto
 
 `POKETCG_API_KEY` gia' assente dal sorgente (rimossa in una sessione precedente, non registrato nel piano). `POKEWALLET_API_KEY`: verificato che il client la allega solo se il proxy e' disattivato (`PokeWalletRepository` fallisce gia' chiuso altrimenti) -- ma restava comunque scritta in chiaro nell'APK di release via `BuildConfig`, estraibile decompilando anche se mai usata a runtime in produzione. `buildTypes.release` in `app/build.gradle.kts` ora forza `POKEWALLET_API_KEY = ""` e `POKEWALLET_PROXY_ENABLED = true` indipendentemente da `local.properties`, cosi' una release non puo' piu' finire nella configurazione pericolosa (proxy spento + chiave presente). Build debug invariata. Verificato sul `BuildConfig.java` generato (non solo per lettura del gradle script) + `:app:assembleRelease` verde.
+
+### Sez. 8 #1 (Migration Room reale) -- rivalutata e chiusa con una soluzione piu' semplice
+
+Prima di scrivere `Migration(1,2)` + `MigrationTestHelper` come chiedeva la voce alla lettera, verificato cosa protegge davvero `PokeVaultDatabase`: contiene solo `CachedSetEntity`/`CachedCardEntity`/`CachedPriceEntity` -- una cache locale di dati di rete (PokeWallet/D1), sempre ricostruibile. I dati veri dell'utente (carte possedute, mazzi, album, wishlist, tornei, log partite) vivono tutti su **Firestore** (`FirestoreRepository.kt`, cloud), mai in Room -- verificato leggendo le collection reali (`users/{id}/cards|decks|albums|wishlists|match_logs|tournaments|goal_albums`).
+
+Conseguenza: senza un fallback per l'upgrade (`fallbackToDestructiveMigrationOnDowngrade(false)` copriva solo il downgrade), un futuro bump di versione senza `Migration` esplicita farebbe **crashare l'app all'avvio**, non perdere dati reali. Costruire Migration incrementali per un database che e' solo cache sarebbe lavoro sproporzionato al rischio effettivo. Cambiato in `fallbackToDestructiveMigration(true)`: un bump futuro ricostruisce la cache da rete invece di crashare. Se in futuro questo database dovesse mai contenere qualcosa di non ricostruibile, questa scelta va rivista.
