@@ -91,7 +91,11 @@ class StatsViewModel : ViewModel() {
                         .map { it.key to it.value }
 
                     val byType = cards.groupBy {
-                            AppLocale.translateType(it.type).ifBlank { AppLocale.other }
+                            // Le carte a doppio tipo salvate prima del fix hanno type =
+                            // "Tipo1, Tipo2": si raggruppano sul primo tipo, altrimenti
+                            // finirebbero in una categoria a se' con un'etichetta composta.
+                            val primaryType = it.type.substringBefore(",").trim()
+                            AppLocale.translateType(primaryType).ifBlank { AppLocale.other }
                         }
                         .mapValues { (_, v) -> v.sumOf { it.quantity } }
                         .entries.sortedByDescending { it.value }

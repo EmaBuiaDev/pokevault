@@ -237,7 +237,12 @@ class CollectionViewModel : ViewModel() {
             val matchesType = when {
                 uiState.selectedType == null -> true
                 uiState.supertypeFilter == SupertypeFilter.TRAINER || uiState.supertypeFilter == SupertypeFilter.ENERGY -> true
-                else -> AppLocale.translateType(card.type).equals(uiState.selectedType, ignoreCase = true)
+                // Le poche carte a doppio tipo hanno type = "Tipo1, Tipo2" (una sola stringa):
+                // va confrontato ogni tipo separatamente, altrimenti nessuna chip le trova mai
+                // (translateType() cerca la stringa intera nella mappa e non trova nulla).
+                else -> card.type.split(",").any { singleType ->
+                    AppLocale.translateType(singleType.trim()).equals(uiState.selectedType, ignoreCase = true)
+                }
             }
             
             val matchesRarity = uiState.selectedRarity == null ||

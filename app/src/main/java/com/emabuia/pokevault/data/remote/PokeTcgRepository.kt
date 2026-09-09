@@ -2388,7 +2388,17 @@ class PokeTcgRepository {
             supertype = baseCard?.supertype?.takeIf { it.isNotBlank() } ?: deriveItalianSupertype(record),
             subtypes = baseCard?.subtypes ?: emptyList(),
             hp = record.ps?.takeIf { it.isNotBlank() } ?: baseCard?.hp,
-            types = record.tipo?.takeIf { it.isNotBlank() }?.let { listOf(it) } ?: baseCard?.types,
+            // Le poche carte a doppio tipo arrivano da D1 come "Tipo1, Tipo2" in un unico
+            // campo (vedi types.join(', ') in ingest/backfill-tipo-tcgdex.mjs): va risplittato
+            // in una lista vera, altrimenti ogni consumatore che confronta un tipo singolo
+            // (filtro tipo in SetDetail e Collezione, raggruppamento in Statistiche) non le
+            // trova mai, perche' confronta "Metallo" con "Metallo, Lotta".
+            types = record.tipo?.takeIf { it.isNotBlank() }
+                ?.split(",")
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.takeIf { it.isNotEmpty() }
+                ?: baseCard?.types,
             set = cardSet,
             number = normalizedNumber,
             // Our own D1-backfilled rarity (schema/004, sourced once from TCGdex -- see
