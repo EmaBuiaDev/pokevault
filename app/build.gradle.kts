@@ -55,6 +55,16 @@ android {
             if (releaseSigningConfig?.storeFile?.exists() == true) {
                 signingConfig = releaseSigningConfig
             }
+            // Never bake the real PokeWallet API key into a release APK -- it would sit in
+            // plaintext, extractable by decompiling the app. The Cloudflare Worker proxy
+            // injects its own server-side copy of this key (createUpstreamHeaders in
+            // pokevault-proxy-worker/src/index.ts) and is what release builds must use;
+            // forcing the proxy on here too means a release build can never end up in the
+            // one config (proxy off + key present) that would send the key over the wire.
+            // PokeWalletRepository already fails closed (IllegalStateException) rather than
+            // falling back to a direct call if POKEWALLET_PROXY_URL is left unconfigured.
+            buildConfigField("String", "POKEWALLET_API_KEY", "\"\"")
+            buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "true")
         }
     }
     compileOptions {
