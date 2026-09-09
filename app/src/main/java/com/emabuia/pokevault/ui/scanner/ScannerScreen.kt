@@ -6,8 +6,6 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Rect as AndroidRect
 import android.graphics.YuvImage
-import android.util.Log
-import com.emabuia.pokevault.BuildConfig
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -65,7 +63,9 @@ import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import timber.log.Timber
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.viewmodel.ScannerViewModel
 import java.io.ByteArrayOutputStream
@@ -76,13 +76,6 @@ import java.util.concurrent.Executors
  * Usato per calcolare la zona di scansione.
  */
 private const val CARD_ASPECT_RATIO = 63f / 88f // ~0.716
-
-private fun safeImageUrl(url: String): String {
-    return url
-        .replace(" ", "%20")
-        .replace("(", "%28")
-        .replace(")", "%29")
-}
 
 @Composable
 private fun ScannerCardImageFallback(
@@ -319,7 +312,7 @@ fun ScannerScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         SubcomposeAsyncImage(
-                            model = safeImageUrl(card.images.small),
+                            model = ImageUrlUtils.safeImageUrl(card.images.small),
                             contentDescription = card.name,
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
@@ -405,7 +398,7 @@ private fun CandidateCardPicker(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SubcomposeAsyncImage(
-                    model = safeImageUrl(card.images.small),
+                    model = ImageUrlUtils.safeImageUrl(card.images.small),
                     contentDescription = card.name,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
@@ -501,7 +494,7 @@ private fun PendingCardConfirmation(
             verticalAlignment = Alignment.CenterVertically
         ) {
             SubcomposeAsyncImage(
-                model = safeImageUrl(card.images.small),
+                model = ImageUrlUtils.safeImageUrl(card.images.small),
                 contentDescription = card.name,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
@@ -823,7 +816,7 @@ private fun CameraPreview(
                     camera.cameraControl.enableTorch(flashEnabled)
                     camera.cameraControl.cancelFocusAndMetering()
                 } catch (e: Exception) {
-                    if (BuildConfig.DEBUG) Log.e("ScannerScreen", "Camera bind failed", e)
+                    Timber.e(e, "Camera bind failed")
                 }
             }, ContextCompat.getMainExecutor(ctx))
 

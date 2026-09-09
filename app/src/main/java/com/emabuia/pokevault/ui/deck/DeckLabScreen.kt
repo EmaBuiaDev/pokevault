@@ -59,6 +59,7 @@ import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.DeckLabViewModel
 import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
 
@@ -1126,6 +1127,7 @@ fun TypeBadge(type: String, small: Boolean = false) {
         }
     }
 }
+
 
 @Composable
 fun EmptyDecksPlaceholder() {

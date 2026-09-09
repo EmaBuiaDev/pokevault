@@ -165,6 +165,11 @@ type ItalianAssetRequest =
   | {
     kind: 'setLogo';
     setCode: string;
+    // True when the client is asking for the logo of an Italian-catalog
+    // expansion (mergeItalianSets() on the Android side). Set purely from
+    // the `source=ita` query marker the client attaches -- see
+    // buildSetImageUrl(setRef, italianOnly) in PokeTcgRepository.kt.
+    italianOnly: boolean;
   };
 
 const TTL_24_HOURS = 24 * 60 * 60;
@@ -506,6 +511,7 @@ function parseItalianAssetRequest(urlObj: URL): ItalianAssetRequest | null {
     return {
       kind: 'setLogo',
       setCode,
+      italianOnly: urlObj.searchParams.get('source') === 'ita',
     };
   }
 
@@ -688,7 +694,15 @@ async function handleItalianR2AssetRequest(
 
   // For set logos, if nothing is in R2 fall through to the PokeWallet proxy so
   // the upstream API can serve the image (e.g. sets that don't have a local ITA logo).
-  if (!hit && requestInfo.kind === 'setLogo') {
+  // EXCEPT for logos explicitly requested for the Italian catalog (mergeItalianSets()):
+  // PokeWallet's logo for a given set code is whatever language that product actually
+  // shipped in upstream (often JAP/CHN for historical sets with no ENG release), and
+  // silently showing that would mix languages in what the user sees as an Italian
+  // Pokedex entry -- verified 2026-09-08 (MIGRATION_PLAN.md sez. 8, bug #8). Returning
+  // 404 here instead routes into SetCard's existing MissingSetLogoFallback (name-based
+  // placeholder), the exact same "no logo" UI already shown today whenever images.logo
+  // is blank -- not a new UI state, just a corrected trigger for an existing one.
+  if (!hit && requestInfo.kind === 'setLogo' && !requestInfo.italianOnly) {
     return null;
   }
 

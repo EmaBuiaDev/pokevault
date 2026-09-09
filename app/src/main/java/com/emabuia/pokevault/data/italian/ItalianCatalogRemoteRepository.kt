@@ -58,7 +58,7 @@ class ItalianCatalogRemoteRepository {
         }
 
         val networkResult: Result<ItalianCatalog> = runCatching {
-            val rawJson = fetchCatalogJson(url)
+            val rawJson = fetchJson(url)
             // Move heavy Gson parse off the caller's thread (avoid blocking Main).
             withContext(Dispatchers.Default) {
                 ItalianCatalogNormalizer.parseCatalogJson(rawJson)
@@ -196,7 +196,7 @@ class ItalianCatalogRemoteRepository {
         }
     }
 
-    private suspend fun fetchCatalogJson(url: String): String = withContext(Dispatchers.IO) {
+    private suspend fun fetchJson(url: String): String = withContext(Dispatchers.IO) {
         val cacheBucket = System.currentTimeMillis() / REMOTE_CACHE_BUCKET_MS
         val resolvedUrl = url.toHttpUrlOrNull()
             ?.newBuilder()

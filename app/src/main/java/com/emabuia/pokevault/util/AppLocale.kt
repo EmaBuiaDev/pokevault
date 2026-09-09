@@ -756,22 +756,29 @@ object AppLocale {
         "proprietà di Nintendo, The Pokémon Company e The Pokémon Company International. " +
         "Questa app non è affiliata, sponsorizzata o approvata da Nintendo, " +
         "The Pokémon Company o The Pokémon Company International.\n\n" +
-        "Le immagini e i dati delle carte sono forniti tramite API di terze parti (Pokewallet.io, api.pokewallet.io) " +
-        "e sono utilizzati esclusivamente a scopo informativo e di gestione della collezione personale.\n\n" +
+        "I dati e le immagini del catalogo italiano sono ospitati sulla nostra infrastruttura Cloudflare. " +
+        "Prezzi di mercato e catalogo carte in altre lingue sono recuperati da Pokewallet.io (api.pokewallet.io) " +
+        "tramite i nostri server, mai direttamente dal tuo dispositivo. Sono utilizzati esclusivamente a scopo " +
+        "informativo e di gestione della collezione personale. Per segnalazioni relative al copyright: " +
+        "emabuiadev.github.io/pokevault/copyright\n\n" +
         "Tutti gli altri marchi appartengono ai rispettivi proprietari."
     else
         "Pokémon, Pokémon TCG, and all related names, images, and trademarks are the property " +
         "of Nintendo, The Pokémon Company, and The Pokémon Company International. " +
         "This app is not affiliated with, sponsored by, or endorsed by Nintendo, " +
         "The Pokémon Company, or The Pokémon Company International.\n\n" +
-        "Card images and data are provided through third-party APIs (Pokewallet.io, api.pokewallet.io) " +
-        "and are used solely for informational and personal collection management purposes.\n\n" +
+        "Italian catalog data and images are hosted on our own Cloudflare infrastructure. " +
+        "Market prices and the card catalog in other languages are fetched from Pokewallet.io (api.pokewallet.io) " +
+        "through our servers, never directly from your device. All of it is used solely for informational and " +
+        "personal collection management purposes. For copyright takedown requests: " +
+        "emabuiadev.github.io/pokevault/copyright\n\n" +
         "All other trademarks belong to their respective owners."
     val disclaimerAccept: String get() = if (isItalian) "Ho capito, continua" else "I understand, continue"
 
     // Privacy Policy
     val privacyPolicyUrl: String get() = "https://emabuiadev.github.io/pokevault/privacy-policy"
     val termsUrl: String get() = "https://emabuiadev.github.io/pokevault/terms"
+    val copyrightUrl: String get() = "https://emabuiadev.github.io/pokevault/copyright"
     val tikTokUrl: String get() = "https://www.tiktok.com/@pokemondo22?_r=1&_t=ZN-95pJ7LLQ7eh"
 
     val ratingPromptTitle: String get() = if (isItalian) "Un Poké-messaggio per te" else "A Poké message for you"

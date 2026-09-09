@@ -2,7 +2,6 @@ package com.emabuia.pokevault.viewmodel
 
 import android.app.Application
 import androidx.compose.runtime.getValue
-import com.emabuia.pokevault.BuildConfig
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -31,6 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 data class SetDetailUiState(
     val set: TcgSet? = null,
@@ -398,9 +398,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             firestoreRepository.getOwnedCardsBySet(setName)
                 .catch { e ->
-                    if (BuildConfig.DEBUG) {
-                        android.util.Log.w("SetDetailVM", "Errore osservazione carte possedute", e)
-                    }
+                    Timber.w(e, "Errore osservazione carte possedute")
                 }
                 .collectLatest { ownedCards ->
                     val currentCardIds = currentCards

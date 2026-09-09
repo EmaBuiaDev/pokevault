@@ -1,9 +1,8 @@
 package com.emabuia.pokevault.ocr
 
-import android.util.Log
-import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.emabuia.pokevault.data.remote.SetCodeMapper
+import timber.log.Timber
 
 /**
  * Parser specializzato per estrarre campi strutturati dal testo OCR di carte Pokemon.
@@ -24,7 +23,6 @@ import com.emabuia.pokevault.data.remote.SetCodeMapper
  */
 object CardFieldParser {
 
-    private const val TAG = "CardFieldParser"
     private const val MAX_NAME_TOKENS = 4
 
     // ═══════════════════════════════════════════
@@ -74,7 +72,7 @@ object CardFieldParser {
             confidence = estimateConfidence(name, number, hp)
         )
 
-        if (BuildConfig.DEBUG) Log.d(TAG, "Parsed: name=$name, number=$number/$setTotal, hp=$hp, variant=$variant")
+        Timber.d("Parsed: name=$name, number=$number/$setTotal, hp=$hp, variant=$variant")
         return result
     }
 

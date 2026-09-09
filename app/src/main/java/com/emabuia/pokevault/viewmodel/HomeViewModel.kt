@@ -5,12 +5,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.firebase.CollectionStats
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 class HomeViewModel : ViewModel() {
 
@@ -38,9 +38,7 @@ class HomeViewModel : ViewModel() {
             repository.getCards()
                 .catch { error ->
                     isLoading = false
-                    if (BuildConfig.DEBUG) {
-                        android.util.Log.w("HomeViewModel", "Errore caricamento carte", error)
-                    }
+                    Timber.w(error, "Errore caricamento carte")
                 }
                 .collect { cards ->
                     collectionCards = cards

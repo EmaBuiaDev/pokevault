@@ -2,8 +2,8 @@ package com.emabuia.pokevault.data.remote
 
 import android.content.Context
 import com.emabuia.pokevault.data.italian.ItalianCardRecord
-import com.emabuia.pokevault.data.italian.ItalianCatalog
 import com.emabuia.pokevault.data.italian.ItalianCatalogRemoteRepository
+import com.emabuia.pokevault.data.italian.ItalianExpansionManifest
 import com.emabuia.pokevault.data.local.toEntity
 import com.emabuia.pokevault.data.local.toTcgCard
 import com.emabuia.pokevault.data.local.toTcgSet
@@ -442,10 +442,16 @@ class PokeTcgRepository {
                                 language = "ITA"
                             )
 
-                        val catalog = context?.let {
-                            italianCatalogRepository.getCatalog(it, forceRefresh = forceRefresh).getOrNull()
-                        }
-                        val expansionCards = catalog?.cardsByExpansion()?.get(expansionId).orEmpty()
+                        val expansionCards = italianCatalogRepository
+                            .getExpansionCards(baseUrl = PokeWalletRetrofitClient.imageBaseUrl, expansionId = expansionId, forceRefresh = forceRefresh)
+                            .getOrNull()
+                            ?.takeIf { it.isNotEmpty() }
+                            ?: context?.let { safeContext ->
+                                italianCatalogRepository.getCatalog(safeContext, forceRefresh = forceRefresh)
+                                    .getOrNull()
+                                    ?.cardsByExpansion()
+                                    ?.get(expansionId)
+                            }.orEmpty()
                         val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
                         val dominantRawSetCode = expansionCards
                             .asSequence()
@@ -1972,13 +1978,15 @@ class PokeTcgRepository {
 
     private suspend fun resolveItalianExpansionIdForSet(
         setId: String,
-        catalog: ItalianCatalog
+        expansions: List<ItalianExpansionManifest>
     ): String? {
         val safeSetId = setId.trim()
         if (safeSetId.isBlank()) return null
 
+        val expansionsById = expansions.associateBy { it.espansioneId.trim().lowercase(Locale.ROOT) }
+
         val direct = safeSetId.lowercase(Locale.ROOT)
-        if (catalog.cardsByExpansion().containsKey(direct)) {
+        if (expansionsById.containsKey(direct)) {
             return direct
         }
 
@@ -1996,52 +2004,36 @@ class PokeTcgRepository {
         val preferredBaseSetCode = italianExpansionId?.let(::preferredBaseSetCodeForItalianExpansion)
         val targetRaw = (preferredBaseSetCode ?: setRef ?: safeSetId).trim().uppercase(Locale.ROOT)
         val targetCanonical = normalizeItalianSetCode(preferredBaseSetCode ?: setRef ?: safeSetId)
-        val cardsByExpansion = catalog.cardsByExpansion()
 
         val preferredExpansionId = preferredItalianExpansionIdHint(
             setName = setName,
             targetRawSetCode = targetRaw,
             targetCanonicalSetCode = targetCanonical
         )
-        if (preferredExpansionId != null && cardsByExpansion.containsKey(preferredExpansionId)) {
+        if (preferredExpansionId != null && expansionsById.containsKey(preferredExpansionId)) {
             return preferredExpansionId
         }
 
-        val byRawCardCode = catalog.expansions.firstOrNull { manifest ->
-            val rawFromCards = cardsByExpansion[manifest.espansioneId.lowercase(Locale.ROOT)]
-                .orEmpty()
-                .asSequence()
-                .mapNotNull { record -> record.imageReference()?.setCode }
-                .map { code -> code.trim().uppercase(Locale.ROOT) }
-                .groupingBy { it }
-                .eachCount()
-                .maxByOrNull { it.value }
-                ?.key
-            rawFromCards == targetRaw
+        // dominantSetCode is precomputed server-side (GET /v1/expansions) from the
+        // same per-card majority vote this used to do locally over the whole catalog
+        // (see schema/003_add_dominant_set_code.sql). Null for expansions the backend
+        // hasn't backfilled yet -- falls through to the expansionId-based match below,
+        // same safety net mergeItalianSets() relies on.
+        val byRawCardCode = expansions.firstOrNull { manifest ->
+            manifest.dominantSetCode?.trim()?.uppercase(Locale.ROOT) == targetRaw
         }
-
         if (byRawCardCode != null) {
             return byRawCardCode.espansioneId.trim().lowercase(Locale.ROOT)
         }
 
-        val byCardCode = catalog.expansions.firstOrNull { manifest ->
-            val canonicalFromCards = cardsByExpansion[manifest.espansioneId.lowercase(Locale.ROOT)]
-                .orEmpty()
-                .asSequence()
-                .mapNotNull { record -> record.imageReference()?.setCode }
-                .map { code -> normalizeItalianSetCode(code) }
-                .groupingBy { it }
-                .eachCount()
-                .maxByOrNull { it.value }
-                ?.key
-            canonicalFromCards == targetCanonical
+        val byCardCode = expansions.firstOrNull { manifest ->
+            manifest.dominantSetCode?.let { normalizeItalianSetCode(it) } == targetCanonical
         }
-
         if (byCardCode != null) {
             return byCardCode.espansioneId.trim().lowercase(Locale.ROOT)
         }
 
-        return catalog.expansions
+        return expansions
             .firstOrNull { manifest ->
                 normalizeItalianSetCode(manifest.espansioneId) == targetCanonical
             }
@@ -2430,8 +2422,15 @@ class PokeTcgRepository {
         val catalog = italianCatalogRepository.getCatalog(safeContext, forceRefresh = refreshItalianCatalog)
             .getOrElse { return null }
 
-        val expansionId = resolveItalianExpansionIdForSet(setId = setId, catalog = catalog) ?: cacheKey
-        val records = catalog.cardsByExpansion()[expansionId].orEmpty()
+        val expansionId = resolveItalianExpansionIdForSet(setId = setId, expansions = catalog.expansions) ?: cacheKey
+        // Fast path: fetch just this expansion's cards instead of relying solely on the
+        // full catalog already loaded above; falls back to it on any failure, same pattern
+        // as getCardsByItalianSet.
+        val records = italianCatalogRepository
+            .getExpansionCards(baseUrl = PokeWalletRetrofitClient.imageBaseUrl, expansionId = expansionId, forceRefresh = refreshItalianCatalog)
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+            ?: catalog.cardsByExpansion()[expansionId].orEmpty()
         if (records.isEmpty()) return null
 
         val baseCards = loadCachedStandardCardsForSet(setId)
@@ -2892,8 +2891,14 @@ class PokeTcgRepository {
             .replace("+", "%20")
     }
 
-    private fun buildSetImageUrl(setRef: String): String {
-        return "${PokeWalletRetrofitClient.imageBaseUrl}sets/$setRef/image?v=$SET_IMAGE_CACHE_VERSION"
+    // italianOnly marks a request as belonging to the Italian catalog (mergeItalianSets()).
+    // The Worker uses this to stop falling back to PokeWallet's logo for that set code when
+    // no Italian logo is uploaded to R2 -- PokeWallet's logo is whatever language the product
+    // actually shipped in upstream (often JAP/CHN for historical sets), which would silently
+    // mix languages in an Italian Pokedex entry. See MIGRATION_PLAN.md sez. 8, bug #8.
+    private fun buildSetImageUrl(setRef: String, italianOnly: Boolean = false): String {
+        val base = "${PokeWalletRetrofitClient.imageBaseUrl}sets/$setRef/image?v=$SET_IMAGE_CACHE_VERSION"
+        return if (italianOnly) "$base&source=ita" else base
     }
 
     private fun mapSubTypeNameToKey(subTypeName: String?): String {

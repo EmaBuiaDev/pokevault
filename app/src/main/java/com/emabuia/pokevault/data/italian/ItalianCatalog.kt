@@ -37,17 +37,20 @@ data class ItalianExpansionManifest(
     val espansioneId: String = "",
     val cardCount: Int = 0,
     val order: Int = 0,
-    val logoKey: String = ""
+    val logoKey: String = "",
+    // Raw ENG base-set code (e.g. "DP1"), precomputed server-side from the
+    // majority cardId prefix of this expansion's cards. Only populated when
+    // the manifest comes from GET /v1/expansions; null for catalogs parsed
+    // from the full blob (buildCatalog()), whose consumers still derive it
+    // themselves by scanning cards directly.
+    val dominantSetCode: String? = null
 )
 
 @Immutable
 data class ItalianCatalog(
     val cards: List<ItalianCardRecord> = emptyList(),
     val expansions: List<ItalianExpansionManifest> = emptyList()
-) {
-    fun cardsByExpansion(): Map<String, List<ItalianCardRecord>> =
-        cards.groupBy { it.espansioneId.lowercase(Locale.ROOT) }
-}
+)
 
 data class ItalianCatalogPayload(
     val cards: List<ItalianCardRecord> = emptyList(),

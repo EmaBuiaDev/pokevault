@@ -36,18 +36,12 @@ import com.emabuia.pokevault.data.remote.ItalianCardAttribute
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.GoalAlbumViewModel
 import com.emabuia.pokevault.viewmodel.GoalProgress
 import kotlinx.coroutines.launch
 
 private enum class ChaseTab { ALL, OWNED, MISSING, DUPLICATES }
-
-private fun safeImageUrl(url: String): String {
-    return url
-        .replace(" ", "%20")
-        .replace("(", "%28")
-        .replace(")", "%29")
-}
 
 @Composable
 private fun CardImageFallback(card: TcgCard) {
@@ -362,7 +356,7 @@ private fun ChaseCardItem(card: TcgCard, isOwned: Boolean, onAddTap: () -> Unit)
             .clickable(enabled = !isOwned, onClick = onAddTap)
     ) {
         SubcomposeAsyncImage(
-            model = safeImageUrl(card.images.small),
+            model = ImageUrlUtils.safeImageUrl(card.images.small),
             contentDescription = card.name,
             contentScale = ContentScale.FillWidth,
             modifier = Modifier

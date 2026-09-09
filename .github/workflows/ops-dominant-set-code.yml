@@ -1,0 +1,94 @@
+name: Ops - dominant_set_code migration + backfill + deploy
+
+# One-off/reusable operator utility: applies schema/003_add_dominant_set_code.sql
+# to D1, backfills expansions.dominant_set_code for all existing expansions from
+# the current catalog blob on R2, then deploys the Worker so GET /v1/expansions
+# starts returning it. See MIGRATION_PLAN.md checkpoint "dominant_set_code:
+# mergeItalianSets e getItalianOverlayCards completati" for why this exists.
+#
+# Manual trigger only (workflow_dispatch) -- this changes production D1 schema/
+# data and deploys the Worker, so it never runs unattended. Reuses the repo's
+# existing CLOUDFLARE_API_TOKEN secret (same one catalog-ingest.yml already
+# uses), so no new credential is introduced.
+#
+# Safe to re-run: schema/003's ALTER TABLE is idempotent in practice (a second
+# run fails harmlessly on "duplicate column" and the job stops there -- the
+# backfill/deploy steps that follow simply wouldn't run that time), and the
+# backfill SQL uses ON CONFLICT DO UPDATE.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  migrate-backfill-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: pokevault-proxy-worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'  # wrangler 4.x requires Node >=22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply schema/003 migration (adds expansions.dominant_set_code)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        # Idempotent on purpose: a re-run of this workflow (e.g. after a fix to a
+        # later step) hits "duplicate column name" here because the ALTER TABLE
+        # already succeeded last time -- that's not a real failure, so it's
+        # treated as success. Any other wrangler error still fails the step.
+        run: |
+          set -o pipefail
+          if ! npx wrangler d1 execute pokevault-catalog --remote --file schema/003_add_dominant_set_code.sql 2>&1 | tee migration-output.log; then
+            if grep -q "duplicate column name: dominant_set_code" migration-output.log; then
+              echo "Colonna dominant_set_code gia' presente (migration applicata in un run precedente) -- proseguo."
+            else
+              exit 1
+            fi
+          fi
+
+      - name: Download current catalog blob from R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler r2 object get pokevault-images/it/catalog/cards.cleaned.json --file catalog-live.json --remote
+
+      - name: Generate backfill SQL for dominant_set_code
+        # --batch-size 50: the script's default (300) produces a single INSERT
+        # statement D1 rejects with SQLITE_TOOBIG once each card row carries its
+        # full attacchi_json blob (confirmed against the live catalog on
+        # 2026-09-07, see MIGRATION_PLAN.md -- the original one-time import used
+        # the same 50 for this reason). Even smaller here since the ON CONFLICT
+        # DO UPDATE clause added to the cards INSERT makes each row longer.
+        run: node scripts/import-catalog-to-d1.mjs --catalog catalog-live.json --out backfill-dominant-set-code.sql --batch-size 50
+
+      - name: Apply backfill to D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler d1 execute pokevault-catalog --remote --file backfill-dominant-set-code.sql
+
+      - name: Verify dominant_set_code populated
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -o pipefail
+          npx wrangler d1 execute pokevault-catalog --remote \
+            --command "SELECT COUNT(*) AS total, COUNT(dominant_set_code) AS populated FROM expansions" \
+            | tee verify-output.log
+          grep -q '"populated"' verify-output.log
+
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
+
+      - name: Smoke test /v1/expansions in production
+        run: |
+          set -o pipefail
+          sleep 5
+          curl -fsS "https://pokevault-proxy.pokevault-emanu.workers.dev/v1/expansions" | head -c 2000

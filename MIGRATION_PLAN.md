@@ -89,6 +89,8 @@ Le 15.539 immagini gia in R2 provengono da **scraping del sito ufficiale Pokemon
 
 **Nessuna azione distruttiva consigliata sullo storico** (es. rimuoverlo preventivamente): rischierebbe di privare l'app di quasi 20 anni di catalogo per un rischio che le mitigazioni tecniche gia riducono concretamente. La raccomandazione e rinforzare le mitigazioni (specialmente il kill-switch per set e la pagina di takedown, sez. 4.5) prima del rilascio pubblico, non smontare il lavoro fatto.
 
+**Correzione 2026-09-09**: il dettaglio "scraping del sito ufficiale Pokemon" sopra e' stato corretto dall'utente durante la stesura della pagina `docs/copyright/index.html` (sez. 4.5). Fonte reale delle immagini storiche: **scansioni condivise dalla community di collezionisti** (non uno scraping del sito ufficiale) **e immagini scaricate dal catalogo di Pokewallet.io**. Non cambia la conclusione pratica del blocco sopra (restano opere protette indipendentemente dalla fonte, le mitigazioni di sez. 4.2 restano necessarie), ma cambia il profilo di rischio descritto in tabella: niente esposizione diretta verso il sito ufficiale Pokemon Company/Nintendo. La tabella sopra e la sez. 4.2/4.3 sotto restano nel testo cosi' come scritte il 2026-09-06 (record storico di quella sessione), corrette qui invece di riscritte silenziosamente.
+
 ### Decisione: ricompressione WebP delle immagini esistenti (confermata dall'utente)
 
 Le 15.539 PNG (245×342px, ~150-200 KB/file, 2,49 GB totali) vengono ricompresse in WebP alla stessa risoluzione. Stima: **2,49 GB -> ~300-400 MB**, nessuna perdita di copertura, stessa qualita visiva percepita.
@@ -743,13 +745,13 @@ L'app ha **Google Play Billing** e una `PremiumScreen`. Vendere l'accesso a cont
 
 ### 4.5 Documenti da aggiornare
 
-| Documento | Intervento |
-|---|---|
-| `docs/privacy-policy/index.html` | Rimuovere il riferimento a Pokewallet come fornitore dati; aggiungere Cloudflare (R2/D1/Workers) come sub-responsabile |
-| `docs/terms/index.html` | Aggiungere sezione **Proprieta intellettuale** + procedura di takedown con contatto |
-| **Nuovo** `docs/copyright/index.html` | Pagina dedicata: fonte dei dati, natura delle immagini, come richiedere rimozione, SLA 72h |
-| `util/AppLocale.kt:719-727` | Aggiornare il disclaimer in-app (oggi cita esplicitamente Pokewallet.io) |
-| Tutte le pagine `docs/` | Sono **solo in italiano** mentre l'app e IT/EN: allineare o dichiarare l'italiano come lingua ufficiale |
+| Documento | Intervento | Stato |
+|---|---|---|
+| `docs/privacy-policy/index.html` | Rimuovere il riferimento a Pokewallet come fornitore dati; aggiungere Cloudflare (R2/D1/Workers) come sub-responsabile | **Fatto 2026-09-09** — vedi checkpoint in fondo |
+| `docs/terms/index.html` | Aggiungere sezione **Proprieta intellettuale** + procedura di takedown con contatto | **Fatto 2026-09-09** |
+| **Nuovo** `docs/copyright/index.html` | Pagina dedicata: fonte dei dati, natura delle immagini, come richiedere rimozione, SLA 72h | **Fatto 2026-09-09** |
+| `util/AppLocale.kt:719-727` | Aggiornare il disclaimer in-app (oggi cita esplicitamente Pokewallet.io) | **Fatto 2026-09-09** |
+| Tutte le pagine `docs/` | Sono **solo in italiano** mentre l'app e IT/EN: allineare o dichiarare l'italiano come lingua ufficiale | **Fatto 2026-09-09** — dichiarato l'italiano lingua ufficiale, non tradotto (resta voce #26 sez. 8) |
 
 ---
 
@@ -989,6 +991,7 @@ Le ragioni, in ordine di peso:
 | 5 | Set giapponesi taggati erroneamente come ENG | `viewmodel/SetsViewModel.kt:118` |
 | 6 | Verificare che le immagini non finiscano dietro paywall (sez. 4.4) | `ui/premium/PremiumScreen.kt`, `data/billing/PremiumManager.kt` |
 | 7 | **BUG PRODUZIONE confermato 2026-09-07: `normalizeCardNumber()` mostra la carta sbagliata per le sotto-collezioni "Shiny Vault"** — vedi dettaglio sotto | `pokevault-proxy-worker/src/index.ts:530-536` |
+| 8 | **BUG segnalato dall'utente: loghi delle espansioni sbagliati o assenti nel Pokedex** — logo giapponese/cinese su alcune espansioni ITA, nessun logo su molte altre — vedi dettaglio sotto | `PokeTcgRepository.kt` (`mergeItalianSets`, `buildSetImageUrl`), `pokevault-proxy-worker/src/index.ts` (`buildItalianSetLogoCandidates`, `handleItalianR2AssetRequest`) |
 
 #### Dettaglio bug #7 — immagine sbagliata per le carte "Shiny Vault" (preesistente, non causato dalla sessione del 2026-09-07)
 
@@ -1002,24 +1005,46 @@ Le ragioni, in ordine di peso:
 
 **Spiega anche perche' la ricompressione WebP fallisce "in blocco" su queste carte**: lo script di ricompressione cerca la chiave `it/SWSH45/SWSH45_IT_SV001.png` (che non esiste — verificato con `wrangler r2 object get`, "specified key does not exist"), perche' il nome file reale non include il prefisso `SV`. Non e' un problema della pipeline di conversione: e' lo stesso bug di fondo, visto da un angolo diverso.
 
+#### Dettaglio bug #8 — loghi delle espansioni: giapponesi/cinesi su alcune, assenti su molte (segnalato dall'utente 2026-09-08, causa root tracciata per intero via lettura codice -- nessuna build disponibile per riprodurlo visivamente)
+
+**Sintomo riportato**: nella sezione espansioni del Pokedex, alcune espansioni mostrano un logo in giapponese o cinese; molte altre non mostrano alcun logo.
+
+**Come funziona oggi, tracciato riga per riga**:
+
+1. Per ogni espansione ITA, `mergeItalianSets()` (`PokeTcgRepository.kt:~2060`) calcola un `baseRawSetCode` (da `preferredBaseSetCodeForItalianExpansion()` se l'espansione e' tra le poche mappate esplicitamente — solo `me01-04`/`sv01-10` e varianti — altrimenti da `dominant_set_code`, gia' arrivato da D1) e chiede il logo con `buildSetImageUrl(baseRawSetCode)` -> `GET {worker}/sets/{CODE}/image`.
+2. **Questa e' la stessa identica route usata anche per i set ENG/JAP/CHN** (`PokeWalletSet.toTcgSet()`, riga 2532): non c'e' distinzione lato URL tra "voglio il logo italiano" e "voglio il logo del set PokeWallet generico".
+3. Lato Worker, `parseItalianAssetRequest()` (riga 500) intercetta `^/sets/([^/]+)/image$` e lo instrada come `kind: 'setLogo'` a `handleItalianR2AssetRequest()`: prova prima `buildItalianSetLogoCandidates()` in R2 (`{prefix}/{SET}/set-logo.png`, `set_logo.png`, `logo.png`, `cover.png`, `{SET}_IT_logo.png`) — **l'infrastruttura per servire un logo italiano self-hosted esiste gia' ed e' corretta**. Se non trova nulla in R2, ritorna `null` esplicitamente (riga 691-692, commento: *"fall through to the PokeWallet proxy so the upstream API can serve the image"*) e la richiesta prosegue verso il passthrough generico PokeWallet, che restituisce l'immagine associata a quel codice **senza alcuna selezione di lingua**.
+
+**Causa del logo giapponese/cinese**: il lavoro di raccolta immagini fatto finora (`upload-ita-r2.ps1`, poi la ricompressione WebP) si e' concentrato **solo sulle carte**, mai sui loghi dei set — verificato che `buildItalianSetLogoCandidates()` non ha mai un candidato popolato per la stragrande maggioranza delle 106 espansioni, quindi il fallback a PokeWallet scatta quasi sempre. Quando scatta, PokeWallet restituisce quello che ha per quel codice esatto, senza preferenza di lingua: se un set e' stato pubblicato da PokeWallet solo in giapponese o cinese (es. i set esclusivamente giapponesi gia' noti da `SetsViewModel.languageNameOverrides` — "Mega Evolution All-Stars", "Pokémon Card Game Classic", ecc. — mai localizzati in inglese), il logo restituito e' in quella lingua. Non e' un errore di matching: e' l'unico logo che esiste upstream per quel codice.
+
+**Causa del logo assente**: per le ~90 espansioni storiche senza una entry esplicita in `preferredBaseSetCodeForItalianExpansion()`, `dominant_set_code` e' un valore euristico — il prefisso piu' frequente tra i `card_id` di quell'espansione nel nostro dataset (`dominantSetCode()` in `scripts/import-catalog-to-d1.mjs`), **non garantito coincidere con un `set_code` realmente indicizzato da PokeWallet**. Quando non coincide, sia R2 (nessun logo caricato) sia il fallback PokeWallet (nessun set con quel codice) rispondono vuoto/404 — nessun logo mostrato, senza errori visibili in log lato client.
+
+**Perche' non e' stato toccato ora**: sistemarlo bene richiede due cose che questa sessione non ha:
+1. **Contenuto**: caricare loghi ITA reali in R2 per le espansioni che li vogliono (stesso tipo di lavoro fatto per le 15.539 immagini carte — acquisizione, non solo codice), oppure decidere un placeholder coerente (stesso principio gia' adottato per le carte senza immagine IT, sez. 2.2: "nessun mix IT/EN, nessuna cella vuota") per i set senza logo proprio, invece di mostrare un logo in lingua sbagliata o niente
+2. **Verifica visiva**: qualunque modifica a `mergeItalianSets()`/`buildSetImageUrl()` (es. distinguere esplicitamente il caso ITA da ENG/JAP/CHN, o non richiedere affatto il logo PokeWallet quando manca quello R2) cambia cosa vede l'utente nel Pokedex — va controllata su device/emulatore, non solo per lettura di codice, prima di un deploy
+
+**Direzione raccomandata per la prossima sessione con build disponibile**: trattare il logo dei set ITA come le immagini delle carte — self-hosted in R2 con soglia di pubblicazione, mai un fallback silenzioso a una fonte in lingua diversa. Concretamente: se `buildItalianSetLogoCandidates()` non trova nulla in R2 per un'espansione ITA, il Worker dovrebbe rispondere con un placeholder proprio (o 404 esplicito) invece di innescare il passthrough PokeWallet — lo stesso pattern "mai un mix di lingue" gia' applicato con successo alle carte.
+
+**Aggiornamento 2026-09-09**: il punto 2 sopra (distinguere ITA da ENG/JAP/CHN, mai un fallback silenzioso) e' stato implementato — vedi checkpoint in fondo al documento. Resta aperto solo il punto 1 (contenuto: loghi ITA reali da caricare in R2), che il fix di oggi non affronta e non puo' affrontare senza acquisizione immagini.
+
 ### Priorita alta — performance
 
 | # | Intervento | Dove |
 |---|---|---|
-| 7 | **`ImageRequest.size()` su tutte le 55 `AsyncImage`** — causa #1 dei consumi memoria | Tutte le schermate con Coil |
-| 8 | Loop di rete sequenziali -> `async`/`awaitAll` (pattern gia usato nel progetto) | `PokeTcgRepository.kt` righe 438, 497, 534, 576, **600**, 801, 856 |
+| 7 | **`ImageRequest.size()` su tutte le 55 `AsyncImage`** — causa #1 dei consumi memoria | Tutte le schermate con Coil — **investigata 2026-09-09, chiusa come non necessaria, vedi checkpoint in fondo** |
+| 8 | Loop di rete sequenziali -> `async`/`awaitAll` (pattern gia usato nel progetto) | `PokeTcgRepository.kt` righe 438, 497, 534, 576, **600**, 801, 856 — **investigato 2026-09-09, sospeso su decisione utente, vedi checkpoint in fondo** |
 | 9 | `Column + verticalScroll` su liste potenzialmente lunghe -> `LazyColumn` | `CollectionScreen.kt`, `StatsScreen.kt`, `SettingsScreen.kt` |
-| 10 | Rimuovere PaddleOCR + TensorFlow Lite (nessun `.tflite` esiste, `assets/` non c'e) | `ocr/PaddleOCREngine.kt`, `app/build.gradle.kts` |
+| 10 | Rimuovere PaddleOCR + TensorFlow Lite (nessun `.tflite` esiste, `assets/` non c'e) | `ocr/PaddleOCREngine.kt`, `app/build.gradle.kts` — **fatto 2026-09-09, vedi checkpoint in fondo** |
 
 ### Priorita media — pulizia
 
 | # | Intervento | Dove |
 |---|---|---|
 | 11 | **Cancellare i duplicati orfani in root** | `util/AppLocale.kt`, `viewmodel/DeckLabViewModel.kt` |
-| 12 | `safeImageUrl()` duplicato 7 volte -> utility unica in `util/` e applicata ovunque | 7 file + i 3 punti che non la usano |
-| 13 | Rinominare i file `_v2`/`_v3` e allineare nome file/classe | `MainActivity_v2.kt`, `CardsVaultTCGApp.kt`, `AppNavigation_v3.kt`, `HomeScreen_v2.kt` |
-| 14 | Logging unificato su Timber (38 usi di `Log`/`println` residui) | `PaddleOCREngine.kt`, `MLKitOCREngine.kt`, `LimitlessTcgRepository.kt` |
-| 15 | Spezzare i file monolitici (`DeckLabScreen.kt` 2240 righe, `PokeTcgRepository.kt` 1735) | — |
+| 12 | `safeImageUrl()` duplicato 7 volte -> utility unica in `util/` e applicata ovunque | 7 file + i 3 punti che non la usano — **fatto per intero il 2026-09-09 (dedup + i 14 punti reali), vedi checkpoint in fondo** |
+| 13 | Rinominare i file `_v2`/`_v3` e allineare nome file/classe | `MainActivity_v2.kt`, `CardsVaultTCGApp.kt`, `AppNavigation_v3.kt`, `HomeScreen_v2.kt` — **fatto 2026-09-09, vedi checkpoint in fondo** |
+| 14 | Logging unificato su Timber (38 usi di `Log`/`println` residui) | `PaddleOCREngine.kt`, `MLKitOCREngine.kt`, `LimitlessTcgRepository.kt` — **fatto 2026-09-09, vedi checkpoint in fondo** |
+| 15 | Spezzare i file monolitici (`DeckLabScreen.kt` 2240 righe, `PokeTcgRepository.kt` 1735) | — **`DeckLabScreen.kt` fatto 2026-09-09 (2241 -> 6 file), `PokeTcgRepository.kt` non è lo stesso tipo di lavoro, vedi checkpoint in fondo** |
 | 16 | Rimuovere `FORCED_REAL_TOTALS_BY_SET_CODE = { ME03: 124 }` — i conteggi ora sono nostri in D1 | `pokevault-proxy-worker/src/index.ts:82-88` |
 | 17 | Rimuovere `TranslationService` (MyMemory) se le traduzioni arrivano dal catalogo IT | `data/remote/TranslationService.kt` |
 
@@ -1036,12 +1061,12 @@ Le ragioni, in ordine di peso:
 
 ### Priorita bassa — qualita
 
-| # | Intervento |
-|---|---|
-| 24 | Migrare `AppLocale.kt` (1019 righe di getter) verso `strings.xml` + `stringResource` — grosso, valutare se ne vale la pena ora che il catalogo e IT-only |
-| 25 | Portare la copertura test al 50% (target gia dichiarato in `README_TESTING.md`, mai raggiunto) |
-| 26 | Tradurre le pagine `docs/` in inglese o dichiarare l'italiano come lingua ufficiale |
-| 27 | Convenzione commit unica (oggi misto IT/EN, prefissi `- `) |
+| # | Intervento | Stato |
+|---|---|---|
+| 24 | Migrare `AppLocale.kt` (1019 righe di getter) verso `strings.xml` + `stringResource` — grosso, valutare se ne vale la pena ora che il catalogo e IT-only | **Investigata 2026-09-09, sospesa su decisione utente — portata reale molto piu' grande del previsto, vedi checkpoint in fondo** |
+| 25 | Portare la copertura test al 50% (target gia dichiarato in `README_TESTING.md`, mai raggiunto) | Non toccata |
+| 26 | Tradurre le pagine `docs/` in inglese o dichiarare l'italiano come lingua ufficiale | **Fatto 2026-09-09** — dichiarato l'italiano lingua ufficiale, vedi checkpoint sez. 4.5 |
+| 27 | Convenzione commit unica (oggi misto IT/EN, prefissi `- `) | Non toccata — nessun rischio ad adottarla da qui in avanti, non tocca commit passati |
 
 ---
 
@@ -1324,3 +1349,427 @@ Dopo aver verificato che `me05` (85% di copertura) restava correttamente nascost
 ### Cosa NON e' stato fatto (deliberatamente, fuori scope per oggi)
 
 Il vero passo successivo di M4 previsto dal piano — cambiare il **pattern di fetch** dell'app (da "scarica tutto il catalogo in un colpo" a "carica per espansione, on-demand", usando `/v1/expansions` + `/v1/expansions/{id}/cards`) — resta da fare. E' un cambiamento di codice Kotlin vero e proprio (non solo backend), con un ciclo di verifica piu' lento (build Gradle, non `curl`), e va affrontato come lavoro a se stante quando si decide di aprirlo.
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (fetch on-demand per SetDetail, parziale e motivato)
+
+Ripresa da una sessione remota (container cloud, non la macchina Windows delle sessioni precedenti). **Nessun accesso a `dl.google.com`** dalla rete di questo ambiente (bloccato dalla policy di rete del container): `./gradlew :app:compileDebugKotlin` non e' eseguibile qui, a differenza delle sessioni precedenti sulla macchina Windows. Le modifiche sotto sono state verificate a mano, rilettura riga per riga del diff e dei tipi coinvolti, **non con una build reale** — da confermare con `./gradlew :app:compileDebugKotlin` (JDK 21) prima di mergiare.
+
+### Cosa e' stato implementato
+
+Nuovi metodi `ItalianCatalogRemoteRepository.getExpansions()` (`GET /v1/expansions`) e `getExpansionCards(expansionId)` (`GET /v1/expansions/{id}/cards`), con lo stesso pattern di cache a due livelli (memoria + `SharedPreferences`, TTL 5 min, fallback su stale se la rete fallisce) gia' usato da `getCatalog()`. L'URL base e' derivato da `BuildConfig.ITALIAN_CATALOG_URL` togliendo il suffisso `ita/catalog.json` (nessun nuovo campo `BuildConfig`, nessuna modifica a `build.gradle.kts`/`local.properties` — stesso host del Worker gia' configurato).
+
+`getCardsByItalianSet()` (il percorso reale di `SetDetail`, la schermata aperta ripetutamente dagli utenti) ora chiama `getExpansionCards(expansionId)` invece di scaricare l'intero blob da 10+ MB e filtrarlo in locale con `catalog.cardsByExpansion()[expansionId]`. `expansionId` si ottiene da `parseItalianExpansionId(setId)`, un parsing di stringa puro — nessuna dipendenza dal catalogo completo lungo questo percorso, verificato leggendo tutta la funzione fino in fondo (incluso `resolveEnglishBaseSetIdForItalianSet`, che usa la cache dei set ENG, non quella ITA).
+
+### Cosa NON e' stato convertito, e perche' (non e' stato dimenticato)
+
+`mergeItalianSets()` (la lista set, aperta all'avvio app) e `getItalianOverlayCards()` restano su `getCatalog()` (blob intero). Motivo verificato leggendo il codice, non assunto: entrambe le funzioni derivano il "set base ENG" da collegare (per logo/nome/serie) contando `imageReference()?.setCode` **su tutte le carte dell'espansione**, per le ~90 espansioni storiche (`dp1`, `xy1`, `bw1`, `sm1`, `swsh1`, ...) che non hanno una entry in `preferredBaseSetCodeForItalianExpansion()` (quella mappa copre solo `me01-04`/`sv01-10` e varianti). `GET /v1/expansions` oggi restituisce solo `id, card_count, sort_order, logo_key` — non il "codice set dominante" — quindi sostituire la fonte qui perderebbe silenziosamente la corrispondenza corretta con logo/nome/serie ENG per la maggioranza storica del catalogo, un rischio non verificabile senza una build+test reale su device. Per fare questo pezzo in modo sicuro serve prima un campo aggiuntivo lato Worker/D1 (es. `dominant_set_code` precalcolato in `expansions`), lavoro non fatto oggi.
+
+### Prossimi passi
+
+1. **Verificare con una build reale** (`./gradlew :app:compileDebugKotlin`, poi test strumentato/manuale di `SetDetail` su almeno un set con mapping esplicito e uno senza, es. `sv10` e `dp1`) prima di considerare il pezzo fatto oggi definitivo
+2. Se si vuole completare anche `mergeItalianSets`/`getItalianOverlayCards`: aggiungere `dominant_set_code` a `expansions` in D1 (calcolato una volta in ingest, non a ogni richiesta), esporlo in `/v1/expansions`, poi ripetere la stessa conversione fatta oggi per queste due funzioni
+3. Le funzioni di ricerca (`searchItalianCardsByName/ByNumber`, `searchItalianScannerCandidates`) restano intenzionalmente sul catalogo completo: hanno bisogno di scansionare tutte le carte per il matching fuzzy, e il Worker non espone oggi un endpoint di ricerca full-catalog lato server
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (dominant_set_code: mergeItalianSets e getItalianOverlayCards completati)
+
+Fatto il punto 2 della lista sopra: `mergeItalianSets()`, `getItalianOverlayCards()`/`resolveItalianExpansionIdForSet()` e `getEnglishBaseCardForItalianOverlay()` (un quarto punto trovato rileggendo il file per intero, stesso pattern degli altri tre) **non usano piu' `getCatalog()` (blob intero)**. Con questo, l'unico consumo residuo del blob intero sono le 3 funzioni di ricerca (punto 3 sopra), lasciate cosi' deliberatamente.
+
+### Cosa e' cambiato, lato server (preparato ma NON deployato -- vedi sotto)
+
+- **`schema/003_add_dominant_set_code.sql`**: nuova colonna `expansions.dominant_set_code` -- il codice set ENG dominante di un'espansione (es. "DP1"), lo stesso valore che il Kotlin calcolava al volo scansionando le carte.
+- **`scripts/import-catalog-to-d1.mjs`**: calcola `dominant_set_code` per le 106 espansioni storiche (stesso algoritmo del Kotlin: conteggio del prefisso `{SET}_IT_` per cardId, replicato in Node -- vedi commento `dominantSetCode()` nello script). **Testato con un catalogo sintetico di 3 carte/2 espansioni**: output SQL verificato a mano, `dominant_set_code` corretto per entrambe.
+- **`scripts/ingest-tcgdex-set.mjs`**: per i set ingeriti da TCGdex il valore e' banale (`setId.toUpperCase()`, sempre lo stesso per costruzione del cardId) -- nessuno scan necessario, aggiunto come valore costante nell'INSERT.
+- **`src/index.ts`**: `GET /v1/expansions` ora seleziona anche `dominant_set_code`. `npm run type-check` pulito.
+
+### Cosa e' cambiato, lato Android
+
+- `ItalianExpansionManifest` ha un nuovo campo `dominantSetCode: String?` (null per i catalog costruiti dal blob intero, che non lo calcolano piu' localmente -- solo i tre consumer sotto lo popolano, dal blob completo nessuno lo legge piu').
+- `mergeItalianSets()`, `resolveItalianExpansionIdForSet()`/`getItalianOverlayCards()`, `getEnglishBaseCardForItalianOverlay()`: usano `manifest.dominantSetCode` invece di scansionare le carte dell'espansione, e recuperano i dati via `getExpansions()`/`getExpansionCards()` invece di `getCatalog()`.
+- **Fallback esplicito e verificato per il rollout fuori ordine**: se il client aggiorna prima del backend (o il D1 non e' ancora stato ribackfillato con lo script sopra), `dominant_set_code` arriva `null` dal server. In quel caso tutte e tre le funzioni ricadono su `expansionId.uppercase()` -- lo stesso fallback che il codice usava gia' come ultima risorsa. Non e' un crash ne' un dato mancante, solo una risoluzione meno precisa per le espansioni storiche senza mapping esplicito finche' il backfill non gira. Confermato rileggendo ogni punto di uscita delle tre funzioni, non assunto.
+- `ItalianCatalog.cardsByExpansion()` rimosso: dopo questi cambi non aveva piu' nessun chiamante (verificato con una grep sull'intero `app/src/main`).
+
+### Cosa NON e' stato fatto (richiede l'utente)
+
+1. **Migration D1 in produzione**: `schema/003_add_dominant_set_code.sql` va applicata (`wrangler d1 execute pokevault-catalog --remote --file schema/003_add_dominant_set_code.sql`) e poi va rilanciato `scripts/import-catalog-to-d1.mjs` contro il catalogo attuale per popolare `dominant_set_code` sulle 106 espansioni esistenti. Nessuna delle due e' stata eseguita qui: **questa sessione remota non ha credenziali Cloudflare** (`wrangler whoami` -> "You are not authenticated"), a differenza delle sessioni precedenti sulla macchina Windows dell'utente.
+2. **Deploy del Worker**: `src/index.ts` con la nuova colonna in `/v1/expansions` non e' stato deployato, stesso motivo (nessuna credenziale).
+3. **Build Android reale**: come nel checkpoint precedente, questo ambiente non raggiunge `dl.google.com` (bloccato dalla policy di rete del container) quindi l'Android Gradle Plugin non si risolve e `./gradlew` non parte qui. Tutte le modifiche Kotlin sono state rilette a mano con attenzione (inclusi gli import, che avevano bisogno di un fix -- `ItalianExpansionManifest` non era importato, `ItalianCatalog` era rimasto importato da inutilizzato), ma **non compilate**. Da verificare con `./gradlew :app:compileDebugKotlin` prima di considerare il lavoro definitivo.
+
+### Ordine consigliato per chiudere il cerchio
+
+1. Applicare `schema/003_add_dominant_set_code.sql` a D1 (`wrangler d1 execute ... --remote`)
+2. Rilanciare `scripts/import-catalog-to-d1.mjs` sul catalogo corrente e applicare il SQL generato (backfilla `dominant_set_code` sulle 106 espansioni)
+3. `wrangler deploy` del Worker aggiornato (dopo revisione diff, come per ogni deploy precedente di questa migrazione)
+4. `./gradlew :app:compileDebugKotlin` + verifica manuale/strumentata di: lista set (nomi/loghi/serie invariati per un set con mapping esplicito tipo `sv10` e uno senza tipo `dp1`), `SetDetail` su entrambi, l'overlay ME03 (`preferredImageMacro = "ITA"`)
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (punti 1-3 eseguiti in produzione, punto 4 ancora aperto)
+
+Eseguiti i punti 1-3 sopra tramite `.github/workflows/ops-dominant-set-code.yml` (l'utente ha lanciato il workflow da GitHub Actions sul branch `release/R3.0.0`, io ho monitorato via API GitHub e corretto tre bug emersi durante l'esecuzione reale, non trovati nella sola rilettura statica):
+
+1. `scripts/import-catalog-to-d1.mjs`: l'INSERT su `cards` non aveva `ON CONFLICT` (pensato per un DB vuoto) -> `UNIQUE constraint failed: cards.card_id` al primo re-run. Aggiunto `ON CONFLICT(card_id) DO UPDATE`, stesso pattern di `expansions` e di `ingest-tcgdex-set.mjs` -- lo script e' ora idempotente per intero, non solo per le espansioni.
+2. Il workflow falliva duro su un secondo tentativo di `ALTER TABLE` (colonna gia' aggiunta dal run precedente) invece di trattarlo come "gia' fatto". Aggiunto un controllo esplicito su "duplicate column name" che tratta quel caso specifico come successo, senza mascherare altri errori wrangler.
+3. Il default dello script (`--batch-size` 300) produceva un singolo INSERT troppo grande per D1 (`SQLITE_TOOBIG`) una volta sommato il blob `attacchi_json` di ogni carta -- coerente con la nota gia' in questo documento ("batch da 50, D1 rifiuta batch da 300"). Il workflow ora passa esplicitamente `--batch-size 50`.
+
+**Verificato in produzione** (non solo "il job e' verde"): lo step di verifica ha confermato `"populated": 106` su 106 espansioni; lo smoke test su `/v1/expansions` mostra `dominant_set_code` popolato correttamente per ogni riga (es. `dp1` -> `"DP1"`, `bw4` -> `"BW4"`). Il Worker deployato mostra tutti i binding attesi (CACHE, pokevault_catalog, IMAGES_BUCKET). `release/R3.0.0` e `claude/continue-plan-fxtrod` sono allineati (fast-forward) con tutti questi fix.
+
+**Cosa resta**: solo il punto 4 -- build Android reale (`./gradlew :app:compileDebugKotlin`) e verifica manuale/strumentata su device o emulatore, che questa sessione non puo' fare (nessun accesso a `dl.google.com`). Il codice Kotlin di oggi (`mergeItalianSets`, `getItalianOverlayCards`, `getEnglishBaseCardForItalianOverlay`) ora legge `dominant_set_code` da un backend che lo popola davvero -- il percorso "felice" del fallback e' quindi gia' coperto, ma la build resta da confermare prima di un rilascio.
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (M7: pulizia git/repo + consolidamento documentazione)
+
+Sessione remota, stesse limitazioni di quella precedente (nessuna credenziale Cloudflare, nessun accesso a `dl.google.com`). Lavoro scelto deliberatamente per non richiedere build Android ne' deploy: voci di sez. 8 verificabili per lettura/grep, non per compilazione.
+
+### Git/repo hygiene (sez. 8, voci #3, #19, #22)
+
+Rimossi dal tracking futuro (history esistente intatta, nessun `filter-repo`/BFG eseguito -- resta voce #18, esplicitamente rimandata: richiede force-push coordinato):
+- `.wrangler/cache/wrangler-account.json` e `cf.json` -- **leak reale, non solo teorico**: il primo conteneva l'email dell'account Cloudflare, il secondo geolocalizzazione (Napoli), ISP (Vodafone Italia) e fingerprint TLS della sessione `wrangler login` di una sessione precedente
+- `.kotlin/errors/*.log` (4 file), `.idea/` (13 file), `app/release/app-release.aab` (26 MB)
+- `.gitignore` di root aggiornato con `.kotlin/`, `.wrangler/`, `.idea/`, `node_modules/`, `app/release/`, `*.aab`, `*.apk`
+
+### Bugfix isolati (sez. 8, priorita' alta)
+
+- `LimitlessTcgRepository`: `HttpLoggingInterceptor` ora `NONE` in release, `BASIC` solo in `BuildConfig.DEBUG` -- chiudeva il leak di log in produzione (voce #2)
+- Rimossa `POKETCG_API_KEY`: campo `BuildConfig` mai letto in nessun punto del client (verificato con grep sull'intero `app/src`), coerente con debito #10 (sez. 1.2, "codice morto"). Ripulita anche da `local.properties.example`, dai workflow CI (`android-tests.yml`, `android-advanced-tests.yml`) e dai doc del worker. **`POKEWALLET_API_KEY` non toccata**: e' ancora attivamente letta (`CardsVaultTCGApp.kt`, `PokeTcgRepository.kt`, `PokeWalletRepository.kt`) -- rimuoverla ora, prima del taglio del cordone PokeWallet (M6), romperebbe funzionalita' live.
+
+### Consolidamento documentazione (sez. 8 voce #21)
+
+I 12 markdown ridondanti descritti in quella voce (3848 righe circa, in gran parte AI-slop con playbook duplicati) sono stati sostituiti da:
+- **`README.md`** di root (non esisteva -- debito #14 chiuso): overview, struttura repo, stack, setup locale
+- **`docs/TESTING.md`**: consolidamento di `TESTING_GUIDE.md`, `README_TESTING.md`, `TESTING_COMPLETE.md`, `TESTING_SUMMARY.md`, `QUICK_REFERENCE.md`, `TESTING_START_HERE.md`, `QUICK_START_TESTING.md`, `GITHUB_SETUP.md` -- comandi Gradle, template di test, setup branch protection, e il debito CI reale (sez. 1.2 #2/#3) citato esplicitamente invece di essere ripetuto in modo impreciso
+- **`pokevault-proxy-worker/README.md`** riscritto da zero: la versione precedente (insieme a `DEPLOYMENT_GUIDE.md` e `QUICK_DEPLOY.md`, entrambi eliminati) descriveva il Worker come un semplice proxy-cache KV per PokeWallet `/sets` -- non rifletteva affatto D1, R2, le route `/v1/*` ne' gli script di ingest costruiti nelle sessioni precedenti. Il nuovo README descrive lo stato attuale reale e rimanda qui per la storia
+- `CLOUDFLARE_PROXY_IMPLEMENTATION.md` (root) eliminato: descriveva un'architettura (proxy KV puro) ampiamente superata da questo stesso documento
+
+Non toccato: contenuto dei test stessi (16 file reali in `app/src/test`+`app/src/androidTest`, molti di piu' dei "5 file/19 test" che i vecchi doc dichiaravano -- erano scritti prima che la suite crescesse).
+
+### Non fatto, deliberatamente (troppo rischioso senza build/deploy disponibili qui)
+
+- `FORCED_REAL_TOTALS_BY_SET_CODE` (voce #16): verificato che e' ancora nel percorso attivo dei conteggi PokeWallet legacy, non un residuo isolato come assumeva la voce -- rimuoverlo senza poter testare con wrangler e' rischioso, lasciato per una sessione con credenziali
+
+### Approfondimento successivo: `FORCED_REAL_TOTALS_BY_SET_CODE`, indagine conclusa -- **non rimovibile**
+
+Tracciata l'intera catena: `FORCED_REAL_TOTALS_BY_SET_CODE`/`BY_SET_ID` alimentano `resolveRealTotal()`, usata solo da `enrichSetsPayload()`/`enrichSetDetailPayload()` -- funzioni che intercettano le risposte delle route **legacy** `/sets` e `/sets/{code}` (sia sul path cache-HIT via `createResponseFromCache()` che su quello cache-MISS nel fetch handler principale). Queste route non sono mai state toccate dalla migrazione D1: la voce #16 del piano ("i conteggi ora sono nostri in D1") era basata su un'assunzione sbagliata -- il forcing non ha niente a che fare col catalogo italiano.
+
+**Ancora chiamate dal client oggi**: `PokeWalletApiService.getSets()` -> `PokeTcgRepository.getSets()` e' il percorso reale del Pokedex multi-lingua. `SetsViewModel.languageMacros` gestisce esplicitamente `ITA, ENG, JAP, CHN` -- solo ITA e' stata migrata a D1, **ENG/JAP/CHN restano serviti da PokeWallet** attraverso queste stesse route del Worker.
+
+**Il forcing corregge un problema di dati upstream reale**: `computeRealSetTotal()` pagina `/sets/{setCode}` e filtra con `isActualCard()` (esclude righe senza `card_number` o con nome che matcha `PRODUCT_PATTERNS`, es. box/tin/blister). Per `ME03` ("Perfect Order") questo filtro automatico non basta -- PokeWallet restituisce comunque 207 elementi contro le 124 carte reali (verificato dal commento nel codice, non riprodotto qui per assenza di API key).
+
+**Conclusione**: rimuoverlo oggi farebbe tornare `GET /sets`/`GET /sets/ME03` a mostrare 207 invece di 124 per gli utenti che guardano quel set nelle schede ENG/JAP/CHN -- una regressione visibile, non pulizia di codice morto. **Voce #16 chiusa come "non applicabile com'era scritta"**: resta valida solo l'osservazione che, una volta che anche ENG/JAP/CHN passassero a un catalogo proprietario (fuori scope attuale, mai pianificato), l'intero blocco `enrichSetsPayload`/`resolveRealTotal`/backfill diventerebbe rimovibile in un colpo solo.
+- Bug "set giapponesi taggati come ENG" (voce #5, `SetsViewModel.kt:118`): rileggendo il file risulta **gia' risolto** in un commit precedente a questa migrazione (`226cefd`), la lista di `languageNameOverrides` copre gia' i casi noti -- la voce nel piano era stata semplicemente non aggiornata
+- PaddleOCR/TensorFlow Lite (perf #10), dedup `safeImageUrl` (#12), rinomina file `_v2`/`_v3` (#13), split file monolitici (#15): toccano piu' file o comportamento runtime, richiedono build per essere sicuri
+- `git filter-repo`/BFG sui 23 AAB storici (#18) ed eliminazione dei 37 branch remoti (#20): operazioni distruttive con force-push, fuori scope senza conferma esplicita dell'utente
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (M7: rimossi i duplicati orfani in root, voce #11)
+
+Rimossi `util/AppLocale.kt` (593 righe) e `viewmodel/DeckLabViewModel.kt` (268 righe), presenti a livello di root del repo, fuori da qualunque source set Gradle (nessun `sourceSets`/`srcDir` custom in `app/build.gradle.kts` -- solo `app/src/main/java/` e' compilato).
+
+**Verificato prima di cancellare, non assunto**:
+- Entrambi introdotti nello **stesso commit iniziale** del repo (`6d6aeba`, 7 maggio 2026, il piu' vecchio dei 53 commit totali) e mai piu' toccati -- debris della prima importazione, non lavoro in corso
+- Stesso `package` delle versioni vere (`com.emabuia.pokevault.util`/`.viewmodel`), quindi non erano varianti intenzionali ma copie divergenti (501 e 849 righe di diff contro `app/src/main/java/com/emabuia/pokevault/{util,viewmodel}/...` rispettivamente -- coerente con le "577 e 908 righe" gia' stimate in sez. 1.2 #4)
+- Nessun riferimento in nessun punto del repo (grep su `.kts`, `.yml`, `.md`, `.kt`): non erano importati, non erano citati in build script, CI o documentazione
+
+Cancellazione innocua per costruzione: file mai compilati, mai referenziati. Le cartelle `util/` e `viewmodel/` vuote in root sono state rimosse insieme ai file (git non traccia cartelle vuote).
+
+---
+
+## 📍 CHECKPOINT — sessione successiva (M7: audit paywall, dead-code check TranslationService, pulizia test placeholder)
+
+Tre verifiche a rischio zero (nessuna richiede build), su richiesta esplicita "cosa possiamo fare senza buildare".
+
+### Audit paywall vs immagini (sez. 4.4) -- **nessuna violazione trovata**
+
+Letto per intero `PremiumManager.kt`: tutti i gate premium (`canCreateDeck`, `canCreateAlbum`, `canCreateGoalAlbum`, `canCreateWishlist`, `canCreateTournament`, `canViewMetaDeck`, `canExportDecklist`, `canRunHandSimulator`, `canChooseHomeSprite`, `canViewPrices`) riguardano funzionalita' o i **prezzi** -- mai le immagini delle carte. Grep incrociato `isPremium` con `image`/`AsyncImage`/`highRes`/`resolution` su tutto `app/src/main`: zero risultati. La regola "le immagini non stanno mai dietro paywall" (sez. 4.4) e' rispettata oggi. Voce #6 (sez. 8) chiusa come verificata, nessun codice da toccare.
+
+### `TranslationService` (voce #17) -- **non rimovibile, stessa storia di `FORCED_REAL_TOTALS_BY_SET_CODE`**
+
+Ancora referenziato in `SetDetailViewModel.kt` e `SetsViewModel.kt`: `translateItToEn()` traduce le query di ricerca dall'italiano per interrogare il catalogo PokeWallet (ENG/JAP/CHN), non e' legato al testo del catalogo ITA (che e' gia' nativo in italiano nel nostro D1, indipendentemente da questo servizio). La premessa della voce #17 ("se le traduzioni arrivano dal catalogo IT") non si applica: e' un componente di ricerca cross-lingua ancora attivo, non un residuo. Nessun codice toccato.
+
+### Rimossi i template placeholder mai scritti (voce #23)
+
+`ExampleUnitTest.kt` (`assertEquals(4, 2+2)`) e `ExampleInstrumentedTest.kt` (verifica il nome del package) sono i default generati da Android Studio alla creazione del progetto, mai sostituiti con test reali. Non testano nulla dell'app: cancellati senza sostituirli, dato che scrivere test nuovi e verificarne la compilazione richiede una sessione con build disponibile. La suite reale (16 file in `app/src/test`+`app/src/androidTest`, elencata in `docs/TESTING.md`) non e' toccata.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09 (bug #8: rimosso il fallback silenzioso PokeWallet per i loghi ITA)
+
+Sessione remota, stesse limitazioni delle precedenti: nessun accesso a `dl.google.com` (confermato di nuovo con un test diretto — `curl` bloccato dalla policy di rete), nessuna credenziale Cloudflare (`wrangler whoami` -> "You are not authenticated"). Ripreso da qui il branch di ieri (`claude/migration-plan-review-ma7dgr`, fast-forward pulito sullo stesso commit di base), poi affrontato il punto 2 del bug #8 (sez. 8): quello risolvibile senza contenuto nuovo ne' build.
+
+### Cosa e' stato cambiato
+
+Il problema (letto per intero nel checkpoint di ieri): `buildSetImageUrl()` in `PokeTcgRepository.kt` e la route Worker `/sets/{code}/image` sono **condivise** tra il percorso ITA (`mergeItalianSets()`) e quello ENG/JAP/CHN generico. Quando un'espansione ITA non ha un logo proprio in R2, il Worker faceva fallthrough al proxy PokeWallet generico, che risponde con qualunque lingua abbia quel codice upstream — spesso giapponese o cinese per set storici mai pubblicati in inglese.
+
+**Fix**: reso il fallback condizionale, non rimosso il meccanismo (serve ancora per ENG/JAP/CHN, dove il logo PokeWallet e' quello corretto).
+- `PokeTcgRepository.kt`: `buildSetImageUrl(setRef, italianOnly = false)` — quando `italianOnly = true` (solo nel branch `mergeItalianSets()`, riga ~2069, quando non c'e' un `linkedBase` gia' risolto da un set PokeWallet reale) appende `&source=ita` all'URL. Il branch generico (ENG/JAP/CHN, riga ~2532) resta invariato — nessun parametro, nessun cambio di comportamento.
+- `pokevault-proxy-worker/src/index.ts`: `parseItalianAssetRequest()` legge il marcatore (`italianOnly: urlObj.searchParams.get('source') === 'ita'`); `handleItalianR2AssetRequest()` fa fallthrough al proxy PokeWallet solo quando `!italianOnly` — per una richiesta marcata ITA senza hit in R2, ora risponde **404 esplicito** invece di innescare il passthrough.
+- `npm run type-check` pulito (installato `node_modules/` via `npm ci`, prima assente in questa sessione).
+
+### Perche' e' un fix a rischio contenuto, anche senza build/deploy disponibili qui
+
+Verificato leggendo `SetCard` (`SetsListScreen.kt:510-556`) prima di procedere: un logo mancante o che fallisce il caricamento (`onError` di Coil) mostra gia' oggi `MissingSetLogoFallback(setName = set.name)` — un placeholder testuale esistente, usato ogni volta che `images.logo` e' vuoto. Il fix di oggi **non introduce un nuovo stato UI**: sposta soltanto quali casi attivano quello gia' esistente (da "a volte logo in lingua sbagliata, a volte niente" a "sempre niente logo quando R2 non ce l'ha"), coerente con la regola gia' applicata alle carte (sez. 2.2: mai un mix di lingue). Inoltre l'URL cambia (`&source=ita` in coda) solo per le richieste ITA senza `linkedBase`, quindi la chiave di cache KV lato Worker e' automaticamente nuova per questi casi — nessun purge manuale necessario al deploy, a differenza del bugfix #7 di due sessioni fa.
+
+### Cosa NON risolve (resta il punto 1 del bug #8)
+
+Le ~90 espansioni storiche senza logo proprio in R2 ora mostreranno il placeholder col nome invece di un logo (giusto o sbagliato che fosse). Caricare i loghi ITA reali resta lavoro di acquisizione contenuti, non di codice — fuori scope per questa sessione, come gia' notato ieri.
+
+### Cosa resta da fare (richiede l'utente)
+
+1. **Deploy del Worker**: `src/index.ts` non e' stato deployato (nessuna credenziale qui). La modifica e' additiva e a basso rischio (vedi sopra) ma va comunque rivista e deployata con `wrangler deploy` come ogni cambio precedente di questa migrazione.
+2. **Build Android reale**: `./gradlew :app:compileDebugKotlin` non eseguibile qui. Le due righe toccate in `PokeTcgRepository.kt` sono state rilette con attenzione (firma di default parameter, unico altro call site invariato), ma non compilate.
+3. **Verifica visiva**: dopo build+deploy, controllare su device/emulatore che le espansioni storiche senza logo (es. `dp1`, `bw4`) mostrino il placeholder col nome invece del logo sbagliato di prima, e che le espansioni con `linkedBase` risolto (es. `sv10`) restino invariate.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, seconda parte (voce #12: dedup di `safeImageUrl()`)
+
+Su richiesta esplicita dell'utente, dopo il fix del bug #8 sopra. Stesse limitazioni di sempre (nessun `dl.google.com`, nessuna credenziale Cloudflare) — lavoro scelto perche' e' un refactor puramente meccanico (spostare codice identico, non riscriverlo), a rischio piu' basso di un refactor comportamentale anche senza build.
+
+### Cosa e' stato fatto
+
+Trovate le 7 definizioni **identiche** di `private fun safeImageUrl(url: String): String` (percent-encoding di spazio/parentesi, char per char uguali in tutti e 7 i file: `SetDetailScreen.kt`, `WishlistDetailScreen.kt`, `ScannerScreen.kt`, `CreateGoalAlbumScreen.kt`, `GoalAlbumDetailScreen.kt`, `CardDetailScreen.kt`, `CollectionScreen.kt`) e le 15 call site che le usano. Consolidate in un nuovo `util/ImageUrlUtils.kt`:
+- `safeImageUrl(url)` — la funzione di encoding, identica alle 7 copie
+- `proxyPokeWalletUrl(url)` — la logica *aggiuntiva* che solo `CollectionScreen.kt` aveva (riscrive un URL diretto `api.pokewallet.io` verso il proxy Cloudflare quando configurato): non era un duplicato, era una variante con un passo in piu', **verificata leggendo il codice prima di consolidare** — non assunta uguale alle altre 6 solo perche' aveva lo stesso nome
+- `safeProxiedImageUrl(url)` — le due combinate, usata nei 3 call site di `CollectionScreen.kt` al posto della vecchia `safeImageUrl()` locale (che gia' chiamava `maybeProxyPokeWalletUrl()` al suo interno)
+
+I 6 file "semplici" ora chiamano `ImageUrlUtils.safeImageUrl(...)`; `CollectionScreen.kt` chiama `ImageUrlUtils.safeProxiedImageUrl(...)` e non ha piu' ne' `safeImageUrl` ne' `maybeProxyPokeWalletUrl` locali (rimossi anche gli import `android.net.Uri` e `com.emabuia.pokevault.BuildConfig`, diventati inutilizzati). Nessun comportamento cambiato: stesso identico output per lo stesso identico input in tutti e 15 i call site, solo spostato in un posto solo.
+
+### La voce #12 diceva "7 file + i 3 punti che non la usano" — verificato: sono di piu'
+
+Cercati tutti gli `.data(...)` di Coil su URL di immagini/loghi (`AsyncImage`/`SubcomposeAsyncImage`, grep su `\.data\(` filtrato per campi `image`/`logo`/`symbol`/`url`) che **non** passano da nessuna delle due funzioni. Trovati **14** punti, non 3: `AlbumDetailScreen.kt` (2), `AlbumListScreen.kt` (1), `CreateGoalAlbumScreen.kt` (2, loghi set — diversi dai 2 call site di card gia' migrati sopra), `DeckLabScreen.kt` (6), `WelcomeHeader_v2.kt` (1), `SetsListScreen.kt` (1). La stima originale del piano era imprecisa (come gia' successo per la voce #5, gia' corretta in un checkpoint precedente) — non e' stata aggiornata qui perche' contarli non e' lo stesso lavoro che applicarci il fix.
+
+**Perche' non toccati ora**: a differenza delle 7 duplicazioni (spostare codice identico, comportamento zero-rischio), aggiungere l'encoding a 14 punti nuovi — 6 dei quali in `DeckLabScreen.kt`, il file monolitico da 2240 righe della voce #15 — e' un cambio di comportamento reale (per URL che oggi non vengono mai incapsulati) su un file grande, senza modo di compilare o verificare qui. Voce #12 lasciata **parzialmente chiusa**: dedup fatto, copertura estesa ancora da fare in una sessione successiva (idealmente con build disponibile, dato il numero di punti coinvolti).
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, terza parte (sez. 4.5: documenti di compliance aggiornati)
+
+Su richiesta esplicita dell'utente. Lavoro interamente in HTML statico + una stringa Kotlin — nessun rischio di build, nessuna credenziale necessaria (a differenza di tutto il resto della sez. 4, che riguarda solo contenuti/testo, non infrastruttura).
+
+### `docs/privacy-policy/index.html` (sez. 6, "Condivisione dei dati")
+
+Il testo diceva ancora "Pokewallet.io ... per il recupero di dati pubblici sulle carte", non aggiornato da quando il catalogo ITA e migrato su D1/R2. Sostituito con tre voci distinte e verificate contro cosa succede davvero oggi (non assunte): **Cloudflare (R2/D1/Workers)** come sub-responsabile che ospita il catalogo ITA, **Pokewallet.io** ridimensionato a "prezzi + catalogo altre lingue, contattato solo dai nostri server" (mai dal dispositivo dell'utente — coerente con l'isolamento gia' implementato lato Worker), **TCGdex** aggiunto come fonte dati per l'ingest automatico (licenza MIT, nessun dato utente coinvolto). Data di aggiornamento portata a Settembre 2026.
+
+### `docs/terms/index.html` (sez. 7, "Proprieta intellettuale")
+
+Paragrafo esteso per menzionare esplicitamente le mitigazioni gia' descritte in sez. 4.2 di questo piano (bassa risoluzione, nessun ritaglio, copyright intatto) e aggiunto un rimando alla nuova pagina copyright per la procedura di segnalazione.
+
+### Nuova `docs/copyright/index.html`
+
+Pagina dedicata (stesso stile CSS delle altre due, badge rosso per distinguerla): da dove vengono dati e immagini (metadati fattuali, TCGdex MIT per i set recenti, scansioni community + catalogo Pokewallet.io per lo storico — vedi correzione 2026-09-09 in sez. 1.1 sopra), le 5 mitigazioni di sez. 4.2, procedura di segnalazione con contatto e **SLA dichiarato di 72 ore**.
+
+**Scelta deliberata sull'SLA**: la pagina promette solo "rispondiamo entro 72 ore" e "possiamo sospendere la visibilita... senza attendere una release" — **non** promette un kill-switch tecnico automatico "sotto i 5 minuti" come ipotizzato in sez. 4.2 del piano originale. Verificato prima di scrivere la pagina: la tabella `takedowns` esiste nello schema D1 (`schema/001_init.sql`) ma **non e referenziata da nessuna parte in `src/index.ts`** — non e' collegata alla logica di serving, quindi quel kill-switch non esiste ancora davvero. Pubblicare una promessa di 5 minuti per un meccanismo non implementato sarebbe stato un rischio reale, non solo impreciso. **Follow-up aperto, non fatto qui**: wire-are `takedowns` nel path `handleItalianR2AssetRequest` (check `WHERE expansion_id = ?` prima di servire, TTL cache basso o bypass) per rendere vera la sospensione rapida — finche' non e' fatto, una richiesta di rimozione urgente va gestita a mano (rimozione oggetti R2 o `wrangler deploy` con un filtro ad-hoc), comunque dentro l'SLA di 72h dichiarato.
+
+**Contatto riusato, non inventato**: la pagina usa `devteam.vaultcards@hotmail.com`, lo stesso indirizzo gia' presente in privacy-policy/terms — non esiste un'email dedicata separata nel repo, e inventarne una che non riceve posta sarebbe stato peggio che riusare quella esistente. Se si vuole un indirizzo dedicato (es. `copyright@...`) va creato fuori da questa sessione.
+
+### `util/AppLocale.kt` — disclaimer in-app allineato (righe ~722-737)
+
+`disclaimerBody` (IT ed EN, unica fonte usata sia da `LegalDialogs.kt` che da `SettingsScreen.kt` — verificato con grep, nessun secondo posto da aggiornare) ora rispecchia lo stesso quadro delle pagine web: Cloudflare per il catalogo ITA, Pokewallet.io ridimensionato a prezzi/altre lingue via server, link alla pagina copyright per le segnalazioni. Aggiunta anche una costante `copyrightUrl` accanto a `privacyPolicyUrl`/`termsUrl` per coerenza — **non ancora collegata a una riga cliccabile in `SettingsScreen.kt`** (che oggi ha righe solo per Privacy Policy e Termini): aggiungerla e' una modifica di layout UI vera, lasciata a una sessione con build per la verifica visiva, non fatta alla cieca qui.
+
+### Lingua della documentazione (ultima riga della tabella sez. 4.5)
+
+Scelta l'opzione "dichiarare l'italiano lingua ufficiale" (non tradurre): aggiunta la stessa riga di nota in fondo a tutte e tre le pagine `docs/`. Tradurre i contenuti resta la voce #26 (sez. 8, bassa priorita), esplicitamente non toccata qui.
+
+### Non modificato, verificato prima di escludere
+
+Il footer di tutte e tre le pagine `docs/` ora linka anche `/pokevault/copyright` (aggiunto in `docs/index.html`, `privacy-policy/index.html`, `terms/index.html`). Nessun link rotto: tutti e tre i file sono in `docs/<slug>/index.html`, stesso schema di routing gia' usato dalle due pagine esistenti (GitHub Pages serve `docs/` come root del sito).
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, quarta parte (correzione: fonte reale delle immagini storiche)
+
+L'utente ha chiesto di togliere il riferimento allo "scraping sito ufficiale" dalla pagina copyright, sostituendolo con Pokewallet. **Non eseguito alla lettera**: sostituire con "solo Pokewallet" sarebbe stata una dichiarazione falsa in un documento legale pubblico — rischio maggiore, non minore, di quello che si voleva ridurre (un'incoerenza tra dichiarazione pubblica e fatti reali, se mai verificata, pesa piu' della disclosure onesta). Chiesta conferma con `AskUserQuestion` su tre punti separati (fonte immagini storiche, fonte immagini set nuovi, fonte prezzi) prima di scrivere qualunque cosa in un documento di compliance.
+
+**Risposta dell'utente, la fonte corretta**:
+- Immagini storiche (~15.539, pre-2023): **scansioni condivise dalla community di collezionisti + immagini scaricate dal catalogo di Pokewallet.io** — non "scraping del sito ufficiale Pokemon" come scritto il 2026-09-06 (quella sessione aveva chiesto la stessa domanda e ricevuto una risposta diversa; la correzione di oggi e' quella da considerare valida)
+- Immagini set nuovi (automazione TCGdex): **invariato**, confermato dall'utente
+- Prezzi: **invariato**, solo Pokewallet, confermato dall'utente
+
+**Modificato**: `docs/copyright/index.html` sez. 2 (bullet "Immagini delle espansioni storiche"), aggiunta una nota di correzione datata in questo documento subito dopo il blocco originale del 2026-09-06 sez. 1.1 (**non riscritto silenziosamente** — il record storico resta leggibile, la correzione e' visibilmente sovrapposta con data). Verificato che "scraping" non compariva in nessun'altra pagina `docs/` ne' in `AppLocale.kt` (grep mirato prima di dichiarare finito): nessun'altra modifica necessaria. HTML ribilanciato dopo l'edit (stesso controllo tag-per-tag di prima, nessuna asimmetria).
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, quinta parte (sez. 8 #10: rimossi PaddleOCR + TensorFlow Lite)
+
+Prima domanda dell'utente prima di procedere: "poi funzionera' lo scanner?". Verificato **prima** di toccare codice, non assunto: lo scanner oggi funziona **gia' solo con ML Kit**. `OCRManager.hasTFLiteModels()` cercava `det_model.tflite`/`rec_model.tflite` in `context.assets.list("")`, ma `app/src/main/assets/` **non esiste affatto nel repo** (confermato con `find`) — quindi il ramo PaddleOCR non veniva mai eseguito, `initialize()` cadeva sempre sul fallback ML Kit. Confermato anche che la UI dello scanner (`ScannerScreen.kt`) fa la sua stessa passata di riconoscimento live **direttamente con ML Kit** (`TextRecognition.getClient`), indipendente da `OCRManager` — un secondo percorso che non tocca PaddleOCR in nessun modo. Rimuovere il codice morto non cambia quindi alcun comportamento osservabile.
+
+### Rimosso
+
+- `ocr/PaddleOCREngine.kt` (537 righe) — file eliminato per intero, unico consumer era `OCRManager.kt`
+- `OCRManager.kt`: tolto il branch PaddleOCR da `initialize()` (ora prova solo ML Kit, nessun parametro `preferPaddleOCR` piu' necessario), rimossa `hasTFLiteModels()`, rimosso il parametro costruttore `context: Context` (diventato inutile senza quella funzione) e l'import `android.content.Context`. Aggiornati i commenti che descrivevano l'architettura a doppio motore
+- `ScannerViewModel.kt`: `OCRManager(application)` -> `OCRManager()`, unico call site nel repo (verificato con grep)
+- `app/build.gradle.kts`: rimosse le dipendenze `tensorflow-lite`/`tensorflow-lite-gpu`, il blocco `androidResources { noCompress += "tflite" }` (non serve piu' comprimere nulla), e le due entry `libtensorflowlite_*_jni.so` da `keepDebugSymbols` — **lasciate** invece le entry `liblitert_*_jni.so`: LiteRT (il nuovo nome di TFLite) potrebbe arrivare transitivamente da ML Kit stesso, non solo dalla nostra dipendenza esplicita rimossa; toglierle senza una build per verificare avrebbe rischiato di far tornare i warning di strip che quel blocco esiste apposta per evitare
+- `gradle/libs.versions.toml`: rimossi `tensorflowLite` (version) e le due entry `tensorflow-lite`/`tensorflow-lite-gpu`
+- Commenti residui in `OCREngine.kt` e `MLKitOCREngine.kt` che citavano PaddleOCR, aggiornati
+
+**Verificato con grep sull'intero repo** (non solo sui file toccati) che non resta alcun riferimento a `Paddle`/`tensorflow`/`tflite` fuori da questo checkpoint del piano stesso. Non compilato (nessun accesso a `dl.google.com` in questa sessione remota): diff riletto per intero, incluse le graffe del blocco `initialize()` semplificato.
+
+**Beneficio atteso** (da confermare a build fatta): APK piu' leggero di due librerie native (`tensorflow-lite`, `tensorflow-lite-gpu`) mai state raggiungibili a runtime.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, sesta parte (sez. 8 #13: rinominati i file `_v2`/`_v3`)
+
+Verificato prima di rinominare, non assunto: in tutti e cinque i file la classe/funzione top-level **non aveva mai il suffisso** `_v2`/`_v3` — solo il nome del file. Kotlin non richiede che file e classe combacino (a differenza di Java), quindi ogni riferimento nel resto del repo e' gia' per nome di classe/funzione (import, `AndroidManifest.xml` con `.MainActivity`/`.PokeVaultApp`), mai per path del file. Un rename di file quindi **non tocca alcun import esistente** — confermato con `git mv` (preserva la history) seguito da un grep sull'intero repo per i vecchi nomi file: zero residui fuori da questo piano.
+
+| File vecchio | File nuovo | Classe/funzione dentro (invariata) |
+|---|---|---|
+| `MainActivity_v2.kt` | `MainActivity.kt` | `class MainActivity` |
+| `CardsVaultTCGApp.kt` | `PokeVaultApp.kt` | `class PokeVaultApp` (mismatch file/classe, non solo un suffisso `_v2`) |
+| `ui/home/HomeScreen_v2.kt` | `ui/home/HomeScreen.kt` | `fun HomeScreen` |
+| `ui/home/components/WelcomeHeader_v2.kt` | `ui/home/components/WelcomeHeader.kt` | `fun WelcomeHeader` |
+| `ui/navigation/AppNavigation_v3.kt` | `ui/navigation/AppNavigation.kt` | `fun AppNavigation` |
+
+Trovato un quinto file oltre ai quattro elencati nel piano originale: `WelcomeHeader_v2.kt` (stesso pattern, emerso durante la ricerca dei 14 punti mancanti per la voce #12). Nessun conflitto di nome verificato prima di ogni `git mv` (`find` sul nome di destinazione, zero risultati per tutti e cinque).
+
+Non compilato (nessun accesso a `dl.google.com` qui), ma il rischio e' strutturalmente basso: un rename puro senza alcuna modifica al contenuto dei file.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, settima parte (sez. 8 #14: logging unificato su Timber)
+
+`PaddleOCREngine.kt` era gia' sparito (voce #10, checkpoint precedente). Cercato `android.util.Log`/`System.out.print`/`println(` sull'intero `app/src/main` (non solo sui tre file indicati dal piano, che erano incompleti): **8 file**, non 3 — `ScannerScreen.kt`, `LimitlessTcgRepository.kt` (18 chiamate, il grosso del totale), `SetDetailViewModel.kt`, `AuthViewModel.kt`, `HomeViewModel.kt`, `CardFieldParser.kt`, `ImagePreprocessor.kt` (solo un import morto, zero chiamate reali), `MLKitOCREngine.kt`.
+
+### Conversione, non solo sostituzione 1:1
+
+Ogni `Log.LEVEL(TAG, "msg"[, e])` -> `Timber.LEVEL("msg")` o `Timber.LEVEL(e, "msg")` (Timber vuole il `Throwable` come primo argomento posizionale, non ultimo come `Log`; il tag si toglie, Timber lo deduce automaticamente dalla classe chiamante). Rimossi anche gli import `android.util.Log`/`com.emabuia.pokevault.BuildConfig` diventati inutili e le costanti `TAG` companion ormai senza chiamanti, verificato file per file con grep mirato prima di ogni rimozione (non assunto).
+
+### Scoperta reale, non solo pulizia cosmetica
+
+Su 22 chiamate totali (`LimitlessTcgRepository.kt` escluso, gia' tutte guardate), **5 non avevano `if (BuildConfig.DEBUG)`**: `AuthViewModel.kt` (2, mai guardate), `SetDetailViewModel.kt` e `HomeViewModel.kt` (1 ciascuna, guardate ma con un blocco `if` invece dell'espressione inline usata altrove). Queste **loggavano gia' in release** prima di oggi — un piccolo leak reale della stessa famiglia di quello gia' chiuso per `HttpLoggingInterceptor` (voce #2). La conversione a Timber le chiude automaticamente, non per una guardia aggiunta caso per caso: `PokeVaultApp.kt` pianta un `Timber.DebugTree()` **solo se `BuildConfig.DEBUG`** (unico `Timber.plant` nel repo, verificato con grep) — senza nessun tree piantato in release, ogni chiamata `Timber.*` in tutto il codebase e' gia' un no-op silenzioso, guardia o meno. Le chiamate gia' guardate con `if (BuildConfig.DEBUG)` diventano ridondanti (Timber lo fa gia' da solo) e la guardia e' stata rimossa insieme alla conversione, coerente con come `OCRManager.kt` usava gia' Timber prima di questa voce.
+
+### Verificato dopo la conversione
+
+Grep sull'intero `app/src/main` per `android.util.Log`/`Log\.(d|w|e|i|v)(`/`System.out.print`/`println(`: **zero risultati**. Parentesi e graffe ricontate per ognuno degli 8 file (aperte = chiuse), nessuna asimmetria introdotta. Non compilato (nessun accesso a `dl.google.com` qui).
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, ottava parte (sez. 8 #12, chiusura completa: i 14 punti senza `safeImageUrl`)
+
+Rifatta la ricerca dei call site `.data(...)` su URL immagine/logo non ancora incapsulati (stessa query del checkpoint di dedup, sui file aggiornati nel frattempo: `WelcomeHeader_v2.kt` -> `WelcomeHeader.kt` dopo la voce #13). Confermati gli stessi **14** punti: `AlbumDetailScreen.kt` (2), `AlbumListScreen.kt` (1), `CreateGoalAlbumScreen.kt` (2, loghi set), `DeckLabScreen.kt` (6), `WelcomeHeader.kt` (1), `SetsListScreen.kt` (1).
+
+### Non un wrap uniforme: due funzioni diverse a seconda del tipo, verificato per ognuno
+
+Prima di editare, risalita al tipo di dato/funzione di ogni call site (non assunto dal nome del parametro):
+
+| Sorgente | Tipo | Funzione usata | Perche' |
+|---|---|---|---|
+| `card.imageUrl` (`AlbumDetailScreen.kt` x2, `AlbumListScreen.kt` via `cards.firstOrNull()?.imageUrl`, `DeckLabScreen.kt` x3) | `PokemonCard` | `ImageUrlUtils.safeProxiedImageUrl` | Stesso campo che `CollectionScreen.kt` gia' passava per il proxy PokeWallet (voce #12 originale) — URL grezzo salvato in Room, non ancora passato dal Worker |
+| `deck.coverImageUrl`/`coverUrls.first()`/`coverUrl` (`DeckLabScreen.kt` x3) | derivano da `PokemonCard.imageUrl` (`DeckLabViewModel.addCardToDeck(card: PokemonCard)` -> `displayCoverImageUrls()`) | `ImageUrlUtils.safeProxiedImageUrl` | Stessa origine di `card.imageUrl`, solo passata attraverso il modello `Deck` invece che letta direttamente |
+| `set.images.logo`/`set.images.symbol` (`CreateGoalAlbumScreen.kt` x2, `SetsListScreen.kt` x1) | `TcgSet` | `ImageUrlUtils.safeImageUrl` (no proxy) | Stesso campo gia' incapsulato altrove (`SetDetailScreen.kt`, ecc.) — URL gia' servito dal Worker, non un host PokeWallet grezzo |
+| `card.images.small` (`DeckLabScreen.kt` x1, `TcgCardSearchItem`) | `TcgCard` | `ImageUrlUtils.safeImageUrl` | Stesso pattern degli altri 6 file gia' fatti nel checkpoint di dedup |
+| `pokemonImageUrl` (`WelcomeHeader.kt`) | stringa costruita da `PokeAPI/sprites` (GitHub raw, ID Pokemon numerico da una pool fissa) | `ImageUrlUtils.safeImageUrl` | Non e' un URL di carta/PokeWallet — verificato che l'ID e' sempre numerico (`pokemonIds`), quindi l'encoding non cambia mai nulla in pratica; applicato comunque per coerenza e a rischio zero (nessun carattere da incapsulare puo' mai comparire) |
+
+`album.coverImageUrl` (il campo diretto, non il fallback): verificato con grep che **nessun punto del codice lo valorizza mai** a qualcosa di non vuoto — resta sempre il fallback `PokemonCard.imageUrl` in pratica, coerente con la scelta sopra.
+
+### Verificato dopo l'edit
+
+Stessa query di ricerca dei 14 punti rilanciata su tutto `app/src/main/java/com/emabuia/pokevault/ui`: **zero residui**. Parentesi ricontate su tutti e 6 i file toccati (aperte = chiuse). Non compilato (nessun accesso a `dl.google.com` qui): ogni sostituzione verificata a mano confrontando il tipo del parametro con gli usi analoghi gia' fatti nel checkpoint di dedup, non per pattern-matching cieco sul nome della variabile.
+
+**Voce #12 ora chiusa per intero**: dedup delle 7 copie + applicazione ai 14 punti mancanti, in due sessioni separate dello stesso giorno.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, nona parte (voce perf #8: loop rete->async, investigato e sospeso)
+
+Su richiesta esplicita "continua sui punti grandi e rischiosi, controlla pero' che non ci siano regressioni". Prima di scrivere codice, letti per intero i 14 `for (...)` di `PokeTcgRepository.kt` (i riferimenti di riga della voce erano gia' superati, il file e' cambiato molte volte da quando furono scritti) per capire cosa fa davvero ciascuno, non solo se contiene una chiamata di rete.
+
+### Nessuno dei 14 e' un candidato pulito per `async`/`awaitAll`
+
+- **8 loop non fanno I/O di rete**: distanza di Levenshtein locale (2 loop annidati), raggruppamento/matching set (2), lookup Room/cache con fallback locale (2), matching stringhe (2) — etichettati "loop di rete" nella voce originale ma non lo sono
+- **3 loop hanno un early-exit intenzionale** (`for page in 1..3` con `break` su 404 in `searchByName`, ricerca candidati con `break` al raggiungimento di N risultati, ricerca a token con `return` al primo match utile): parallelizzare li farebbe sempre eseguire tutte le richieste anche quando la prima basta gia' — **piu' chiamate API, non meno**, il contrario dell'obiettivo della voce
+- **1 loop ha una dipendenza tra iterazioni reale** (`enrichMissingMegaSetsFromSearch`): ogni iterazione controlla `presentIds`/`presentCodes`, mutati dalle iterazioni precedenti dello stesso loop, per evitare di aggiungere lo stesso set due volte. Parallelizzare rischia **set doppi visibili nel Pokedex** — non un dettaglio interno, un bug utente-visibile
+- **2 loop sono puliti in teoria** (`buildStrictSetNumberQueries`/`buildStrictNameSetNumberQueries`: nessun early-exit, oggi eseguono comunque tutte le query della lista) **ma** il numero di query e' il prodotto di combinazioni di varianti (nome × token set × numero, fino a 3 pattern per combinazione in `buildStrictNameSetNumberQueries`) — puo' arrivare a diverse decine per una singola ricerca. Un `awaitAll` senza limite di concorrenza spara tutte insieme: rischia di **innescare il rate-limit (`429`) che il progetto lavora attivamente per evitare** (vedi `guardedApiCall`/`globalRateLimitUntil`), l'esatta regressione da evitare, non misurabile qui senza un device reale
+
+### Rischio aggiuntivo scoperto in `guardedApiCall` (righe ~2911), condiviso da tutte le chiamate di rete del file
+
+Stato mutabile non pensato per accessi concorrenti: `globalRateLimitUntil` e' un `var: Long` letto/scritto senza sincronizzazione (race benigna nel caso peggiore: un 429 concorrente puo' accorciare la finestra di cooldown), e i contatori diagnostici (`cacheHitCount`/`cacheMissCount`/`networkCallCount`) fanno `++` non atomico nonostante siano `@Volatile` (`@Volatile` garantisce visibilita', non atomicita' del read-modify-write). Impatto verificato basso: `lastNetworkAttempt` e' gia' `ConcurrentHashMap` (l'unica struttura dati vera, thread-safe), e `getDiagnostics()`/`CacheDiagnostics` non ha **nessun consumatore** in tutto `app/src/main` fuori da questo file (grep verificato) — quindi i contatori sono diagnostica morta oggi, non un problema funzionale. Non e' pero' un motivo per introdurre nuove race condition senza necessita'.
+
+### Decisione dell'utente: sospendere la voce
+
+Esposte tre opzioni (salta, parallelizza i 2 loop puliti con un limite di concorrenza, parallelizza senza limite accettando il rischio) — **scelto di saltare**. Nessun codice toccato in `PokeTcgRepository.kt` per questa voce. La voce originale ("loop di rete sequenziali -> async/awaitAll, pattern gia' usato nel progetto") era una descrizione troppo generica: il progetto usa gia' il pattern altrove (`LimitlessTcgRepository.kt`, verificato in un checkpoint precedente) ma li' i loop non hanno le stesse dipendenze di early-exit/stato condiviso trovate qui. Se si vuole riprendere in futuro con build disponibile: i 2 candidati puliti restano `buildStrictSetNumberQueries`/`buildStrictNameSetNumberQueries`, da convertire con un limite di concorrenza esplicito (semaforo, non `awaitAll` piatto), misurando prima il numero reale di query generate su casi tipici.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, decima parte (voce perf #7: `ImageRequest.size()`, investigata e chiusa come non necessaria)
+
+Stesso approccio della voce precedente: investigato prima di editare 34-55 punti. Il conteggio "55" della voce era gia' obsoleto — contate le chiamate reali oggi: **23 `AsyncImage(` + 11 `SubcomposeAsyncImage(` = 34**.
+
+### La premessa della voce non regge per questo progetto: Coil 2.6.0 (verificato in `gradle/libs.versions.toml`) auto-dimensiona gia' la decodifica dai vincoli di layout Compose
+
+La sua integrazione Compose usa un `SizeResolver` basato sui `Constraints` effettivi al momento della misura — non serve chiamare `.size()` esplicitamente perche' Coil lo fa gia' da solo, a meno che il contenitore sia genuinamente senza vincoli su nessun asse. Controllati tutti e 34 i call site (grep + lettura del `Modifier` circostante, non solo della riga della chiamata):
+
+- La maggioranza ha gia' un vincolo esplicito: `.size(Xdp, Ydp)` fisso, o `.fillMaxSize()` dentro un `Box`/cella di griglia di dimensione fissa
+- 3 casi (`GoalAlbumDetailScreen.kt`, `CreateGoalAlbumScreen.kt` x2) usano solo `.fillMaxWidth()` con `ContentScale.FillWidth` senza altezza esplicita — verificato che questo e' comunque un vincolo valido per Coil: larghezza vincolata + `FillWidth` fa decodificare all'altezza proporzionale corretta, non a piena risoluzione
+- In `DeckLabScreen.kt` (griglia di selezione copertine mazzo, il punto a piu' alta densita' di immagini) **qualcuno ha gia' aggiunto `.size(140, 200)`/`.size(200, 280)` espliciti in pixel** sulla `ImageRequest.Builder` — la voce era gia' stata affrontata selettivamente dove contava di piu', non ignorata
+
+### Perche' non l'ho applicata comunque "per sicurezza"
+
+Aggiungere `.size()` esplicito su 34 punti a mano richiede convertire dp -> pixel (`density.toPx()`) per ognuno. Un errore di conversione (facile senza poter vedere il risultato su schermo) produce **decodifica piu' piccola del dovuto — immagini sfocate**, una regressione visiva reale, l'opposto di un miglioramento performance. Senza device/profiler per verificare, il rischio di introdurre questa regressione era piu' concreto del beneficio (probabilmente gia' ottenuto) di aggiungerla.
+
+### Decisione dell'utente
+
+Esposto il rischio, scelto di **chiudere la voce come non necessaria** invece di applicarla comunque. Nessun codice toccato.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, undicesima parte (voce #15: `DeckLabScreen.kt` spezzato in 6 file)
+
+### `PokeTcgRepository.kt` NON e' lo stesso lavoro di `DeckLabScreen.kt` — verificato prima di iniziare
+
+Kotlin non ha classi parziali (a differenza di C#): l'intero corpo di una `class` deve stare in un solo file. `PokeTcgRepository.kt` (2958 righe oggi, non 1735 -- conteggio della voce obsoleto come altri oggi) e' **una singola classe** con tutti i metodi come membri privati/pubblici della stessa `class PokeTcgRepository { ... }`. "Spezzarlo in piu' file" nel senso letterale della voce e' impossibile senza prima estrarre porzioni di logica in classi/object separati che la classe principale userebbe per composizione -- un refactoring architetturale vero (decidere confini di responsabilita', spostare stato condiviso), non uno spostamento meccanico di codice. Fuori scope per questa sessione: **non toccato**, resta un lavoro a se' per una sessione dedicata con build disponibile per verificare che la composizione risultante si comporti in modo identico.
+
+### `DeckLabScreen.kt` invece e' un caso pulito: verificato prima di procedere
+
+`grep "^private "` sull'intero file: **zero risultati**. Il file era gia' strutturato come 13 funzioni `@Composable` top-level, tutte visibilita' di default (pubblica) -- nessuna dipendenza da stato o helper `private` a livello di file che lo spostamento avrebbe rotto. Le funzioni top-level in Kotlin possono stare in file diversi dello stesso package senza bisogno di import (risoluzione per package, non per file) -- a differenza di `PokeTcgRepository.kt`, questo *e'* uno spostamento meccanico sicuro.
+
+### Split eseguito, raggruppato per responsabilita' (non per lunghezza arbitraria)
+
+| File nuovo | Contenuto | Righe |
+|---|---|---|
+| `DeckLabScreen.kt` (stesso file, ridotto) | `DeckLabScreen` (schermo principale), `TypeBadge`, `EmptyDecksPlaceholder` | 519 (da 2241) |
+| `DeckListItem.kt` | `DeckItem` (card nella lista mazzi) | 345 |
+| `DeckDetailComponents.kt` | `DeckDetailView`, `DeckExportDialog`, `AnalysisSection`, `AnalysisInfoItem` | 463 |
+| `NewDeckBottomSheet.kt` | `NewDeckBottomSheetContent` (il piu' grande, form di creazione/modifica mazzo) | 692 |
+| `DeckCardPickers.kt` | `CardSelectionItem`, `TcgCardSearchItem` | 221 |
+| `DeckImportDialogs.kt` | `DeckImportDialog`, `ImportResultDialog` | 322 |
+
+Ogni nuovo file ha lo stesso `package com.emabuia.pokevault.ui.deck` e lo stesso blocco di import completo del file originale (nessun tentativo di potare gli import per file: un import in eccesso e' solo un warning in Kotlin, uno **mancante** e' un errore di compilazione che non posso vedere qui -- scelta deliberatamente conservativa). Gli `@OptIn` (`ExperimentalMaterial3Api` su `NewDeckBottomSheetContent`, `ExperimentalFoundationApi` su `CardSelectionItem`) portati con la funzione a cui erano applicati.
+
+### Verifica di correttezza, non solo "sembra giusto"
+
+1. **Confronto graffe/parentesi**: contate su tutto il file originale prima dello split (420 `{`/420 `}`, 1134 `(`/1134 `)`) e sommate sui 6 file nuovi dopo lo split: **identiche**, 420/420 e 1134/1134
+2. **Diff riga per riga**: ricostruito un file "virtuale" concatenando solo le porzioni di corpo estratte (senza gli header duplicati) nell'ordine originale, e confrontato con `diff` contro l'originale (che nel frattempo avevo gia' sovrascritto -- fatto **prima** di scrivere i file nel progetto, non dopo): unica differenza le righe vuote di separazione che ho aggiunto io tra le sezioni, **zero righe di codice diverse, spostate o perse**
+3. **Zero duplicati**: `grep` di tutte le dichiarazioni `^fun` nell'intero package `ui/deck` (inclusi i 2 file preesistenti non toccati, `MetaArchetypeScreen.kt`/`MetaDeckScreen.kt`) -- ogni nome compare esattamente una volta
+4. **Import esterni**: solo `AppNavigation.kt` importa da questo package (`DeckLabScreen`, il composable principale) -- rimasto nel file con lo stesso nome, import ancora valido. Nessun altro file nel repo importa per nome uno degli altri 12 composable spostati (grep mirato, zero risultati) -- se lo avesse fatto sarebbe stato comunque valido, dato che Kotlin risolve per package non per file, ma verificato lo stesso per essere sicuri
+
+Non compilato (nessun accesso a `dl.google.com` qui): le quattro verifiche sopra sono il sostituto piu' rigoroso possibile di un compilatore reale con gli strumenti disponibili in questa sessione, ma **restano da confermare con `./gradlew :app:compileDebugKotlin`** prima di considerare la voce definitivamente chiusa.
+
+---
+
+## 📍 CHECKPOINT — 2026-09-09, dodicesima parte (voce #24: `AppLocale.kt` -> `strings.xml`, investigata e sospesa)
+
+Su richiesta esplicita "fai #24". Fatta una ricognizione della portata reale prima di editare, come per le voci #7/#9 -- la riga del piano ("1019 righe di getter") descriveva solo la dimensione del file, non la complessita' del lavoro.
+
+### I numeri reali
+
+- **512** proprieta'/funzioni esposte da `AppLocale.kt` (oggi 1034 righe), **693** call site `AppLocale.*` nel resto del codice (contati con grep, non stimati)
+- **41** di quelle 512 sono **funzioni di lookup/traduzione con parametri** (`translateRarity(rarity)`, `translateType(type)`, `getConditions()`, `getRarities()`, ecc.), non stringhe statiche -- non si convertono 1:1 in una entry di `strings.xml`, servirebbero array di risorse (`string-array`) + una funzione di mappatura indice, un pattern diverso da quello semplice `stringResource(R.string.x)`
+- **7 file non-`@Composable`** chiamano `AppLocale.*` direttamente: 6 ViewModel + **`PokeTcgRepository.kt`**, il repository dati. `stringResource()` e' una funzione `@Composable` -- non e' chiamabile li' per costruzione (errore di compilazione, non un dettaglio a runtime), servirebbe `Context.getString()` con un `Context` che `PokeTcgRepository` oggi non ha e non e' pensato per avere
+
+### Il problema architetturale reale, trovato leggendo `AppLocale.kt` riga per riga
+
+L'app **non segue la lingua del telefono**. `AppLocale` implementa un selettore di lingua manuale in-app (`Language.IT`/`Language.EN`, salvato in `SharedPreferences` via `toggle()`/`setLanguage()`), completamente indipendente dalla configurazione di sistema -- verosimilmente un'opzione nelle Impostazioni dell'app.
+
+`stringResource()` di Android risolve automaticamente tra `res/values/` e `res/values-it/` in base alla **lingua di sistema del dispositivo**, non a una preferenza salvata dall'app. Una migrazione diretta (senza altro intervento) **romperebbe il selettore lingua in-app**: un utente con telefono in inglese che ha scelto italiano nell'app tornerebbe a vedere l'inglese, perche' la risoluzione delle risorse seguirebbe il sistema, non la sua scelta salvata in `SharedPreferences`. Per preservare il comportamento servirebbe `AppCompatDelegate.setApplicationLocales()` (l'API Android corretta per un selettore lingua in-app con risorse standard, disponibile da AppCompat 1.6+) -- un cambio architetturale reale, che tocca il ciclo di vita delle Activity/ricomposizione, non verificabile senza un device o almeno un emulatore.
+
+### Decisione dell'utente
+
+Esposta la portata reale (512 simboli, 693 call site, 41 funzioni di lookup non banali, 7 consumer non-Composable incluso il repository dati, il rischio concreto di rompere il selettore lingua) e le opzioni (salta, fallo comunque per intero, fanne solo una parte scoped). L'utente ha lasciato la decisione a me ("nessuna preferenza") — scelto **di sospendere**, stessa logica delle voci #7/#9: senza compilatore ne' device per verificare che il selettore lingua continui a funzionare dopo il cambio, il rischio di una regressione utente-visibile (un'intera funzionalita' che smette di rispettare la scelta salvata) supera il beneficio di manutenibilita' a lungo termine. Nessun codice toccato.
+
+**Se si vuole riprendere in futuro**: la sessione dovrebbe avere accesso a build + emulatore/device per verificare concretamente che `AppCompatDelegate.setApplicationLocales()` (o l'alternativa scelta) preservi il comportamento attuale del selettore lingua ad ogni ricomposizione, prima di toccare anche solo il primo dei 693 call site.

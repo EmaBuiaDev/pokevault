@@ -1,13 +1,12 @@
 package com.emabuia.pokevault.ocr
 
 import android.graphics.Bitmap
-import android.util.Log
-import com.emabuia.pokevault.BuildConfig
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.suspendCancellableCoroutine
+import timber.log.Timber
 import kotlin.coroutines.resume
 
 /**
@@ -24,8 +23,6 @@ import kotlin.coroutines.resume
  * - Meno accurato su testo molto piccolo o ruotato
  * - Non personalizzabile
  *
- * Usato come fallback quando PaddleOCR TFLite non e disponibile,
- * oppure come engine primario durante lo sviluppo.
  */
 class MLKitOCREngine : OCREngine {
 
@@ -37,7 +34,7 @@ class MLKitOCREngine : OCREngine {
     override suspend fun initialize() {
         recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         ready = true
-        if (BuildConfig.DEBUG) Log.i(TAG, "ML Kit Text Recognition inizializzato")
+        Timber.i("ML Kit Text Recognition inizializzato")
     }
 
     override fun release() {
@@ -96,15 +93,11 @@ class MLKitOCREngine : OCREngine {
                     }
                 }
                 .addOnFailureListener { e ->
-                    if (BuildConfig.DEBUG) Log.w(TAG, "ML Kit recognition fallito: ${e.message}")
+                    Timber.w(e, "ML Kit recognition fallito")
                     if (continuation.isActive) {
                         continuation.resume(emptyList())
                     }
                 }
         }
-    }
-
-    companion object {
-        private const val TAG = "MLKitOCREngine"
     }
 }

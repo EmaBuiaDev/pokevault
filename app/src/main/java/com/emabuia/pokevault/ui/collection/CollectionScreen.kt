@@ -1,6 +1,5 @@
 package com.emabuia.pokevault.ui.collection
 
-import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -49,42 +48,16 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
-import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.ui.home.components.SearchBar
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import com.emabuia.pokevault.viewmodel.CollectionViewModel
 import com.emabuia.pokevault.viewmodel.SortOrder
 import com.emabuia.pokevault.viewmodel.SupertypeFilter
-
-private fun safeImageUrl(url: String): String {
-    val proxied = maybeProxyPokeWalletUrl(url)
-    return proxied
-        .replace(" ", "%20")
-        .replace("(", "%28")
-        .replace(")", "%29")
-}
-
-private fun maybeProxyPokeWalletUrl(url: String): String {
-    if (url.isBlank()) return url
-    val proxyBase = BuildConfig.POKEWALLET_PROXY_URL.trim().trimEnd('/')
-    if (!BuildConfig.POKEWALLET_PROXY_ENABLED || proxyBase.isBlank()) return url
-
-    return try {
-        val parsed = Uri.parse(url)
-        val host = parsed.host?.lowercase().orEmpty()
-        if (host != "api.pokewallet.io") return url
-
-        val encodedPath = parsed.encodedPath?.trimStart('/').orEmpty()
-        val encodedQuery = parsed.encodedQuery?.let { "?$it" }.orEmpty()
-        "$proxyBase/$encodedPath$encodedQuery"
-    } catch (_: Exception) {
-        url
-    }
-}
 
 private enum class ExpansionSortOrder {
     BY_NAME_ASC,
@@ -227,7 +200,7 @@ fun CollectionScreen(
                 .take(maxPrefetch)
         }
         cardsToPrefetch
-            .map { safeImageUrl(it.imageUrl) }
+            .map { ImageUrlUtils.safeProxiedImageUrl(it.imageUrl) }
             .filter { it.isNotBlank() }
             .distinct()
             .forEach { url ->
@@ -1332,7 +1305,7 @@ fun CollectionCardGridItem(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         AsyncImage(
-            model = safeImageUrl(card.imageUrl),
+            model = ImageUrlUtils.safeProxiedImageUrl(card.imageUrl),
             contentDescription = card.name,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
@@ -1426,7 +1399,7 @@ fun CollectionCardListItem(
         }
 
         AsyncImage(
-            model = safeImageUrl(card.imageUrl),
+            model = ImageUrlUtils.safeProxiedImageUrl(card.imageUrl),
             contentDescription = card.name,
             modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp)),
             contentScale = ContentScale.Crop

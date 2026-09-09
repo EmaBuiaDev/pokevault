@@ -40,16 +40,10 @@ import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.ui.pokedex.PriceSparkline
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-
-private fun safeImageUrl(url: String): String {
-    return url
-        .replace(" ", "%20")
-        .replace("(", "%28")
-        .replace(")", "%29")
-}
 
 @Composable
 private fun CollectionDetailImageFallback(card: PokemonCard) {
@@ -293,7 +287,7 @@ fun CardDetailScreen(
                 ) {
                     if (currentCard.imageUrl.isNotBlank()) {
                         SubcomposeAsyncImage(
-                            model = safeImageUrl(currentCard.imageUrl),
+                            model = ImageUrlUtils.safeImageUrl(currentCard.imageUrl),
                             contentDescription = currentCard.name,
                             contentScale = ContentScale.FillBounds,
                             modifier = Modifier.fillMaxSize(),

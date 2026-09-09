@@ -29,6 +29,7 @@ import com.emabuia.pokevault.data.model.GoalAlbum
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.AlbumViewModel
 import com.emabuia.pokevault.viewmodel.GoalAlbumViewModel
 
@@ -355,7 +356,7 @@ fun AlbumCard(
                 if (coverUrl.isNotBlank()) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(coverUrl)
+                            .data(ImageUrlUtils.safeProxiedImageUrl(coverUrl))
                             .crossfade(true)
                             .build(),
                         contentDescription = album.name,

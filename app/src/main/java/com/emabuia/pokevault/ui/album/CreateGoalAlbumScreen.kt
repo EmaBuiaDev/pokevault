@@ -43,14 +43,8 @@ import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.GoalAlbumViewModel
-
-private fun safeImageUrl(url: String): String {
-    return url
-        .replace(" ", "%20")
-        .replace("(", "%28")
-        .replace(")", "%29")
-}
 
 @Composable
 private fun GoalCardImageFallback(card: TcgCard, compact: Boolean) {
@@ -298,7 +292,7 @@ private fun SetPicker(
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(selectedSet.images.logo.ifBlank { selectedSet.images.symbol })
+                            .data(ImageUrlUtils.safeImageUrl(selectedSet.images.logo.ifBlank { selectedSet.images.symbol }))
                             .crossfade(true)
                             .build(),
                         contentDescription = selectedSet.name,
@@ -414,7 +408,7 @@ private fun SetPicker(
                                 ) {
                                     AsyncImage(
                                         model = ImageRequest.Builder(LocalContext.current)
-                                            .data(set.images.symbol)
+                                            .data(ImageUrlUtils.safeImageUrl(set.images.symbol))
                                             .crossfade(true)
                                             .build(),
                                         contentDescription = set.name,
@@ -608,7 +602,7 @@ private fun CustomCardSearch(viewModel: GoalAlbumViewModel) {
                             }
                     ) {
                         SubcomposeAsyncImage(
-                            model = safeImageUrl(card.images.small),
+                            model = ImageUrlUtils.safeImageUrl(card.images.small),
                             contentDescription = card.name,
                             contentScale = ContentScale.FillWidth,
                             modifier = Modifier.fillMaxWidth(),
@@ -648,7 +642,7 @@ private fun PreviewSection(cards: List<TcgCard>) {
         ) {
             itemsIndexed(cards.take(12), key = { _, c -> c.id }) { _, card ->
                 SubcomposeAsyncImage(
-                    model = safeImageUrl(card.images.small),
+                    model = ImageUrlUtils.safeImageUrl(card.images.small),
                     contentDescription = card.name,
                     contentScale = ContentScale.FillWidth,
                     modifier = Modifier

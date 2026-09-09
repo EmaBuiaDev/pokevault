@@ -25,7 +25,6 @@ android {
         versionCode = 28
         versionName = "2.0.20"
 
-        buildConfigField("String", "POKETCG_API_KEY", "\"${localProperties.getProperty("POKETCG_API_KEY", "")}\"")
         buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
         buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "${localProperties.getProperty("POKEWALLET_PROXY_ENABLED", "false")}")
         buildConfigField("String", "POKEWALLET_PROXY_URL", "\"${localProperties.getProperty("POKEWALLET_PROXY_URL", "")}\"")
@@ -76,11 +75,6 @@ android {
         compose = true
         buildConfig = true
     }
-    // Non comprimere modelli TFLite (memory-mapping richiede file non compresso)
-    androidResources {
-        noCompress += "tflite"
-    }
-
     // Escludi le architetture x86/x86_64 e non tentare strip su librerie terze parti
     // che arrivano gia' non strip-pabili (evita warning ripetuti in fase assemble).
     packaging {
@@ -92,8 +86,6 @@ android {
                 "**/libimage_processing_util_jni.so",
                 "**/libmlkit_google_ocr_pipeline.so",
                 "**/libsurface_util_jni.so",
-                "**/libtensorflowlite_gpu_jni.so",
-                "**/libtensorflowlite_jni.so",
                 "**/liblitert_gpu_jni.so",
                 "**/liblitert_jni.so"
             )
@@ -157,10 +149,6 @@ dependencies {
 
     // ── ML Kit Text Recognition ──
     implementation(libs.mlkit.text.recognition)
-
-    // ── TensorFlow Lite (PaddleOCR engine) ──
-    implementation(libs.tensorflow.lite)
-    implementation(libs.tensorflow.lite.gpu)
 
     // ── Accompanist Permissions ──
     implementation(libs.accompanist.permissions)
