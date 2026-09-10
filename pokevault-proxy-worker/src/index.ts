@@ -7,6 +7,8 @@
  * - Returns cache status headers for debugging
  */
 
+import { handleBillingRequest } from './billing';
+
 interface Env {
   CACHE: KVNamespace;
   IMAGES_BUCKET?: R2Bucket;
@@ -20,6 +22,13 @@ interface Env {
   // (it/catalog/cards.cleaned.json) served by /ita/catalog.json. New /v1/*
   // routes read from here; nothing existing was changed to use it yet.
   pokevault_catalog?: D1Database;
+
+  // Verifica lato server degli abbonamenti (vedi src/billing.ts e BILLING.md).
+  // Sono secret: si impostano con `wrangler secret put`, non in wrangler.toml.
+  PLAY_SERVICE_ACCOUNT_JSON?: string;
+  PLAY_PACKAGE_NAME?: string;
+  FIREBASE_PROJECT_ID?: string;
+  RTDN_SHARED_SECRET?: string;
 }
 
 interface CachedResponse {
@@ -1768,12 +1777,16 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const requestUrl = new URL(request.url);
+
+    // Le rotte di billing usano POST: vanno risolte PRIMA del filtro sui GET.
+    const billingResponse = await handleBillingRequest(request, requestUrl.pathname, env);
+    if (billingResponse) return billingResponse;
+
     // Only cache GET requests
     if (request.method !== 'GET') {
       return new Response('Method not allowed', { status: 405 });
     }
-
-    const requestUrl = new URL(request.url);
 
     // New D1-backed catalog API: independent of the CACHE/KV binding
     // required below, and does not affect any existing route.
