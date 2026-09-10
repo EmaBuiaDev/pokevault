@@ -115,13 +115,17 @@ fun AlbumCollectionListScreen(
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
                 items(viewModel.albums, key = { it.id }) { album ->
+                    // Memoizzata: prima getCardsForAlbum girava dentro items{},
+                    // quindi per ogni album visibile a ogni frame durante lo scroll.
+                    val coverUrl = remember(album, viewModel.ownedCards) {
+                        album.coverImageUrl.ifBlank {
+                            viewModel.getCardsForAlbum(album).firstOrNull()?.imageUrl ?: ""
+                        }
+                    }
                     AlbumCard(
                         album = album,
                         cardsCount = album.cardIds.size,
-                        coverUrl = album.coverImageUrl.ifBlank {
-                            val cards = viewModel.getCardsForAlbum(album)
-                            cards.firstOrNull()?.imageUrl ?: ""
-                        },
+                        coverUrl = coverUrl,
                         onClick = { onAlbumClick(album.id) },
                         onDelete = { showDeleteDialog = album },
                         onEdit = { onCreateAlbum(album.id) }

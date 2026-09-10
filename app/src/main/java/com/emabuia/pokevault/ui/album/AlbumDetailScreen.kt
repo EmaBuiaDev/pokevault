@@ -57,7 +57,8 @@ fun AlbumDetailScreen(
         return
     }
 
-    val albumCards = viewModel.getCardsForAlbum(album)
+    // Memoizzato: veniva ricalcolato a ogni ricomposizione dello schermo.
+    val albumCards = remember(album, viewModel.ownedCards) { viewModel.getCardsForAlbum(album) }
     val themeColors = getThemeColors(album.theme)
     val isFull = album.cardIds.size >= album.size
 
@@ -257,7 +258,7 @@ private fun AddCardsBottomSheet(
     onDismiss: () -> Unit,
     onCardClick: (String) -> Unit
 ) {
-    val filteredCards = viewModel.getFilteredCardsForAlbum(album)
+    val filteredCards = remember(album, viewModel.ownedCards) { viewModel.getFilteredCardsForAlbum(album) }
     var searchQuery by remember(album.id) { mutableStateOf("") }
     val visibleCards = remember(filteredCards, searchQuery) {
         val query = searchQuery.trim().lowercase()

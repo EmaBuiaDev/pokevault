@@ -125,12 +125,12 @@ private fun CollectorLabCardsRow(
     val albumSubtitle = if (albumCount == 0) {
         AppLocale.collectorAlbumSubtitle
     } else {
-        "$albumCount album creati"
+        AppLocale.collectorAlbumCount(albumCount)
     }
     val chaseSubtitle = if (chaseCount == 0) {
         AppLocale.collectorChaseSubtitle
     } else {
-        "$chaseCount chase creati"
+        AppLocale.collectorChaseCount(chaseCount)
     }
 
     Row(
@@ -233,7 +233,7 @@ private fun NewChaseCard(onClick: () -> Unit) {
 // ── Chase Card ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ChaseCard(
+internal fun ChaseCard(
     goalAlbum: GoalAlbum,
     ownedCount: Int,
     onClick: () -> Unit,
@@ -289,7 +289,7 @@ private fun ChaseCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "$ownedCount / ${goalAlbum.targetCardApiIds.size} carte",
+                    AppLocale.chaseCardsProgress(ownedCount, goalAlbum.targetCardApiIds.size),
                     color = TextMuted,
                     fontSize = 12.sp
                 )
@@ -309,12 +309,12 @@ private fun ChaseCard(
     }
 }
 
-private fun com.emabuia.pokevault.data.model.GoalCriteriaType.displayName(): String = when (this) {
-    com.emabuia.pokevault.data.model.GoalCriteriaType.SET -> "Set"
-    com.emabuia.pokevault.data.model.GoalCriteriaType.RARITY -> "Rarità"
-    com.emabuia.pokevault.data.model.GoalCriteriaType.SUPERTYPE -> "Categoria"
-    com.emabuia.pokevault.data.model.GoalCriteriaType.TYPE -> "Tipo"
-    com.emabuia.pokevault.data.model.GoalCriteriaType.CUSTOM -> "Personalizzato"
+internal fun com.emabuia.pokevault.data.model.GoalCriteriaType.displayName(): String = when (this) {
+    com.emabuia.pokevault.data.model.GoalCriteriaType.SET -> AppLocale.criteriaSet
+    com.emabuia.pokevault.data.model.GoalCriteriaType.RARITY -> AppLocale.criteriaRarity
+    com.emabuia.pokevault.data.model.GoalCriteriaType.SUPERTYPE -> AppLocale.criteriaSupertype
+    com.emabuia.pokevault.data.model.GoalCriteriaType.TYPE -> AppLocale.criteriaType
+    com.emabuia.pokevault.data.model.GoalCriteriaType.CUSTOM -> AppLocale.criteriaCustom
 }
 
 @Composable

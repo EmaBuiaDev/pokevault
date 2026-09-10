@@ -665,11 +665,34 @@ object AppLocale {
     else
         "Could not load your owned cards"
     val chaseNotFound: String get() = if (isItalian) "Chase non trovato" else "Chase not found"
-    val albumSubtitle: String get() = if (isItalian) "Album, Espositori e altro." else "Albums, Displays and more."
+    fun chaseCardsProgress(owned: Int, total: Int): String =
+        if (isItalian) "$owned / $total carte" else "$owned / $total cards"
+    val criteriaSet: String get() = "Set"
+    val criteriaRarity: String get() = if (isItalian) "Rarità" else "Rarity"
+    val criteriaSupertype: String get() = if (isItalian) "Categoria" else "Category"
+    val criteriaType: String get() = if (isItalian) "Tipo" else "Type"
+    val criteriaCustom: String get() = if (isItalian) "Personalizzato" else "Custom"
+    val albumSubtitle: String get() = if (isItalian) "Album e Chase." else "Albums and Chases."
     val collectorAlbumTitle: String get() = "Album"
-    val collectorAlbumSubtitle: String get() = if (isItalian) "Funzionalita album" else "Album features"
+    val collectorAlbumSubtitle: String get() = if (isItalian)
+        "Raccogli le tue carte in album personalizzati"
+    else
+        "Collect your cards in custom albums"
     val collectorChaseTitle: String get() = "Chase"
-    val collectorChaseSubtitle: String get() = if (isItalian) "Funzionalita chase" else "Chase features"
+    val collectorChaseSubtitle: String get() = if (isItalian)
+        "Segui il completamento di un set carta per carta"
+    else
+        "Track set completion card by card"
+    fun collectorAlbumCount(count: Int): String = if (isItalian) {
+        if (count == 1) "1 album creato" else "$count album creati"
+    } else {
+        if (count == 1) "1 album created" else "$count albums created"
+    }
+    fun collectorChaseCount(count: Int): String = if (isItalian) {
+        if (count == 1) "1 chase creato" else "$count chase creati"
+    } else {
+        if (count == 1) "1 chase created" else "$count chases created"
+    }
     val myAlbums: String get() = if (isItalian) "I miei Album" else "My Albums"
     val createAlbum: String get() = if (isItalian) "Crea Album" else "Create Album"
     val editAlbum: String get() = if (isItalian) "Modifica Album" else "Edit Album"

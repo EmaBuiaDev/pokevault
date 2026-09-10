@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.viewmodel
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -71,10 +72,21 @@ class AlbumViewModel : ViewModel() {
         return albums.find { it.id == albumId }
     }
 
+    /**
+     * Indice per id delle carte possedute.
+     *
+     * getCardsForAlbum faceva ownedCards.find { } per ogni id dell'album, cioe'
+     * O(carte album x carte possedute). Veniva chiamata anche dentro la lambda
+     * items{} della lista album, quindi per ogni album visibile a ogni frame
+     * durante lo scroll.
+     */
+    private val ownedCardsById by derivedStateOf {
+        ownedCards.associateBy { it.id }
+    }
+
     fun getCardsForAlbum(album: Album): List<PokemonCard> {
-        return album.cardIds.mapNotNull { cardId ->
-            ownedCards.find { it.id == cardId }
-        }
+        val byId = ownedCardsById
+        return album.cardIds.mapNotNull { byId[it] }
     }
 
     fun getFilteredCardsForAlbum(album: Album): List<PokemonCard> {

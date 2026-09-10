@@ -203,15 +203,27 @@ fun GoalAlbumDetailScreen(
                 }
             } else {
                 // ── Grid carte ────────────────────────────────────────────
-                val displayCards: List<TcgCard> = when (selectedTab) {
-                    ChaseTab.ALL -> targetCards
-                    ChaseTab.OWNED -> targetCards.filter { tc ->
-                        viewModel.ownedCards.any { pc -> pc.apiCardId.trim() == tc.id.trim() && pc.quantity >= 1 }
-                    }
-                    ChaseTab.MISSING -> progress.missing
-                    ChaseTab.DUPLICATES -> {
-                        val dupIds = progress.duplicates.map { it.apiCardId.trim() }.toSet()
-                        targetCards.filter { it.id.trim() in dupIds }
+                // Insieme degli id posseduti, costruito una volta sola.
+                // Prima ogni cella faceva ownedCards.any { ... trim() == ... trim() }:
+                // una scansione lineare dell'intera collezione piu' due
+                // allocazioni di stringa per confronto, per cella, per frame.
+                val ownedApiIds = remember(viewModel.ownedCards) {
+                    viewModel.ownedCards
+                        .asSequence()
+                        .filter { it.quantity >= 1 }
+                        .map { it.apiCardId.trim() }
+                        .toHashSet()
+                }
+
+                val displayCards: List<TcgCard> = remember(selectedTab, targetCards, ownedApiIds, progress) {
+                    when (selectedTab) {
+                        ChaseTab.ALL -> targetCards
+                        ChaseTab.OWNED -> targetCards.filter { it.id.trim() in ownedApiIds }
+                        ChaseTab.MISSING -> progress.missing
+                        ChaseTab.DUPLICATES -> {
+                            val dupIds = progress.duplicates.map { it.apiCardId.trim() }.toSet()
+                            targetCards.filter { it.id.trim() in dupIds }
+                        }
                     }
                 }
 
@@ -237,7 +249,7 @@ fun GoalAlbumDetailScreen(
                         contentPadding = PaddingValues(top = 12.dp, bottom = 80.dp)
                     ) {
                         itemsIndexed(displayCards, key = { _, c -> c.id }) { _, card ->
-                            val isOwned = viewModel.ownedCards.any { it.apiCardId.trim() == card.id.trim() && it.quantity >= 1 }
+                            val isOwned = card.id.trim() in ownedApiIds
                             ChaseCardItem(
                                 card = card,
                                 isOwned = isOwned,

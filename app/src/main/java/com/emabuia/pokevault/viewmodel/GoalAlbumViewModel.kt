@@ -121,6 +121,23 @@ class GoalAlbumViewModel : ViewModel() {
     // ── Progress ───────────────────────────────────────────────────────────
 
     /**
+     * Quante carte obiettivo l'utente possiede, senza bisogno delle TcgCard.
+     *
+     * Serve alla lista chase, che deve mostrare l'avanzamento senza scaricare
+     * le carte di ogni chase: getProgress richiede targetCards, che arrivano
+     * dalla rete solo nel dettaglio.
+     */
+    fun getOwnedTargetCount(album: GoalAlbum): Int {
+        if (album.targetCardApiIds.isEmpty()) return 0
+        val ownedIds = ownedCards
+            .asSequence()
+            .filter { it.quantity >= 1 }
+            .map { it.apiCardId.trim() }
+            .toHashSet()
+        return album.targetCardApiIds.count { it in ownedIds }
+    }
+
+    /**
      * Calcola il progresso on-the-fly confrontando targetCardApiIds con
      * le carte dell'utente. Non fa rete, non altera lo stato persistito.
      */

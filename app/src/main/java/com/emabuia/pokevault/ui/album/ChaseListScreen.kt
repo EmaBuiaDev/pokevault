@@ -118,24 +118,19 @@ fun ChaseListScreen(
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
                 items(viewModel.goalAlbums, key = { it.id }) { chase ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onChaseClick(chase.id) },
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = DarkCard)
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                text = chase.name,
-                                color = TextWhite,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 15.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                    // ChaseCard esisteva gia' in AlbumListScreen -- con anello di
+                    // progresso, conteggio carte, criterio e delete -- ma non era
+                    // collegato da nessuna parte: qui si mostrava una Card spoglia
+                    // col solo nome.
+                    val ownedCount = remember(chase, viewModel.ownedCards) {
+                        viewModel.getOwnedTargetCount(chase)
                     }
+                    ChaseCard(
+                        goalAlbum = chase,
+                        ownedCount = ownedCount,
+                        onClick = { onChaseClick(chase.id) },
+                        onDelete = { viewModel.deleteGoalAlbum(chase.id) }
+                    )
                 }
                 item { Spacer(modifier = Modifier.height(80.dp)) }
             }
