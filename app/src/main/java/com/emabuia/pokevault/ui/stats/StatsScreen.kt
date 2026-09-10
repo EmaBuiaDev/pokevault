@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import java.util.Locale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -24,6 +26,15 @@ import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.SetCompletion
 import com.emabuia.pokevault.viewmodel.StatsViewModel
+
+/**
+ * Importo in euro con locale esplicito.
+ *
+ * Prima si usava "%.2f".format(valore), che adotta il locale di default del
+ * dispositivo: il separatore decimale poteva non corrispondere al simbolo di
+ * valuta mostrato accanto.
+ */
+private fun formatEuro(value: Double): String = "€%.2f".format(Locale.ITALY, value)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,7 +67,7 @@ fun StatsScreen(
                 CircularProgressIndicator(color = BlueCard)
             }
         } else if (state.errorMessage != null) {
-            ErrorStateView(message = state.errorMessage!!)
+            ErrorStateView(message = state.errorMessage)
         } else if (state.cards.isEmpty()) {
             EmptyStateView(
                 title = AppLocale.emptyStatsTitle,
@@ -90,13 +101,13 @@ fun StatsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     StatCard(
                         label = AppLocale.totalValue,
-                        value = "€${"%.2f".format(state.stats.totalValue)}",
+                        value = formatEuro(state.stats.totalValue),
                         color = GreenCard,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
                         label = AppLocale.averageValue,
-                        value = "€${"%.2f".format(state.averageValue)}",
+                        value = formatEuro(state.averageValue),
                         color = YellowCard,
                         modifier = Modifier.weight(1f)
                     )
@@ -108,7 +119,8 @@ fun StatsScreen(
                         label = AppLocale.mostValuable,
                         value = state.stats.mostValuable,
                         color = StarGold,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        isTextValue = true
                     )
                     StatCard(
                         label = AppLocale.graded,
@@ -131,7 +143,7 @@ fun StatsScreen(
                     DistributionSection(
                         title = AppLocale.bySet,
                         items = state.cardsBySet.take(10),
-                        maxValue = state.cardsBySet.maxOf { it.second },
+                        maxValue = state.cardsBySet.first().second,
                         color = BlueCard
                     )
                 }
@@ -141,7 +153,7 @@ fun StatsScreen(
                     DistributionSection(
                         title = AppLocale.byRarity,
                         items = state.cardsByRarity,
-                        maxValue = state.cardsByRarity.maxOf { it.second },
+                        maxValue = state.cardsByRarity.first().second,
                         color = PurpleCard
                     )
                 }
@@ -151,7 +163,7 @@ fun StatsScreen(
                     DistributionSection(
                         title = AppLocale.byType,
                         items = state.cardsByType,
-                        maxValue = state.cardsByType.maxOf { it.second },
+                        maxValue = state.cardsByType.first().second,
                         color = GreenCard
                     )
                 }
@@ -167,7 +179,11 @@ fun StatCard(
     label: String,
     value: String,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // I valori testuali (il nome della carta piu' preziosa) hanno bisogno di
+    // piu' spazio dei numeri: a 20.sp su mezza larghezza e una riga sola
+    // venivano troncati a pochi caratteri.
+    isTextValue: Boolean = false
 ) {
     Column(
         modifier = modifier
@@ -179,8 +195,9 @@ fun StatCard(
             text = value,
             color = color,
             fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            maxLines = 1
+            fontSize = if (isTextValue) 14.sp else 20.sp,
+            maxLines = if (isTextValue) 2 else 1,
+            overflow = TextOverflow.Ellipsis
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(

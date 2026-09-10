@@ -88,6 +88,29 @@ class DeckLabViewModel : ViewModel() {
         ownedCards.associate { it.id to getCardKey(it) }
     }
 
+    /** Indice per id: evita ownedCards.find { } dentro i loop di validazione. */
+    private val ownedCardsById by derivedStateOf {
+        ownedCards.associateBy { it.id }
+    }
+
+    /** Documenti posseduti raggruppati per chiave carta. */
+    private val ownedCardsByKey by derivedStateOf {
+        ownedCards.groupBy { getCardKey(it) }
+    }
+
+    /**
+     * Copie possedute per chiave carta.
+     *
+     * getTotalOwnedQuantity filtrava l'intera lista posseduta costruendo una
+     * stringa chiave per ogni elemento. Veniva chiamata anche dentro gli item
+     * di una LazyVerticalGrid a 5 colonne, cioe' per ogni cella visibile a ogni
+     * frame durante lo scroll, e in un loop da addAllCopiesToDeck.
+     */
+    private val ownedQuantitiesByKey by derivedStateOf {
+        ownedCards.groupingBy { getCardKey(it) }
+            .fold(0) { acc, card -> acc + card.quantity }
+    }
+
     // Counts of each card key currently in the deck
     private val deckQuantitiesByKey by derivedStateOf {
         selectedCardsIds.mapNotNull { cardIdToKeyMap[it] }
@@ -142,8 +165,7 @@ class DeckLabViewModel : ViewModel() {
     }
 
     fun getTotalOwnedQuantity(card: PokemonCard): Int {
-        val key = getCardKey(card)
-        return ownedCards.filter { getCardKey(it) == key }.sumOf { it.quantity }
+        return ownedQuantitiesByKey[getCardKey(card)] ?: 0
     }
 
     /** Vedi [CardClassifier]: implementazione unica condivisa da tutta l'app. */
@@ -169,8 +191,11 @@ class DeckLabViewModel : ViewModel() {
         }
 
         if (!isEnergy(card)) {
+            // Era ownedCards.find { } per ogni carta gia' nel deck, cioe'
+            // O(deck x possedute) a ogni tocco -- e addAllCopiesToDeck chiama
+            // questa funzione fino a 60 volte di fila.
             val sameNameCount = selectedCardsIds.count { id ->
-                ownedCards.find { it.id == id }?.name == card.name
+                ownedCardsById[id]?.name == card.name
             }
             if (sameNameCount >= 4) {
                 validationError = "Massimo 4 copie di ${card.name}."
@@ -178,8 +203,8 @@ class DeckLabViewModel : ViewModel() {
             }
         }
 
-        val availableId = ownedCards
-            .filter { getCardKey(it) == key }
+        val availableId = ownedCardsByKey[key]
+            .orEmpty()
             .firstOrNull { doc ->
                 val docInDeckCount = selectedCardsIds.count { it == doc.id }
                 docInDeckCount < doc.quantity

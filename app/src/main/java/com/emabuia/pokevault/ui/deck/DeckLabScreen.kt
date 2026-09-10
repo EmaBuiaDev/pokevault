@@ -287,6 +287,11 @@ fun DeckLabScreen(
                     if (viewModel.decks.isEmpty()) {
                         EmptyDecksPlaceholder()
                     } else {
+                        // Indice costruito una volta per l'intera lista, invece che
+                        // scandito da ogni riga.
+                        val ownedById = remember(viewModel.ownedCards) {
+                            viewModel.ownedCards.associateBy { it.id }
+                        }
                         LazyColumn(
                             contentPadding = PaddingValues(20.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -295,7 +300,7 @@ fun DeckLabScreen(
                                 DeckItem(
                                     deck = deck,
                                     onClick = { selectedDeck = deck },
-                                    allOwnedCards = viewModel.ownedCards
+                                    ownedById = ownedById
                                 )
                             }
                         }
@@ -462,7 +467,11 @@ fun DeckLabScreen(
 fun DeckItem(
     deck: Deck,
     onClick: () -> Unit,
-    allOwnedCards: List<PokemonCard>
+    // Indice per id invece della lista intera: il filtro su allOwnedCards era
+    // O(carte possedute) per ogni riga, cioe' O(deck x possedute) sull'intera
+    // lista, e il remember era chiavato sull'ISTANZA della lista, che e' un
+    // oggetto nuovo a ogni snapshot Firestore: quindi si invalidava sempre.
+    ownedById: Map<String, PokemonCard>
 ) {
     val deckCardAnimation = rememberInfiniteTransition(label = "deckCardBackgroundAnimation")
     val sheenOffset by deckCardAnimation.animateFloat(
@@ -486,8 +495,8 @@ fun DeckItem(
 
     val coverUrls = remember(deck) { deck.displayCoverImageUrls() }
     val cardCounts = remember(deck.cards) { deck.cards.groupingBy { it }.eachCount() }
-    val uniqueDeckCards = remember(deck.cards, allOwnedCards) {
-        allOwnedCards.filter { it.id in cardCounts.keys }
+    val uniqueDeckCards = remember(cardCounts, ownedById) {
+        cardCounts.keys.mapNotNull { ownedById[it] }
     }
 
     fun classifyForDeckSections(card: PokemonCard): String = CardClassifier.classify(card)
@@ -565,7 +574,10 @@ fun DeckItem(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer(translationX = sheenOffset)
+                    // Lettura dentro la lambda: avviene in fase di draw, non di
+                    // composizione, quindi l'animazione non ricompone la riga a
+                    // ogni frame.
+                    .graphicsLayer { translationX = sheenOffset }
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
@@ -581,12 +593,15 @@ fun DeckItem(
                 modifier = Modifier
                     .size(130.dp)
                     .align(Alignment.TopStart)
-                    .graphicsLayer(
-                        translationX = sheenOffset * 0.45f,
+                    .graphicsLayer {
+                        translationX = sheenOffset * 0.45f
                         translationY = 12f
-                    )
+                        // Equivalente a BlueCard.copy(alpha = glowAlpha), ma letto
+                        // in fase di draw invece che di composizione.
+                        alpha = glowAlpha
+                    }
                     .background(
-                        color = BlueCard.copy(alpha = glowAlpha),
+                        color = BlueCard,
                         shape = CircleShape
                     )
             )

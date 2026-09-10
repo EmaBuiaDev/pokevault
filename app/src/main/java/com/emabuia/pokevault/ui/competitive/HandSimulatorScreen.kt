@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.data.model.CardClassifier
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.simulator.HandSimulationEngine
@@ -116,6 +117,7 @@ fun HandSimulatorScreen(
     var savedReloadTick by remember { mutableStateOf(0) }
     var savedHands by remember { mutableStateOf<List<SavedProblemHand>>(emptyList()) }
     var isSimulating by remember { mutableStateOf(false) }
+    var accuracyWarnings by remember { mutableStateOf<List<String>>(emptyList()) }
 
     val simulationScope = rememberCoroutineScope()
 
@@ -359,6 +361,7 @@ fun HandSimulatorScreen(
                                 // main thread, altrimenti la UI resta bloccata per secondi.
                                 validationMessage = null
                                 saveFeedback = null
+                                accuracyWarnings = deckAccuracyWarnings(deck, viewModel.ownedCards)
                                 isSimulating = true
 
                                 simulationScope.launch {
@@ -449,6 +452,32 @@ fun HandSimulatorScreen(
                                 color = TextGray,
                                 fontSize = 12.sp
                             )
+                        }
+                    }
+                }
+            }
+
+            if (summary != null && accuracyWarnings.isNotEmpty()) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = DarkCard),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = AppLocale.handSimulatorAccuracyTitle,
+                                color = TextWhite,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp
+                            )
+                            accuracyWarnings.forEach { warning ->
+                                Text(text = warning, color = TextGray, fontSize = 12.sp)
+                            }
                         }
                     }
                 }
@@ -957,6 +986,9 @@ private fun MetricInfoDialog(onDismiss: () -> Unit) {
     )
 }
 
+/** Numero di carte di un mazzo legale: tutte le probabilita' assumono questo. */
+private const val LEGAL_DECK_SIZE = 60
+
 private fun buildDeckCardPool(deck: Deck, ownedCards: List<PokemonCard>): List<SimulatorCard> {
     val cardMap = ownedCards.associateBy { it.id }
     return deck.cards.mapNotNull { cardId ->
@@ -970,6 +1002,18 @@ private fun buildDeckCardPool(deck: Deck, ownedCards: List<PokemonCard>): List<S
         )
     }
 }
+
+/**
+ * Vero quando lo stadio della carta non e' ricavabile dai dati.
+ *
+ * Le carte importate dal percorso di fallback di DeckLabViewModel arrivano con
+ * subtypes vuoto e hp segnaposto: isBasicPokemon() le conta tutte come Basic,
+ * perche' non trova marcatori di evoluzione. Su un mazzo che ne contiene molte
+ * il tasso di mulligan risulta piu' basso del reale. Non possiamo indovinare lo
+ * stadio, ma possiamo dirlo all'utente invece di presentare numeri precisi.
+ */
+private fun PokemonCard.hasUnknownStage(): Boolean =
+    classify() == CardClassifier.POKEMON && hp > 0 && subtypes.isEmpty()
 
 private fun PokemonCard.isBasicPokemon(): Boolean {
     // A Pokémon is Basic if:
@@ -992,6 +1036,33 @@ private fun PokemonCard.isBasicPokemon(): Boolean {
     }
     
     return !hasEvolutionMarker
+}
+
+/**
+ * Avvisi sulla qualita' dei dati del mazzo, da mostrare accanto ai risultati.
+ *
+ * Prima buildDeckCardPool rifiutava solo i mazzi con meno di 7 carte: un mazzo
+ * da 45 veniva simulato come mazzo da 45, e ogni probabilita' (starter, mulligan,
+ * energia al T1) risultava sbagliata rispetto alla matematica reale su 60 carte,
+ * senza che nulla lo segnalasse.
+ */
+private fun deckAccuracyWarnings(deck: Deck, ownedCards: List<PokemonCard>): List<String> {
+    val warnings = mutableListOf<String>()
+
+    val poolSize = deck.cards.size
+    if (poolSize != LEGAL_DECK_SIZE) {
+        warnings += AppLocale.handSimulatorDeckSizeWarning(poolSize, LEGAL_DECK_SIZE)
+    }
+
+    val cardMap = ownedCards.associateBy { it.id }
+    val unknownStage = deck.cards
+        .mapNotNull { cardMap[it] }
+        .count { it.hasUnknownStage() }
+    if (unknownStage > 0) {
+        warnings += AppLocale.handSimulatorUnknownStageWarning(unknownStage)
+    }
+
+    return warnings
 }
 
 private fun PokemonCard.isSupporterCard(): Boolean {

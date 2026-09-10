@@ -390,6 +390,18 @@ object AppLocale {
     val handSimulatorRunCount: String get() = if (isItalian) "Numero simulazioni" else "Simulations"
     val handSimulatorRunButton: String get() = if (isItalian) "Avvia simulazione" else "Run simulation"
     val handSimulatorRunning: String get() = if (isItalian) "Simulazione in corso..." else "Simulating..."
+    val handSimulatorAccuracyTitle: String get() = if (isItalian)
+        "Attenzione all'accuratezza"
+    else
+        "Accuracy warning"
+    fun handSimulatorDeckSizeWarning(actual: Int, expected: Int): String = if (isItalian)
+        "Il mazzo ha $actual carte invece di $expected: tutte le probabilita' sono calcolate su $actual."
+    else
+        "This deck has $actual cards instead of $expected: every probability is computed over $actual."
+    fun handSimulatorUnknownStageWarning(count: Int): String = if (isItalian)
+        "$count carte non hanno lo stadio nei dati e sono contate come Base: il tasso di mulligan puo' risultare piu' basso del reale."
+    else
+        "$count cards have no stage in the data and are counted as Basic: the mulligan rate may read lower than it really is."
     val handSimulatorNoDecks: String get() = if (isItalian) "Nessun deck disponibile" else "No decks available"
     val handSimulatorNoDecksSubtitle: String get() = if (isItalian) "Crea o importa un deck nel Deck Lab" else "Create or import a deck in Deck Lab"
     val handSimulatorInvalidDeck: String get() = if (isItalian) "Deck non valido: servono almeno 7 carte" else "Invalid deck: at least 7 cards required"
@@ -624,6 +636,7 @@ object AppLocale {
     val albumTitle: String get() = "Collector Lab"
     val albumNotFound: String get() = if (isItalian) "Album non trovato" else "Album not found"
     val priceUnavailable: String get() = if (isItalian) "Prezzo N/D" else "Price N/A"
+    val unknownError: String get() = if (isItalian) "Errore sconosciuto" else "Unknown error"
 
     // Etichette di ordinamento e categoria della collezione. Prima erano
     // hardcoded in italiano nel foglio dei filtri, e nei chip dei filtri attivi
