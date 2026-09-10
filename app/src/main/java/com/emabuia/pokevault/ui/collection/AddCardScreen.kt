@@ -52,7 +52,7 @@ fun AddCardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppColors.background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         // ── Top Bar ──
@@ -61,12 +61,12 @@ fun AddCardScreen(
                 Text(
                     if (state.isEditMode) AppLocale.editCard else AppLocale.addCard,
                     fontWeight = FontWeight.SemiBold,
-                    color = TextWhite
+                    color = AppColors.textPrimary
                 )
             },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                 }
             },
             actions = {
@@ -78,15 +78,15 @@ fun AddCardScreen(
                     if (state.isLoading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
-                            color = BlueCard,
+                            color = AppColors.blue,
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text(AppLocale.save, color = BlueCard, fontWeight = FontWeight.SemiBold)
+                        Text(AppLocale.save, color = AppColors.blue, fontWeight = FontWeight.SemiBold)
                     }
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
         )
 
         // ── Errore ──
@@ -96,10 +96,10 @@ fun AddCardScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(RedCard.copy(alpha = 0.15f))
+                    .background(AppColors.red.copy(alpha = 0.15f))
                     .padding(12.dp)
             ) {
-                Text(text = state.errorMessage ?: "", color = RedCard, fontSize = 13.sp)
+                Text(text = state.errorMessage ?: "", color = AppColors.red, fontSize = 13.sp)
             }
         }
 
@@ -187,21 +187,21 @@ fun AddCardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(DarkCard)
+                    .background(AppColors.card)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(AppLocale.gradedCard, color = TextWhite, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                    Text(AppLocale.gradedHint, color = TextMuted, fontSize = 12.sp)
+                    Text(AppLocale.gradedCard, color = AppColors.textPrimary, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                    Text(AppLocale.gradedHint, color = AppColors.textMuted, fontSize = 12.sp)
                 }
                 Switch(
                     checked = state.isGraded,
                     onCheckedChange = { viewModel.updateIsGraded(it) },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = TextWhite,
-                        checkedTrackColor = BlueCard
+                        checkedThumbColor = AppColors.textPrimary,
+                        checkedTrackColor = AppColors.blue
                     )
                 )
             }
@@ -270,7 +270,7 @@ fun FormField(
     Column(modifier = modifier) {
         Text(
             text = label,
-            color = TextGray,
+            color = AppColors.textSecondary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(bottom = 6.dp)
@@ -280,21 +280,21 @@ fun FormField(
                 .fillMaxWidth()
                 .defaultMinSize(minHeight = if (minHeight > 0.dp) minHeight else 48.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(DarkCard)
+                .background(AppColors.card)
                 .padding(horizontal = 14.dp, vertical = 14.dp)
         ) {
             if (value.isEmpty()) {
-                Text(text = placeholder, color = TextMuted, fontSize = 14.sp)
+                Text(text = placeholder, color = AppColors.textMuted, fontSize = 14.sp)
             }
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
                 textStyle = androidx.compose.ui.text.TextStyle(
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontSize = 14.sp
                 ),
                 singleLine = singleLine,
-                cursorBrush = SolidColor(BlueCard),
+                cursorBrush = SolidColor(AppColors.blue),
                 keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -316,7 +316,7 @@ fun FormDropdown(
     Column(modifier = modifier) {
         Text(
             text = label,
-            color = TextGray,
+            color = AppColors.textSecondary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(bottom = 6.dp)
@@ -330,7 +330,7 @@ fun FormDropdown(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(DarkCard)
+                    .background(AppColors.card)
                     .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                     .clickable { expanded = true }
                     .padding(horizontal = 14.dp, vertical = 14.dp)
@@ -340,12 +340,12 @@ fun FormDropdown(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = selected, color = TextWhite, fontSize = 14.sp)
+                    Text(text = selected, color = AppColors.textPrimary, fontSize = 14.sp)
                     Icon(
                         imageVector = if (expanded) Icons.Default.ExpandLess
                                       else Icons.Default.ExpandMore,
                         contentDescription = null,
-                        tint = TextMuted,
+                        tint = AppColors.textMuted,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -354,11 +354,11 @@ fun FormDropdown(
             ExposedDropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                modifier = Modifier.background(DarkSurface)
+                modifier = Modifier.background(AppColors.surface)
             )  {
                 options.forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(option, color = TextWhite, fontSize = 14.sp) },
+                        text = { Text(option, color = AppColors.textPrimary, fontSize = 14.sp) },
                         onClick = {
                             onSelect(option)
                             expanded = false

@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.viewmodel
 
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -11,6 +12,7 @@ import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.GoalAlbum
 import com.emabuia.pokevault.data.model.GoalCriteriaType
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.remote.ItalianCardAttribute
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
@@ -41,7 +43,9 @@ class GoalAlbumViewModel : ViewModel() {
     var ownedCards by mutableStateOf<List<PokemonCard>>(emptyList())
         private set
 
-    var isLoading by mutableStateOf(false)
+    // Parte a true: il loader viene avviato in init, quindi al primo frame
+    // stiamo gia' caricando. Con false, un dettaglio lampeggiava "non trovato".
+    var isLoading by mutableStateOf(true)
         private set
 
     var isSaving by mutableStateOf(false)
@@ -104,19 +108,36 @@ class GoalAlbumViewModel : ViewModel() {
     // ── Preview ────────────────────────────────────────────────────────────
 
     /** Aggiorna la lista di carte preview quando il criterio cambia. */
-    fun loadPreview() {
+    fun loadPreview(context: Context) {
         if (formCriteriaValue.isBlank()) {
             previewCards = emptyList()
             return
         }
         viewModelScope.launch {
             isPreviewLoading = true
-            previewCards = fetchTargetCards(GoalCriteriaType.SET, formCriteriaValue)
+            previewCards = fetchTargetCards(GoalCriteriaType.SET, formCriteriaValue, context)
             isPreviewLoading = false
         }
     }
 
     // ── Progress ───────────────────────────────────────────────────────────
+
+    /**
+     * Quante carte obiettivo l'utente possiede, senza bisogno delle TcgCard.
+     *
+     * Serve alla lista chase, che deve mostrare l'avanzamento senza scaricare
+     * le carte di ogni chase: getProgress richiede targetCards, che arrivano
+     * dalla rete solo nel dettaglio.
+     */
+    fun getOwnedTargetCount(album: GoalAlbum): Int {
+        if (album.targetCardApiIds.isEmpty()) return 0
+        val ownedIds = ownedCards
+            .asSequence()
+            .filter { it.quantity >= 1 }
+            .map { it.apiCardId.trim() }
+            .toHashSet()
+        return album.targetCardApiIds.count { it in ownedIds }
+    }
 
     /**
      * Calcola il progresso on-the-fly confrontando targetCardApiIds con
@@ -156,12 +177,12 @@ class GoalAlbumViewModel : ViewModel() {
 
     // ── CRUD ───────────────────────────────────────────────────────────────
 
-    fun saveGoalAlbum(onSuccess: () -> Unit) {
+    fun saveGoalAlbum(context: Context, onSuccess: () -> Unit) {
         if (formName.isBlank() || formCriteriaValue.isBlank()) return
         viewModelScope.launch {
             isSaving = true
             val criteriaType = GoalCriteriaType.SET
-            val targetApiIds = fetchTargetCards(criteriaType, formCriteriaValue).map { it.id }
+            val targetApiIds = fetchTargetCards(criteriaType, formCriteriaValue, context).map { it.id }
             val album = GoalAlbum(
                 name = formName.trim(),
                 criteriaType = criteriaType,
@@ -241,19 +262,23 @@ class GoalAlbumViewModel : ViewModel() {
 
     private suspend fun fetchTargetCards(
         type: GoalCriteriaType,
-        value: String
+        value: String,
+        context: Context
     ): List<TcgCard> = when (type) {
         GoalCriteriaType.SET -> {
             tcgRepository.getCardsBySet(value).getOrElse { emptyList() }
         }
         GoalCriteriaType.RARITY -> {
-            tcgRepository.searchCards("rarity:\"$value\"").getOrElse { emptyList() }
+            tcgRepository.searchItalianCardsByAttribute(ItalianCardAttribute.RARITY, value, context)
+                .getOrElse { emptyList() }
         }
         GoalCriteriaType.SUPERTYPE -> {
-            tcgRepository.searchCards("supertype:\"$value\"").getOrElse { emptyList() }
+            tcgRepository.searchItalianCardsByAttribute(ItalianCardAttribute.SUPERTYPE, value, context)
+                .getOrElse { emptyList() }
         }
         GoalCriteriaType.TYPE -> {
-            tcgRepository.searchCards("types:\"$value\"").getOrElse { emptyList() }
+            tcgRepository.searchItalianCardsByAttribute(ItalianCardAttribute.TYPE, value, context)
+                .getOrElse { emptyList() }
         }
         GoalCriteriaType.CUSTOM -> {
             // Per CUSTOM value è una lista di apiIds separata da virgola

@@ -1,0 +1,20 @@
+-- Adds dominant_set_code to expansions: the raw ENG base-set code (e.g.
+-- "DP1", "SVI") that the majority of an expansion's cards resolve to via
+-- their cardId (SET_IT_NUMBER.ext). Precomputed once at ingest time instead
+-- of scanning every card of every expansion on each request.
+--
+-- Why this exists: the Android app links each ITA expansion to its ENG
+-- counterpart (for logo/name/series) via a lookup table that only covers
+-- modern sets (me01-04, sv01-10). For the ~90 historical expansions without
+-- an entry, it used to fall back to scanning all of that expansion's cards
+-- and taking the most common cardId set-code prefix -- which required
+-- downloading the whole catalog. Exposing the same value here lets
+-- GET /v1/expansions carry it directly, so the app's sets list can drop its
+-- dependency on the full catalog blob (see MIGRATION_PLAN.md checkpoint).
+--
+-- Not yet backfilled for the 106 existing (pre-D1) expansions -- run
+-- scripts/import-catalog-to-d1.mjs again against the current catalog blob
+-- (idempotent, ON CONFLICT DO UPDATE) to populate it for those. New sets
+-- ingested via scripts/ingest-tcgdex-set.mjs set it directly (their cardId
+-- is always {SETID_UPPER}_IT_{number}, so no scan is needed there).
+ALTER TABLE expansions ADD COLUMN dominant_set_code TEXT;

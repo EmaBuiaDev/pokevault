@@ -25,7 +25,6 @@ android {
         versionCode = 28
         versionName = "2.0.20"
 
-        buildConfigField("String", "POKETCG_API_KEY", "\"${localProperties.getProperty("POKETCG_API_KEY", "")}\"")
         buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
         buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "${localProperties.getProperty("POKEWALLET_PROXY_ENABLED", "false")}")
         buildConfigField("String", "POKEWALLET_PROXY_URL", "\"${localProperties.getProperty("POKEWALLET_PROXY_URL", "")}\"")
@@ -45,6 +44,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Senza questo testDebugUnitTest non produce alcun file .exec,
+            // quindi il report Jacoco risulterebbe vuoto.
+            enableUnitTestCoverage = true
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -56,6 +60,16 @@ android {
             if (releaseSigningConfig?.storeFile?.exists() == true) {
                 signingConfig = releaseSigningConfig
             }
+            // Never bake the real PokeWallet API key into a release APK -- it would sit in
+            // plaintext, extractable by decompiling the app. The Cloudflare Worker proxy
+            // injects its own server-side copy of this key (createUpstreamHeaders in
+            // pokevault-proxy-worker/src/index.ts) and is what release builds must use;
+            // forcing the proxy on here too means a release build can never end up in the
+            // one config (proxy off + key present) that would send the key over the wire.
+            // PokeWalletRepository already fails closed (IllegalStateException) rather than
+            // falling back to a direct call if POKEWALLET_PROXY_URL is left unconfigured.
+            buildConfigField("String", "POKEWALLET_API_KEY", "\"\"")
+            buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "true")
         }
     }
     compileOptions {
@@ -76,11 +90,6 @@ android {
         compose = true
         buildConfig = true
     }
-    // Non comprimere modelli TFLite (memory-mapping richiede file non compresso)
-    androidResources {
-        noCompress += "tflite"
-    }
-
     // Escludi le architetture x86/x86_64 e non tentare strip su librerie terze parti
     // che arrivano gia' non strip-pabili (evita warning ripetuti in fase assemble).
     packaging {
@@ -92,8 +101,6 @@ android {
                 "**/libimage_processing_util_jni.so",
                 "**/libmlkit_google_ocr_pipeline.so",
                 "**/libsurface_util_jni.so",
-                "**/libtensorflowlite_gpu_jni.so",
-                "**/libtensorflowlite_jni.so",
                 "**/liblitert_gpu_jni.so",
                 "**/liblitert_jni.so"
             )
@@ -158,18 +165,13 @@ dependencies {
     // ── ML Kit Text Recognition ──
     implementation(libs.mlkit.text.recognition)
 
-    // ── TensorFlow Lite (PaddleOCR engine) ──
-    implementation(libs.tensorflow.lite)
-    implementation(libs.tensorflow.lite.gpu)
-
     // ── Accompanist Permissions ──
     implementation(libs.accompanist.permissions)
 
     // ── Splash Screen ──
-    implementation(libs.androidx.core.splashscreen)
 
     // ── Google Play Billing ──
-    implementation(libs.billing.ktx)
+    implementation(libs.billing)
 
     // ── Logging ──
     implementation(libs.timber)
@@ -206,4 +208,44 @@ dependencies {
 // Configurazione Jacoco per Code Coverage
 jacoco {
     toolVersion = "0.8.11"
+}
+
+/**
+ * Report di coverage per la variante debug.
+ *
+ * Il plugin jacoco era applicato ma nessun task JacocoReport era registrato:
+ * AGP non li crea da solo per variante. Di conseguenza
+ * `jacocoTestDebugUnitTestReport`, invocato da android-advanced-tests.yml,
+ * non esisteva e quel workflow falliva prima ancora di eseguire i test.
+ */
+tasks.register<JacocoReport>("jacocoTestDebugUnitTestReport") {
+    dependsOn("testDebugUnitTest")
+    group = "verification"
+    description = "Genera il report Jacoco per i test unitari della variante debug."
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+
+    // Codice generato: escluso, altrimenti falsa la percentuale.
+    val excludes = listOf(
+        "**/R.class", "**/R$*.class", "**/BuildConfig.*", "**/Manifest*.*",
+        "**/*Test*.*", "android/**/*.*",
+        "**/*_Factory.*", "**/*_MembersInjector.*",
+        "**/*Composable*.class",
+        "**/databinding/**", "**/generated/**",
+        "**/*_Impl*.*"          // DAO generati da Room
+    )
+
+    classDirectories.setFrom(
+        files(
+            fileTree("${layout.buildDirectory.get()}/tmp/kotlin-classes/debug") { exclude(excludes) },
+            fileTree("${layout.buildDirectory.get()}/intermediates/javac/debug/classes") { exclude(excludes) }
+        )
+    )
+    sourceDirectories.setFrom(files("$projectDir/src/main/java"))
+    executionData.setFrom(
+        fileTree(layout.buildDirectory) { include("**/*.exec", "**/*.ec") }
+    )
 }

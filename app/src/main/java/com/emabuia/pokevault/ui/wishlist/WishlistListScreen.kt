@@ -66,16 +66,7 @@ import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.model.WishlistIcons
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
-import com.emabuia.pokevault.ui.theme.BlueCard
-import com.emabuia.pokevault.ui.theme.DarkBackground
-import com.emabuia.pokevault.ui.theme.DarkCard
-import com.emabuia.pokevault.ui.theme.DarkSurface
-import com.emabuia.pokevault.ui.theme.PurpleCard
-import com.emabuia.pokevault.ui.theme.RedCard
-import com.emabuia.pokevault.ui.theme.StarGold
-import com.emabuia.pokevault.ui.theme.TextGray
-import com.emabuia.pokevault.ui.theme.TextMuted
-import com.emabuia.pokevault.ui.theme.TextWhite
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.WishlistViewModel
 
@@ -86,14 +77,18 @@ private data class WishlistIconOption(
     val color: Color
 )
 
+// @Composable perche' i colori vengono dai token del tema, non piu' da
+// costanti fisse.
+@Composable
 private fun wishlistIconOptions(): List<WishlistIconOption> = listOf(
-    WishlistIconOption(WishlistIcons.POKEBALL, "Poke Ball", Icons.Default.CatchingPokemon, RedCard),
-    WishlistIconOption(WishlistIcons.MASTER_BALL, "Master Ball", Icons.Default.Stars, PurpleCard),
-    WishlistIconOption(WishlistIcons.PIKACHU, "Pikachu", Icons.Default.Bolt, StarGold),
+    WishlistIconOption(WishlistIcons.POKEBALL, "Poke Ball", Icons.Default.CatchingPokemon, AppColors.red),
+    WishlistIconOption(WishlistIcons.MASTER_BALL, "Master Ball", Icons.Default.Stars, AppColors.purple),
+    WishlistIconOption(WishlistIcons.PIKACHU, "Pikachu", Icons.Default.Bolt, AppColors.gold),
     WishlistIconOption(WishlistIcons.CHARIZARD, "Charizard", Icons.Default.LocalFireDepartment, Color(0xFFE87A35)),
-    WishlistIconOption(WishlistIcons.EEVEE, "Eevee", Icons.Default.Pets, BlueCard)
+    WishlistIconOption(WishlistIcons.EEVEE, "Eevee", Icons.Default.Pets, AppColors.blue)
 )
 
+@Composable
 private fun iconForKey(iconKey: String): WishlistIconOption {
     return wishlistIconOptions().firstOrNull { it.key == iconKey } ?: wishlistIconOptions().first()
 }
@@ -115,13 +110,13 @@ fun WishlistListScreen(
     var wishlistToEdit by remember { mutableStateOf<Wishlist?>(null) }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = AppLocale.wishlistTitle,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -130,11 +125,11 @@ fun WishlistListScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
-                            tint = TextWhite
+                            tint = AppColors.textPrimary
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         },
         floatingActionButton = {
@@ -146,10 +141,10 @@ fun WishlistListScreen(
                         showPremiumDialog = true
                     }
                 },
-                containerColor = PurpleCard,
+                containerColor = AppColors.purple,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = AppLocale.wishlistCreate, tint = TextWhite)
+                Icon(Icons.Default.AutoAwesome, contentDescription = AppLocale.wishlistCreate, tint = AppColors.textPrimary)
             }
         }
     ) { padding ->
@@ -161,7 +156,7 @@ fun WishlistListScreen(
                         .padding(padding),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = PurpleCard)
+                    CircularProgressIndicator(color = AppColors.purple)
                 }
             }
 
@@ -176,20 +171,20 @@ fun WishlistListScreen(
                         Icon(
                             Icons.Default.Favorite,
                             contentDescription = null,
-                            tint = TextMuted,
+                            tint = AppColors.textMuted,
                             modifier = Modifier.size(52.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = AppLocale.wishlistEmpty,
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = AppLocale.wishlistEmptySubtitle,
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 13.sp
                         )
                     }
@@ -249,9 +244,9 @@ fun WishlistListScreen(
     wishlistToDelete?.let { wishlist ->
         AlertDialog(
             onDismissRequest = { wishlistToDelete = null },
-            containerColor = DarkSurface,
-            title = { Text(AppLocale.wishlistDeleteTitle, color = TextWhite) },
-            text = { Text(AppLocale.wishlistDeleteMessage, color = TextGray) },
+            containerColor = AppColors.surface,
+            title = { Text(AppLocale.wishlistDeleteTitle, color = AppColors.textPrimary) },
+            text = { Text(AppLocale.wishlistDeleteMessage, color = AppColors.textSecondary) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -259,12 +254,12 @@ fun WishlistListScreen(
                         wishlistToDelete = null
                     }
                 ) {
-                    Text(AppLocale.delete, color = RedCard)
+                    Text(AppLocale.delete, color = AppColors.red)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { wishlistToDelete = null }) {
-                    Text(AppLocale.cancel, color = TextMuted)
+                    Text(AppLocale.cancel, color = AppColors.textMuted)
                 }
             }
         )
@@ -301,8 +296,8 @@ private fun WishlistRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DarkCard.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
-            .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+            .background(AppColors.card.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+            .border(1.dp, AppColors.textMuted.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -322,7 +317,7 @@ private fun WishlistRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = wishlist.name,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 15.sp,
                 maxLines = 1,
@@ -330,17 +325,17 @@ private fun WishlistRow(
             )
             Text(
                 text = AppLocale.wishlistCardsCount(wishlist.cardIds.size),
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 12.sp
             )
         }
 
         IconButton(onClick = onEdit) {
-            Icon(Icons.Default.Edit, contentDescription = AppLocale.wishlistEdit, tint = TextMuted)
+            Icon(Icons.Default.Edit, contentDescription = AppLocale.wishlistEdit, tint = AppColors.textMuted)
         }
 
         IconButton(onClick = onDelete) {
-            Icon(Icons.Default.DeleteOutline, contentDescription = AppLocale.delete, tint = TextMuted)
+            Icon(Icons.Default.DeleteOutline, contentDescription = AppLocale.delete, tint = AppColors.textMuted)
         }
     }
 }
@@ -359,15 +354,15 @@ fun CreateWishlistDialog(
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
     var selectedIconKey by remember(initialIconKey) { mutableStateOf(initialIconKey) }
-    val options = remember { wishlistIconOptions() }
+    val options = wishlistIconOptions()
 
     AlertDialog(
         onDismissRequest = { if (canDismiss && !isSaving) onDismiss() },
-        containerColor = DarkSurface,
+        containerColor = AppColors.surface,
         title = {
             Text(
                 text = titleText,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold
             )
         },
@@ -378,11 +373,11 @@ fun CreateWishlistDialog(
                     onValueChange = { if (it.length <= 40) name = it },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
-                    label = { Text(AppLocale.wishlistName, color = TextMuted) },
-                    placeholder = { Text(AppLocale.wishlistNamePlaceholder, color = TextMuted) }
+                    label = { Text(AppLocale.wishlistName, color = AppColors.textMuted) },
+                    placeholder = { Text(AppLocale.wishlistNamePlaceholder, color = AppColors.textMuted) }
                 )
 
-                Text(AppLocale.wishlistChooseIcon, color = TextGray, fontSize = 13.sp)
+                Text(AppLocale.wishlistChooseIcon, color = AppColors.textSecondary, fontSize = 13.sp)
 
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -393,12 +388,12 @@ fun CreateWishlistDialog(
                         Row(
                             modifier = Modifier
                                 .background(
-                                    if (selected) option.color.copy(alpha = 0.22f) else DarkCard,
+                                    if (selected) option.color.copy(alpha = 0.22f) else AppColors.card,
                                     RoundedCornerShape(16.dp)
                                 )
                                 .border(
                                     1.dp,
-                                    if (selected) option.color else TextMuted.copy(alpha = 0.25f),
+                                    if (selected) option.color else AppColors.textMuted.copy(alpha = 0.25f),
                                     RoundedCornerShape(16.dp)
                                 )
                                 .clickable { selectedIconKey = option.key }
@@ -407,7 +402,7 @@ fun CreateWishlistDialog(
                         ) {
                             Icon(option.icon, contentDescription = null, tint = option.color, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.size(6.dp))
-                            Text(option.label, color = TextWhite, fontSize = 12.sp)
+                            Text(option.label, color = AppColors.textPrimary, fontSize = 12.sp)
                         }
                     }
                 }
@@ -417,18 +412,18 @@ fun CreateWishlistDialog(
             Button(
                 onClick = { onConfirm(name.trim(), selectedIconKey) },
                 enabled = name.trim().isNotBlank() && !isSaving,
-                colors = ButtonDefaults.buttonColors(containerColor = PurpleCard)
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.purple)
             ) {
                 if (isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.6.dp, color = TextWhite)
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.6.dp, color = AppColors.textPrimary)
                 } else {
-                    Text(confirmText, color = TextWhite)
+                    Text(confirmText, color = AppColors.textPrimary)
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !isSaving) {
-                Text(AppLocale.cancel, color = TextMuted)
+                Text(AppLocale.cancel, color = AppColors.textMuted)
             }
         }
     )

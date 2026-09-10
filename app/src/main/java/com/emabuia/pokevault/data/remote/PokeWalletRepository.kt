@@ -15,7 +15,7 @@ class PokeWalletRepository {
     }
 
     private val apiService: PokeWalletApiService by lazy {
-        PokeWalletRetrofitClient.create(BuildConfig.POKEWALLET_API_KEY)
+        PokeVaultApiClient.create(BuildConfig.POKEWALLET_API_KEY)
     }
 
     private val db get() = RepositoryProvider.database

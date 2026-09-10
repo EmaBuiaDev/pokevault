@@ -20,6 +20,7 @@ object ItalianTranslations {
         "Diamond & Pearl" to "Diamante e Perla",
         "EX" to "EX",
         "Mega Evolutions" to "Mega Evoluzioni",
+        "Mega Evolution" to "Mega Evoluzioni", // TCGdex's own serie.name uses the singular form
         "World Championships" to "Campionati Mondiali",
         "Promos" to "Promo",
         "Base Energy" to "Energie Base",

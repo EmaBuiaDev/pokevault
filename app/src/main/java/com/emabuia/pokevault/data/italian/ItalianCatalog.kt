@@ -20,7 +20,8 @@ data class ItalianCardRecord(
     val tipo: String? = null,
     val ps: String? = null,
     val attacchi: List<ItalianAttackRecord> = emptyList(),
-    val regolaSpeciale: String? = null
+    val regolaSpeciale: String? = null,
+    val rarity: String? = null
 ) {
     fun imageReference(): ItalianImageReference? = ItalianCatalogNormalizer.toImageReference(cardId)
 
@@ -36,7 +37,13 @@ data class ItalianExpansionManifest(
     val espansioneId: String = "",
     val cardCount: Int = 0,
     val order: Int = 0,
-    val logoKey: String = ""
+    val logoKey: String = "",
+    // Raw ENG base-set code (e.g. "DP1"), precomputed server-side from the
+    // majority cardId prefix of this expansion's cards. Only populated when
+    // the manifest comes from GET /v1/expansions; null for catalogs parsed
+    // from the full blob (buildCatalog()), whose consumers still derive it
+    // themselves by scanning cards directly.
+    val dominantSetCode: String? = null
 )
 
 @Immutable
@@ -51,6 +58,27 @@ data class ItalianCatalog(
 data class ItalianCatalogPayload(
     val cards: List<ItalianCardRecord> = emptyList(),
     val expansions: List<ItalianExpansionManifest> = emptyList()
+)
+
+data class ItalianExpansionCardsResponse(
+    val expansionId: String = "",
+    val cards: List<ItalianCardRecord> = emptyList()
+)
+
+@Immutable
+data class ItalianExpansionSummary(
+    val id: String = "",
+    val name: String? = null,
+    val cardCount: Int = 0,
+    val sortOrder: Int = 0,
+    val logoKey: String? = null,
+    val baseSetCode: String? = null,
+    val releaseDate: String? = null,
+    val series: String? = null
+)
+
+data class ItalianExpansionsResponse(
+    val expansions: List<ItalianExpansionSummary> = emptyList()
 )
 
 @Immutable
@@ -75,6 +103,8 @@ object ItalianCatalogNormalizer {
     private val gson = Gson()
     private val cardListType = object : TypeToken<List<ItalianCardRecord>>() {}.type
     private val catalogPayloadType = object : TypeToken<ItalianCatalogPayload>() {}.type
+    private val expansionCardsResponseType = object : TypeToken<ItalianExpansionCardsResponse>() {}.type
+    private val expansionsResponseType = object : TypeToken<ItalianExpansionsResponse>() {}.type
     private const val UTF8_BOM = "\uFEFF"
     private val imageIdRegex = Regex(
         "^([A-Za-z0-9]+)_IT_([A-Za-z0-9_]+)\\.(png|webp|jpe?g)$",
@@ -110,6 +140,32 @@ object ItalianCatalogNormalizer {
                 buildCatalog(normalizedCards)
             }
         }
+    }
+
+    // Parses the response of GET /v1/expansions/{id}/cards ({expansionId, cards: [...]}),
+    // used to fetch a single set's ~100-200 cards instead of the whole catalog blob when
+    // opening a set detail screen. Same field shape as parseCatalogJson's card array.
+    fun parseExpansionCardsResponse(json: String): List<ItalianCardRecord> {
+        val raw = stripUtf8Bom(json).trim()
+        if (raw.isBlank()) return emptyList()
+        val payload = gson.fromJson<ItalianExpansionCardsResponse>(raw, expansionCardsResponseType)
+            ?: ItalianExpansionCardsResponse()
+        return payload.cards
+            .filter { it.cardId.isNotBlank() && it.espansioneId.isNotBlank() && it.nome.isNotBlank() }
+            .sortedWith(cardComparator())
+    }
+
+    // Parses the response of GET /v1/expansions ({expansions: [{id, cardCount,
+    // sortOrder, logoKey, baseSetCode}, ...]}) -- lightweight expansion manifest
+    // (a few KB for ~107 expansions) used to build the Pokedex list without
+    // fetching the whole card catalog just to compute each expansion's dominant
+    // base set code (baseSetCode is precomputed server-side, see schema/003).
+    fun parseExpansionsResponse(json: String): List<ItalianExpansionSummary> {
+        val raw = stripUtf8Bom(json).trim()
+        if (raw.isBlank()) return emptyList()
+        val payload = gson.fromJson<ItalianExpansionsResponse>(raw, expansionsResponseType)
+            ?: ItalianExpansionsResponse()
+        return payload.expansions.filter { it.id.isNotBlank() }
     }
 
     fun toCatalogJson(catalog: ItalianCatalog): String {

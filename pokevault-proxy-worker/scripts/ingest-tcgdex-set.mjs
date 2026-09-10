@@ -155,9 +155,12 @@ async function main() {
   console.log('\nGenerazione SQL per D1...');
   const lines = [];
   lines.push(
-    `INSERT INTO expansions (id, card_count, sort_order, logo_key, published, coverage_pct, release_date) VALUES (` +
-    `${sqlString(setId)}, ${enriched.length}, 100, NULL, ${published ? 1 : 0}, ${coverage.toFixed(4)}, ${sqlString(setSummary.releaseDate)}) ` +
-    `ON CONFLICT(id) DO UPDATE SET card_count = excluded.card_count, published = excluded.published, coverage_pct = excluded.coverage_pct, release_date = excluded.release_date;`
+    // base_set_code and dominant_set_code hold the same value here (schema/003 was
+    // added twice under different names by two branches worked in parallel) --
+    // written together so neither column goes stale for newly-ingested sets.
+    `INSERT INTO expansions (id, card_count, sort_order, logo_key, published, coverage_pct, release_date, dominant_set_code, base_set_code) VALUES (` +
+    `${sqlString(setId)}, ${enriched.length}, 100, NULL, ${published ? 1 : 0}, ${coverage.toFixed(4)}, ${sqlString(setSummary.releaseDate)}, ${sqlString(setCodeUpper)}, ${sqlString(setCodeUpper)}) ` +
+    `ON CONFLICT(id) DO UPDATE SET card_count = excluded.card_count, published = excluded.published, coverage_pct = excluded.coverage_pct, release_date = excluded.release_date, dominant_set_code = excluded.dominant_set_code, base_set_code = excluded.base_set_code;`
   );
 
   const cardRows = enriched.map((e) => {

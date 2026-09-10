@@ -41,11 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
-import com.emabuia.pokevault.ui.theme.DarkBackground
-import com.emabuia.pokevault.ui.theme.DarkCard
-import com.emabuia.pokevault.ui.theme.OrangeCard
-import com.emabuia.pokevault.ui.theme.TextMuted
-import com.emabuia.pokevault.ui.theme.TextWhite
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.GoalAlbumViewModel
 
@@ -61,13 +57,13 @@ fun ChaseListScreen(
     var showChasePremiumDialog by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = "Chase",
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -76,11 +72,11 @@ fun ChaseListScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
-                            tint = TextWhite
+                            tint = AppColors.textPrimary
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         },
         floatingActionButton = {
@@ -88,10 +84,10 @@ fun ChaseListScreen(
                 onClick = {
                     if (viewModel.canCreate()) onCreateChase() else showChasePremiumDialog = true
                 },
-                containerColor = OrangeCard,
+                containerColor = AppColors.orange,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = AppLocale.createChaseTitle, tint = TextWhite)
+                Icon(Icons.Default.Add, contentDescription = AppLocale.createChaseTitle, tint = AppColors.textPrimary)
             }
         }
     ) { padding ->
@@ -103,9 +99,9 @@ fun ChaseListScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.TrackChanges, contentDescription = null, tint = TextMuted, modifier = Modifier.size(40.dp))
+                    Icon(Icons.Default.TrackChanges, contentDescription = null, tint = AppColors.textMuted, modifier = Modifier.size(40.dp))
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(AppLocale.newChaseSubtitle, color = TextMuted, fontSize = 13.sp)
+                    Text(AppLocale.newChaseSubtitle, color = AppColors.textMuted, fontSize = 13.sp)
                 }
             }
         } else {
@@ -118,24 +114,19 @@ fun ChaseListScreen(
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
                 items(viewModel.goalAlbums, key = { it.id }) { chase ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onChaseClick(chase.id) },
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = DarkCard)
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                text = chase.name,
-                                color = TextWhite,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 15.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                    // ChaseCard esisteva gia' in AlbumListScreen -- con anello di
+                    // progresso, conteggio carte, criterio e delete -- ma non era
+                    // collegato da nessuna parte: qui si mostrava una Card spoglia
+                    // col solo nome.
+                    val ownedCount = remember(chase, viewModel.ownedCards) {
+                        viewModel.getOwnedTargetCount(chase)
                     }
+                    ChaseCard(
+                        goalAlbum = chase,
+                        ownedCount = ownedCount,
+                        onClick = { onChaseClick(chase.id) },
+                        onDelete = { viewModel.deleteGoalAlbum(chase.id) }
+                    )
                 }
                 item { Spacer(modifier = Modifier.height(80.dp)) }
             }

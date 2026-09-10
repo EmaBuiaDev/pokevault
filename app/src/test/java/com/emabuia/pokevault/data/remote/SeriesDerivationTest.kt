@@ -6,7 +6,7 @@ import org.junit.Test
 
 class SeriesDerivationTest {
 
-    private val repository = PokeTcgRepository()
+    private val repository = CatalogRepository()
 
     @Test
     fun `chaos rising cri code classifies as mega evolutions`() {

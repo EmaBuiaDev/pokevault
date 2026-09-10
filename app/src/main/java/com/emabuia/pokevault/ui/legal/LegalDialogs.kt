@@ -82,7 +82,7 @@ fun AgeGateDialog(
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(24.dp))
-                .background(DarkSurface)
+                .background(AppColors.surface)
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -90,7 +90,7 @@ fun AgeGateDialog(
                 text = AppLocale.ageGateTitle,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 textAlign = TextAlign.Center
             )
 
@@ -99,7 +99,7 @@ fun AgeGateDialog(
             Text(
                 text = AppLocale.ageGateMessage,
                 fontSize = 14.sp,
-                color = TextGray,
+                color = AppColors.textSecondary,
                 textAlign = TextAlign.Center,
                 lineHeight = 20.sp
             )
@@ -109,7 +109,7 @@ fun AgeGateDialog(
                 Text(
                     text = AppLocale.ageGateDenied,
                     fontSize = 13.sp,
-                    color = RedCard,
+                    color = AppColors.red,
                     textAlign = TextAlign.Center
                 )
             }
@@ -120,7 +120,7 @@ fun AgeGateDialog(
                 onClick = onConfirmed,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
             ) {
                 Text(
                     text = AppLocale.ageGateConfirm,
@@ -138,7 +138,7 @@ fun AgeGateDialog(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextGray)
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textSecondary)
             ) {
                 Text(
                     text = AppLocale.ageGateDeny,
@@ -161,7 +161,7 @@ fun DisclaimerDialog(
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(24.dp))
-                .background(DarkSurface)
+                .background(AppColors.surface)
                 .padding(24.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -170,7 +170,7 @@ fun DisclaimerDialog(
                 text = AppLocale.disclaimerTitle,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 textAlign = TextAlign.Center
             )
 
@@ -179,7 +179,7 @@ fun DisclaimerDialog(
             Text(
                 text = AppLocale.disclaimerBody,
                 fontSize = 13.sp,
-                color = TextGray,
+                color = AppColors.textSecondary,
                 lineHeight = 19.sp
             )
 
@@ -189,7 +189,7 @@ fun DisclaimerDialog(
                 onClick = onAccepted,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
             ) {
                 Text(
                     text = AppLocale.disclaimerAccept,
@@ -214,7 +214,7 @@ fun PrivacyConsentDialog(
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(24.dp))
-                .background(DarkSurface)
+                .background(AppColors.surface)
                 .padding(24.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -223,7 +223,7 @@ fun PrivacyConsentDialog(
                 text = AppLocale.privacyConsentTitle,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 textAlign = TextAlign.Center
             )
 
@@ -232,7 +232,7 @@ fun PrivacyConsentDialog(
             Text(
                 text = AppLocale.privacyConsentSummary,
                 fontSize = 13.sp,
-                color = TextGray,
+                color = AppColors.textSecondary,
                 lineHeight = 19.sp
             )
 
@@ -246,7 +246,7 @@ fun PrivacyConsentDialog(
             ) {
                 Text(
                     text = AppLocale.readFullPrivacyPolicy,
-                    color = BlueCard,
+                    color = AppColors.blue,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -258,7 +258,7 @@ fun PrivacyConsentDialog(
                 onClick = onAccepted,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
             ) {
                 Text(
                     text = AppLocale.privacyConsentAccept,

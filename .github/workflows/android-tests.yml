@@ -2,7 +2,7 @@ name: Android CI/CD Tests
 
 on:
   push:
-    branches: [ main, develop, 'release/**', 'feature/**', 'fix/**' ]
+    branches: [ main, develop, 'release/**', 'feature/**', 'fix/**', 'claude/**' ]
   pull_request:
     branches: [ main, develop ]
 
@@ -32,7 +32,6 @@ jobs:
       - name: Create local.properties
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "POKETCG_API_KEY=" >> local.properties
           echo "POKEWALLET_API_KEY=" >> local.properties
           echo "POKEWALLET_PROXY_ENABLED=false" >> local.properties
           echo "POKEWALLET_PROXY_URL=" >> local.properties

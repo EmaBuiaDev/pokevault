@@ -41,27 +41,30 @@ fun MatchLogScreen(
     viewModel: CompetitiveLogViewModel = viewModel()
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
-    val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
+    // isPremium NON viene raccolto qui: tutti i gate di questo schermo stanno
+    // dentro lambda di click, quindi leggono _isPremium.value al momento del
+    // tocco, che e' gia' il comportamento corretto. Raccoglierlo senza usarlo
+    // faceva solo ricomporre l'intero schermo a ogni cambio di stato premium.
     var showDeleteDialog by remember { mutableStateOf<Tournament?>(null) }
     var showPremiumDialog by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         AppLocale.tournamentListTitle,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         },
         floatingActionButton = {
@@ -73,10 +76,10 @@ fun MatchLogScreen(
                         showPremiumDialog = true
                     }
                 },
-                containerColor = OrangeCard,
+                containerColor = AppColors.orange,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = AppLocale.addTournament, tint = TextWhite)
+                Icon(Icons.Default.Add, contentDescription = AppLocale.addTournament, tint = AppColors.textPrimary)
             }
         }
     ) { padding ->
@@ -108,16 +111,16 @@ fun MatchLogScreen(
 
             if (viewModel.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = OrangeCard)
+                    CircularProgressIndicator(color = AppColors.orange)
                 }
             } else if (viewModel.tournaments.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.EmojiEvents, null, tint = TextMuted, modifier = Modifier.size(64.dp))
+                        Icon(Icons.Default.EmojiEvents, null, tint = AppColors.textMuted, modifier = Modifier.size(64.dp))
                         Spacer(Modifier.height(16.dp))
-                        Text(AppLocale.tournamentEmpty, color = TextWhite, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        Text(AppLocale.tournamentEmpty, color = AppColors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(8.dp))
-                        Text(AppLocale.tournamentEmptySubtitle, color = TextMuted, fontSize = 14.sp)
+                        Text(AppLocale.tournamentEmptySubtitle, color = AppColors.textMuted, fontSize = 14.sp)
                     }
                 }
             } else {
@@ -143,18 +146,18 @@ fun MatchLogScreen(
     showDeleteDialog?.let { tournament ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
-            containerColor = DarkSurface,
-            title = { Text(AppLocale.tournamentDeleteTitle, color = TextWhite) },
-            text = { Text(AppLocale.tournamentDeleteMessage, color = TextGray) },
+            containerColor = AppColors.surface,
+            title = { Text(AppLocale.tournamentDeleteTitle, color = AppColors.textPrimary) },
+            text = { Text(AppLocale.tournamentDeleteMessage, color = AppColors.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteTournament(tournament.id)
                     showDeleteDialog = null
-                }) { Text(AppLocale.delete, color = RedCard) }
+                }) { Text(AppLocale.delete, color = AppColors.red) }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = null }) {
-                    Text(AppLocale.cancel, color = TextGray)
+                    Text(AppLocale.cancel, color = AppColors.textSecondary)
                 }
             }
         )
@@ -184,16 +187,16 @@ private fun TournamentCard(
     val dateStr = tournament.date?.toDate()?.let { dateFormat.format(it) } ?: ""
 
     val typeColor = when (tournament.type) {
-        "Cup" -> StarGold
-        "Challenge" -> BlueCard
-        "Local" -> GreenCard
-        else -> TextMuted
+        "Cup" -> AppColors.gold
+        "Challenge" -> AppColors.blue
+        "Local" -> AppColors.green
+        else -> AppColors.textMuted
     }
 
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard)
+        colors = CardDefaults.cardColors(containerColor = AppColors.card)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -238,12 +241,12 @@ private fun TournamentCard(
                     if (tournament.format.isNotBlank()) {
                         Spacer(Modifier.width(6.dp))
                         Surface(
-                            color = LavenderCard.copy(alpha = 0.2f),
+                            color = AppColors.lavender.copy(alpha = 0.2f),
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Text(
                                 text = tournament.format,
-                                color = LavenderCard,
+                                color = AppColors.lavender,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -256,7 +259,7 @@ private fun TournamentCard(
 
                 Text(
                     text = tournament.deckName.ifBlank { "—" },
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     maxLines = 1,
@@ -267,11 +270,11 @@ private fun TournamentCard(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (dateStr.isNotBlank()) {
-                        Text(dateStr, color = TextMuted, fontSize = 11.sp)
+                        Text(dateStr, color = AppColors.textMuted, fontSize = 11.sp)
                     }
                     if (tournament.location.isNotBlank()) {
-                        if (dateStr.isNotBlank()) Text("  •  ", color = TextMuted, fontSize = 11.sp)
-                        Text(tournament.location, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (dateStr.isNotBlank()) Text("  •  ", color = AppColors.textMuted, fontSize = 11.sp)
+                        Text(tournament.location, color = AppColors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
 
@@ -280,18 +283,18 @@ private fun TournamentCard(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         AppLocale.tournamentMatches(matchCount),
-                        color = TextGray,
+                        color = AppColors.textSecondary,
                         fontSize = 11.sp
                     )
                     if (tournament.participants > 0) {
-                        Text("•", color = TextMuted, fontSize = 11.sp)
-                        Text(AppLocale.playersCount(tournament.participants), color = TextGray, fontSize = 11.sp)
+                        Text("•", color = AppColors.textMuted, fontSize = 11.sp)
+                        Text(AppLocale.playersCount(tournament.participants), color = AppColors.textSecondary, fontSize = 11.sp)
                     }
                 }
             }
 
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Delete, AppLocale.delete, tint = TextMuted, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Delete, AppLocale.delete, tint = AppColors.textMuted, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -299,11 +302,11 @@ private fun TournamentCard(
 
 @Composable
 private fun StatMini(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = DarkCard)) {
+    Card(modifier = modifier, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = AppColors.card)) {
         Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, color = TextMuted, fontSize = 11.sp)
+            Text(label, color = AppColors.textMuted, fontSize = 11.sp)
             Spacer(Modifier.height(4.dp))
-            Text(value, color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(value, color = AppColors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
     }
 }

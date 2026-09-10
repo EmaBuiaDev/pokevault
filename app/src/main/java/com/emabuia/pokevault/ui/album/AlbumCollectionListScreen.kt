@@ -40,13 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.Album
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
-import com.emabuia.pokevault.ui.theme.DarkBackground
-import com.emabuia.pokevault.ui.theme.DarkSurface
-import com.emabuia.pokevault.ui.theme.OrangeCard
-import com.emabuia.pokevault.ui.theme.RedCard
-import com.emabuia.pokevault.ui.theme.TextGray
-import com.emabuia.pokevault.ui.theme.TextMuted
-import com.emabuia.pokevault.ui.theme.TextWhite
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.AlbumViewModel
 
@@ -64,16 +58,16 @@ fun AlbumCollectionListScreen(
     var showDeleteDialog by remember { mutableStateOf<Album?>(null) }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
-                title = { Text(AppLocale.myAlbums, color = TextWhite, fontWeight = FontWeight.Bold) },
+                title = { Text(AppLocale.myAlbums, color = AppColors.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppLocale.back, tint = TextWhite)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppLocale.back, tint = AppColors.textPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         },
         floatingActionButton = {
@@ -85,10 +79,10 @@ fun AlbumCollectionListScreen(
                         showPremiumDialog = true
                     }
                 },
-                containerColor = OrangeCard,
+                containerColor = AppColors.orange,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = AppLocale.createAlbum, tint = TextWhite)
+                Icon(Icons.Default.Add, contentDescription = AppLocale.createAlbum, tint = AppColors.textPrimary)
             }
         }
     ) { padding ->
@@ -100,9 +94,9 @@ fun AlbumCollectionListScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.PhotoAlbum, contentDescription = null, tint = TextMuted, modifier = Modifier.size(40.dp))
+                    Icon(Icons.Default.PhotoAlbum, contentDescription = null, tint = AppColors.textMuted, modifier = Modifier.size(40.dp))
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(AppLocale.albumEmptySubtitle, color = TextMuted, fontSize = 13.sp)
+                    Text(AppLocale.albumEmptySubtitle, color = AppColors.textMuted, fontSize = 13.sp)
                 }
             }
         } else {
@@ -115,13 +109,17 @@ fun AlbumCollectionListScreen(
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
                 items(viewModel.albums, key = { it.id }) { album ->
+                    // Memoizzata: prima getCardsForAlbum girava dentro items{},
+                    // quindi per ogni album visibile a ogni frame durante lo scroll.
+                    val coverUrl = remember(album, viewModel.ownedCards) {
+                        album.coverImageUrl.ifBlank {
+                            viewModel.getCardsForAlbum(album).firstOrNull()?.imageUrl ?: ""
+                        }
+                    }
                     AlbumCard(
                         album = album,
                         cardsCount = album.cardIds.size,
-                        coverUrl = album.coverImageUrl.ifBlank {
-                            val cards = viewModel.getCardsForAlbum(album)
-                            cards.firstOrNull()?.imageUrl ?: ""
-                        },
+                        coverUrl = coverUrl,
                         onClick = { onAlbumClick(album.id) },
                         onDelete = { showDeleteDialog = album },
                         onEdit = { onCreateAlbum(album.id) }
@@ -135,20 +133,20 @@ fun AlbumCollectionListScreen(
     showDeleteDialog?.let { album ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
-            containerColor = DarkSurface,
-            title = { Text(AppLocale.albumDeleteTitle, color = TextWhite) },
-            text = { Text(AppLocale.albumDeleteMessage, color = TextGray) },
+            containerColor = AppColors.surface,
+            title = { Text(AppLocale.albumDeleteTitle, color = AppColors.textPrimary) },
+            text = { Text(AppLocale.albumDeleteMessage, color = AppColors.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteAlbum(album.id)
                     showDeleteDialog = null
                 }) {
-                    Text(AppLocale.delete, color = RedCard)
+                    Text(AppLocale.delete, color = AppColors.red)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = null }) {
-                    Text(AppLocale.cancel, color = TextMuted)
+                    Text(AppLocale.cancel, color = AppColors.textMuted)
                 }
             }
         )

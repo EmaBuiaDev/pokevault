@@ -63,13 +63,31 @@ object RarityUtils {
                 RarityInfo("★", Color(0xFF60A5FA), if (isIt) "Rara Shiny" else "Shiny Rare", 9)
 
             // 3. DOUBLE RARE (V, VMAX, VSTAR, ex)
-            // Deve stare sopra Rare perché "rare holo v" verrebbe preso da "rare holo"
+            // Deve stare sopra Rare perché "rare holo v"/"holo rare v" verrebbe preso da "rare"/"holo rare"
             r.contains("double rare") || r.contains("doppia rara") || r.contains("ex") ||
-                    r.contains("vmax") || r.contains("vstar") || r == "rare holo v" ->
+                    r.contains("vmax") || r.contains("vstar") ||
+                    r == "rare holo v" || r == "holo rare v" ->
                 RarityInfo("★★", Color(0xFF000000), if (isIt) "Doppia Rara" else "Double Rare", 3)
 
-            // 2. RARE (Holo o Standard)
-            r == "rare" || r.contains("rare holo") || r == "rara" ->
+            // 13. SECRET RARE (numerata oltre il totale stampato del set; TCGdex, non copriva PokeWallet)
+            r.contains("secret rare") || r.contains("rara segreta") ->
+                RarityInfo("★★★", Color(0xFFEAB308), if (isIt) "Rara Segreta" else "Secret Rare", 13)
+
+            // Rarita' storiche distinte (ere HGSS/BW/SM), assenti dal vocabolario PokeWallet originale
+            r.contains("legend") ->
+                RarityInfo("★★", Color(0xFF7C3AED), "LEGEND", 8)
+            r.contains("prime") ->
+                RarityInfo("★", Color(0xFF7C3AED), if (isIt) "Rara Prime" else "Rare PRIME", 6)
+            r.contains("radiant") || r.contains("radiosa") ->
+                RarityInfo("☆", Color(0xFFEAB308), if (isIt) "Radiosa Rara" else "Radiant Rare", 6)
+            r.contains("amazing") ->
+                RarityInfo("☆", Color(0xFFEC4899), if (isIt) "Rara Amazing" else "Amazing Rare", 6)
+            r.contains("black white rare") ->
+                RarityInfo("★", Color(0xFF000000), if (isIt) "Rara B/W" else "Black White Rare", 3)
+
+            // 2. RARE (Holo o Standard) -- entrambi gli ordini di parole visti nei dati reali
+            // ("Rare Holo" da PokeWallet, "Holo Rare" da TCGdex)
+            r == "rare" || r.contains("rare holo") || r.contains("holo rare") || r == "rara" ->
                 RarityInfo("★", Color(0xFF000000), if (isIt) "Rara" else "Rare", 2)
 
             // 11. PROMO

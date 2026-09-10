@@ -33,3 +33,4 @@ recompress-progress.ndjson
 .recompress-tmp/
 catalog-live.json
 import-catalog.sql
+.rarity-tmp/

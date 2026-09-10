@@ -31,58 +31,8 @@ data class PokemonCard(
     val variant: String = "Normal",
     val language: String = "Italiano"
 ) {
-    fun classify(): String {
-        val s = supertype.lowercase()
-        val t = type.lowercase()
-        val n = name.lowercase()
-        val sub = subtypes.map { it.lowercase() }
-
-        // Energy ha priorità massima
-        if (
-            s.contains("energy") ||
-            s.contains("energ") ||
-            t.contains("energy") ||
-            t.contains("energia") ||
-            t.contains("energ") ||
-            sub.any { it.contains("energy") || it.contains("energia") } ||
-            n.contains("energy") ||
-            n.contains("energia")
-        ) {
-            return "Energy"
-        }
-        // Trainer rilevato esplicitamente da supertype o subtype (non da hp=0)
-        if (
-            s.contains("trainer") ||
-            s.contains("allenat") ||
-            s.contains("aiuto") ||
-            t.contains("trainer") ||
-            t.contains("supporter") ||
-            t.contains("item") ||
-            t.contains("stadium") ||
-            t.contains("tool") ||
-            t.contains("allenat") ||
-            t.contains("aiuto") ||
-            t.contains("stadio") ||
-            t.contains("strumento") ||
-            sub.any {
-                it == "item" ||
-                    it == "stadium" ||
-                    it == "supporter" ||
-                    it == "tool" ||
-                    it == "strumento" ||
-                    it == "stadio" ||
-                    it == "aiuto"
-            }
-        ) {
-            return "Trainer"
-        }
-        // Pokémon rilevato esplicitamente
-        if (s.contains("pok")) {
-            return "Pokémon"
-        }
-        // Fallback quando il supertype non è esplicitamente valorizzato: usa hp come euristica
-        return if (hp > 0) "Pokémon" else "Trainer"
-    }
+    /** Vedi [CardClassifier]: implementazione unica condivisa da tutta l'app. */
+    fun classify(): String = CardClassifier.classify(this)
 }
 
 fun PokemonCard.collectionGroupKey(): String {

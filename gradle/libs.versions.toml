@@ -19,10 +19,9 @@ retrofit = "2.11.0"
 okhttpLoggingInterceptor = "4.12.0"
 cameraX = "1.6.0"
 mlkitTextRecognition = "16.0.1"
-tensorflowLite = "2.17.0"
 accompanistPermissions = "0.34.0"
 coreSplashscreen = "1.2.0"
-billing = "7.1.1"
+billing = "9.1.0"
 timber = "5.0.1"
 roomKtx = "2.7.1"
 ksp = "2.0.21-1.0.28"
@@ -75,11 +74,12 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
-tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
-tensorflow-lite-gpu = { group = "org.tensorflow", name = "tensorflow-lite-gpu", version.ref = "tensorflowLite" }
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanistPermissions" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
-billing-ktx = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
+# Artefatto Java, non billing-ktx: le estensioni ktx della 9.x sono compilate
+# con metadata Kotlin 2.3.0 e il progetto e' su Kotlin 2.0.21, che legge fino
+# alla 2.0.x. I wrapper coroutine stanno in PremiumManager.
+billing = { group = "com.android.billingclient", name = "billing", version.ref = "billing" }
 timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "roomKtx" }

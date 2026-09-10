@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import java.util.Locale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -24,6 +26,15 @@ import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.SetCompletion
 import com.emabuia.pokevault.viewmodel.StatsViewModel
+
+/**
+ * Importo in euro con locale esplicito.
+ *
+ * Prima si usava "%.2f".format(valore), che adotta il locale di default del
+ * dispositivo: il separatore decimale poteva non corrispondere al simbolo di
+ * valuta mostrato accanto.
+ */
+private fun formatEuro(value: Double): String = "€%.2f".format(Locale.ITALY, value)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,27 +47,27 @@ fun StatsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppColors.background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         TopAppBar(
-            title = { Text(AppLocale.statistics, fontWeight = FontWeight.SemiBold, color = TextWhite) },
+            title = { Text(AppLocale.statistics, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
         )
 
         OfflineBanner()
 
         if (state.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = BlueCard)
+                CircularProgressIndicator(color = AppColors.blue)
             }
         } else if (state.errorMessage != null) {
-            ErrorStateView(message = state.errorMessage!!)
+            ErrorStateView(message = state.errorMessage)
         } else if (state.cards.isEmpty()) {
             EmptyStateView(
                 title = AppLocale.emptyStatsTitle,
@@ -77,27 +88,27 @@ fun StatsScreen(
                     StatCard(
                         label = AppLocale.totalCards,
                         value = "${state.stats.totalCards}",
-                        color = BlueCard,
+                        color = AppColors.blue,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
                         label = AppLocale.uniqueCards,
                         value = "${state.stats.uniqueCards}",
-                        color = PurpleCard,
+                        color = AppColors.purple,
                         modifier = Modifier.weight(1f)
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     StatCard(
                         label = AppLocale.totalValue,
-                        value = "€${"%.2f".format(state.stats.totalValue)}",
-                        color = GreenCard,
+                        value = formatEuro(state.stats.totalValue),
+                        color = AppColors.green,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
                         label = AppLocale.averageValue,
-                        value = "€${"%.2f".format(state.averageValue)}",
-                        color = YellowCard,
+                        value = formatEuro(state.averageValue),
+                        color = AppColors.yellow,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -107,13 +118,14 @@ fun StatsScreen(
                     StatCard(
                         label = AppLocale.mostValuable,
                         value = state.stats.mostValuable,
-                        color = StarGold,
-                        modifier = Modifier.weight(1f)
+                        color = AppColors.gold,
+                        modifier = Modifier.weight(1f),
+                        isTextValue = true
                     )
                     StatCard(
                         label = AppLocale.graded,
                         value = "${state.gradedCount}",
-                        color = RedCard,
+                        color = AppColors.red,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -131,8 +143,8 @@ fun StatsScreen(
                     DistributionSection(
                         title = AppLocale.bySet,
                         items = state.cardsBySet.take(10),
-                        maxValue = state.cardsBySet.maxOf { it.second },
-                        color = BlueCard
+                        maxValue = state.cardsBySet.first().second,
+                        color = AppColors.blue
                     )
                 }
 
@@ -141,8 +153,8 @@ fun StatsScreen(
                     DistributionSection(
                         title = AppLocale.byRarity,
                         items = state.cardsByRarity,
-                        maxValue = state.cardsByRarity.maxOf { it.second },
-                        color = PurpleCard
+                        maxValue = state.cardsByRarity.first().second,
+                        color = AppColors.purple
                     )
                 }
 
@@ -151,8 +163,8 @@ fun StatsScreen(
                     DistributionSection(
                         title = AppLocale.byType,
                         items = state.cardsByType,
-                        maxValue = state.cardsByType.maxOf { it.second },
-                        color = GreenCard
+                        maxValue = state.cardsByType.first().second,
+                        color = AppColors.green
                     )
                 }
 
@@ -167,25 +179,30 @@ fun StatCard(
     label: String,
     value: String,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // I valori testuali (il nome della carta piu' preziosa) hanno bisogno di
+    // piu' spazio dei numeri: a 20.sp su mezza larghezza e una riga sola
+    // venivano troncati a pochi caratteri.
+    isTextValue: Boolean = false
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppColors.card)
             .padding(16.dp)
     ) {
         Text(
             text = value,
             color = color,
             fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            maxLines = 1
+            fontSize = if (isTextValue) 14.sp else 20.sp,
+            maxLines = if (isTextValue) 2 else 1,
+            overflow = TextOverflow.Ellipsis
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = label,
-            color = TextMuted,
+            color = AppColors.textMuted,
             fontSize = 12.sp
         )
     }
@@ -200,12 +217,12 @@ fun CompletionSection(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppColors.card)
             .padding(16.dp)
     ) {
         Text(
             text = title,
-            color = TextWhite,
+            color = AppColors.textPrimary,
             fontWeight = FontWeight.SemiBold,
             fontSize = 16.sp
         )
@@ -228,14 +245,14 @@ fun CompletionBar(item: SetCompletion) {
         ) {
             Text(
                 text = item.setName,
-                color = TextGray,
+                color = AppColors.textSecondary,
                 fontSize = 13.sp,
                 maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
             Text(
                 text = "${(item.percentage * 100).toInt()}% (${item.ownedUnique}/${item.totalCards})",
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -246,7 +263,7 @@ fun CompletionBar(item: SetCompletion) {
                 .fillMaxWidth()
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(DarkSurface)
+                .background(AppColors.surface)
         ) {
             Box(
                 modifier = Modifier
@@ -255,9 +272,9 @@ fun CompletionBar(item: SetCompletion) {
                     .clip(RoundedCornerShape(4.dp))
                     .background(
                         when {
-                            item.percentage >= 1f -> GreenCard
-                            item.percentage >= 0.5f -> YellowCard
-                            else -> BlueCard
+                            item.percentage >= 1f -> AppColors.green
+                            item.percentage >= 0.5f -> AppColors.yellow
+                            else -> AppColors.blue
                         }
                     )
             )
@@ -276,12 +293,12 @@ fun DistributionSection(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
+            .background(AppColors.card)
             .padding(16.dp)
     ) {
         Text(
             text = title,
-            color = TextWhite,
+            color = AppColors.textPrimary,
             fontWeight = FontWeight.SemiBold,
             fontSize = 16.sp
         )
@@ -313,14 +330,14 @@ fun DistributionBar(
         ) {
             Text(
                 text = label,
-                color = TextGray,
+                color = AppColors.textSecondary,
                 fontSize = 13.sp,
                 maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
             Text(
                 text = "$count",
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold
             )
@@ -331,7 +348,7 @@ fun DistributionBar(
                 .fillMaxWidth()
                 .height(6.dp)
                 .clip(RoundedCornerShape(3.dp))
-                .background(DarkSurface)
+                .background(AppColors.surface)
         ) {
             val fraction = if (maxValue > 0) count.toFloat() / maxValue else 0f
             Box(

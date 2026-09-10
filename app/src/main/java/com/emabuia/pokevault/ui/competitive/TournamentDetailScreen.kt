@@ -47,31 +47,31 @@ fun TournamentDetailScreen(
     var showDeleteDialog by remember { mutableStateOf<MatchLog?>(null) }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         tournament?.type ?: "",
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { onAddMatch(tournamentId) },
-                containerColor = OrangeCard,
+                containerColor = AppColors.orange,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.Add, AppLocale.addMatch, tint = TextWhite)
+                Icon(Icons.Default.Add, AppLocale.addMatch, tint = AppColors.textPrimary)
             }
         }
     ) { padding ->
@@ -106,7 +106,7 @@ fun TournamentDetailScreen(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     AppLocale.matchLogTitle,
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
@@ -119,10 +119,10 @@ fun TournamentDetailScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.SportsEsports, null, tint = TextMuted, modifier = Modifier.size(48.dp))
+                            Icon(Icons.Default.SportsEsports, null, tint = AppColors.textMuted, modifier = Modifier.size(48.dp))
                             Spacer(Modifier.height(12.dp))
-                            Text(AppLocale.matchLogEmpty, color = TextMuted, fontSize = 14.sp)
-                            Text(AppLocale.matchLogEmptySubtitle, color = TextMuted, fontSize = 12.sp)
+                            Text(AppLocale.matchLogEmpty, color = AppColors.textMuted, fontSize = 14.sp)
+                            Text(AppLocale.matchLogEmptySubtitle, color = AppColors.textMuted, fontSize = 12.sp)
                         }
                     }
                 }
@@ -143,18 +143,18 @@ fun TournamentDetailScreen(
     showDeleteDialog?.let { match ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
-            containerColor = DarkSurface,
-            title = { Text(AppLocale.matchDeleteTitle, color = TextWhite) },
-            text = { Text(AppLocale.matchDeleteMessage, color = TextGray) },
+            containerColor = AppColors.surface,
+            title = { Text(AppLocale.matchDeleteTitle, color = AppColors.textPrimary) },
+            text = { Text(AppLocale.matchDeleteMessage, color = AppColors.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteMatch(match.id)
                     showDeleteDialog = null
-                }) { Text(AppLocale.delete, color = RedCard) }
+                }) { Text(AppLocale.delete, color = AppColors.red) }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = null }) {
-                    Text(AppLocale.cancel, color = TextGray)
+                    Text(AppLocale.cancel, color = AppColors.textSecondary)
                 }
             }
         )
@@ -167,15 +167,15 @@ private fun TournamentInfoCard(tournament: Tournament) {
     val dateStr = tournament.date?.toDate()?.let { dateFormat.format(it) } ?: ""
 
     val typeColor = when (tournament.type) {
-        "Cup" -> StarGold
-        "Challenge" -> BlueCard
-        "Local" -> GreenCard
-        else -> TextMuted
+        "Cup" -> AppColors.gold
+        "Challenge" -> AppColors.blue
+        "Local" -> AppColors.green
+        else -> AppColors.textMuted
     }
 
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard)
+        colors = CardDefaults.cardColors(containerColor = AppColors.card)
     ) {
         Column(
             Modifier.fillMaxWidth().padding(16.dp),
@@ -186,33 +186,33 @@ private fun TournamentInfoCard(tournament: Tournament) {
                     Text(tournament.type, color = typeColor, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
                 }
                 if (tournament.format.isNotBlank()) {
-                    Surface(color = LavenderCard.copy(alpha = 0.2f), shape = RoundedCornerShape(8.dp)) {
-                        Text(tournament.format, color = LavenderCard, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                    Surface(color = AppColors.lavender.copy(alpha = 0.2f), shape = RoundedCornerShape(8.dp)) {
+                        Text(tournament.format, color = AppColors.lavender, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
                 }
             }
 
             if (tournament.deckName.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Layers, null, tint = OrangeCard, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Layers, null, tint = AppColors.orange, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(tournament.deckName, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(tournament.deckName, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (dateStr.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CalendarToday, null, tint = TextMuted, modifier = Modifier.size(13.dp))
+                        Icon(Icons.Default.CalendarToday, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(dateStr, color = TextGray, fontSize = 12.sp)
+                        Text(dateStr, color = AppColors.textSecondary, fontSize = 12.sp)
                     }
                 }
                 if (tournament.location.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.LocationOn, null, tint = TextMuted, modifier = Modifier.size(13.dp))
+                        Icon(Icons.Default.LocationOn, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(tournament.location, color = TextGray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(tournament.location, color = AppColors.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -220,16 +220,16 @@ private fun TournamentInfoCard(tournament: Tournament) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (tournament.participants > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Group, null, tint = TextMuted, modifier = Modifier.size(13.dp))
+                        Icon(Icons.Default.Group, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("${tournament.participants}", color = TextGray, fontSize = 12.sp)
+                        Text("${tournament.participants}", color = AppColors.textSecondary, fontSize = 12.sp)
                     }
                 }
                 if (tournament.registrationFee > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Euro, null, tint = TextMuted, modifier = Modifier.size(13.dp))
+                        Icon(Icons.Default.Euro, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("${"%.2f".format(tournament.registrationFee)} €", color = TextGray, fontSize = 12.sp)
+                        Text("${"%.2f".format(tournament.registrationFee)} €", color = AppColors.textSecondary, fontSize = 12.sp)
                     }
                 }
             }
@@ -244,13 +244,13 @@ private fun MatchCard(
     onDelete: () -> Unit
 ) {
     val resultColor = when (match.result) {
-        "W" -> GreenCard; "L" -> RedCard; "T" -> YellowCard; else -> TextMuted
+        "W" -> AppColors.green; "L" -> AppColors.red; "T" -> AppColors.yellow; else -> AppColors.textMuted
     }
 
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard)
+        colors = CardDefaults.cardColors(containerColor = AppColors.card)
     ) {
         Row(
             Modifier.fillMaxWidth().padding(14.dp),
@@ -273,7 +273,7 @@ private fun MatchCard(
                     if (match.round > 0) {
                         Text(
                             "${AppLocale.matchRound} ${match.round}",
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
                         )
@@ -290,16 +290,16 @@ private fun MatchCard(
                             if (match.opponentName.isNotBlank()) append(")")
                         }
                     }
-                    Text(vsText, color = TextGray, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(vsText, color = AppColors.textSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
 
                 if (match.notes.isNotBlank()) {
-                    Text(match.notes, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(match.notes, color = AppColors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
 
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Delete, AppLocale.delete, tint = TextMuted, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Delete, AppLocale.delete, tint = AppColors.textMuted, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -307,11 +307,11 @@ private fun MatchCard(
 
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = DarkCard)) {
+    Card(modifier = modifier, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = AppColors.card)) {
         Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, color = TextMuted, fontSize = 11.sp)
+            Text(label, color = AppColors.textMuted, fontSize = 11.sp)
             Spacer(Modifier.height(4.dp))
-            Text(value, color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(value, color = AppColors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
     }
 }

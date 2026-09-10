@@ -72,7 +72,10 @@ object HandSimulationEngine {
             )
         }
 
-        val random = Random(System.currentTimeMillis())
+        // Random.Default e' seminato dal sistema. Prima si usava
+        // Random(System.currentTimeMillis()): due simulazioni avviate nello
+        // stesso millisecondo producevano risultati identici.
+        val random = Random.Default
 
         var firstHandStarterHits = 0
         var firstHandMulligans = 0

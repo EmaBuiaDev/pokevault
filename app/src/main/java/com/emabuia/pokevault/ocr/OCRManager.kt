@@ -1,6 +1,5 @@
 package com.emabuia.pokevault.ocr
 
-import android.content.Context
 import android.graphics.Bitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -12,7 +11,7 @@ import timber.log.Timber
  *
  * Orchestrazione completa:
  * 1. Preprocessing immagine (zone crop, contrasto, denoise, glare removal)
- * 2. Text Detection + Recognition (PaddleOCR TFLite o ML Kit)
+ * 2. Text Detection + Recognition (ML Kit)
  * 3. Post-processing Pokemon-specifico (estrazione campi strutturati)
  * 4. Output JSON strutturato
  *
@@ -35,8 +34,8 @@ import timber.log.Timber
  *        │         │
  *        ▼         ▼
  *   ┌─────────────────────┐
- *   │    OCR Engine        │  PaddleOCR TFLite (primario)
- *   │  (detect + recog)    │  ML Kit (fallback)
+ *   │    OCR Engine        │  ML Kit
+ *   │  (detect + recog)    │
  *   └─────────┬───────────┘
  *             │
  *             ▼
@@ -56,7 +55,7 @@ import timber.log.Timber
  * ═══════════════════════════════════════════════════
  *
  *   // Nel ViewModel:
- *   private val ocrManager = OCRManager(application)
+ *   private val ocrManager = OCRManager()
  *
  *   init {
  *       viewModelScope.launch { ocrManager.initialize() }
@@ -75,30 +74,8 @@ import timber.log.Timber
  *       ocrManager.release()
  *   }
  *
- * ═══════════════════════════════════════════════════
- * SCELTA DEL MOTORE OCR
- * ═══════════════════════════════════════════════════
- *
- * PaddleOCR Lite (consigliato per produzione):
- *   + Piu accurato su testo piccolo (numeri carta, footer)
- *   + Open-source, completamente personalizzabile
- *   + Fine-tuning possibile su dataset carte Pokemon
- *   + Supporta testo ruotato/prospettico
- *   - Richiede modelli TFLite in assets (~8MB)
- *   - Setup piu complesso (conversione modelli)
- *
- * ML Kit (consigliato per sviluppo rapido):
- *   + Zero configurazione, funziona subito
- *   + Buona performance generale
- *   + Gestione automatica GPU/NNAPI
- *   - Meno preciso su testo molto piccolo
- *   - Non personalizzabile
- *   - Meno robusto con prospettiva/blur
- *
- * Questa implementazione usa ML Kit come default con fallback automatico,
- * e supporta PaddleOCR quando i modelli TFLite sono presenti in assets/.
  */
-class OCRManager(private val context: Context) {
+class OCRManager {
 
     private var engine: OCREngine? = null
     private var isInitialized = false
@@ -107,41 +84,23 @@ class OCRManager(private val context: Context) {
     val activeEngineName: String
         get() = engine?.engineName ?: "None"
 
-    /**
-     * Inizializza la pipeline OCR.
-     * Tenta PaddleOCR TFLite, con fallback a ML Kit.
-     *
-     * @param preferPaddleOCR Se true, tenta prima PaddleOCR TFLite
-     */
-    suspend fun initialize(preferPaddleOCR: Boolean = true) {
+    /** Inizializza la pipeline OCR (ML Kit). */
+    suspend fun initialize() {
         withContext(Dispatchers.IO) {
-        if (isInitialized) return@withContext
+            if (isInitialized) return@withContext
 
-        if (preferPaddleOCR && hasTFLiteModels()) {
             try {
-                val paddleEngine = PaddleOCREngine(context)
-                paddleEngine.initialize()
-                engine = paddleEngine
+                val mlKitEngine = MLKitOCREngine()
+                mlKitEngine.initialize()
+                engine = mlKitEngine
                 isInitialized = true
-                Timber.i("Inizializzato con PaddleOCR TFLite")
-                return@withContext
+                Timber.i("Inizializzato con ML Kit")
             } catch (e: Exception) {
-                Timber.w("PaddleOCR non disponibile, fallback a ML Kit: ${e.message}")
+                Timber.e(e, "Nessun engine OCR disponibile: ${e.message}")
+                throw e
             }
         }
-
-        // Fallback: ML Kit
-        try {
-            val mlKitEngine = MLKitOCREngine()
-            mlKitEngine.initialize()
-            engine = mlKitEngine
-            isInitialized = true
-            Timber.i("Inizializzato con ML Kit (fallback)")
-        } catch (e: Exception) {
-            Timber.e(e, "Nessun engine OCR disponibile: ${e.message}")
-            throw e
-        }
-    } }
+    }
 
     /** Rilascia tutte le risorse */
     fun release() {
@@ -335,20 +294,6 @@ class OCRManager(private val context: Context) {
         } catch (e: Exception) {
             Timber.w("Analisi zone fallita: ${e.message}")
             return null
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    // UTILITY
-    // ═══════════════════════════════════════════
-
-    /** Verifica se i modelli TFLite PaddleOCR sono presenti in assets */
-    private fun hasTFLiteModels(): Boolean {
-        return try {
-            val assets = context.assets.list("") ?: emptyArray()
-            "det_model.tflite" in assets && "rec_model.tflite" in assets
-        } catch (e: Exception) {
-            false
         }
     }
 

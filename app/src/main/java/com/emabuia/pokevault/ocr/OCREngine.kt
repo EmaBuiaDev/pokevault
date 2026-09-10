@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 
 /**
  * Interfaccia per i motori OCR.
- * Permette di scambiare facilmente tra PaddleOCR TFLite, ML Kit, Tesseract, ecc.
+ * Permette di scambiare facilmente tra ML Kit, Tesseract, ecc.
  */
 interface OCREngine {
 
