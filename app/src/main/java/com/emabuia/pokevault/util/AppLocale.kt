@@ -637,6 +637,26 @@ object AppLocale {
     val albumNotFound: String get() = if (isItalian) "Album non trovato" else "Album not found"
     val priceUnavailable: String get() = if (isItalian) "Prezzo N/D" else "Price N/A"
     val unknownError: String get() = if (isItalian) "Errore sconosciuto" else "Unknown error"
+    val manageSubscriptionLabel: String get() = if (isItalian)
+        "Gestisci abbonamento"
+    else
+        "Manage subscription"
+    val manageSubscriptionSubtitle: String get() = if (isItalian)
+        "Apri Google Play per modificare o disdire"
+    else
+        "Open Google Play to change or cancel"
+    val premiumPurchaseSuccess: String get() = if (isItalian)
+        "Premium attivato. Grazie!"
+    else
+        "Premium activated. Thank you!"
+    val premiumPurchasePending: String get() = if (isItalian)
+        "Acquisto in attesa di conferma da Google. Il premium si attivera' appena viene confermato."
+    else
+        "Purchase awaiting confirmation from Google. Premium activates as soon as it clears."
+    fun premiumPurchaseError(reason: String): String = if (isItalian)
+        "Acquisto non riuscito: $reason"
+    else
+        "Purchase failed: $reason"
     val themeLabel: String get() = if (isItalian) "Tema" else "Theme"
     fun themeSubtitle(mode: String): String = when (mode) {
         "light" -> if (isItalian) "Chiaro" else "Light"

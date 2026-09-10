@@ -5,10 +5,13 @@ import android.content.Context
 import com.android.billingclient.api.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 class PremiumManager private constructor(private val context: Context) {
 
@@ -23,10 +26,12 @@ class PremiumManager private constructor(private val context: Context) {
         const val PRODUCT_ANNUAL = "pokevault_premium_annual"
 
         private const val PREFS_NAME = "pokevault_premium"
-        private const val KEY_IS_PREMIUM = "is_premium"
         private const val KEY_META_DECK_VIEWS = "meta_deck_views"
         private const val KEY_HOME_SPRITE_ID = "home_sprite_id"
         private const val KEY_HAND_SIM_RUN_PREFIX = "hand_sim_runs_"
+
+        private const val ACK_MAX_ATTEMPTS = 3
+        private const val ACK_RETRY_DELAY_MS = 1500L
 
         private val HOME_SPRITE_IDS = listOf(25, 1, 4, 7, 133, 150, 151, 384, 448, 94, 158, 258, 393, 6, 9, 3)
 
@@ -75,12 +80,16 @@ class PremiumManager private constructor(private val context: Context) {
         .setListener { billingResult, purchases ->
             scope.launch { handlePurchasesUpdated(billingResult, purchases) }
         }
-        .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
+        // enableOneTimeProducts() era un no-op: questa app vende SOLO abbonamenti
+        // (ProductType.SUBS ovunque). Il flag corretto e' enablePrepaidPlans(),
+        // senza il quale gli acquisti prepagati non erano supportati.
+        .enablePendingPurchases(PendingPurchasesParams.newBuilder().enablePrepaidPlans().build())
+        // Sostituisce la riconnessione a mano: la libreria ristabilisce da se'
+        // la connessione quando una chiamata arriva a servizio disconnesso.
+        .enableAutoServiceReconnection()
         .build()
 
     init {
-        // Svuota la cache locale all'avvio per evitare che venga usata come fonte di verità
-        prefs.edit().remove(KEY_IS_PREMIUM).apply()
         connectAndQueryPurchases()
     }
 
@@ -96,6 +105,11 @@ class PremiumManager private constructor(private val context: Context) {
                         queryProducts()
                         queryExistingPurchases()
                     }
+                } else {
+                    // Prima ogni esito diverso da OK veniva ignorato: con
+                    // BILLING_UNAVAILABLE o SERVICE_DISABLED l'utente non
+                    // riceveva alcun segnale.
+                    reportBillingProblem(result, "startConnection")
                 }
             }
 
@@ -141,9 +155,21 @@ class PremiumManager private constructor(private val context: Context) {
             .setProductList(productList)
             .build()
 
-        val result = billingClient.queryProductDetails(params)
-        if (result.billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-            _products.value = result.productDetailsList ?: emptyList()
+        // Da Play Billing 8 il listener riceve un QueryProductDetailsResult, non
+        // piu' una List<ProductDetails>: si usa la forma con listener, che ha una
+        // firma esplicita, invece dell'estensione suspend.
+        val details = suspendCancellableCoroutine<List<ProductDetails>> { cont ->
+            billingClient.queryProductDetailsAsync(params) { billingResult, queryResult ->
+                if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                    cont.resume(queryResult.productDetailsList)
+                } else {
+                    reportBillingProblem(billingResult, "queryProductDetails")
+                    cont.resume(emptyList())
+                }
+            }
+        }
+        if (details.isNotEmpty()) {
+            _products.value = details
         }
     }
 
@@ -153,22 +179,31 @@ class PremiumManager private constructor(private val context: Context) {
             .build()
 
         val result = billingClient.queryPurchasesAsync(params)
-        if (result.billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-            val hasActive = result.purchasesList.any { purchase ->
-                purchase.purchaseState == Purchase.PurchaseState.PURCHASED
-            }
-            updatePremiumStatus(hasActive)
-
-            // Acknowledge unacknowledged purchases
-            result.purchasesList
-                .filter { it.purchaseState == Purchase.PurchaseState.PURCHASED && !it.isAcknowledged }
-                .forEach { acknowledgePurchase(it) }
+        if (result.billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
+            // Su errore NON si tocca lo stato: un problema di rete non deve
+            // togliere il premium a chi ha pagato.
+            reportBillingProblem(result.billingResult, "queryPurchases")
+            return
         }
+
+        val purchased = result.purchasesList.filter {
+            it.purchaseState == Purchase.PurchaseState.PURCHASED
+        }
+
+        purchased.filterNot { it.isAcknowledged }.forEach { acknowledgePurchase(it) }
+
+        updatePremiumStatus(purchased.isNotEmpty())
     }
 
     fun launchPurchaseFlow(activity: Activity, productDetails: ProductDetails) {
-        val offerToken = productDetails.subscriptionOfferDetails
-            ?.firstOrNull()?.offerToken ?: return
+        // Il base plan ha offerId vuoto; le eventuali offerte introduttive o di
+        // prova hanno un offerId valorizzato. Prima si prendeva il PRIMO
+        // dell'elenco, che non e' necessariamente il base plan: appena si
+        // configura un'offerta in Play Console l'utente comprerebbe quella.
+        // Stessa logica gia' usata da getBasePlanFormattedPrice().
+        val offers = productDetails.subscriptionOfferDetails.orEmpty()
+        val offerToken = (offers.firstOrNull { it.offerId.isNullOrEmpty() } ?: offers.firstOrNull())
+            ?.offerToken ?: return
 
         _purchaseState.value = PurchaseState.Loading
 
@@ -192,13 +227,29 @@ class PremiumManager private constructor(private val context: Context) {
     ) {
         when (billingResult.responseCode) {
             BillingClient.BillingResponseCode.OK -> {
-                purchases?.forEach { purchase ->
-                    if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
-                        acknowledgePurchase(purchase)
-                        updatePremiumStatus(true)
-                        _purchaseState.value = PurchaseState.Success
-                    }
+                val list = purchases.orEmpty()
+
+                // Lo stato PENDING non veniva gestito: un acquisto in attesa di
+                // conferma (contanti, bonifico, piani prepagati) lasciava la UI
+                // bloccata su Loading per sempre.
+                if (list.any { it.purchaseState == Purchase.PurchaseState.PENDING }) {
+                    _purchaseState.value = PurchaseState.Pending
                 }
+
+                list.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
+                    .forEach { purchase ->
+                        // Il premium si concede SOLO dopo una conferma riuscita:
+                        // prima veniva concesso comunque, e un ack fallito si
+                        // traduceva in un rimborso automatico dopo 3 giorni.
+                        if (acknowledgePurchase(purchase)) {
+                            updatePremiumStatus(true)
+                            _purchaseState.value = PurchaseState.Success
+                        } else {
+                            _purchaseState.value = PurchaseState.Error(
+                                "Acquisto non confermato. Riapri l'app quando torni online."
+                            )
+                        }
+                    }
             }
             BillingClient.BillingResponseCode.USER_CANCELED -> {
                 _purchaseState.value = PurchaseState.Idle
@@ -216,27 +267,86 @@ class PremiumManager private constructor(private val context: Context) {
         }
     }
 
-    private suspend fun acknowledgePurchase(purchase: Purchase) {
-        if (!purchase.isAcknowledged) {
-            val params = AcknowledgePurchaseParams.newBuilder()
-                .setPurchaseToken(purchase.purchaseToken)
-                .build()
-            billingClient.acknowledgePurchase(params)
+    /**
+     * Conferma l'acquisto a Google, ritentando in caso di errore.
+     *
+     * Prima l'esito veniva scartato e non c'era alcun retry. Se la conferma
+     * fallisce (per esempio la rete cade subito dopo l'acquisto) Google rimborsa
+     * automaticamente dopo 3 giorni: l'utente pagava, vedeva il premium attivo e
+     * lo perdeva tre giorni dopo senza spiegazione.
+     *
+     * @return true se l'acquisto risulta confermato.
+     */
+    private suspend fun acknowledgePurchase(purchase: Purchase): Boolean {
+        if (purchase.isAcknowledged) return true
+
+        val params = AcknowledgePurchaseParams.newBuilder()
+            .setPurchaseToken(purchase.purchaseToken)
+            .build()
+
+        repeat(ACK_MAX_ATTEMPTS) { attempt ->
+            val result = billingClient.acknowledgePurchase(params)
+            if (result.responseCode == BillingClient.BillingResponseCode.OK) return true
+
+            // ITEM_NOT_OWNED significa rimborso o annullamento: ritentare e' inutile.
+            if (result.responseCode == BillingClient.BillingResponseCode.ITEM_NOT_OWNED) return false
+
+            if (attempt < ACK_MAX_ATTEMPTS - 1) {
+                delay(ACK_RETRY_DELAY_MS * (attempt + 1))
+            } else {
+                reportBillingProblem(result, "acknowledgePurchase")
+            }
         }
+        return false
+    }
+
+    /**
+     * Porta l'errore fino alla UI invece di lasciarlo silenzioso.
+     *
+     * onBillingSetupFinished ignorava ogni esito diverso da OK, quindi
+     * BILLING_UNAVAILABLE o SERVICE_DISABLED non producevano alcun segnale.
+     */
+    private fun reportBillingProblem(result: BillingResult, operation: String) {
+        val message = result.debugMessage.takeIf { it.isNotBlank() }
+            ?: "$operation: codice ${result.responseCode}"
+        _purchaseState.value = PurchaseState.Error(message)
     }
 
     private fun updatePremiumStatus(isPremium: Boolean) {
         _isPremium.value = isPremium
-        // Aggiorna la cache locale solo dopo verifica server/acquisto
-        prefs.edit().putBoolean(KEY_IS_PREMIUM, isPremium).apply()
         syncToFirestore(isPremium)
     }
 
+    /**
+     * Riporta l'entitlement su Firestore.
+     *
+     * Prima si usava update(), che FALLISCE se il documento utente non esiste o
+     * non ha ancora il campo, e senza alcun addOnFailureListener: l'errore era
+     * invisibile. set() con merge crea il campo quando manca, e il fallimento
+     * viene almeno segnalato.
+     *
+     * Resta un dato scritto e mai riletto: l'entitlement autorevole richiede la
+     * verifica lato server (vedi pokevault-proxy-worker/BILLING.md).
+     */
     private fun syncToFirestore(isPremium: Boolean) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         FirebaseFirestore.getInstance()
             .collection("users").document(uid)
-            .update("isPremium", isPremium)
+            .set(mapOf("isPremium" to isPremium), SetOptions.merge())
+            .addOnFailureListener { e ->
+                android.util.Log.w("PremiumManager", "Sync isPremium su Firestore fallito", e)
+            }
+    }
+
+    /**
+     * Rilegge gli acquisti da Google.
+     *
+     * Va chiamata quando l'app torna in primo piano: prima l'unica query era
+     * quella in init, quindi una disdetta, un rimborso o una scadenza restavano
+     * invisibili per tutta la vita del processo.
+     */
+    fun refreshEntitlement() {
+        scope.launch { queryExistingPurchases() }
     }
 
     fun canCreateDeck(currentDeckCount: Int): Boolean {
@@ -375,6 +485,8 @@ class PremiumManager private constructor(private val context: Context) {
         data object Idle : PurchaseState()
         data object Loading : PurchaseState()
         data object Success : PurchaseState()
+        /** Acquisto avviato ma non ancora confermato da Google. */
+        data object Pending : PurchaseState()
         data class Error(val message: String) : PurchaseState()
     }
 }

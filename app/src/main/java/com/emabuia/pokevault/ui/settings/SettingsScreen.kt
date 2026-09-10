@@ -177,6 +177,25 @@ fun SettingsScreen(
                 accentColor = AppColors.gold
             )
 
+            // Play richiede un percorso in-app per gestire o disdire
+            // l'abbonamento: prima non esisteva da nessuna parte.
+            if (isPremium) {
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingsItem(
+                    icon = Icons.Default.ManageAccounts,
+                    title = AppLocale.manageSubscriptionLabel,
+                    subtitle = AppLocale.manageSubscriptionSubtitle,
+                    onClick = {
+                        val uri = Uri.parse(
+                            "https://play.google.com/store/account/subscriptions" +
+                                "?sku=${PremiumManager.PRODUCT_MONTHLY}" +
+                                "&package=${context.packageName}"
+                        )
+                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    }
+                )
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
             SettingsItem(

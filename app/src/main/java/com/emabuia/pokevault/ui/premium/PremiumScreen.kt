@@ -41,6 +41,7 @@ fun PremiumScreen(
     val products by premiumManager.products.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = context as? Activity
+    val snackbarHostState = remember { SnackbarHostState() }
 
     Box(
         modifier = Modifier
@@ -323,18 +324,33 @@ fun PremiumScreen(
                 }
             }
             is PremiumManager.PurchaseState.Success -> {
+                // Prima l'esito veniva azzerato senza mostrare nulla: un acquisto
+                // riuscito e uno fallito erano indistinguibili per l'utente.
                 LaunchedEffect(Unit) {
+                    snackbarHostState.showSnackbar(AppLocale.premiumPurchaseSuccess)
+                    premiumManager.resetPurchaseState()
+                }
+            }
+            is PremiumManager.PurchaseState.Pending -> {
+                LaunchedEffect(Unit) {
+                    snackbarHostState.showSnackbar(AppLocale.premiumPurchasePending)
                     premiumManager.resetPurchaseState()
                 }
             }
             is PremiumManager.PurchaseState.Error -> {
                 val error = (purchaseState as PremiumManager.PurchaseState.Error).message
                 LaunchedEffect(error) {
+                    snackbarHostState.showSnackbar(AppLocale.premiumPurchaseError(error))
                     premiumManager.resetPurchaseState()
                 }
             }
             else -> {}
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
