@@ -115,6 +115,13 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     var uiState by mutableStateOf(SetsUiState())
         private set
 
+    private var lastRevalidationAtMs: Long = 0L
+
+    private companion object {
+        /** Finestra minima fra due rivalidazioni di rete del catalogo set. */
+        const val REVALIDATION_MIN_INTERVAL_MS = 15L * 60 * 1000
+    }
+
     /**
      * Known sets whose language is mis-tagged in the source data.
      * Key: lowercase set name fragment (partial match) → correct macro.
@@ -227,7 +234,22 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Rivalidazione di rete del catalogo set, con finestra minima.
+     *
+     * Lo schermo chiama refreshFromCache() a ogni ON_RESUME, e sia quello sia
+     * loadSets() finivano qui con forceRefresh = true: erano due round-trip
+     * /sets ogni volta che l'utente tornava sul Pokedex, il che annullava di
+     * fatto la cache da 7 giorni del repository.
+     *
+     * refresh() (pull-to-refresh esplicito) resta invece sempre forzato: la'
+     * l'utente sta chiedendo esplicitamente dati freschi.
+     */
     private fun revalidateSetsFromNetwork(context: Context) {
+        val now = System.currentTimeMillis()
+        if (now - lastRevalidationAtMs < REVALIDATION_MIN_INTERVAL_MS) return
+        lastRevalidationAtMs = now
+
         viewModelScope.launch {
             repository.getSets(context = context, forceRefresh = true)
                 .onSuccess { freshSets ->
@@ -254,6 +276,9 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refresh() {
+        // Pull-to-refresh esplicito: sempre forzato, e vale come rivalidazione
+        // appena avvenuta per la finestra di revalidateSetsFromNetwork.
+        lastRevalidationAtMs = System.currentTimeMillis()
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext

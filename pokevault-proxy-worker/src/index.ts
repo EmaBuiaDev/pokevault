@@ -1651,12 +1651,27 @@ async function createResponseFromCache(cached: CachedResponse, isHit: boolean, p
 // individual cards remain resolvable by id, matching the plan's coverage
 // rule (a set can be incomplete without breaking a user's existing collection).
 
-function jsonResponse(data: unknown, status = 200): Response {
+function jsonResponse(data: unknown, status = 200, cacheControl = 'public, max-age=300'): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=300' },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': cacheControl },
   });
 }
+
+/**
+ * Cache-control per le rotte di catalogo /v1.
+ *
+ * Il catalogo cambia al massimo una volta al giorno (cron catalog-ingest alle
+ * 06:00), ma queste risposte uscivano con "max-age=300" e nient'altro. I
+ * Worker non cachano da soli le risposte che generano, quindi ogni singola
+ * richiesta arrivava fino a D1: su /v1/expansions/{id}/cards significa
+ * scandire tutte le carte dell'espansione a ogni apertura di un set.
+ *
+ * s-maxage governa la cache edge, max-age quella del client, e
+ * stale-while-revalidate evita che la scadenza si traduca in una richiesta
+ * lenta per l'utente che capita nel momento sbagliato.
+ */
+const V1_CATALOG_CACHE_CONTROL = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400';
 
 async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response | null> {
   if (!pathname.startsWith('/v1/')) return null;
@@ -1671,35 +1686,78 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
   }
 
   if (pathname === '/v1/expansions') {
+    // Ordinamento per data di uscita, non per sort_order: sort_order e' rimasto
+    // 100 per tutte le espansioni importate (vedi schema/002 e
+    // scripts/import-catalog-to-d1.mjs), quindi "ORDER BY sort_order, id"
+    // dava di fatto un ordine alfabetico per id. release_date esisteva ed era
+    // inutilizzata. Le espansioni senza data finiscono in fondo invece di
+    // sparire in mezzo, e sort_order resta come discriminante manuale.
     const { results } = await db
-      .prepare('SELECT id, card_count, sort_order, logo_key, dominant_set_code FROM expansions WHERE published = 1 ORDER BY sort_order, id')
+      .prepare(
+        `SELECT e.id, e.card_count, e.sort_order, e.logo_key, e.dominant_set_code, e.release_date
+         FROM expansions e
+         WHERE e.published = 1
+           AND NOT EXISTS (
+             SELECT 1 FROM takedowns t
+             WHERE t.target_type = 'expansion' AND t.target_id = e.id
+           )
+         ORDER BY (e.release_date IS NULL), e.release_date DESC, e.sort_order, e.id`
+      )
       .all();
-    return jsonResponse({ expansions: results });
+    return jsonResponse({ expansions: results }, 200, V1_CATALOG_CACHE_CONTROL);
   }
 
   const cardsMatch = pathname.match(/^\/v1\/expansions\/([A-Za-z0-9._-]+)\/cards$/);
   if (cardsMatch) {
     const expansionId = cardsMatch[1].toLowerCase();
+
+    // Kill-switch di compliance: la tabella takedowns esisteva dallo schema v1
+    // ma nessuna rotta /v1 la consultava, quindi non aveva alcun effetto.
+    const expansionTakedown = await db
+      .prepare(`SELECT 1 FROM takedowns WHERE target_type = 'expansion' AND target_id = ?1`)
+      .bind(expansionId)
+      .first();
+    if (expansionTakedown) {
+      return jsonResponse({ error: 'expansion not available' }, 451);
+    }
+
     const { results } = await db
       .prepare(
-        `SELECT card_id, card_number, nome, tipo, ps, regola_speciale, attacchi_json, image_status
-         FROM cards WHERE expansion_id = ?1
-         ORDER BY CAST(card_number AS INTEGER), card_number`
+        `SELECT c.card_id, c.card_number, c.nome, c.tipo, c.ps, c.regola_speciale,
+                c.attacchi_json, c.image_status
+         FROM cards c
+         WHERE c.expansion_id = ?1
+           AND NOT EXISTS (
+             SELECT 1 FROM takedowns t
+             WHERE t.target_type = 'card' AND t.target_id = c.card_id
+           )
+         ORDER BY CAST(c.card_number AS INTEGER), c.card_number`
       )
       .bind(expansionId)
       .all();
     if (results.length === 0) {
       return jsonResponse({ error: 'expansion not found or has no cards' }, 404);
     }
-    return jsonResponse({ expansionId, cards: results });
+    return jsonResponse({ expansionId, cards: results }, 200, V1_CATALOG_CACHE_CONTROL);
   }
 
   const cardMatch = pathname.match(/^\/v1\/cards\/([A-Za-z0-9._-]+)$/);
   if (cardMatch) {
     const cardId = cardMatch[1];
-    const row = await db.prepare('SELECT * FROM cards WHERE card_id = ?1').bind(cardId).first();
+    const row = await db
+      .prepare(
+        `SELECT c.* FROM cards c
+         WHERE c.card_id = ?1
+           AND NOT EXISTS (
+             SELECT 1 FROM takedowns t
+             WHERE (t.target_type = 'card' AND t.target_id = c.card_id)
+                OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id)
+           )`
+      )
+      .bind(cardId)
+      .first();
     if (!row) return jsonResponse({ error: 'card not found' }, 404);
-    return jsonResponse(row);
+    return jsonResponse(row, 200, V1_CATALOG_CACHE_CONTROL);
   }
 
   return jsonResponse({ error: 'unknown /v1 route' }, 404);
