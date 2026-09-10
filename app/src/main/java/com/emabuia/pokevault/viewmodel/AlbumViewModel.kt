@@ -22,7 +22,9 @@ class AlbumViewModel : ViewModel() {
     var ownedCards by mutableStateOf<List<PokemonCard>>(emptyList())
         private set
 
-    var isLoading by mutableStateOf(false)
+    // Parte a true: il loader viene avviato in init, quindi al primo frame
+    // stiamo gia' caricando. Con false, un dettaglio lampeggiava "non trovato".
+    var isLoading by mutableStateOf(true)
         private set
 
     var isSaving by mutableStateOf(false)

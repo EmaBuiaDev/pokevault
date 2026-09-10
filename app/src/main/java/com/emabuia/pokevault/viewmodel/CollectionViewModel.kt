@@ -266,7 +266,13 @@ class CollectionViewModel : ViewModel() {
         }
 
         return when (uiState.sortOrder) {
-            SortOrder.NEWEST -> filtered.reversed() // Assumendo che l'ordine originale sia cronologico (addedAt)
+            // getCards() non ha un orderBy, quindi Firestore restituisce ordine di
+            // document-id: il precedente reversed() "assumendo che l'ordine sia
+            // cronologico" produceva un ordinamento di fatto arbitrario.
+            // L'ordinamento resta lato client di proposito: un orderBy("addedAt")
+            // su Firestore ESCLUDE i documenti che non hanno il campo, e i record
+            // storici possono non averlo. Qui invece finiscono in fondo.
+            SortOrder.NEWEST -> filtered.sortedByDescending { it.addedAt?.seconds ?: Long.MIN_VALUE }
             SortOrder.PRICE_ASC -> filtered.sortedBy { it.estimatedValue }
             SortOrder.PRICE_DESC -> filtered.sortedByDescending { it.estimatedValue }
             SortOrder.NAME_ASC -> filtered.sortedBy { it.name }

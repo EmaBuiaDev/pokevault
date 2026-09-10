@@ -36,14 +36,20 @@ fun AddMatchScreen(
 ) {
     LaunchedEffect(tournamentId, editMatchId) {
         viewModel.loadMatchesForTournament(tournamentId)
-        if (editMatchId != null) {
-            val match = viewModel.getMatchById(editMatchId)
-            if (match != null) {
-                viewModel.loadMatchForEdit(match)
-            }
-        } else {
+        if (editMatchId == null) {
             viewModel.resetMatchForm()
             viewModel.matchTournamentId = tournamentId
+        }
+    }
+
+    // Il precaricamento deve attendere che i match siano davvero arrivati.
+    // loadMatchesForTournament e' asincrono e questo schermo riceve sempre un
+    // CompetitiveLogViewModel nuovo (scoped alla nav entry): leggere
+    // tournamentMatches subito dopo la chiamata restituiva sempre una lista
+    // vuota, quindi il form di modifica restava vuoto ogni volta.
+    LaunchedEffect(editMatchId, viewModel.tournamentMatches) {
+        if (editMatchId != null && viewModel.editingMatchId != editMatchId) {
+            viewModel.getMatchById(editMatchId)?.let { viewModel.loadMatchForEdit(it) }
         }
     }
 

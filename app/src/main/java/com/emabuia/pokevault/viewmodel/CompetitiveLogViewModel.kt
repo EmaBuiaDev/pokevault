@@ -211,7 +211,11 @@ class CompetitiveLogViewModel : ViewModel() {
             val match = MatchLog(
                 id = editingMatchId ?: "",
                 tournamentId = matchTournamentId,
-                round = matchRound.toIntOrNull() ?: (tournamentMatches.size + 1),
+                // Il round successivo si deriva dal massimo esistente, non da
+                // size + 1: con un match cancellato in mezzo, size + 1 riusava
+                // un numero gia' assegnato.
+                round = matchRound.toIntOrNull()
+                    ?: ((tournamentMatches.maxOfOrNull { it.round } ?: 0) + 1),
                 result = matchResult,
                 opponentName = matchOpponentName,
                 opponentDeck = matchOpponentDeck,

@@ -29,6 +29,7 @@ import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.Album
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.ui.components.NotFoundOrLoadingView
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.AlbumViewModel
 
@@ -44,14 +45,15 @@ fun AlbumDetailScreen(
     var showAddSheet by remember { mutableStateOf(false) }
 
     if (album == null) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(DarkBackground),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(color = OrangeCard)
-        }
+        // Prima si mostrava uno spinner incondizionato: per un album cancellato
+        // o con id non valido girava all'infinito, senza messaggio e senza modo
+        // di tornare indietro. "Sto caricando" e "non esiste" vanno distinti.
+        NotFoundOrLoadingView(
+            isLoading = viewModel.isLoading,
+            message = AppLocale.albumNotFound,
+            onBack = onBack,
+            accentColor = OrangeCard
+        )
         return
     }
 

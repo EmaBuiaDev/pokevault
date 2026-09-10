@@ -7,6 +7,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material.icons.filled.CollectionsBookmark
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -122,5 +125,44 @@ fun ErrorStateView(
             fontSize = 14.sp,
             textAlign = TextAlign.Center
         )
+    }
+}
+
+/**
+ * Distingue "sto ancora caricando" da "non esiste".
+ *
+ * Diversi schermi di dettaglio mostravano un CircularProgressIndicator
+ * incondizionato quando l'entita' cercata era null: per un id cancellato o non
+ * valido lo spinner girava all'infinito, senza messaggio e senza modo di
+ * tornare indietro.
+ */
+@Composable
+fun NotFoundOrLoadingView(
+    isLoading: Boolean,
+    message: String,
+    onBack: () -> Unit,
+    accentColor: androidx.compose.ui.graphics.Color = BlueCard,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(DarkBackground),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(color = accentColor)
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                ErrorStateView(message = message)
+                Button(
+                    onClick = onBack,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                ) {
+                    Text(text = AppLocale.back, color = TextWhite, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
     }
 }

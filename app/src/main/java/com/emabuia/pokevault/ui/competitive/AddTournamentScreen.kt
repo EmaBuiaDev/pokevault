@@ -39,11 +39,17 @@ fun AddTournamentScreen(
     viewModel: CompetitiveLogViewModel = viewModel()
 ) {
     LaunchedEffect(editTournamentId) {
-        if (editTournamentId != null) {
-            val tournament = viewModel.getTournamentById(editTournamentId)
-            if (tournament != null) viewModel.loadTournamentForEdit(tournament)
-        } else {
+        if (editTournamentId == null) {
             viewModel.resetTournamentForm()
+        }
+    }
+
+    // Come in AddMatchScreen: i tornei arrivano da un listener asincrono
+    // avviato nell'init del ViewModel, quindi al primo frame la lista e'
+    // vuota e il form di modifica restava vuoto. Va riletta quando arriva.
+    LaunchedEffect(editTournamentId, viewModel.tournaments) {
+        if (editTournamentId != null && viewModel.editingTournamentId != editTournamentId) {
+            viewModel.getTournamentById(editTournamentId)?.let { viewModel.loadTournamentForEdit(it) }
         }
     }
 

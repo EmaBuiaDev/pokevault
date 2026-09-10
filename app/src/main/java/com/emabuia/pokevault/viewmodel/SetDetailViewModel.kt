@@ -81,6 +81,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentSourceMacro: String? = null
     private var translationJob: Job? = null
     private var italianSetPriceWarmupJob: Job? = null
+    private var ownedCardsJob: Job? = null
     private var lastPricedCardId: String? = null
     private val requestedCardPriceIds = mutableSetOf<String>()
     private var italianSetPriceMap: Map<String, PokeWalletPriceData> = emptyMap()
@@ -395,12 +396,18 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun observeOwnedCards(setName: String, currentCards: List<TcgCard>) {
-        viewModelScope.launch {
+        // loadSet puo' essere richiamato piu' volte sullo stesso ViewModel: senza
+        // cancellare il collector precedente ogni chiamata lasciava attivo un
+        // listener Firestore in piu', come gia' facevano translationJob e
+        // italianSetPriceWarmupJob qui sopra.
+        ownedCardsJob?.cancel()
+        ownedCardsJob = viewModelScope.launch {
             firestoreRepository.getOwnedCardsBySet(setName)
                 .catch { e ->
                     if (BuildConfig.DEBUG) {
                         android.util.Log.w("SetDetailVM", "Errore osservazione carte possedute", e)
                     }
+                    uiState = uiState.copy(errorMessage = AppLocale.ownedCardsLoadError)
                 }
                 .collectLatest { ownedCards ->
                     val currentCardIds = currentCards

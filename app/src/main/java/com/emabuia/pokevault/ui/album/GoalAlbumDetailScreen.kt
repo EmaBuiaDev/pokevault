@@ -120,9 +120,14 @@ fun GoalAlbumDetailScreen(
     }
 
     if (album == null) {
-        Box(Modifier.fillMaxSize().background(DarkBackground), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = OrangeCard)
-        }
+        // Vedi AlbumDetailScreen: prima era uno spinner incondizionato, quindi
+        // infinito per un chase cancellato o con id non valido.
+        com.emabuia.pokevault.ui.components.NotFoundOrLoadingView(
+            isLoading = viewModel.isLoading,
+            message = AppLocale.chaseNotFound,
+            onBack = onBack,
+            accentColor = OrangeCard
+        )
         return
     }
 
