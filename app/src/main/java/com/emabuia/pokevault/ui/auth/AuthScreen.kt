@@ -335,6 +335,14 @@ fun VaultLogo() {
                 .background(AppColors.background),
             contentAlignment = Alignment.Center
         ) {
+            // Lo scope di disegno di Canvas non e' un contesto @Composable:
+            // i token del tema si leggono prima.
+            val backCardColor = AppColors.blue.copy(alpha = 0.6f)
+            val midCardColor = AppColors.purple.copy(alpha = 0.7f)
+            val frontCardBrush = Brush.linearGradient(
+                colors = listOf(AppColors.gold, AppColors.orange)
+            )
+
             Canvas(modifier = Modifier.size(52.dp)) {
                 val cardW = size.width * 0.45f
                 val cardH = size.height * 0.65f
@@ -344,7 +352,7 @@ fun VaultLogo() {
                 // Carta posteriore (inclinata a sinistra)
                 rotate(degrees = -15f, pivot = Offset(cx, cy)) {
                     drawRoundRect(
-                        color = AppColors.blue.copy(alpha = 0.6f),
+                        color = backCardColor,
                         topLeft = Offset(cx - cardW / 2, cy - cardH / 2),
                         size = Size(cardW, cardH),
                         cornerRadius = CornerRadius(4f)
@@ -353,7 +361,7 @@ fun VaultLogo() {
 
                 // Carta centrale
                 drawRoundRect(
-                    color = AppColors.purple.copy(alpha = 0.7f),
+                    color = midCardColor,
                     topLeft = Offset(cx - cardW / 2, cy - cardH / 2),
                     size = Size(cardW, cardH),
                     cornerRadius = CornerRadius(4f)
@@ -362,9 +370,7 @@ fun VaultLogo() {
                 // Carta frontale (inclinata a destra)
                 rotate(degrees = 15f, pivot = Offset(cx, cy)) {
                     drawRoundRect(
-                        brush = Brush.linearGradient(
-                            colors = listOf(AppColors.gold, AppColors.orange)
-                        ),
+                        brush = frontCardBrush,
                         topLeft = Offset(cx - cardW / 2, cy - cardH / 2),
                         size = Size(cardW, cardH),
                         cornerRadius = CornerRadius(4f)
