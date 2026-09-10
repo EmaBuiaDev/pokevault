@@ -90,10 +90,16 @@ class PremiumManager private constructor(private val context: Context) {
         .setListener { billingResult, purchases ->
             scope.launch { handlePurchasesUpdated(billingResult, purchases) }
         }
-        // enableOneTimeProducts() era un no-op: questa app vende SOLO abbonamenti
-        // (ProductType.SUBS ovunque). Il flag corretto e' enablePrepaidPlans(),
-        // senza il quale gli acquisti prepagati non erano supportati.
-        .enablePendingPurchases(PendingPurchasesParams.newBuilder().enablePrepaidPlans().build())
+        // enableOneTimeProducts() NON e' un no-op: dalla 8.0 e' obbligatorio, e
+        // senza di esso build() lancia IllegalArgumentException, uccidendo l'app
+        // dentro Application.onCreate. enablePrepaidPlans() si aggiunge, non
+        // sostituisce: serve agli abbonamenti prepagati.
+        .enablePendingPurchases(
+            PendingPurchasesParams.newBuilder()
+                .enableOneTimeProducts()
+                .enablePrepaidPlans()
+                .build()
+        )
         // Sostituisce la riconnessione a mano: la libreria ristabilisce da se'
         // la connessione quando una chiamata arriva a servizio disconnesso.
         .enableAutoServiceReconnection()
