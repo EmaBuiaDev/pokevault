@@ -173,7 +173,7 @@ dependencies {
     // ── Splash Screen ──
 
     // ── Google Play Billing ──
-    implementation(libs.billing.ktx)
+    implementation(libs.billing)
 
     // ── Logging ──
     implementation(libs.timber)

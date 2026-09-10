@@ -178,7 +178,7 @@ class PremiumManager private constructor(private val context: Context) {
             .setProductType(BillingClient.ProductType.SUBS)
             .build()
 
-        val result = billingClient.queryPurchasesAsync(params)
+        val result = queryPurchasesSuspending(params)
         if (result.billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
             // Su errore NON si tocca lo stato: un problema di rete non deve
             // togliere il premium a chi ha pagato.
@@ -285,7 +285,7 @@ class PremiumManager private constructor(private val context: Context) {
             .build()
 
         repeat(ACK_MAX_ATTEMPTS) { attempt ->
-            val result = billingClient.acknowledgePurchase(params)
+            val result = acknowledgeSuspending(params)
             if (result.responseCode == BillingClient.BillingResponseCode.OK) return true
 
             // ITEM_NOT_OWNED significa rimborso o annullamento: ritentare e' inutile.
@@ -299,6 +299,36 @@ class PremiumManager private constructor(private val context: Context) {
         }
         return false
     }
+
+    /**
+     * Wrapper coroutine su queryPurchasesAsync.
+     *
+     * Prima si usava l'estensione suspend di billing-ktx, che nella 9.x e'
+     * compilata con metadata Kotlin 2.3.0 e non e' leggibile da Kotlin 2.0.21.
+     * Si usa quindi l'artefatto Java e si adatta qui.
+     */
+    private suspend fun queryPurchasesSuspending(
+        params: QueryPurchasesParams
+    ): PurchasesResult = suspendCancellableCoroutine { cont ->
+        billingClient.queryPurchasesAsync(params) { billingResult, purchases ->
+            cont.resume(PurchasesResult(billingResult, purchases))
+        }
+    }
+
+    /** Wrapper coroutine su acknowledgePurchase. Vedi [queryPurchasesSuspending]. */
+    private suspend fun acknowledgeSuspending(
+        params: AcknowledgePurchaseParams
+    ): BillingResult = suspendCancellableCoroutine { cont ->
+        billingClient.acknowledgePurchase(params) { billingResult ->
+            cont.resume(billingResult)
+        }
+    }
+
+    /** Esito di [queryPurchasesSuspending]. */
+    private data class PurchasesResult(
+        val billingResult: BillingResult,
+        val purchasesList: List<Purchase>
+    )
 
     /**
      * Porta l'errore fino alla UI invece di lasciarlo silenzioso.
