@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.viewmodel
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -83,9 +84,20 @@ class WishlistViewModel : ViewModel() {
         }
     }
 
-    fun isCardWishlisted(cardId: String): Boolean {
-        return wishlists.any { cardId in it.cardIds }
+    /**
+     * Indice di tutti i cardId in wishlist, ricalcolato solo quando le wishlist
+     * cambiano.
+     *
+     * isCardWishlisted viene chiamata per OGNI carta visibile della griglia di
+     * un set (~120 celle) a ogni ricomposizione, e prima scorreva tutte le
+     * wishlist facendo `cardId in it.cardIds` su una List: una scansione
+     * lineare dentro un ciclo, cioe' lavoro quadratico durante lo scroll.
+     */
+    private val wishlistedCardIds: Set<String> by derivedStateOf {
+        wishlists.flatMapTo(HashSet()) { it.cardIds }
     }
+
+    fun isCardWishlisted(cardId: String): Boolean = cardId in wishlistedCardIds
 
     fun canCreateWishlist(isPremium: Boolean): Boolean {
         return canCreateWishlistCount(isPremium, wishlists.size)

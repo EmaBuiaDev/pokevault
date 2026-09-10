@@ -44,8 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import coil.compose.SubcomposeAsyncImage
-import coil.compose.SubcomposeAsyncImageContent
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.Wishlist
@@ -1127,11 +1125,20 @@ fun TcgCardCompactItem(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
         ) {
             if (!imageLoadFailed && currentImageUrl.isNotBlank()) {
-                SubcomposeAsyncImage(
-                    model = ImageUrlUtils.safeImageUrl(currentImageUrl),
+                // Vedi la nota in TcgCardListRow: SubcomposeAsyncImage costava
+                // tre subcomposition per cella, qui moltiplicate per l'intera
+                // griglia del set.
+                AsyncImage(
+                    model = remember(currentImageUrl) { ImageUrlUtils.safeImageUrl(currentImageUrl) },
                     contentDescription = card.name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(AppColors.surface),
+                    onSuccess = {
+                        isImageAvailable = true
+                        imageLoadFailed = false
+                    },
                     onError = {
                         val canTryLarge =
                             currentImageUrl != card.images.large && card.images.large.isNotBlank()
@@ -1141,21 +1148,6 @@ fun TcgCardCompactItem(
                             imageLoadFailed = true
                             isImageAvailable = false
                         }
-                    },
-                    loading = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(AppColors.surface)
-                        )
-                    },
-                    error = {
-                        CardImageFallback(card = card, compact = false)
-                    },
-                    success = {
-                        isImageAvailable = true
-                        imageLoadFailed = false
-                        SubcomposeAsyncImageContent()
                     }
                 )
             } else {
@@ -1417,11 +1409,22 @@ fun TcgCardListRow(
             .height(63.dp)
             .clip(RoundedCornerShape(6.dp))) {
             if (!imageLoadFailed && currentImageUrl.isNotBlank()) {
-                SubcomposeAsyncImage(
-                    model = ImageUrlUtils.safeImageUrl(currentImageUrl),
+                // AsyncImage, non SubcomposeAsyncImage: i suoi slot loading/error/
+                // success sono tre subcomposition per cella, e in una griglia di
+                // ~120 carte era il costo principale del jank in scroll. Lo sfondo
+                // fa da placeholder, e il fallback d'errore e' gia' il ramo else
+                // qui sotto, che scatta quando imageLoadFailed diventa true.
+                AsyncImage(
+                    model = remember(currentImageUrl) { ImageUrlUtils.safeImageUrl(currentImageUrl) },
                     contentDescription = card.name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(AppColors.surface),
+                    onSuccess = {
+                        isImageAvailable = true
+                        imageLoadFailed = false
+                    },
                     onError = {
                         val canTryLarge =
                             currentImageUrl != card.images.large && card.images.large.isNotBlank()
@@ -1431,21 +1434,6 @@ fun TcgCardListRow(
                             imageLoadFailed = true
                             isImageAvailable = false
                         }
-                    },
-                    loading = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(AppColors.surface)
-                        )
-                    },
-                    error = {
-                        CardImageFallback(card = card, compact = true)
-                    },
-                    success = {
-                        isImageAvailable = true
-                        imageLoadFailed = false
-                        SubcomposeAsyncImageContent()
                     }
                 )
             } else {
