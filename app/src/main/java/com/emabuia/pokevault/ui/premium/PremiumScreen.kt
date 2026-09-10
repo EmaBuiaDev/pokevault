@@ -45,7 +45,7 @@ fun PremiumScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppColors.background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         Column(
@@ -65,16 +65,16 @@ fun PremiumScreen(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(DarkCard)
+                        .background(AppColors.card)
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = "PokeVault Premium",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextWhite
+                    color = AppColors.textPrimary
                 )
             }
 
@@ -93,7 +93,7 @@ fun PremiumScreen(
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
-                                listOf(StarGold, StarGold.copy(alpha = 0.6f))
+                                listOf(AppColors.gold, AppColors.gold.copy(alpha = 0.6f))
                             )
                         ),
                     contentAlignment = Alignment.Center
@@ -101,7 +101,7 @@ fun PremiumScreen(
                     Icon(
                         Icons.Default.WorkspacePremium,
                         contentDescription = null,
-                        tint = DarkBackground,
+                        tint = AppColors.background,
                         modifier = Modifier.size(40.dp)
                     )
                 }
@@ -113,14 +113,14 @@ fun PremiumScreen(
                         text = AppLocale.premiumActiveTitle,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Black,
-                        color = StarGold,
+                        color = AppColors.gold,
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = AppLocale.premiumActiveSubtitle,
                         fontSize = 14.sp,
-                        color = TextGray,
+                        color = AppColors.textSecondary,
                         textAlign = TextAlign.Center
                     )
                 } else {
@@ -128,14 +128,14 @@ fun PremiumScreen(
                         text = AppLocale.premiumTitle,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Black,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = AppLocale.premiumSubtitle,
                         fontSize = 14.sp,
-                        color = TextGray,
+                        color = AppColors.textSecondary,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -149,14 +149,14 @@ fun PremiumScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(DarkCard)
+                    .background(AppColors.card)
                     .padding(20.dp)
             ) {
                 Text(
                     text = AppLocale.premiumFeaturesTitle,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextWhite
+                    color = AppColors.textPrimary
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -232,7 +232,7 @@ fun PremiumScreen(
                         text = AppLocale.premiumChoosePlan,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextWhite
+                        color = AppColors.textPrimary
                     )
 
                     // Monthly plan
@@ -281,13 +281,13 @@ fun PremiumScreen(
                     Icon(
                         Icons.Default.Restore,
                         contentDescription = null,
-                        tint = BlueCard,
+                        tint = AppColors.blue,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = AppLocale.premiumRestore,
-                        color = BlueCard,
+                        color = AppColors.blue,
                         fontSize = 14.sp
                     )
                 }
@@ -298,7 +298,7 @@ fun PremiumScreen(
             // Legal footnote
             Text(
                 text = AppLocale.premiumLegalNote,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 10.sp,
                 textAlign = TextAlign.Center,
                 lineHeight = 14.sp,
@@ -319,7 +319,7 @@ fun PremiumScreen(
                         .background(Color.Black.copy(alpha = 0.5f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = StarGold)
+                    CircularProgressIndicator(color = AppColors.gold)
                 }
             }
             is PremiumManager.PurchaseState.Success -> {
@@ -353,20 +353,20 @@ private fun FeatureRow(
         Icon(
             icon,
             contentDescription = null,
-            tint = if (isFree) TextMuted else StarGold,
+            tint = if (isFree) AppColors.textMuted else AppColors.gold,
             modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = feature,
             fontSize = 13.sp,
-            color = if (isFree) TextGray else TextWhite,
+            color = if (isFree) AppColors.textSecondary else AppColors.textPrimary,
             modifier = Modifier.weight(1f)
         )
         Icon(
             if (isFree) Icons.Default.CheckCircleOutline else Icons.Default.Stars,
             contentDescription = null,
-            tint = if (isFree) GreenCard else StarGold,
+            tint = if (isFree) AppColors.green else AppColors.gold,
             modifier = Modifier.size(18.dp)
         )
     }
@@ -380,8 +380,8 @@ private fun PlanCard(
     isHighlighted: Boolean,
     onClick: () -> Unit
 ) {
-    val borderColor = if (isHighlighted) StarGold else DarkSurface
-    val bgColor = if (isHighlighted) StarGold.copy(alpha = 0.08f) else DarkCard
+    val borderColor = if (isHighlighted) AppColors.gold else AppColors.surface
+    val bgColor = if (isHighlighted) AppColors.gold.copy(alpha = 0.08f) else AppColors.card
 
     Box(
         modifier = Modifier
@@ -403,17 +403,17 @@ private fun PlanCard(
                         text = title,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextWhite
+                        color = AppColors.textPrimary
                     )
                     if (badge != null) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
-                            color = StarGold,
+                            color = AppColors.gold,
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
                                 text = badge,
-                                color = DarkBackground,
+                                color = AppColors.background,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Black,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -425,14 +425,14 @@ private fun PlanCard(
                 Text(
                     text = price,
                     fontSize = 13.sp,
-                    color = if (isHighlighted) StarGold else TextGray
+                    color = if (isHighlighted) AppColors.gold else AppColors.textSecondary
                 )
             }
 
             Icon(
                 Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
-                tint = if (isHighlighted) StarGold else TextMuted,
+                tint = if (isHighlighted) AppColors.gold else AppColors.textMuted,
                 modifier = Modifier.size(24.dp)
             )
         }
@@ -448,20 +448,20 @@ fun PremiumRequiredDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DarkSurface,
+        containerColor = AppColors.surface,
         shape = RoundedCornerShape(24.dp),
         icon = {
             Icon(
                 Icons.Default.WorkspacePremium,
                 contentDescription = null,
-                tint = StarGold,
+                tint = AppColors.gold,
                 modifier = Modifier.size(40.dp)
             )
         },
         title = {
             Text(
                 text = title,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
@@ -469,7 +469,7 @@ fun PremiumRequiredDialog(
         text = {
             Text(
                 text = message,
-                color = TextGray,
+                color = AppColors.textSecondary,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 lineHeight = 20.sp
@@ -478,19 +478,19 @@ fun PremiumRequiredDialog(
         confirmButton = {
             Button(
                 onClick = onUpgrade,
-                colors = ButtonDefaults.buttonColors(containerColor = StarGold),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.gold),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
                     text = AppLocale.premiumUpgradeButton,
-                    color = DarkBackground,
+                    color = AppColors.background,
                     fontWeight = FontWeight.Bold
                 )
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(AppLocale.cancel, color = TextMuted)
+                Text(AppLocale.cancel, color = AppColors.textMuted)
             }
         }
     )

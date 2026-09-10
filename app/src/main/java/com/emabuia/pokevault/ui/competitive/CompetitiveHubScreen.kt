@@ -31,13 +31,13 @@ fun CompetitiveHubScreen(
     onNavigateToHandSimulator: () -> Unit
 ) {
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         AppLocale.competitiveTitle,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -46,11 +46,11 @@ fun CompetitiveHubScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
-                            tint = TextWhite
+                            tint = AppColors.textPrimary
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         }
     ) { padding ->
@@ -68,7 +68,7 @@ fun CompetitiveHubScreen(
                 title = AppLocale.competitiveDeckLabTab,
                 subtitle = AppLocale.deckLabSubtitle,
                 icon = Icons.Default.Layers,
-                gradientColors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.6f)),
+                gradientColors = listOf(AppColors.lavender, AppColors.lavender.copy(alpha = 0.6f)),
                 onClick = onNavigateToDeckLab
             )
 
@@ -86,7 +86,7 @@ fun CompetitiveHubScreen(
                 title = AppLocale.competitiveHandSimulatorTab,
                 subtitle = AppLocale.handSimulatorSubtitle,
                 icon = Icons.Default.Shuffle,
-                gradientColors = listOf(BlueCard, BlueCard.copy(alpha = 0.65f)),
+                gradientColors = listOf(AppColors.blue, AppColors.blue.copy(alpha = 0.65f)),
                 onClick = onNavigateToHandSimulator
             )
         }

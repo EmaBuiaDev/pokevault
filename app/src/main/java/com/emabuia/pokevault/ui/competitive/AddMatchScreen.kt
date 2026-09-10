@@ -56,22 +56,22 @@ fun AddMatchScreen(
     val isEditing = editMatchId != null
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         if (isEditing) AppLocale.editMatch else AppLocale.addMatch,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         }
     ) { padding ->
@@ -91,9 +91,9 @@ fun AddMatchScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                ResultButton("W", AppLocale.matchWin, GreenCard, viewModel.matchResult == "W", { viewModel.matchResult = "W" }, Modifier.weight(1f))
-                ResultButton("L", AppLocale.matchLoss, RedCard, viewModel.matchResult == "L", { viewModel.matchResult = "L" }, Modifier.weight(1f))
-                ResultButton("T", AppLocale.matchTie, YellowCard, viewModel.matchResult == "T", { viewModel.matchResult = "T" }, Modifier.weight(1f))
+                ResultButton("W", AppLocale.matchWin, AppColors.green, viewModel.matchResult == "W", { viewModel.matchResult = "W" }, Modifier.weight(1f))
+                ResultButton("L", AppLocale.matchLoss, AppColors.red, viewModel.matchResult == "L", { viewModel.matchResult = "L" }, Modifier.weight(1f))
+                ResultButton("T", AppLocale.matchTie, AppColors.yellow, viewModel.matchResult == "T", { viewModel.matchResult = "T" }, Modifier.weight(1f))
             }
 
             // ── Turno ──
@@ -140,8 +140,8 @@ fun AddMatchScreen(
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = OrangeCard,
-                    disabledContainerColor = OrangeCard.copy(alpha = 0.4f)
+                    containerColor = AppColors.orange,
+                    disabledContainerColor = AppColors.orange.copy(alpha = 0.4f)
                 )
             ) {
                 if (viewModel.isSaving) {
@@ -171,25 +171,25 @@ private fun ResultButton(
         modifier = modifier
             .height(56.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isSelected) color.copy(alpha = 0.2f) else DarkCard)
+            .background(if (isSelected) color.copy(alpha = 0.2f) else AppColors.card)
             .border(
                 width = if (isSelected) 2.dp else 1.dp,
-                color = if (isSelected) color else TextMuted.copy(alpha = 0.3f),
+                color = if (isSelected) color else AppColors.textMuted.copy(alpha = 0.3f),
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(code, color = if (isSelected) color else TextGray, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-            Text(label, color = if (isSelected) color else TextMuted, fontSize = 10.sp)
+            Text(code, color = if (isSelected) color else AppColors.textSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+            Text(label, color = if (isSelected) color else AppColors.textMuted, fontSize = 10.sp)
         }
     }
 }
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text, color = TextGray, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    Text(text, color = AppColors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
@@ -216,13 +216,13 @@ private fun MatchTextField(
 
 @Composable
 private fun matchTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = OrangeCard,
-    unfocusedBorderColor = TextMuted,
-    cursorColor = OrangeCard,
-    focusedLabelColor = OrangeCard,
-    unfocusedLabelColor = TextMuted,
-    focusedTextColor = TextWhite,
-    unfocusedTextColor = TextWhite,
-    focusedPlaceholderColor = TextMuted,
-    unfocusedPlaceholderColor = TextMuted
+    focusedBorderColor = AppColors.orange,
+    unfocusedBorderColor = AppColors.textMuted,
+    cursorColor = AppColors.orange,
+    focusedLabelColor = AppColors.orange,
+    unfocusedLabelColor = AppColors.textMuted,
+    focusedTextColor = AppColors.textPrimary,
+    unfocusedTextColor = AppColors.textPrimary,
+    focusedPlaceholderColor = AppColors.textMuted,
+    unfocusedPlaceholderColor = AppColors.textMuted
 )

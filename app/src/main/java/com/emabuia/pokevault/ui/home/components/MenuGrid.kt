@@ -38,25 +38,25 @@ fun MenuGrid(
         MenuItemData(
             title = AppLocale.myCards,
             icon = Icons.Default.Style,
-            gradientColors = listOf(BlueCard, BlueCard.copy(alpha = 0.7f)),
+            gradientColors = listOf(AppColors.blue, AppColors.blue.copy(alpha = 0.7f)),
             routeKey = "my_cards"
         ),
         MenuItemData(
             title = AppLocale.statistics,
             icon = Icons.Default.BarChart,
-            gradientColors = listOf(PurpleCard, PurpleCard.copy(alpha = 0.7f)),
+            gradientColors = listOf(AppColors.purple, AppColors.purple.copy(alpha = 0.7f)),
             routeKey = "statistics"
         ),
         MenuItemData(
             title = AppLocale.gradedCardsTitle,
             icon = Icons.Default.Star,
-            gradientColors = listOf(GreenCard, GreenCard.copy(alpha = 0.7f)),
+            gradientColors = listOf(AppColors.green, AppColors.green.copy(alpha = 0.7f)),
             routeKey = "graded"
         ),
         MenuItemData(
             title = AppLocale.cardsAndExpansions,
             icon = Icons.Default.CatchingPokemon,
-            gradientColors = listOf(YellowCard, RedCard),
+            gradientColors = listOf(AppColors.yellow, AppColors.red),
             routeKey = "pokedex"
         )
     )
@@ -64,14 +64,14 @@ fun MenuGrid(
     val competitiveItem = MenuItemData(
         title = AppLocale.competitiveTitle,
         icon = Icons.Default.EmojiEvents,
-        gradientColors = listOf(LavenderCard, LavenderCard.copy(alpha = 0.6f)),
+        gradientColors = listOf(AppColors.lavender, AppColors.lavender.copy(alpha = 0.6f)),
         routeKey = "competitive"
     )
 
     val albumItem = MenuItemData(
         title = AppLocale.albumTitle,
         icon = Icons.Default.PhotoAlbum,
-        gradientColors = listOf(OrangeCard, OrangeCard.copy(alpha = 0.7f)),
+        gradientColors = listOf(AppColors.orange, AppColors.orange.copy(alpha = 0.7f)),
         routeKey = "collector_lab"
     )
 

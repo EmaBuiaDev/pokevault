@@ -129,9 +129,9 @@ fun MetaArchetypeSection(
                         AppLocale.metaRefreshCooldown(viewModel.refreshCooldownSeconds)
                     else null
                 },
-                modifier = Modifier.size(32.dp).clip(CircleShape).background(DarkCard)
+                modifier = Modifier.size(32.dp).clip(CircleShape).background(AppColors.card)
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Refresh, contentDescription = null, tint = AppColors.textMuted, modifier = Modifier.size(18.dp))
             }
         }
 
@@ -144,10 +144,10 @@ fun MetaArchetypeSection(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.AutoMirrored.Filled.Sort, null, tint = TextMuted, modifier = Modifier.size(15.dp))
+                Icon(Icons.AutoMirrored.Filled.Sort, null, tint = AppColors.textMuted, modifier = Modifier.size(15.dp))
                 Text(
                     text = if (AppLocale.isItalian) "Ordina:" else "Sort:",
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     fontSize = 11.sp
                 )
                 SortChip(
@@ -174,7 +174,7 @@ fun MetaArchetypeSection(
                     Icon(
                         Icons.Default.Info,
                         contentDescription = if (AppLocale.isItalian) "Cos'è un tier?" else "What is a tier?",
-                        tint = if (showTierInfo) BlueCard else TextMuted,
+                        tint = if (showTierInfo) AppColors.blue else AppColors.textMuted,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -194,11 +194,11 @@ fun MetaArchetypeSection(
             viewModel.isLoadingArchetypes -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = BlueCard, modifier = Modifier.size(40.dp))
+                        CircularProgressIndicator(color = AppColors.blue, modifier = Modifier.size(40.dp))
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             if (AppLocale.isItalian) "Caricamento archetipi..." else "Loading archetypes...",
-                            color = TextMuted, fontSize = 13.sp
+                            color = AppColors.textMuted, fontSize = 13.sp
                         )
                     }
                 }
@@ -207,16 +207,16 @@ fun MetaArchetypeSection(
             viewModel.archetypeError != null -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(40.dp)) {
-                        Icon(Icons.Default.CloudOff, null, tint = RedCard, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.CloudOff, null, tint = AppColors.red, modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             if (AppLocale.isItalian) "Errore di connessione" else "Connection error",
-                            color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold
+                            color = AppColors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold
                         )
-                        Text(viewModel.archetypeError ?: "", color = TextMuted, fontSize = 12.sp)
+                        Text(viewModel.archetypeError ?: "", color = AppColors.textMuted, fontSize = 12.sp)
                         Spacer(modifier = Modifier.height(16.dp))
                         TextButton(onClick = { viewModel.loadArchetypes() }) {
-                            Text(AppLocale.retry, color = BlueCard)
+                            Text(AppLocale.retry, color = AppColors.blue)
                         }
                     }
                 }
@@ -225,12 +225,12 @@ fun MetaArchetypeSection(
             viewModel.archetypes.isEmpty() -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(40.dp)) {
-                        Icon(Icons.Default.SearchOff, null, tint = LavenderCard, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.SearchOff, null, tint = AppColors.lavender, modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text(AppLocale.metaNoArchetypes, color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(AppLocale.metaNoArchetypes, color = AppColors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         Text(
                             if (AppLocale.isItalian) "Prova a cambiare formato." else "Try changing format.",
-                            color = TextMuted, fontSize = 12.sp
+                            color = AppColors.textMuted, fontSize = 12.sp
                         )
                     }
                 }
@@ -281,13 +281,13 @@ private fun TierInfoPanel() {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
-        color = DarkCard,
+        color = AppColors.card,
         shape = RoundedCornerShape(14.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
                 text = if (AppLocale.isItalian) "Cosa sono i Tier?" else "What are Tiers?",
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -297,7 +297,7 @@ private fun TierInfoPanel() {
                     "Il tier indica quanto un archetipo è diffuso nel meta competitivo, calcolato sul numero di deck giocati negli ultimi tornei rispetto al totale."
                 else
                     "The tier indicates how widespread an archetype is in the competitive meta, calculated on the number of decks played in recent tournaments vs. the total.",
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 11.sp,
                 lineHeight = 15.sp
             )
@@ -333,7 +333,7 @@ private fun TierInfoPanel() {
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(desc, color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                    Text(desc, color = AppColors.textMuted, fontSize = 11.sp, lineHeight = 15.sp)
                 }
             }
         }
@@ -362,7 +362,7 @@ private fun TierHeader(tier: Int) {
         Spacer(modifier = Modifier.width(8.dp))
         Text(label, color = color, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(modifier = Modifier.width(8.dp))
-        Text(subtitle, color = TextMuted, fontSize = 10.sp)
+        Text(subtitle, color = AppColors.textMuted, fontSize = 10.sp)
     }
 }
 
@@ -384,13 +384,13 @@ private fun ArchetypeCard(
         1    -> Color(0xFFFFD700)
         2    -> Color(0xFFC0C0C0)
         3    -> Color(0xFFCD7F32)
-        else -> TextMuted
+        else -> AppColors.textMuted
     }
 
     val wrColor = when {
-        archetype.avgWinrate >= 0.65 -> GreenCard
-        archetype.avgWinrate >= 0.50 -> YellowCard
-        else                          -> RedCard
+        archetype.avgWinrate >= 0.65 -> AppColors.green
+        archetype.avgWinrate >= 0.50 -> AppColors.yellow
+        else                          -> AppColors.red
     }
 
     // Trend: confronta i primi 2 piazzamenti recenti con gli ultimi 2
@@ -401,9 +401,9 @@ private fun ArchetypeCard(
                 val early = results.take(2).average()
                 val late  = results.takeLast(2).average()
                 when {
-                    late < early - 4  -> Icons.AutoMirrored.Filled.TrendingUp   to GreenCard
-                    late > early + 4  -> Icons.AutoMirrored.Filled.TrendingDown to RedCard
-                    else              -> Icons.AutoMirrored.Filled.TrendingFlat to TextMuted
+                    late < early - 4  -> Icons.AutoMirrored.Filled.TrendingUp   to AppColors.green
+                    late > early + 4  -> Icons.AutoMirrored.Filled.TrendingDown to AppColors.red
+                    else              -> Icons.AutoMirrored.Filled.TrendingFlat to AppColors.textMuted
                 }
             } else null
         }
@@ -413,7 +413,7 @@ private fun ArchetypeCard(
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        colors = CardDefaults.cardColors(containerColor = AppColors.card),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
@@ -435,7 +435,7 @@ private fun ArchetypeCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = archetype.name,
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             maxLines = 1,
@@ -461,7 +461,7 @@ private fun ArchetypeCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(AppLocale.deckCountLabel(archetype.count), color = TextMuted, fontSize = 11.sp)
+                        Text(AppLocale.deckCountLabel(archetype.count), color = AppColors.textMuted, fontSize = 11.sp)
 
                         if (archetype.topPlacement <= 3) {
                             val trophyColor = when (archetype.topPlacement) {
@@ -520,7 +520,7 @@ private fun ArchetypeCard(
                     .fillMaxWidth()
                     .height(5.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(DarkBackground)
+                    .background(AppColors.background)
             ) {
                 Box(
                     modifier = Modifier
@@ -550,13 +550,13 @@ private fun ArchetypeCard(
                 ArchetypeStat(
                     label = if (AppLocale.isItalian) "Piazzamento" else "Best Place",
                     value = "#${archetype.topPlacement}",
-                    color = BlueCard,
+                    color = AppColors.blue,
                     modifier = Modifier.weight(1f)
                 )
                 ArchetypeStat(
                     label = "Deck",
                     value = "${archetype.count}",
-                    color = LavenderCard,
+                    color = AppColors.lavender,
                     modifier = Modifier.weight(0.8f)
                 )
 
@@ -568,7 +568,7 @@ private fun ArchetypeCard(
                             .height(40.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .clickable(onClick = onImport),
-                        color = PurpleCard.copy(alpha = 0.14f),
+                        color = AppColors.purple.copy(alpha = 0.14f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Row(
@@ -576,9 +576,9 @@ private fun ArchetypeCard(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.FileDownload, null, tint = PurpleCard, modifier = Modifier.size(15.dp))
+                            Icon(Icons.Default.FileDownload, null, tint = AppColors.purple, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(AppLocale.import, color = PurpleCard, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(AppLocale.import, color = AppColors.purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -619,13 +619,13 @@ private fun SortChip(
     onClick: () -> Unit
 ) {
     Surface(
-        color = if (selected) BlueCard.copy(alpha = 0.2f) else DarkCard,
+        color = if (selected) AppColors.blue.copy(alpha = 0.2f) else AppColors.card,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.clickable(onClick = onClick)
     ) {
         Text(
             text = label,
-            color = if (selected) BlueCard else TextMuted,
+            color = if (selected) AppColors.blue else AppColors.textMuted,
             fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)

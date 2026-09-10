@@ -83,7 +83,7 @@ private fun CardImageFallback(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(DarkSurface)
+            .background(AppColors.surface)
             .padding(if (compact) 4.dp else 6.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -93,7 +93,7 @@ private fun CardImageFallback(
         ) {
             Text(
                 text = card.name,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontSize = titleSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
@@ -103,7 +103,7 @@ private fun CardImageFallback(
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = setSeries,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = detailSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -111,7 +111,7 @@ private fun CardImageFallback(
             )
             Text(
                 text = setName,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = detailSize,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -407,7 +407,7 @@ fun SetDetailScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = DarkBackground
+        containerColor = AppColors.background
     ) { padding ->
         Column(
             modifier = Modifier
@@ -418,14 +418,14 @@ fun SetDetailScreen(
                 title = {
                     Column {
                         val cleanSetName = state.set?.name?.substringAfterLast(":")?.trim() ?: ""
-                        Text(cleanSetName, fontWeight = FontWeight.Bold, color = TextWhite, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(cleanSetName, fontWeight = FontWeight.Bold, color = AppColors.textPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (state.set != null) {
-                            Text("${if (AppLocale.isItalian) "Data di uscita" else "Release date"}: ${formatReleaseDate(state.set.releaseDate)}", color = TextMuted, fontSize = 12.sp)
+                            Text("${if (AppLocale.isItalian) "Data di uscita" else "Release date"}: ${formatReleaseDate(state.set.releaseDate)}", color = AppColors.textMuted, fontSize = 12.sp)
                         }
                     }
                 },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
 
             Box(modifier = Modifier.fillMaxSize()) {
@@ -500,20 +500,20 @@ fun SetDetailScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(DarkCard)
+                                    .background(AppColors.card)
                                     .padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Search, null, tint = AppColors.textMuted, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Box(modifier = Modifier.weight(1f)) {
-                                        if (state.searchQuery.isEmpty()) Text(if (AppLocale.isItalian) "Cerca in italiano o inglese..." else "Search in Italian or English...", color = TextMuted, fontSize = 13.sp)
+                                        if (state.searchQuery.isEmpty()) Text(if (AppLocale.isItalian) "Cerca in italiano o inglese..." else "Search in Italian or English...", color = AppColors.textMuted, fontSize = 13.sp)
                                         BasicTextField(
                                             value = state.searchQuery,
                                             onValueChange = { viewModel.updateSearchQuery(it) },
-                                            textStyle = androidx.compose.ui.text.TextStyle(color = TextWhite, fontSize = 13.sp),
+                                            textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.textPrimary, fontSize = 13.sp),
                                             singleLine = true,
-                                            cursorBrush = SolidColor(BlueCard)
+                                            cursorBrush = SolidColor(AppColors.blue)
                                         )
                                     }
                                     // Translation indicator
@@ -522,16 +522,16 @@ fun SetDetailScreen(
                                     if (isTranslating && state.searchQuery.isNotEmpty()) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(12.dp),
-                                            color = BlueCard,
+                                            color = AppColors.blue,
                                             strokeWidth = 1.5.dp
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                     } else if (state.translatedQuery.isNotBlank() && state.searchQuery.isNotEmpty()) {
-                                        Icon(Icons.Default.Translate, null, tint = GreenCard, modifier = Modifier.size(14.dp))
+                                        Icon(Icons.Default.Translate, null, tint = AppColors.green, modifier = Modifier.size(14.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
                                     }
                                     if (state.searchQuery.isNotEmpty()) {
-                                        Icon(Icons.Default.Close, null, tint = TextMuted, modifier = Modifier
+                                        Icon(Icons.Default.Close, null, tint = AppColors.textMuted, modifier = Modifier
                                             .size(16.dp)
                                             .clickable { viewModel.updateSearchQuery("") })
                                     }
@@ -541,15 +541,15 @@ fun SetDetailScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(if (state.showOnlyMissing) RedCard.copy(alpha = 0.2f) else DarkCard)
-                                    .border(1.dp, if (state.showOnlyMissing) RedCard else Color.Transparent, RoundedCornerShape(12.dp))
+                                    .background(if (state.showOnlyMissing) AppColors.red.copy(alpha = 0.2f) else AppColors.card)
+                                    .border(1.dp, if (state.showOnlyMissing) AppColors.red else Color.Transparent, RoundedCornerShape(12.dp))
                                     .clickable { viewModel.toggleShowOnlyMissing() }
                                     .padding(horizontal = 10.dp, vertical = 8.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.FilterAltOff,
                                     contentDescription = null,
-                                    tint = if (state.showOnlyMissing) RedCard else TextMuted,
+                                    tint = if (state.showOnlyMissing) AppColors.red else AppColors.textMuted,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -557,15 +557,15 @@ fun SetDetailScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(if (state.showOnlyOwned) GreenCard.copy(alpha = 0.2f) else DarkCard)
-                                    .border(1.dp, if (state.showOnlyOwned) GreenCard else Color.Transparent, RoundedCornerShape(12.dp))
+                                    .background(if (state.showOnlyOwned) AppColors.green.copy(alpha = 0.2f) else AppColors.card)
+                                    .border(1.dp, if (state.showOnlyOwned) AppColors.green else Color.Transparent, RoundedCornerShape(12.dp))
                                     .clickable { viewModel.toggleShowOnlyOwned() }
                                     .padding(horizontal = 10.dp, vertical = 8.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.CheckCircle,
                                     contentDescription = null,
-                                    tint = if (state.showOnlyOwned) GreenCard else TextMuted,
+                                    tint = if (state.showOnlyOwned) AppColors.green else AppColors.textMuted,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -583,7 +583,7 @@ fun SetDetailScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(DarkCard)
+                                .background(AppColors.card)
                                 .padding(10.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -598,13 +598,13 @@ fun SetDetailScreen(
                                 Icon(
                                     Icons.Default.Tune,
                                     contentDescription = null,
-                                    tint = if (activeFiltersCount > 0) BlueCard else TextMuted,
+                                    tint = if (activeFiltersCount > 0) AppColors.blue else AppColors.textMuted,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = if (AppLocale.isItalian) "Filtri" else "Filters",
-                                    color = TextWhite,
+                                    color = AppColors.textPrimary,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.weight(1f)
@@ -613,12 +613,12 @@ fun SetDetailScreen(
                                 if (activeFiltersCount > 0) {
                                     Text(
                                         text = "$activeFiltersCount",
-                                        color = BlueCard,
+                                        color = AppColors.blue,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(999.dp))
-                                            .border(1.dp, BlueCard.copy(alpha = 0.6f), RoundedCornerShape(999.dp))
+                                            .border(1.dp, AppColors.blue.copy(alpha = 0.6f), RoundedCornerShape(999.dp))
                                             .padding(horizontal = 8.dp, vertical = 2.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -627,7 +627,7 @@ fun SetDetailScreen(
                                 Icon(
                                     imageVector = if (filtersExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                     contentDescription = null,
-                                    tint = TextMuted,
+                                    tint = AppColors.textMuted,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -657,7 +657,7 @@ fun SetDetailScreen(
                                                 modifier = Modifier
                                                     .height(20.dp)
                                                     .padding(horizontal = 4.dp),
-                                                color = TextMuted.copy(alpha = 0.3f)
+                                                color = AppColors.textMuted.copy(alpha = 0.3f)
                                             )
                                         }
 
@@ -700,15 +700,15 @@ fun SetDetailScreen(
                         Row(modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(DarkCard), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            .background(AppColors.card), horizontalArrangement = Arrangement.SpaceEvenly) {
                             listOf((if (AppLocale.isItalian) "Carte" else "Cards") to "grid", (if (AppLocale.isItalian) "Lista" else "List") to "list").forEach { (label, mode) ->
-                                Text(label, color = if (state.viewMode == mode) TextWhite else TextMuted,
+                                Text(label, color = if (state.viewMode == mode) AppColors.textPrimary else AppColors.textMuted,
                                     fontWeight = if (state.viewMode == mode) FontWeight.SemiBold else FontWeight.Normal,
                                     fontSize = 13.sp, textAlign = TextAlign.Center,
                                     modifier = Modifier
                                         .weight(1f)
                                         .clickable { viewModel.setViewMode(mode) }
-                                        .background(if (state.viewMode == mode) BlueCard.copy(alpha = 0.3f) else Color.Transparent)
+                                        .background(if (state.viewMode == mode) AppColors.blue.copy(alpha = 0.3f) else Color.Transparent)
                                         .padding(vertical = 10.dp))
                             }
                         }
@@ -724,7 +724,7 @@ fun SetDetailScreen(
                             Box(modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 40.dp), contentAlignment = Alignment.Center) {
-                                Text(AppLocale.noResults, color = TextMuted, fontSize = 14.sp)
+                                Text(AppLocale.noResults, color = AppColors.textMuted, fontSize = 14.sp)
                             }
                         }
                     } else {
@@ -858,13 +858,13 @@ fun SetDetailScreen(
 fun FilterChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
     Text(
         text = label,
-        color = if (isSelected) TextWhite else TextMuted,
+        color = if (isSelected) AppColors.textPrimary else AppColors.textMuted,
         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
         fontSize = 12.sp,
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (isSelected) BlueCard.copy(alpha = 0.5f) else DarkCard)
-            .border(1.dp, if (isSelected) BlueCard else Color.Transparent, RoundedCornerShape(20.dp))
+            .background(if (isSelected) AppColors.blue.copy(alpha = 0.5f) else AppColors.card)
+            .border(1.dp, if (isSelected) AppColors.blue else Color.Transparent, RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp)
     )
@@ -907,7 +907,7 @@ fun SelectionBottomBar(
             .fillMaxWidth()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.Transparent, DarkSurface.copy(alpha = 0.95f), DarkSurface)
+                    listOf(Color.Transparent, AppColors.surface.copy(alpha = 0.95f), AppColors.surface)
                 )
             )
             .padding(top = 16.dp, bottom = 12.dp, start = 16.dp, end = 16.dp),
@@ -916,7 +916,7 @@ fun SelectionBottomBar(
     ) {
         // Cancel
         IconButton(onClick = onCancel, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Default.Close, contentDescription = null, tint = TextMuted)
+            Icon(Icons.Default.Close, contentDescription = null, tint = AppColors.textMuted)
         }
 
         // Variant pills
@@ -932,16 +932,16 @@ fun SelectionBottomBar(
                         "Reverse" -> "Rev"
                         else -> variant
                     },
-                    color = if (isActive) TextWhite else TextMuted,
+                    color = if (isActive) AppColors.textPrimary else AppColors.textMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .clip(RoundedCornerShape(16.dp))
-                        .background(if (isActive) BlueCard.copy(alpha = 0.7f) else DarkCard)
+                        .background(if (isActive) AppColors.blue.copy(alpha = 0.7f) else AppColors.card)
                         .border(
                             1.dp,
-                            if (isActive) BlueCard else Color.Transparent,
+                            if (isActive) AppColors.blue else Color.Transparent,
                             RoundedCornerShape(16.dp)
                         )
                         .clickable { onVariantChange(variant) }
@@ -953,7 +953,7 @@ fun SelectionBottomBar(
         // Add all button
         Button(
             onClick = onAddAll,
-            colors = ButtonDefaults.buttonColors(containerColor = GreenCard),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.green),
             shape = RoundedCornerShape(12.dp),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
             modifier = Modifier.height(36.dp)
@@ -977,7 +977,7 @@ fun SetInfoHeader(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Brush.verticalGradient(listOf(DarkCard, DarkSurface)))
+            .background(Brush.verticalGradient(listOf(AppColors.card, AppColors.surface)))
             .padding(16.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -996,12 +996,12 @@ fun SetInfoHeader(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .border(1.dp, GreenCard.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                        .border(1.dp, AppColors.green.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
                         "${completionPercent}%",
-                        color = GreenCard,
+                        color = AppColors.green,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
                     )
@@ -1009,7 +1009,7 @@ fun SetInfoHeader(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     "$ownedCount/$displayTotal",
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
@@ -1063,7 +1063,7 @@ fun SetInfoHeader(
                         )
                         Text(
                             text = "${counts.first}/${counts.second}",
-                            color = if (counts.first == counts.second) GreenCard else TextWhite.copy(
+                            color = if (counts.first == counts.second) AppColors.green else AppColors.textPrimary.copy(
                                 alpha = 0.8f
                             ),
                             fontSize = 10.sp,
@@ -1078,12 +1078,12 @@ fun SetInfoHeader(
 }
 
 @Composable
-fun RarityFilterChip(label: String, isSelected: Boolean, color: Color = BlueCard, onClick: () -> Unit) {
-    Text(label, maxLines = 1, color = if (isSelected) TextWhite else TextMuted,
+fun RarityFilterChip(label: String, isSelected: Boolean, color: Color = AppColors.blue, onClick: () -> Unit) {
+    Text(label, maxLines = 1, color = if (isSelected) AppColors.textPrimary else AppColors.textMuted,
         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal, fontSize = 12.sp,
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (isSelected) color.copy(alpha = 0.5f) else DarkCard)
+            .background(if (isSelected) color.copy(alpha = 0.5f) else AppColors.card)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp))
 }
@@ -1124,9 +1124,9 @@ fun TcgCardCompactItem(
             .clip(RoundedCornerShape(10.dp))
             .then(
                 when {
-                    isAdding -> Modifier.border(2.dp, BlueCard.copy(alpha = 0.95f), RoundedCornerShape(10.dp))
-                    isSelected -> Modifier.border(2.dp, BlueCard, RoundedCornerShape(10.dp))
-                    isOwned -> Modifier.border(2.dp, GreenCard.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                    isAdding -> Modifier.border(2.dp, AppColors.blue.copy(alpha = 0.95f), RoundedCornerShape(10.dp))
+                    isSelected -> Modifier.border(2.dp, AppColors.blue, RoundedCornerShape(10.dp))
+                    isOwned -> Modifier.border(2.dp, AppColors.green.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
                     else -> Modifier
                 }
             )
@@ -1152,7 +1152,7 @@ fun TcgCardCompactItem(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(DarkSurface)
+                                .background(AppColors.surface)
                         )
                     },
                     error = {
@@ -1183,12 +1183,12 @@ fun TcgCardCompactItem(
 
             if (isSelected) Box(modifier = Modifier
                 .fillMaxSize()
-                .background(BlueCard.copy(alpha = 0.15f)))
+                .background(AppColors.blue.copy(alpha = 0.15f)))
 
             if (isAdding && !isSelected) Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(BlueCard.copy(alpha = 0.18f))
+                    .background(AppColors.blue.copy(alpha = 0.18f))
             )
 
             // Selection checkbox (top-left)
@@ -1199,8 +1199,8 @@ fun TcgCardCompactItem(
                         .padding(4.dp)
                         .size(20.dp)
                         .clip(CircleShape)
-                        .background(if (isSelected) BlueCard else Color.Black.copy(alpha = 0.5f))
-                        .border(1.5.dp, if (isSelected) BlueCard else Color.White.copy(alpha = 0.4f), CircleShape),
+                        .background(if (isSelected) AppColors.blue else Color.Black.copy(alpha = 0.5f))
+                        .border(1.5.dp, if (isSelected) AppColors.blue else Color.White.copy(alpha = 0.4f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     if (isSelected) {
@@ -1216,7 +1216,7 @@ fun TcgCardCompactItem(
                     .padding(4.dp)
                     .size(18.dp)
                     .clip(CircleShape)
-                    .background(GreenCard), contentAlignment = Alignment.Center) {
+                    .background(AppColors.green), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(12.dp))
                 }
             }
@@ -1246,21 +1246,21 @@ fun TcgCardCompactItem(
                             }
                             Text(
                                 text = label,
-                                color = TextWhite,
+                                color = AppColors.textPrimary,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(BlueCard.copy(alpha = 0.7f))
+                                    .background(AppColors.blue.copy(alpha = 0.7f))
                                     .clickable { onVariantSelected(variant) }
                                     .padding(vertical = 6.dp)
                             )
                         }
                         Icon(
                             Icons.Default.Close, null,
-                            tint = TextMuted,
+                            tint = AppColors.textMuted,
                             modifier = Modifier
                                 .size(16.dp)
                                 .clip(CircleShape)
@@ -1273,7 +1273,7 @@ fun TcgCardCompactItem(
                         if (isSelectionMode) {
                             Text(
                                 card.name,
-                                color = TextWhite,
+                                color = AppColors.textPrimary,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -1281,7 +1281,7 @@ fun TcgCardCompactItem(
                             )
                         } else {
                             val heartColor by animateColorAsState(
-                                targetValue = if (isWishlisted) RedCard else Color.White.copy(alpha = 0.92f),
+                                targetValue = if (isWishlisted) AppColors.red else Color.White.copy(alpha = 0.92f),
                                 label = "wishlistHeartColor"
                             )
                             val heartScale by animateFloatAsState(
@@ -1296,7 +1296,7 @@ fun TcgCardCompactItem(
                             ) {
                                 Text(
                                     text = card.name,
-                                    color = TextWhite,
+                                    color = AppColors.textPrimary,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
@@ -1314,19 +1314,19 @@ fun TcgCardCompactItem(
                                     if (priceText != null) {
                                         Text(
                                             text = priceText,
-                                            color = GreenCard,
+                                            color = AppColors.green,
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(999.dp))
-                                                .border(1.dp, GreenCard.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
-                                                .background(DarkCard)
+                                                .border(1.dp, AppColors.green.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+                                                .background(AppColors.card)
                                                 .padding(horizontal = 7.dp, vertical = 1.dp)
                                         )
                                     } else {
                                         Text(
                                             text = AppLocale.priceUnavailable,
-                                            color = TextMuted,
+                                            color = AppColors.textMuted,
                                             fontSize = 8.sp,
                                             fontWeight = FontWeight.Medium
                                         )
@@ -1340,7 +1340,7 @@ fun TcgCardCompactItem(
                                             modifier = Modifier
                                                 .size(22.dp)
                                                 .clip(CircleShape)
-                                                .background(DarkSurface.copy(alpha = 0.78f))
+                                                .background(AppColors.surface.copy(alpha = 0.78f))
                                                 .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
                                                 .clickable { onWishlistClick() },
                                             contentAlignment = Alignment.Center
@@ -1359,9 +1359,9 @@ fun TcgCardCompactItem(
                                                 .clip(CircleShape)
                                                 .background(
                                                     when {
-                                                        isAdding -> BlueCard.copy(alpha = 0.9f)
+                                                        isAdding -> AppColors.blue.copy(alpha = 0.9f)
                                                         isOwned -> Color.Transparent
-                                                        else -> DarkSurface.copy(alpha = 0.8f)
+                                                        else -> AppColors.surface.copy(alpha = 0.8f)
                                                     }
                                                 )
                                                 .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
@@ -1378,7 +1378,7 @@ fun TcgCardCompactItem(
                                                 Icon(
                                                     Icons.Default.Add,
                                                     null,
-                                                    tint = if (isOwned) TextMuted.copy(alpha = 0.5f) else Color.White,
+                                                    tint = if (isOwned) AppColors.textMuted.copy(alpha = 0.5f) else Color.White,
                                                     modifier = Modifier.size(13.dp)
                                                 )
                                             }
@@ -1415,7 +1415,7 @@ fun TcgCardListRow(
     Row(modifier = Modifier
         .fillMaxWidth()
         .clip(RoundedCornerShape(12.dp))
-        .background(if (isOwned) DarkCard else DarkCard.copy(alpha = 0.5f))
+        .background(if (isOwned) AppColors.card else AppColors.card.copy(alpha = 0.5f))
         .clickable(onClick = onClick)
         .padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(modifier = Modifier
@@ -1442,7 +1442,7 @@ fun TcgCardListRow(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(DarkSurface)
+                                .background(AppColors.surface)
                         )
                     },
                     error = {
@@ -1472,27 +1472,27 @@ fun TcgCardListRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(rarityInfo.emoji, color = rarityInfo.color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.width(4.dp))
-                Text(card.name, color = if (isOwned) TextWhite else TextMuted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(card.name, color = if (isOwned) AppColors.textPrimary else AppColors.textMuted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text("#${card.number} · ${AppLocale.translateRarity(card.rarity ?: "")}", color = TextMuted, fontSize = 11.sp)
+            Text("#${card.number} · ${AppLocale.translateRarity(card.rarity ?: "")}", color = AppColors.textMuted, fontSize = 11.sp)
         }
         val priceText = resolveDisplayPriceText(card)
         if (priceText != null) {
             Text(
                 text = priceText,
-                color = GreenCard,
+                color = AppColors.green,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .clip(RoundedCornerShape(999.dp))
-                    .border(1.dp, GreenCard.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
-                    .background(DarkCard)
+                    .border(1.dp, AppColors.green.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+                    .background(AppColors.card)
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             )
         } else {
             Text(
                 text = AppLocale.priceUnavailable,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -1500,7 +1500,7 @@ fun TcgCardListRow(
         Icon(
             imageVector = if (isWishlisted) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
             contentDescription = AppLocale.wishlistTitle,
-            tint = if (isWishlisted) RedCard else TextMuted,
+            tint = if (isWishlisted) AppColors.red else AppColors.textMuted,
             modifier = Modifier
                 .size(20.dp)
                 .clickable { onWishlistClick() }
@@ -1509,11 +1509,11 @@ fun TcgCardListRow(
         Box(modifier = Modifier
             .size(28.dp)
             .clip(CircleShape)
-            .background(if (isOwned) GreenCard else Color.Transparent)
+            .background(if (isOwned) AppColors.green else Color.Transparent)
             .then(
                 if (!isOwned) Modifier.border(
                     1.5.dp,
-                    TextMuted.copy(alpha = 0.3f),
+                    AppColors.textMuted.copy(alpha = 0.3f),
                     CircleShape
                 ) else Modifier
             ), contentAlignment = Alignment.Center) {
@@ -1539,17 +1539,17 @@ private fun WishlistPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DarkSurface,
+        containerColor = AppColors.surface,
         title = {
             Text(
                 text = AppLocale.wishlistAddToList,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(AppLocale.wishlistChooseList, color = TextMuted, fontSize = 13.sp)
+                Text(AppLocale.wishlistChooseList, color = AppColors.textMuted, fontSize = 13.sp)
 
                 wishlists.forEach { wishlist ->
                     val selected = wishlist.id in selectedIds
@@ -1557,10 +1557,10 @@ private fun WishlistPickerDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (selected) BlueCard.copy(alpha = 0.22f) else DarkCard)
+                            .background(if (selected) AppColors.blue.copy(alpha = 0.22f) else AppColors.card)
                             .border(
                                 1.dp,
-                                if (selected) BlueCard else TextMuted.copy(alpha = 0.2f),
+                                if (selected) AppColors.blue else AppColors.textMuted.copy(alpha = 0.2f),
                                 RoundedCornerShape(12.dp)
                             )
                             .clickable {
@@ -1574,13 +1574,13 @@ private fun WishlistPickerDialog(
                         Icon(
                             imageVector = if (selected) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
                             contentDescription = null,
-                            tint = if (selected) BlueCard else TextMuted,
+                            tint = if (selected) AppColors.blue else AppColors.textMuted,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = wishlist.name,
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontSize = 13.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1592,9 +1592,9 @@ private fun WishlistPickerDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirmSelection(selectedIds) },
-                colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
             ) {
-                Text(AppLocale.addCard, color = TextWhite)
+                Text(AppLocale.addCard, color = AppColors.textPrimary)
             }
         },
         dismissButton = {
@@ -1606,11 +1606,11 @@ private fun WishlistPickerDialog(
                         } else {
                             "${AppLocale.wishlistCreateNewList} • Premium"
                         },
-                        color = if (canCreateNew) PurpleCard else StarGold
+                        color = if (canCreateNew) AppColors.purple else AppColors.gold
                     )
                 }
                 TextButton(onClick = onDismiss) {
-                    Text(AppLocale.cancel, color = TextMuted)
+                    Text(AppLocale.cancel, color = AppColors.textMuted)
                 }
             }
         }

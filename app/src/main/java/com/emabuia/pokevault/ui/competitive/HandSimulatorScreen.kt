@@ -70,11 +70,6 @@ import com.emabuia.pokevault.data.simulator.ProblemHandSample
 import com.emabuia.pokevault.data.simulator.SavedProblemHand
 import com.emabuia.pokevault.data.simulator.SimulatorCard
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
-import com.emabuia.pokevault.ui.theme.BlueCard
-import com.emabuia.pokevault.ui.theme.DarkBackground
-import com.emabuia.pokevault.ui.theme.DarkCard
-import com.emabuia.pokevault.ui.theme.TextGray
-import com.emabuia.pokevault.ui.theme.TextWhite
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.DeckLabViewModel
 import kotlinx.coroutines.Dispatchers
@@ -135,13 +130,13 @@ fun HandSimulatorScreen(
     }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = AppLocale.handSimulatorTitle,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -150,11 +145,11 @@ fun HandSimulatorScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
-                            tint = TextWhite
+                            tint = AppColors.textPrimary
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         }
     ) { padding ->
@@ -167,7 +162,7 @@ fun HandSimulatorScreen(
         ) {
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    colors = CardDefaults.cardColors(containerColor = AppColors.card),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(
@@ -178,22 +173,22 @@ fun HandSimulatorScreen(
                     ) {
                         Text(
                             text = AppLocale.handSimulatorHowItWorksTitle,
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
                         Text(
                             text = AppLocale.handSimulatorHowItWorksBody,
-                            color = TextGray,
+                            color = AppColors.textSecondary,
                             fontSize = 12.sp
                         )
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = DarkBackground),
+                            colors = CardDefaults.cardColors(containerColor = AppColors.background),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text(
                                 text = AppLocale.handSimulatorHowItWorksExample,
-                                color = TextGray,
+                                color = AppColors.textSecondary,
                                 fontSize = 12.sp,
                                 modifier = Modifier.padding(10.dp)
                             )
@@ -204,7 +199,7 @@ fun HandSimulatorScreen(
 
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    colors = CardDefaults.cardColors(containerColor = AppColors.card),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(
@@ -215,7 +210,7 @@ fun HandSimulatorScreen(
                     ) {
                         Text(
                             text = AppLocale.handSimulatorDeckLabel,
-                            color = TextGray,
+                            color = AppColors.textSecondary,
                             fontSize = 12.sp
                         )
 
@@ -311,14 +306,14 @@ fun HandSimulatorScreen(
 
                         Text(
                             text = AppLocale.handSimulatorSelectedKeyCards,
-                            color = TextGray,
+                            color = AppColors.textSecondary,
                             fontSize = 12.sp
                         )
 
                         if (selectedKeyCardNames.isEmpty()) {
                             Text(
                                 text = AppLocale.handSimulatorNoKeyCardSelected,
-                                color = TextGray,
+                                color = AppColors.textSecondary,
                                 fontSize = 12.sp
                             )
                         } else {
@@ -385,13 +380,13 @@ fun HandSimulatorScreen(
                             enabled = !isSimulating,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
                         ) {
                             if (isSimulating) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(18.dp),
                                     strokeWidth = 2.dp,
-                                    color = TextWhite
+                                    color = AppColors.textPrimary
                                 )
                             } else {
                                 Icon(
@@ -414,13 +409,13 @@ fun HandSimulatorScreen(
                             val runsUsed = selectedDeck?.let { premiumManager.getHandSimulatorRuns(it.id) } ?: 0
                             Text(
                                 text = AppLocale.handSimulatorFreeLimitInfo(runsUsed),
-                                color = TextGray,
+                                color = AppColors.textSecondary,
                                 fontSize = 12.sp
                             )
                         } else {
                             Text(
                                 text = AppLocale.handSimulatorPremiumUnlimited,
-                                color = TextGray,
+                                color = AppColors.textSecondary,
                                 fontSize = 12.sp
                             )
                         }
@@ -428,12 +423,12 @@ fun HandSimulatorScreen(
                         if (decks.isEmpty()) {
                             Text(
                                 text = AppLocale.handSimulatorNoDecks,
-                                color = TextWhite,
+                                color = AppColors.textPrimary,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
                                 text = AppLocale.handSimulatorNoDecksSubtitle,
-                                color = TextGray,
+                                color = AppColors.textSecondary,
                                 fontSize = 12.sp
                             )
                         }
@@ -441,7 +436,7 @@ fun HandSimulatorScreen(
                         validationMessage?.let { message ->
                             Text(
                                 text = message,
-                                color = TextGray,
+                                color = AppColors.textSecondary,
                                 fontSize = 12.sp
                             )
                         }
@@ -449,7 +444,7 @@ fun HandSimulatorScreen(
                         saveFeedback?.let { feedback ->
                             Text(
                                 text = feedback,
-                                color = TextGray,
+                                color = AppColors.textSecondary,
                                 fontSize = 12.sp
                             )
                         }
@@ -460,7 +455,7 @@ fun HandSimulatorScreen(
             if (summary != null && accuracyWarnings.isNotEmpty()) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = DarkCard),
+                        colors = CardDefaults.cardColors(containerColor = AppColors.card),
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Column(
@@ -471,12 +466,12 @@ fun HandSimulatorScreen(
                         ) {
                             Text(
                                 text = AppLocale.handSimulatorAccuracyTitle,
-                                color = TextWhite,
+                                color = AppColors.textPrimary,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp
                             )
                             accuracyWarnings.forEach { warning ->
-                                Text(text = warning, color = TextGray, fontSize = 12.sp)
+                                Text(text = warning, color = AppColors.textSecondary, fontSize = 12.sp)
                             }
                         }
                     }
@@ -486,7 +481,7 @@ fun HandSimulatorScreen(
             summary?.let { result ->
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = DarkCard),
+                        colors = CardDefaults.cardColors(containerColor = AppColors.card),
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Column(
@@ -502,7 +497,7 @@ fun HandSimulatorScreen(
                             ) {
                                 Text(
                                     text = AppLocale.handSimulatorResults,
-                                    color = TextWhite,
+                                    color = AppColors.textPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )
@@ -510,7 +505,7 @@ fun HandSimulatorScreen(
                                     Icon(
                                         imageVector = Icons.Default.Info,
                                         contentDescription = AppLocale.handSimulatorMetricInfoTitle,
-                                        tint = TextGray
+                                        tint = AppColors.textSecondary
                                     )
                                 }
                             }
@@ -589,7 +584,7 @@ fun HandSimulatorScreen(
 
                             Text(
                                 text = AppLocale.handSimulatorSampleHand,
-                                color = TextGray,
+                                color = AppColors.textSecondary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -600,12 +595,12 @@ fun HandSimulatorScreen(
                             ) {
                                 result.sampleHand.forEach { cardName ->
                                     Card(
-                                        colors = CardDefaults.cardColors(containerColor = DarkBackground),
+                                        colors = CardDefaults.cardColors(containerColor = AppColors.background),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
                                         Text(
                                             text = cardName,
-                                            color = TextWhite,
+                                            color = AppColors.textPrimary,
                                             fontSize = 12.sp,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
@@ -621,7 +616,7 @@ fun HandSimulatorScreen(
                 if (insights.isNotEmpty()) {
                     item {
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = DarkCard),
+                            colors = CardDefaults.cardColors(containerColor = AppColors.card),
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Column(
@@ -632,27 +627,27 @@ fun HandSimulatorScreen(
                             ) {
                                 Text(
                                     text = AppLocale.handSimulatorInsightsTitle,
-                                    color = TextWhite,
+                                    color = AppColors.textPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )
 
                                 insights.forEach { insight ->
                                     Card(
-                                        colors = CardDefaults.cardColors(containerColor = DarkBackground),
+                                        colors = CardDefaults.cardColors(containerColor = AppColors.background),
                                         shape = RoundedCornerShape(12.dp)
                                     ) {
                                         Column(modifier = Modifier.padding(10.dp)) {
                                             Text(
                                                 text = insight.title,
-                                                color = TextWhite,
+                                                color = AppColors.textPrimary,
                                                 fontWeight = FontWeight.SemiBold,
                                                 fontSize = 13.sp
                                             )
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Text(
                                                 text = insight.message,
-                                                color = TextGray,
+                                                color = AppColors.textSecondary,
                                                 fontSize = 12.sp
                                             )
                                         }
@@ -666,7 +661,7 @@ fun HandSimulatorScreen(
                 if (result.problemHands.isNotEmpty()) {
                     item {
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = DarkCard),
+                            colors = CardDefaults.cardColors(containerColor = AppColors.card),
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Column(
@@ -677,7 +672,7 @@ fun HandSimulatorScreen(
                             ) {
                                 Text(
                                     text = AppLocale.handSimulatorProblemsTitle,
-                                    color = TextWhite,
+                                    color = AppColors.textPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )
@@ -706,7 +701,7 @@ fun HandSimulatorScreen(
 
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    colors = CardDefaults.cardColors(containerColor = AppColors.card),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(
@@ -717,7 +712,7 @@ fun HandSimulatorScreen(
                     ) {
                         Text(
                             text = AppLocale.handSimulatorSavedTitle,
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
@@ -725,7 +720,7 @@ fun HandSimulatorScreen(
                         if (savedHands.isEmpty()) {
                             Text(
                                 text = AppLocale.handSimulatorSavedEmpty,
-                                color = TextGray,
+                                color = AppColors.textSecondary,
                                 fontSize = 12.sp
                             )
                         } else {
@@ -776,7 +771,7 @@ private fun StatPill(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = DarkBackground),
+        colors = CardDefaults.cardColors(containerColor = AppColors.background),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
@@ -786,14 +781,14 @@ private fun StatPill(
         ) {
             Text(
                 text = label,
-                color = TextGray,
+                color = AppColors.textSecondary,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = value,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
@@ -807,7 +802,7 @@ private fun ProblemHandCard(
     onSave: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = DarkBackground),
+        colors = CardDefaults.cardColors(containerColor = AppColors.background),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
@@ -836,7 +831,7 @@ private fun ProblemHandCard(
             Button(
                 onClick = onSave,
                 shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
             ) {
                 Icon(Icons.Default.Save, contentDescription = null)
                 Text(
@@ -857,7 +852,7 @@ private fun SavedProblemHandCard(
     val dateLabel = remember(hand.createdAtMillis) { df.format(Date(hand.createdAtMillis)) }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = DarkBackground),
+        colors = CardDefaults.cardColors(containerColor = AppColors.background),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
@@ -869,7 +864,7 @@ private fun SavedProblemHandCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = hand.deckName,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -877,7 +872,7 @@ private fun SavedProblemHandCard(
                     )
                     Text(
                         text = dateLabel,
-                        color = TextGray,
+                        color = AppColors.textSecondary,
                         fontSize = 11.sp
                     )
                 }
@@ -885,7 +880,7 @@ private fun SavedProblemHandCard(
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = AppLocale.delete,
-                        tint = TextGray
+                        tint = AppColors.textSecondary
                     )
                 }
             }
@@ -905,12 +900,12 @@ private fun SavedProblemHandCard(
 @Composable
 private fun TagChip(label: String) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        colors = CardDefaults.cardColors(containerColor = AppColors.card),
         shape = RoundedCornerShape(8.dp)
     ) {
         Text(
             text = label,
-            color = TextGray,
+            color = AppColors.textSecondary,
             fontSize = 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -925,7 +920,7 @@ private fun KeyCardChip(
     onRemove: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = DarkBackground),
+        colors = CardDefaults.cardColors(containerColor = AppColors.background),
         shape = RoundedCornerShape(8.dp)
     ) {
         Row(
@@ -934,7 +929,7 @@ private fun KeyCardChip(
         ) {
             Text(
                 text = label,
-                color = TextGray,
+                color = AppColors.textSecondary,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -943,7 +938,7 @@ private fun KeyCardChip(
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = AppLocale.delete,
-                    tint = TextGray
+                    tint = AppColors.textSecondary
                 )
             }
         }
@@ -954,31 +949,31 @@ private fun KeyCardChip(
 private fun MetricInfoDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DarkCard,
+        containerColor = AppColors.card,
         title = {
             Text(
                 text = AppLocale.handSimulatorMetricInfoTitle,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(AppLocale.handSimulatorMetricRuns, color = TextGray, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricStarter, color = TextGray, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricMulligan, color = TextGray, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricAvgBasics, color = TextGray, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricEnergyT1, color = TextGray, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricOutT1, color = TextGray, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricSetupT2, color = TextGray, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricAvgMulligans, color = TextGray, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricKeyByT2, color = TextGray, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricRuns, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricStarter, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricMulligan, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricAvgBasics, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricEnergyT1, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricOutT1, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricSetupT2, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricAvgMulligans, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricKeyByT2, color = AppColors.textSecondary, fontSize = 12.sp)
             }
         },
         confirmButton = {
             Button(
                 onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
             ) {
                 Text(text = AppLocale.cancel)
             }

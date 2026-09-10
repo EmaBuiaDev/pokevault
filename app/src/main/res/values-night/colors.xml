@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Sfondo dello splash in tema scuro. Il tema base e' DayNight, ma
+        splash_background era definito una volta sola su un valore scuro:
+        in tema chiaro lo splash lampeggiava scuro prima di aprire l'app.
+    -->
+    <color name="splash_background">#FF1A1A2E</color>
+</resources>

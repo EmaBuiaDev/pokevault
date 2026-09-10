@@ -39,20 +39,20 @@ fun OfflineBanner(modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(RedCard.copy(alpha = 0.15f))
+                .background(AppColors.red.copy(alpha = 0.15f))
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 Icons.Default.SignalWifiOff,
                 contentDescription = null,
-                tint = RedCard,
+                tint = AppColors.red,
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = AppLocale.offlineMessage,
-                color = RedCard,
+                color = AppColors.red,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -77,13 +77,13 @@ fun EmptyStateView(
         Icon(
             icon,
             contentDescription = null,
-            tint = TextMuted.copy(alpha = 0.5f),
+            tint = AppColors.textMuted.copy(alpha = 0.5f),
             modifier = Modifier.size(64.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = title,
-            color = TextGray,
+            color = AppColors.textSecondary,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center
@@ -92,7 +92,7 @@ fun EmptyStateView(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = subtitle,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center
             )
@@ -115,13 +115,13 @@ fun ErrorStateView(
         Icon(
             Icons.Default.ErrorOutline,
             contentDescription = null,
-            tint = RedCard.copy(alpha = 0.6f),
+            tint = AppColors.red.copy(alpha = 0.6f),
             modifier = Modifier.size(48.dp)
         )
         Spacer(modifier = Modifier.height(12.dp))
         Text(
             text = message,
-            color = TextGray,
+            color = AppColors.textSecondary,
             fontSize = 14.sp,
             textAlign = TextAlign.Center
         )
@@ -141,13 +141,13 @@ fun NotFoundOrLoadingView(
     isLoading: Boolean,
     message: String,
     onBack: () -> Unit,
-    accentColor: androidx.compose.ui.graphics.Color = BlueCard,
+    accentColor: androidx.compose.ui.graphics.Color = AppColors.blue,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(DarkBackground),
+            .background(AppColors.background),
         contentAlignment = Alignment.Center
     ) {
         if (isLoading) {
@@ -160,7 +160,7 @@ fun NotFoundOrLoadingView(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = accentColor)
                 ) {
-                    Text(text = AppLocale.back, color = TextWhite, fontWeight = FontWeight.SemiBold)
+                    Text(text = AppLocale.back, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

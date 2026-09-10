@@ -14,6 +14,7 @@ import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.remote.RepositoryProvider
+import com.emabuia.pokevault.ui.theme.ThemePreference
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.workers.CacheCleanupWorker
 import com.emabuia.pokevault.workers.CardsSyncWorker
@@ -50,6 +51,7 @@ class PokeVaultApp : Application(), ImageLoaderFactory {
                 .build()
 
         AppLocale.init(this)
+        ThemePreference.init(this)
         PremiumManager.init(this)
 
         // Initialize Room database and shared repositories

@@ -637,6 +637,12 @@ object AppLocale {
     val albumNotFound: String get() = if (isItalian) "Album non trovato" else "Album not found"
     val priceUnavailable: String get() = if (isItalian) "Prezzo N/D" else "Price N/A"
     val unknownError: String get() = if (isItalian) "Errore sconosciuto" else "Unknown error"
+    val themeLabel: String get() = if (isItalian) "Tema" else "Theme"
+    fun themeSubtitle(mode: String): String = when (mode) {
+        "light" -> if (isItalian) "Chiaro" else "Light"
+        "dark" -> if (isItalian) "Scuro" else "Dark"
+        else -> if (isItalian) "Come il sistema" else "Follow system"
+    }
 
     // Etichette di ordinamento e categoria della collezione. Prima erano
     // hardcoded in italiano nel foglio dei filtri, e nei chip dei filtri attivi

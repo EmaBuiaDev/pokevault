@@ -63,14 +63,14 @@ private fun GoalCardImageFallback(card: TcgCard, compact: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(0.72f)
-            .background(DarkSurface)
+            .background(AppColors.surface)
             .padding(if (compact) 4.dp else 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = card.name,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontSize = titleSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
@@ -80,7 +80,7 @@ private fun GoalCardImageFallback(card: TcgCard, compact: Boolean) {
             Spacer(modifier = Modifier.height(1.dp))
             Text(
                 text = series,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = detailSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -88,7 +88,7 @@ private fun GoalCardImageFallback(card: TcgCard, compact: Boolean) {
             )
             Text(
                 text = setName,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = detailSize,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -125,22 +125,22 @@ fun CreateGoalAlbumScreen(
     }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
-                    Text(AppLocale.createChaseTitle, color = TextWhite, fontWeight = FontWeight.Bold)
+                    Text(AppLocale.createChaseTitle, color = AppColors.textPrimary, fontWeight = FontWeight.Bold)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
-                            tint = TextWhite
+                            tint = AppColors.textPrimary
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         }
     ) { padding ->
@@ -156,20 +156,20 @@ fun CreateGoalAlbumScreen(
             OutlinedTextField(
                 value = viewModel.formName,
                 onValueChange = { viewModel.formName = it },
-                label = { Text(AppLocale.chaseNameLabel, color = TextGray) },
+                label = { Text(AppLocale.chaseNameLabel, color = AppColors.textSecondary) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = OrangeCard,
-                    unfocusedBorderColor = TextMuted,
-                    focusedTextColor = TextWhite,
-                    unfocusedTextColor = TextWhite,
-                    cursorColor = OrangeCard
+                    focusedBorderColor = AppColors.orange,
+                    unfocusedBorderColor = AppColors.textMuted,
+                    focusedTextColor = AppColors.textPrimary,
+                    unfocusedTextColor = AppColors.textPrimary,
+                    cursorColor = AppColors.orange
                 )
             )
 
             // ── Valore criterio ───────────────────────────────────────────
-            Text(AppLocale.set, color = TextGray, fontSize = 13.sp)
+            Text(AppLocale.set, color = AppColors.textSecondary, fontSize = 13.sp)
             SetPicker(
                 sets = viewModel.availableSets,
                 selectedValue = viewModel.formCriteriaValue,
@@ -181,7 +181,7 @@ fun CreateGoalAlbumScreen(
             // ── Preview ───────────────────────────────────────────────────
             if (viewModel.isPreviewLoading) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = OrangeCard, modifier = Modifier.size(28.dp))
+                    CircularProgressIndicator(color = AppColors.orange, modifier = Modifier.size(28.dp))
                 }
             } else if (viewModel.previewCards.isNotEmpty()) {
                 PreviewSection(cards = viewModel.previewCards)
@@ -205,12 +205,12 @@ fun CreateGoalAlbumScreen(
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = OrangeCard)
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.orange)
             ) {
                 if (viewModel.isSaving) {
-                    CircularProgressIndicator(color = TextWhite, modifier = Modifier.size(20.dp))
+                    CircularProgressIndicator(color = AppColors.textPrimary, modifier = Modifier.size(20.dp))
                 } else {
-                    Text(AppLocale.saveChase, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text(AppLocale.saveChase, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 }
             }
 
@@ -265,16 +265,16 @@ private fun SetPicker(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchChange,
-            placeholder = { Text(AppLocale.searchSet, color = TextMuted, fontSize = 14.sp) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted) },
+            placeholder = { Text(AppLocale.searchSet, color = AppColors.textMuted, fontSize = 14.sp) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = AppColors.textMuted) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = OrangeCard,
-                unfocusedBorderColor = TextMuted,
-                focusedTextColor = TextWhite,
-                unfocusedTextColor = TextWhite,
-                cursorColor = OrangeCard
+                focusedBorderColor = AppColors.orange,
+                unfocusedBorderColor = AppColors.textMuted,
+                focusedTextColor = AppColors.textPrimary,
+                unfocusedTextColor = AppColors.textPrimary,
+                cursorColor = AppColors.orange
             )
         )
 
@@ -285,10 +285,10 @@ private fun SetPicker(
                     .clip(RoundedCornerShape(20.dp))
                     .background(
                         Brush.linearGradient(
-                            colors = listOf(OrangeCard.copy(alpha = 0.24f), BlueCard.copy(alpha = 0.18f))
+                            colors = listOf(AppColors.orange.copy(alpha = 0.24f), AppColors.blue.copy(alpha = 0.18f))
                         )
                     )
-                    .border(1.dp, OrangeCard.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                    .border(1.dp, AppColors.orange.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
                     .padding(16.dp)
             ) {
                 Row(
@@ -307,12 +307,12 @@ private fun SetPicker(
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             text = if (AppLocale.isItalian) "Set selezionato" else "Selected set",
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 12.sp
                         )
                         Text(
                             text = selectedSet.name,
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 2,
@@ -320,7 +320,7 @@ private fun SetPicker(
                         )
                         Text(
                             text = formatSetMeta(selectedSet),
-                            color = TextGray,
+                            color = AppColors.textSecondary,
                             fontSize = 12.sp,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -341,18 +341,18 @@ private fun SetPicker(
                 } else {
                     if (AppLocale.isItalian) "Risultati" else "Results"
                 },
-                color = TextGray,
+                color = AppColors.textSecondary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
             Text(
                 text = filtered.size.toString(),
-                color = OrangeCard,
+                color = AppColors.orange,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
                     .clip(RoundedCornerShape(999.dp))
-                    .background(OrangeCard.copy(alpha = 0.14f))
+                    .background(AppColors.orange.copy(alpha = 0.14f))
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             )
         }
@@ -362,8 +362,8 @@ private fun SetPicker(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
-                    .background(DarkSurface)
-                    .border(1.dp, TextMuted.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
+                    .background(AppColors.surface)
+                    .border(1.dp, AppColors.textMuted.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
                     .padding(18.dp)
             ) {
                 Text(
@@ -372,7 +372,7 @@ private fun SetPicker(
                     } else {
                         "No set found. Try name, series, or set code."
                     },
-                    color = TextGray,
+                    color = AppColors.textSecondary,
                     fontSize = 13.sp
                 )
             }
@@ -391,10 +391,10 @@ private fun SetPicker(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(18.dp))
-                                .background(if (isSelected) OrangeCard.copy(alpha = 0.14f) else DarkSurface)
+                                .background(if (isSelected) AppColors.orange.copy(alpha = 0.14f) else AppColors.surface)
                                 .border(
                                     width = if (isSelected) 1.4.dp else 1.dp,
-                                    color = if (isSelected) OrangeCard else TextMuted.copy(alpha = 0.15f),
+                                    color = if (isSelected) AppColors.orange else AppColors.textMuted.copy(alpha = 0.15f),
                                     shape = RoundedCornerShape(18.dp)
                                 )
                                 .clickable { onSelect(set.id) }
@@ -427,7 +427,7 @@ private fun SetPicker(
                                 ) {
                                     Text(
                                         text = set.name,
-                                        color = if (isSelected) OrangeCard else TextWhite,
+                                        color = if (isSelected) AppColors.orange else AppColors.textPrimary,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 2,
@@ -435,7 +435,7 @@ private fun SetPicker(
                                     )
                                     Text(
                                         text = formatSetMeta(set),
-                                        color = TextGray,
+                                        color = AppColors.textSecondary,
                                         fontSize = 12.sp,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
@@ -447,13 +447,13 @@ private fun SetPicker(
                                     } else {
                                         set.id.uppercase()
                                     },
-                                    color = if (isSelected) TextWhite else TextMuted,
+                                    color = if (isSelected) AppColors.textPrimary else AppColors.textMuted,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(999.dp))
                                         .background(
-                                            if (isSelected) OrangeCard else Color.White.copy(alpha = 0.06f)
+                                            if (isSelected) AppColors.orange else Color.White.copy(alpha = 0.06f)
                                         )
                                         .padding(horizontal = 10.dp, vertical = 5.dp)
                                 )
@@ -505,7 +505,7 @@ private fun TypePicker(selected: String, onSelect: (String) -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 private fun CriteriaChipList(options: List<String>, selected: String, onSelect: (String) -> Unit) {
     Column {
-        Text(AppLocale.chaseCriteriaValueLabel, color = TextGray, fontSize = 13.sp)
+        Text(AppLocale.chaseCriteriaValueLabel, color = AppColors.textSecondary, fontSize = 13.sp)
         Spacer(modifier = Modifier.height(8.dp))
         androidx.compose.foundation.layout.FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -517,10 +517,10 @@ private fun CriteriaChipList(options: List<String>, selected: String, onSelect: 
                     onClick = { onSelect(option) },
                     label = { Text(option, fontSize = 12.sp) },
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = OrangeCard,
-                        selectedLabelColor = TextWhite,
-                        containerColor = DarkSurface,
-                        labelColor = TextGray
+                        selectedContainerColor = AppColors.orange,
+                        selectedLabelColor = AppColors.textPrimary,
+                        containerColor = AppColors.surface,
+                        labelColor = AppColors.textSecondary
                     )
                 )
             }
@@ -542,20 +542,20 @@ private fun CustomCardSearch(viewModel: GoalAlbumViewModel) {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(AppLocale.chaseCustomSearchLabel, color = TextGray, fontSize = 13.sp)
+        Text(AppLocale.chaseCustomSearchLabel, color = AppColors.textSecondary, fontSize = 13.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text(AppLocale.searchCardPlaceholder, color = TextMuted, fontSize = 14.sp) },
+                placeholder = { Text(AppLocale.searchCardPlaceholder, color = AppColors.textMuted, fontSize = 14.sp) },
                 singleLine = true,
                 modifier = Modifier.weight(1f),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = OrangeCard,
-                    unfocusedBorderColor = TextMuted,
-                    focusedTextColor = TextWhite,
-                    unfocusedTextColor = TextWhite,
-                    cursorColor = OrangeCard
+                    focusedBorderColor = AppColors.orange,
+                    unfocusedBorderColor = AppColors.textMuted,
+                    focusedTextColor = AppColors.textPrimary,
+                    unfocusedTextColor = AppColors.textPrimary,
+                    cursorColor = AppColors.orange
                 )
             )
             Button(
@@ -568,12 +568,12 @@ private fun CustomCardSearch(viewModel: GoalAlbumViewModel) {
                         }
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = OrangeCard)
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.orange)
             ) {
                 if (isSearching) {
-                    CircularProgressIndicator(color = TextWhite, modifier = Modifier.size(18.dp))
+                    CircularProgressIndicator(color = AppColors.textPrimary, modifier = Modifier.size(18.dp))
                 } else {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = TextWhite)
+                    Icon(Icons.Default.Search, contentDescription = null, tint = AppColors.textPrimary)
                 }
             }
         }
@@ -581,7 +581,7 @@ private fun CustomCardSearch(viewModel: GoalAlbumViewModel) {
         if (searchResults.isNotEmpty()) {
             Text(
                 "${searchResults.size} risultati — tocca per aggiungere/rimuovere",
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 12.sp
             )
             LazyVerticalGrid(
@@ -597,7 +597,7 @@ private fun CustomCardSearch(viewModel: GoalAlbumViewModel) {
                             .clip(RoundedCornerShape(8.dp))
                             .border(
                                 width = if (isSelected) 2.dp else 0.dp,
-                                color = if (isSelected) OrangeCard else Color.Transparent,
+                                color = if (isSelected) AppColors.orange else Color.Transparent,
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .clickable {
@@ -620,7 +620,7 @@ private fun CustomCardSearch(viewModel: GoalAlbumViewModel) {
         if (selectedIds.isNotEmpty()) {
             Text(
                 "${selectedIds.size} carte selezionate",
-                color = OrangeCard,
+                color = AppColors.orange,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold
             )
@@ -633,7 +633,7 @@ private fun PreviewSection(cards: List<TcgCard>) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             "${cards.size} carte target",
-            color = OrangeCard,
+            color = AppColors.orange,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold
         )
@@ -657,7 +657,7 @@ private fun PreviewSection(cards: List<TcgCard>) {
             }
         }
         if (cards.size > 12) {
-            Text(AppLocale.otherCardsCount(cards.size - 12), color = TextMuted, fontSize = 12.sp)
+            Text(AppLocale.otherCardsCount(cards.size - 12), color = AppColors.textMuted, fontSize = 12.sp)
         }
     }
 }

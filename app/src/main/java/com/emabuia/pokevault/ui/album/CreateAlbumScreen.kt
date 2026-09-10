@@ -62,13 +62,13 @@ fun CreateAlbumScreen(
     var showCategoryDropdown by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         if (isEditing) AppLocale.editAlbum else AppLocale.createAlbum,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -77,12 +77,12 @@ fun CreateAlbumScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
-                            tint = TextWhite
+                            tint = AppColors.textPrimary
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkBackground
+                    containerColor = AppColors.background
                 )
             )
         }
@@ -106,15 +106,15 @@ fun CreateAlbumScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = OrangeCard,
-                    unfocusedBorderColor = TextMuted,
-                    cursorColor = OrangeCard,
-                    focusedLabelColor = OrangeCard,
-                    unfocusedLabelColor = TextMuted,
-                    focusedTextColor = TextWhite,
-                    unfocusedTextColor = TextWhite,
-                    focusedPlaceholderColor = TextMuted,
-                    unfocusedPlaceholderColor = TextMuted
+                    focusedBorderColor = AppColors.orange,
+                    unfocusedBorderColor = AppColors.textMuted,
+                    cursorColor = AppColors.orange,
+                    focusedLabelColor = AppColors.orange,
+                    unfocusedLabelColor = AppColors.textMuted,
+                    focusedTextColor = AppColors.textPrimary,
+                    unfocusedTextColor = AppColors.textPrimary,
+                    focusedPlaceholderColor = AppColors.textMuted,
+                    unfocusedPlaceholderColor = AppColors.textMuted
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
@@ -127,15 +127,15 @@ fun CreateAlbumScreen(
                 maxLines = 3,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = OrangeCard,
-                    unfocusedBorderColor = TextMuted,
-                    cursorColor = OrangeCard,
-                    focusedLabelColor = OrangeCard,
-                    unfocusedLabelColor = TextMuted,
-                    focusedTextColor = TextWhite,
-                    unfocusedTextColor = TextWhite,
-                    focusedPlaceholderColor = TextMuted,
-                    unfocusedPlaceholderColor = TextMuted
+                    focusedBorderColor = AppColors.orange,
+                    unfocusedBorderColor = AppColors.textMuted,
+                    cursorColor = AppColors.orange,
+                    focusedLabelColor = AppColors.orange,
+                    unfocusedLabelColor = AppColors.textMuted,
+                    focusedTextColor = AppColors.textPrimary,
+                    unfocusedTextColor = AppColors.textPrimary,
+                    focusedPlaceholderColor = AppColors.textMuted,
+                    unfocusedPlaceholderColor = AppColors.textMuted
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
@@ -156,26 +156,26 @@ fun CreateAlbumScreen(
                         .fillMaxWidth()
                         .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = OrangeCard,
-                        unfocusedBorderColor = TextMuted,
-                        focusedTextColor = TextWhite,
-                        unfocusedTextColor = TextWhite,
-                        focusedTrailingIconColor = OrangeCard,
-                        unfocusedTrailingIconColor = TextMuted
+                        focusedBorderColor = AppColors.orange,
+                        unfocusedBorderColor = AppColors.textMuted,
+                        focusedTextColor = AppColors.textPrimary,
+                        unfocusedTextColor = AppColors.textPrimary,
+                        focusedTrailingIconColor = AppColors.orange,
+                        unfocusedTrailingIconColor = AppColors.textMuted
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
                 ExposedDropdownMenu(
                     expanded = showTypeDropdown,
                     onDismissRequest = { showTypeDropdown = false },
-                    containerColor = DarkSurface
+                    containerColor = AppColors.surface
                 ) {
                     pokemonTypes.forEach { type ->
                         DropdownMenuItem(
                             text = {
                                 Text(
                                     if (type.isBlank()) AppLocale.albumAllTypes else type,
-                                    color = TextWhite
+                                    color = AppColors.textPrimary
                                 )
                             },
                             onClick = {
@@ -203,26 +203,26 @@ fun CreateAlbumScreen(
                         .fillMaxWidth()
                         .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = OrangeCard,
-                        unfocusedBorderColor = TextMuted,
-                        focusedTextColor = TextWhite,
-                        unfocusedTextColor = TextWhite,
-                        focusedTrailingIconColor = OrangeCard,
-                        unfocusedTrailingIconColor = TextMuted
+                        focusedBorderColor = AppColors.orange,
+                        unfocusedBorderColor = AppColors.textMuted,
+                        focusedTextColor = AppColors.textPrimary,
+                        unfocusedTextColor = AppColors.textPrimary,
+                        focusedTrailingIconColor = AppColors.orange,
+                        unfocusedTrailingIconColor = AppColors.textMuted
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
                 ExposedDropdownMenu(
                     expanded = showExpansionDropdown,
                     onDismissRequest = { showExpansionDropdown = false },
-                    containerColor = DarkSurface
+                    containerColor = AppColors.surface
                 ) {
                     expansions.forEach { exp ->
                         DropdownMenuItem(
                             text = {
                                 Text(
                                     if (exp.isBlank()) AppLocale.albumAllExpansions else exp,
-                                    color = TextWhite
+                                    color = AppColors.textPrimary
                                 )
                             },
                             onClick = {
@@ -250,26 +250,26 @@ fun CreateAlbumScreen(
                         .fillMaxWidth()
                         .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = OrangeCard,
-                        unfocusedBorderColor = TextMuted,
-                        focusedTextColor = TextWhite,
-                        unfocusedTextColor = TextWhite,
-                        focusedTrailingIconColor = OrangeCard,
-                        unfocusedTrailingIconColor = TextMuted
+                        focusedBorderColor = AppColors.orange,
+                        unfocusedBorderColor = AppColors.textMuted,
+                        focusedTextColor = AppColors.textPrimary,
+                        unfocusedTextColor = AppColors.textPrimary,
+                        focusedTrailingIconColor = AppColors.orange,
+                        unfocusedTrailingIconColor = AppColors.textMuted
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
                 ExposedDropdownMenu(
                     expanded = showCategoryDropdown,
                     onDismissRequest = { showCategoryDropdown = false },
-                    containerColor = DarkSurface
+                    containerColor = AppColors.surface
                 ) {
                     categories.forEach { cat ->
                         DropdownMenuItem(
                             text = {
                                 Text(
                                     if (cat.isBlank()) AppLocale.albumAllCategories else cat,
-                                    color = TextWhite
+                                    color = AppColors.textPrimary
                                 )
                             },
                             onClick = {
@@ -293,10 +293,10 @@ fun CreateAlbumScreen(
                         modifier = Modifier
                             .height(40.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) OrangeCard else DarkCard)
+                            .background(if (isSelected) AppColors.orange else AppColors.card)
                             .border(
                                 width = if (isSelected) 0.dp else 1.dp,
-                                color = if (isSelected) Color.Transparent else TextMuted,
+                                color = if (isSelected) Color.Transparent else AppColors.textMuted,
                                 shape = RoundedCornerShape(10.dp)
                             )
                             .clickable { viewModel.albumSize = size }
@@ -305,7 +305,7 @@ fun CreateAlbumScreen(
                     ) {
                         Text(
                             text = "$size",
-                            color = if (isSelected) Color.White else TextGray,
+                            color = if (isSelected) Color.White else AppColors.textSecondary,
                             fontSize = 14.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
@@ -318,10 +318,10 @@ fun CreateAlbumScreen(
                         modifier = Modifier
                             .height(40.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (customSelected) OrangeCard else DarkCard)
+                            .background(if (customSelected) AppColors.orange else AppColors.card)
                             .border(
                                 width = if (customSelected) 0.dp else 1.dp,
-                                color = if (customSelected) Color.Transparent else TextMuted,
+                                color = if (customSelected) Color.Transparent else AppColors.textMuted,
                                 shape = RoundedCornerShape(10.dp)
                             )
                             .clickable {
@@ -332,7 +332,7 @@ fun CreateAlbumScreen(
                     ) {
                         Text(
                             text = AppLocale.albumSizeCustom,
-                            color = if (customSelected) Color.White else TextGray,
+                            color = if (customSelected) Color.White else AppColors.textSecondary,
                             fontSize = 14.sp,
                             fontWeight = if (customSelected) FontWeight.Bold else FontWeight.Normal
                         )
@@ -353,13 +353,13 @@ fun CreateAlbumScreen(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = OrangeCard,
-                        unfocusedBorderColor = TextMuted,
-                        cursorColor = OrangeCard,
-                        focusedLabelColor = OrangeCard,
-                        unfocusedLabelColor = TextMuted,
-                        focusedTextColor = TextWhite,
-                        unfocusedTextColor = TextWhite
+                        focusedBorderColor = AppColors.orange,
+                        unfocusedBorderColor = AppColors.textMuted,
+                        cursorColor = AppColors.orange,
+                        focusedLabelColor = AppColors.orange,
+                        unfocusedLabelColor = AppColors.textMuted,
+                        focusedTextColor = AppColors.textPrimary,
+                        unfocusedTextColor = AppColors.textPrimary
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -394,7 +394,7 @@ fun CreateAlbumScreen(
             // Theme name label
             Text(
                 text = getThemeLabel(viewModel.albumTheme),
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 12.sp
             )
 
@@ -409,8 +409,8 @@ fun CreateAlbumScreen(
                     .height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = OrangeCard,
-                    disabledContainerColor = OrangeCard.copy(alpha = 0.4f)
+                    containerColor = AppColors.orange,
+                    disabledContainerColor = AppColors.orange.copy(alpha = 0.4f)
                 )
             ) {
                 if (viewModel.isSaving) {
@@ -440,7 +440,7 @@ fun CreateAlbumScreen(
 private fun SectionLabel(text: String) {
     Text(
         text = text,
-        color = TextGray,
+        color = AppColors.textSecondary,
         fontSize = 14.sp,
         fontWeight = FontWeight.SemiBold
     )

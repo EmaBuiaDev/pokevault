@@ -50,7 +50,7 @@ fun AuthScreen(
     var passwordVisible by remember { mutableStateOf(false) }
 
     val mainGradient = Brush.verticalGradient(
-        listOf(DarkBackground, Color(0xFF16213E))
+        listOf(AppColors.background, Color(0xFF16213E))
     )
 
     val infiniteTransition = rememberInfiniteTransition(label = "loading")
@@ -77,7 +77,7 @@ fun AuthScreen(
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
-                        listOf(PurpleCard.copy(alpha = 0.12f), Color.Transparent)
+                        listOf(AppColors.purple.copy(alpha = 0.12f), Color.Transparent)
                     )
                 )
         )
@@ -109,14 +109,14 @@ fun AuthScreen(
                 text = "PokeVault",
                 fontSize = 36.sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 letterSpacing = 1.sp
             )
             Text(
                 text = AppLocale.legendaryCollection,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
-                color = TextGray
+                color = AppColors.textSecondary
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -125,8 +125,8 @@ fun AuthScreen(
             Surface(
                 modifier = Modifier
                     .clip(RoundedCornerShape(24.dp))
-                    .border(BorderStroke(1.dp, TextMuted.copy(alpha = 0.2f)), RoundedCornerShape(24.dp)),
-                color = DarkCard.copy(alpha = 0.6f)
+                    .border(BorderStroke(1.dp, AppColors.textMuted.copy(alpha = 0.2f)), RoundedCornerShape(24.dp)),
+                color = AppColors.card.copy(alpha = 0.6f)
             ) {
                 Row(modifier = Modifier.padding(4.dp)) {
                     AuthTabButton(
@@ -149,7 +149,7 @@ fun AuthScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(28.dp))
-                    .background(DarkCard.copy(alpha = 0.4f))
+                    .background(AppColors.card.copy(alpha = 0.4f))
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -189,7 +189,7 @@ fun AuthScreen(
                     if (isLoginMode) {
                         Text(
                             text = AppLocale.forgotPassword,
-                            color = BlueCard,
+                            color = AppColors.blue,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier
@@ -209,13 +209,13 @@ fun AuthScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(RedCard.copy(alpha = 0.2f))
+                        .background(AppColors.red.copy(alpha = 0.2f))
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.ErrorOutline, null, tint = RedCard, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.ErrorOutline, null, tint = AppColors.red, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = errorMessage ?: "", color = RedCard, fontSize = 13.sp)
+                    Text(text = errorMessage ?: "", color = AppColors.red, fontSize = 13.sp)
                 }
             }
 
@@ -228,8 +228,8 @@ fun AuthScreen(
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isLoginMode) RedCard else BlueCard,
-                    disabledContainerColor = (if (isLoginMode) RedCard else BlueCard).copy(alpha = 0.5f)
+                    containerColor = if (isLoginMode) AppColors.red else AppColors.blue,
+                    disabledContainerColor = (if (isLoginMode) AppColors.red else AppColors.blue).copy(alpha = 0.5f)
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
             ) {
@@ -246,9 +246,9 @@ fun AuthScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
-                Text(AppLocale.or, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp))
-                HorizontalDivider(modifier = Modifier.weight(1f), color = TextMuted.copy(alpha = 0.2f))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = AppColors.textMuted.copy(alpha = 0.2f))
+                Text(AppLocale.or, color = AppColors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = AppColors.textMuted.copy(alpha = 0.2f))
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -323,16 +323,16 @@ fun VaultLogo() {
             .size(100.dp)
             .clip(CircleShape)
             .background(
-                Brush.linearGradient(listOf(BlueCard, PurpleCard))
+                Brush.linearGradient(listOf(AppColors.blue, AppColors.purple))
             )
-            .border(3.dp, StarGold.copy(alpha = 0.5f), CircleShape),
+            .border(3.dp, AppColors.gold.copy(alpha = 0.5f), CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
                 .size(86.dp)
                 .clip(CircleShape)
-                .background(DarkBackground),
+                .background(AppColors.background),
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.size(52.dp)) {
@@ -344,7 +344,7 @@ fun VaultLogo() {
                 // Carta posteriore (inclinata a sinistra)
                 rotate(degrees = -15f, pivot = Offset(cx, cy)) {
                     drawRoundRect(
-                        color = BlueCard.copy(alpha = 0.6f),
+                        color = AppColors.blue.copy(alpha = 0.6f),
                         topLeft = Offset(cx - cardW / 2, cy - cardH / 2),
                         size = Size(cardW, cardH),
                         cornerRadius = CornerRadius(4f)
@@ -353,7 +353,7 @@ fun VaultLogo() {
 
                 // Carta centrale
                 drawRoundRect(
-                    color = PurpleCard.copy(alpha = 0.7f),
+                    color = AppColors.purple.copy(alpha = 0.7f),
                     topLeft = Offset(cx - cardW / 2, cy - cardH / 2),
                     size = Size(cardW, cardH),
                     cornerRadius = CornerRadius(4f)
@@ -363,7 +363,7 @@ fun VaultLogo() {
                 rotate(degrees = 15f, pivot = Offset(cx, cy)) {
                     drawRoundRect(
                         brush = Brush.linearGradient(
-                            colors = listOf(StarGold, OrangeCard)
+                            colors = listOf(AppColors.gold, AppColors.orange)
                         ),
                         topLeft = Offset(cx - cardW / 2, cy - cardH / 2),
                         size = Size(cardW, cardH),
@@ -389,12 +389,12 @@ private fun AuthTabButton(text: String, isSelected: Boolean, onClick: () -> Unit
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (isSelected) RedCard else Color.Transparent)
+            .background(if (isSelected) AppColors.red else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 40.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = text, color = if (isSelected) TextWhite else TextGray, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Text(text = text, color = if (isSelected) AppColors.textPrimary else AppColors.textSecondary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
     }
 }
 
@@ -413,7 +413,7 @@ private fun AuthTextField(
     Column {
         Text(
             text = placeholder.uppercase(),
-            color = TextMuted,
+            color = AppColors.textMuted,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
@@ -422,24 +422,24 @@ private fun AuthTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(DarkSurface)
-                .border(BorderStroke(1.dp, TextMuted.copy(alpha = 0.1f)), RoundedCornerShape(16.dp))
+                .background(AppColors.surface)
+                .border(BorderStroke(1.dp, AppColors.textMuted.copy(alpha = 0.1f)), RoundedCornerShape(16.dp))
                 .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = leadingIcon,
                     contentDescription = null,
-                    tint = if (value.isNotEmpty()) StarGold else TextMuted,
+                    tint = if (value.isNotEmpty()) AppColors.gold else AppColors.textMuted,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium),
                     singleLine = true,
-                    cursorBrush = SolidColor(StarGold),
+                    cursorBrush = SolidColor(AppColors.gold),
                     keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
                     visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
                     modifier = Modifier.weight(1f)
@@ -448,7 +448,7 @@ private fun AuthTextField(
                     Icon(
                         imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                         contentDescription = null,
-                        tint = TextMuted,
+                        tint = AppColors.textMuted,
                         modifier = Modifier.size(20.dp).clickable { onTogglePassword() }
                     )
                 }

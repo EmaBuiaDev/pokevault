@@ -28,7 +28,7 @@ fun PlaceholderScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppColors.background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         // Top Bar
@@ -37,7 +37,7 @@ fun PlaceholderScreen(
                 Text(
                     text = title,
                     fontWeight = FontWeight.SemiBold,
-                    color = TextWhite
+                    color = AppColors.textPrimary
                 )
             },
             navigationIcon = {
@@ -45,12 +45,12 @@ fun PlaceholderScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = AppLocale.back,
-                        tint = TextWhite
+                        tint = AppColors.textPrimary
                     )
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = DarkBackground
+                containerColor = AppColors.background
             )
         )
 
@@ -69,7 +69,7 @@ fun PlaceholderScreen(
                     modifier = Modifier
                         .size(100.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(DarkCard),
+                        .background(AppColors.card),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(text = emoji, fontSize = 48.sp)
@@ -81,7 +81,7 @@ fun PlaceholderScreen(
                     text = title,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextWhite
+                    color = AppColors.textPrimary
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -89,7 +89,7 @@ fun PlaceholderScreen(
                 Text(
                     text = description,
                     fontSize = 14.sp,
-                    color = TextGray,
+                    color = AppColors.textSecondary,
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
@@ -100,12 +100,12 @@ fun PlaceholderScreen(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(BlueCard.copy(alpha = 0.15f))
+                        .background(AppColors.blue.copy(alpha = 0.15f))
                         .padding(horizontal = 20.dp, vertical = 10.dp)
                 ) {
                     Text(
                         text = "🚧 In arrivo",
-                        color = BlueCard,
+                        color = AppColors.blue,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp
                     )

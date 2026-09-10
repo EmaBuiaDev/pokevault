@@ -134,12 +134,12 @@ fun MetaDeckListView(
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .background(DarkCard)
+                    .background(AppColors.card)
             ) {
                 Icon(
                     Icons.Default.Refresh,
                     contentDescription = AppLocale.refresh,
-                    tint = TextMuted,
+                    tint = AppColors.textMuted,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -161,13 +161,13 @@ fun MetaDeckListView(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(
-                            color = BlueCard,
+                            color = AppColors.blue,
                             modifier = Modifier.size(40.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "Caricamento meta deck...",
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 13.sp
                         )
                     }
@@ -186,25 +186,25 @@ fun MetaDeckListView(
                         Icon(
                             Icons.Default.CloudOff,
                             contentDescription = null,
-                            tint = RedCard,
+                            tint = AppColors.red,
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "Errore di connessione",
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = viewModel.errorMessage ?: "",
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 12.sp
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = { viewModel.refresh() },
-                            colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text(AppLocale.retry)
@@ -225,19 +225,19 @@ fun MetaDeckListView(
                         Icon(
                             Icons.Default.SearchOff,
                             contentDescription = null,
-                            tint = LavenderCard,
+                            tint = AppColors.lavender,
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = AppLocale.noMetaDeckFound,
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = AppLocale.tryChangeFormat,
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 12.sp
                         )
                     }
@@ -252,7 +252,7 @@ fun MetaDeckListView(
                     if (!isPremium) {
                         item {
                             Surface(
-                                color = StarGold.copy(alpha = 0.1f),
+                                color = AppColors.gold.copy(alpha = 0.1f),
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -263,13 +263,13 @@ fun MetaDeckListView(
                                     Icon(
                                         Icons.Default.Visibility,
                                         contentDescription = null,
-                                        tint = StarGold,
+                                        tint = AppColors.gold,
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = AppLocale.premiumMetaDeckViewsRemaining(viewsRemaining),
-                                        color = StarGold,
+                                        color = AppColors.gold,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium
                                     )
@@ -323,7 +323,7 @@ fun MetaInfoBanner(
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 8.dp)
             .clickable { expanded = !expanded },
-        color = BlueCard.copy(alpha = 0.08f),
+        color = AppColors.blue.copy(alpha = 0.08f),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -332,13 +332,13 @@ fun MetaInfoBanner(
                 Icon(
                     Icons.Default.Info,
                     contentDescription = null,
-                    tint = BlueCard,
+                    tint = AppColors.blue,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = title,
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
@@ -346,7 +346,7 @@ fun MetaInfoBanner(
                 Icon(
                     if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (expanded) AppLocale.close else AppLocale.expandAll,
-                    tint = TextMuted,
+                    tint = AppColors.textMuted,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -357,7 +357,7 @@ fun MetaInfoBanner(
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = body,
-                        color = TextMuted,
+                        color = AppColors.textMuted,
                         fontSize = 11.sp,
                         lineHeight = 15.sp
                     )
@@ -368,13 +368,13 @@ fun MetaInfoBanner(
                                 Icon(
                                     Icons.Default.Schedule,
                                     contentDescription = null,
-                                    tint = TextMuted,
+                                    tint = AppColors.textMuted,
                                     modifier = Modifier.size(11.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = updatedLabel,
-                                    color = TextMuted,
+                                    color = AppColors.textMuted,
                                     fontSize = 10.sp
                                 )
                             }
@@ -385,13 +385,13 @@ fun MetaInfoBanner(
                                 Icon(
                                     Icons.Default.HourglassEmpty,
                                     contentDescription = null,
-                                    tint = YellowCard,
+                                    tint = AppColors.yellow,
                                     modifier = Modifier.size(11.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = rateLimitMessage,
-                                    color = YellowCard,
+                                    color = AppColors.yellow,
                                     fontSize = 10.sp
                                 )
                             }
@@ -410,13 +410,13 @@ fun FormatChip(
     onClick: () -> Unit
 ) {
     Surface(
-        color = if (selected) BlueCard else DarkCard,
+        color = if (selected) AppColors.blue else AppColors.card,
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier.clickable(onClick = onClick)
     ) {
         Text(
             text = label,
-            color = if (selected) TextWhite else TextMuted,
+            color = if (selected) AppColors.textPrimary else AppColors.textMuted,
             fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -438,7 +438,7 @@ fun MetaDeckItem(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        colors = CardDefaults.cardColors(containerColor = AppColors.card),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -451,7 +451,7 @@ fun MetaDeckItem(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = deck.archetype ?: AppLocale.unknownDeck,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -460,7 +460,7 @@ fun MetaDeckItem(
                     if (deck.player != null) {
                         Text(
                             text = deck.player,
-                            color = LavenderCard,
+                            color = AppColors.lavender,
                             fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -484,13 +484,13 @@ fun MetaDeckItem(
                     Icon(
                         Icons.Default.EmojiEvents,
                         contentDescription = null,
-                        tint = YellowCard,
+                        tint = AppColors.yellow,
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = deck.tournament,
-                        color = TextMuted,
+                        color = AppColors.textMuted,
                         fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -509,27 +509,27 @@ fun MetaDeckItem(
             ) {
                 // Card distribution
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatMini(label = "Pok\u00e9mon", value = "$pokemonCount", color = BlueCard)
-                    StatMini(label = "Trainer", value = "$trainerCount", color = PurpleCard)
-                    StatMini(label = "Energy", value = "$energyCount", color = GreenCard)
+                    StatMini(label = "Pok\u00e9mon", value = "$pokemonCount", color = AppColors.blue)
+                    StatMini(label = "Trainer", value = "$trainerCount", color = AppColors.purple)
+                    StatMini(label = "Energy", value = "$energyCount", color = AppColors.green)
                 }
 
                 // Winrate
                 deck.winrate?.let { wr ->
                     Surface(
                         color = when {
-                            wr >= 0.7 -> GreenCard.copy(alpha = 0.15f)
-                            wr >= 0.5 -> YellowCard.copy(alpha = 0.15f)
-                            else -> RedCard.copy(alpha = 0.15f)
+                            wr >= 0.7 -> AppColors.green.copy(alpha = 0.15f)
+                            wr >= 0.5 -> AppColors.yellow.copy(alpha = 0.15f)
+                            else -> AppColors.red.copy(alpha = 0.15f)
                         },
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
                             text = "${(wr * 100).toInt()}% WR",
                             color = when {
-                                wr >= 0.7 -> GreenCard
-                                wr >= 0.5 -> YellowCard
-                                else -> RedCard
+                                wr >= 0.7 -> AppColors.green
+                                wr >= 0.5 -> AppColors.yellow
+                                else -> AppColors.red
                             },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -544,7 +544,7 @@ fun MetaDeckItem(
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = formatDate(date),
-                    color = TextMuted.copy(alpha = 0.6f),
+                    color = AppColors.textMuted.copy(alpha = 0.6f),
                     fontSize = 10.sp
                 )
             }
@@ -555,10 +555,10 @@ fun MetaDeckItem(
 @Composable
 fun PlacementBadge(placement: Int) {
     val (bgColor, textColor) = when (placement) {
-        1 -> YellowCard.copy(alpha = 0.2f) to YellowCard
+        1 -> AppColors.yellow.copy(alpha = 0.2f) to AppColors.yellow
         2 -> Color(0xFFC0C0C0).copy(alpha = 0.2f) to Color(0xFFC0C0C0)
         3 -> Color(0xFFCD7F32).copy(alpha = 0.2f) to Color(0xFFCD7F32)
-        else -> DarkBackground.copy(alpha = 0.5f) to TextMuted
+        else -> AppColors.background.copy(alpha = 0.5f) to AppColors.textMuted
     }
 
     Surface(
@@ -586,7 +586,7 @@ fun StatMini(label: String, value: String, color: Color) {
         )
         Text(
             text = label,
-            color = TextMuted,
+            color = AppColors.textMuted,
             fontSize = 9.sp
         )
     }
@@ -611,7 +611,7 @@ fun MetaDeckDetailView(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppColors.background)
     ) {
         // Header
         Box(
@@ -620,8 +620,8 @@ fun MetaDeckDetailView(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            BlueCard.copy(alpha = 0.15f),
-                            DarkBackground
+                            AppColors.blue.copy(alpha = 0.15f),
+                            AppColors.background
                         )
                     )
                 )
@@ -639,12 +639,12 @@ fun MetaDeckDetailView(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(DarkCard)
+                            .background(AppColors.card)
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
-                            tint = TextWhite,
+                            tint = AppColors.textPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -658,12 +658,12 @@ fun MetaDeckDetailView(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(PurpleCard.copy(alpha = 0.3f))
+                                    .background(AppColors.purple.copy(alpha = 0.3f))
                             ) {
                                 Icon(
                                     Icons.Default.FileDownload,
                                     contentDescription = AppLocale.importInDeckLab,
-                                    tint = PurpleCard,
+                                    tint = AppColors.purple,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -675,7 +675,7 @@ fun MetaDeckDetailView(
 
                 Text(
                     text = deck.archetype ?: AppLocale.unknownDeck,
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Black
                 )
@@ -683,7 +683,7 @@ fun MetaDeckDetailView(
                 if (deck.player != null) {
                     Text(
                         text = deck.player,
-                        color = LavenderCard,
+                        color = AppColors.lavender,
                         fontSize = 14.sp
                     )
                 }
@@ -696,13 +696,13 @@ fun MetaDeckDetailView(
                         Icon(
                             Icons.Default.EmojiEvents,
                             contentDescription = null,
-                            tint = YellowCard,
+                            tint = AppColors.yellow,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = deck.tournament,
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 12.sp,
                             maxLines = 2
                         )
@@ -720,25 +720,25 @@ fun MetaDeckDetailView(
                         icon = Icons.Default.CatchingPokemon,
                         label = "Pok\u00e9mon",
                         value = "${pokemonCards.sumOf { it.qty }}",
-                        color = BlueCard
+                        color = AppColors.blue
                     )
                     DeckStatChip(
                         icon = Icons.Default.Handyman,
                         label = "Trainer",
                         value = "${trainerCards.sumOf { it.qty }}",
-                        color = PurpleCard
+                        color = AppColors.purple
                     )
                     DeckStatChip(
                         icon = Icons.Default.Bolt,
                         label = "Energy",
                         value = "${energyCards.sumOf { it.qty }}",
-                        color = GreenCard
+                        color = AppColors.green
                     )
                     DeckStatChip(
                         icon = Icons.Default.Layers,
                         label = "Totale",
                         value = "$totalCards",
-                        color = TextWhite
+                        color = AppColors.textPrimary
                     )
 
                     deck.winrate?.let { wr ->
@@ -747,9 +747,9 @@ fun MetaDeckDetailView(
                             label = "Winrate",
                             value = "${(wr * 100).toInt()}%",
                             color = when {
-                                wr >= 0.7 -> GreenCard
-                                wr >= 0.5 -> YellowCard
-                                else -> RedCard
+                                wr >= 0.7 -> AppColors.green
+                                wr >= 0.5 -> AppColors.yellow
+                                else -> AppColors.red
                             }
                         )
                     }
@@ -768,7 +768,7 @@ fun MetaDeckDetailView(
                     DeckCategorySection(
                         title = "POK\u00c9MON",
                         cards = pokemonCards,
-                        accentColor = BlueCard
+                        accentColor = AppColors.blue
                     )
                 }
             }
@@ -777,7 +777,7 @@ fun MetaDeckDetailView(
                     DeckCategorySection(
                         title = "TRAINER",
                         cards = trainerCards,
-                        accentColor = PurpleCard
+                        accentColor = AppColors.purple
                     )
                 }
             }
@@ -786,7 +786,7 @@ fun MetaDeckDetailView(
                     DeckCategorySection(
                         title = "ENERGIA",
                         cards = energyCards,
-                        accentColor = GreenCard
+                        accentColor = AppColors.green
                     )
                 }
             }
@@ -799,7 +799,7 @@ fun MetaDeckDetailView(
                             .fillMaxWidth()
                             .height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PurpleCard)
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.purple)
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
@@ -823,12 +823,12 @@ fun DeckStatChip(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(DarkCard)
+            .background(AppColors.card)
             .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
         Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
         Text(text = value, color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        Text(text = label, color = TextMuted, fontSize = 9.sp)
+        Text(text = label, color = AppColors.textMuted, fontSize = 9.sp)
     }
 }
 
@@ -859,7 +859,7 @@ fun DeckCategorySection(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "${cards.sumOf { it.qty }}",
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -906,7 +906,7 @@ fun DeckCardRow(
         // Card name
         Text(
             text = card.name,
-            color = TextWhite,
+            color = AppColors.textPrimary,
             fontSize = 13.sp,
             modifier = Modifier.weight(1f),
             maxLines = 1,
@@ -917,7 +917,7 @@ fun DeckCardRow(
         if (card.set != null || card.number != null) {
             Text(
                 text = listOfNotNull(card.set, card.number).joinToString(" "),
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 11.sp
             )
         }
@@ -1027,12 +1027,12 @@ fun WinTournamentListView(
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .background(DarkCard)
+                    .background(AppColors.card)
             ) {
                 Icon(
                     Icons.Default.Refresh,
                     contentDescription = AppLocale.refresh,
-                    tint = TextMuted,
+                    tint = AppColors.textMuted,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -1045,11 +1045,11 @@ fun WinTournamentListView(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = BlueCard, modifier = Modifier.size(40.dp))
+                        CircularProgressIndicator(color = AppColors.blue, modifier = Modifier.size(40.dp))
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = AppLocale.winTournamentLoading,
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 13.sp
                         )
                     }
@@ -1068,25 +1068,25 @@ fun WinTournamentListView(
                         Icon(
                             Icons.Default.CloudOff,
                             contentDescription = null,
-                            tint = RedCard,
+                            tint = AppColors.red,
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = AppLocale.connectionError,
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = viewModel.tournamentsError ?: "",
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 12.sp
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = { viewModel.refresh() },
-                            colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text(AppLocale.retry)
@@ -1107,19 +1107,19 @@ fun WinTournamentListView(
                         Icon(
                             Icons.Default.SearchOff,
                             contentDescription = null,
-                            tint = LavenderCard,
+                            tint = AppColors.lavender,
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = AppLocale.winTournamentNoResults,
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = AppLocale.tryChangeFormat,
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 12.sp
                         )
                     }
@@ -1152,7 +1152,7 @@ fun TournamentResultCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        colors = CardDefaults.cardColors(containerColor = AppColors.card),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1165,13 +1165,13 @@ fun TournamentResultCard(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(YellowCard.copy(alpha = 0.12f), CircleShape),
+                        .background(AppColors.yellow.copy(alpha = 0.12f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Default.EmojiEvents,
                         contentDescription = null,
-                        tint = YellowCard,
+                        tint = AppColors.yellow,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -1181,7 +1181,7 @@ fun TournamentResultCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = result.tournamentName,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
@@ -1197,13 +1197,13 @@ fun TournamentResultCard(
                                 Icon(
                                     Icons.Default.CalendarToday,
                                     contentDescription = null,
-                                    tint = TextMuted,
+                                    tint = AppColors.textMuted,
                                     modifier = Modifier.size(11.dp)
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
                                     text = formatDate(result.date),
-                                    color = TextMuted,
+                                    color = AppColors.textMuted,
                                     fontSize = 11.sp
                                 )
                             }
@@ -1213,13 +1213,13 @@ fun TournamentResultCard(
                                 Icon(
                                     Icons.Default.Group,
                                     contentDescription = null,
-                                    tint = TextMuted,
+                                    tint = AppColors.textMuted,
                                     modifier = Modifier.size(11.dp)
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
                                     text = AppLocale.winTournamentPlayers(result.players),
-                                    color = TextMuted,
+                                    color = AppColors.textMuted,
                                     fontSize = 11.sp
                                 )
                             }
@@ -1229,14 +1229,14 @@ fun TournamentResultCard(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
-            HorizontalDivider(color = DarkBackground.copy(alpha = 0.6f), thickness = 1.dp)
+            HorizontalDivider(color = AppColors.background.copy(alpha = 0.6f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(10.dp))
 
             // ── Top 3 rows ──
             if (result.top3.isEmpty()) {
                 Text(
                     text = AppLocale.noDecklistAvailable,
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
@@ -1245,7 +1245,7 @@ fun TournamentResultCard(
                     if (index > 0) {
                         Spacer(modifier = Modifier.height(8.dp))
                         HorizontalDivider(
-                            color = DarkBackground.copy(alpha = 0.4f),
+                            color = AppColors.background.copy(alpha = 0.4f),
                             thickness = 0.5.dp,
                             modifier = Modifier.padding(start = 40.dp)
                         )
@@ -1275,10 +1275,10 @@ fun Top3PlacementRow(
         else -> "#$rank"
     }
     val accentColor = when (rank) {
-        1 -> YellowCard
+        1 -> AppColors.yellow
         2 -> Color(0xFFC0C0C0)
         3 -> Color(0xFFCD7F32)
-        else -> TextMuted
+        else -> AppColors.textMuted
     }
 
     Row(
@@ -1300,7 +1300,7 @@ fun Top3PlacementRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = deck.archetype ?: "Deck Sconosciuto",
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -1309,7 +1309,7 @@ fun Top3PlacementRow(
             if (deck.player != null) {
                 Text(
                     text = deck.player,
-                    color = LavenderCard,
+                    color = AppColors.lavender,
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1340,7 +1340,7 @@ fun Top3PlacementRow(
         Icon(
             Icons.Default.ChevronRight,
             contentDescription = AppLocale.viewDeck,
-            tint = TextMuted.copy(alpha = 0.5f),
+            tint = AppColors.textMuted.copy(alpha = 0.5f),
             modifier = Modifier.size(16.dp)
         )
     }

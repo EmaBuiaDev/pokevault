@@ -69,7 +69,7 @@ fun SettingsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppColors.background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         Column(
@@ -85,13 +85,13 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                 }
                 Text(
                     text = AppLocale.settingsTitle,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
@@ -117,6 +117,28 @@ fun SettingsScreen(
                 title = AppLocale.languageLabel,
                 subtitle = AppLocale.languageSubtitle,
                 onClick = { AppLocale.toggle(context) }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Tema: l'app era scura per costruzione, senza alcun modo di
+            // scegliere. Cicla fra Sistema, Chiaro e Scuro.
+            SettingsItem(
+                icon = when (ThemePreference.current) {
+                    ThemeMode.LIGHT -> Icons.Default.LightMode
+                    ThemeMode.DARK -> Icons.Default.DarkMode
+                    ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+                },
+                title = AppLocale.themeLabel,
+                subtitle = AppLocale.themeSubtitle(ThemePreference.current.code),
+                onClick = {
+                    val next = when (ThemePreference.current) {
+                        ThemeMode.SYSTEM -> ThemeMode.LIGHT
+                        ThemeMode.LIGHT -> ThemeMode.DARK
+                        ThemeMode.DARK -> ThemeMode.SYSTEM
+                    }
+                    ThemePreference.set(next, context)
+                }
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -152,7 +174,7 @@ fun SettingsScreen(
                 subtitle = if (isPremium) AppLocale.premiumSettingsSubtitleActive
                            else AppLocale.premiumSettingsSubtitleFree,
                 onClick = onNavigateToPremium,
-                accentColor = StarGold
+                accentColor = AppColors.gold
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -168,7 +190,7 @@ fun SettingsScreen(
                         showPremiumHomeSpriteDialog = true
                     }
                 },
-                accentColor = if (isPremium) BlueCard else TextMuted
+                accentColor = if (isPremium) AppColors.blue else AppColors.textMuted
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -181,13 +203,13 @@ fun SettingsScreen(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                DarkCard.copy(alpha = 0.95f),
-                                DarkSurface.copy(alpha = 0.92f)
+                                AppColors.card.copy(alpha = 0.95f),
+                                AppColors.surface.copy(alpha = 0.92f)
                             )
                         )
                     )
                     .border(
-                        BorderStroke(1.dp, StarGold.copy(alpha = 0.22f)),
+                        BorderStroke(1.dp, AppColors.gold.copy(alpha = 0.22f)),
                         RoundedCornerShape(16.dp)
                     )
                     .clickable { showCreatorSection = !showCreatorSection }
@@ -203,7 +225,7 @@ fun SettingsScreen(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(StarGold.copy(alpha = 0.16f)),
+                            .background(AppColors.gold.copy(alpha = 0.16f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -217,34 +239,34 @@ fun SettingsScreen(
                             text = AppLocale.creatorSectionTitle,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextWhite
+                            color = AppColors.textPrimary
                         )
                         Text(
                             text = "Indie dev note",
                             fontSize = 11.sp,
-                            color = StarGold
+                            color = AppColors.gold
                         )
                     }
 
                     Icon(
                         imageVector = if (showCreatorSection) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                         contentDescription = null,
-                        tint = StarGold
+                        tint = AppColors.gold
                     )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Surface(
-                    color = StarGold.copy(alpha = 0.08f),
+                    color = AppColors.gold.copy(alpha = 0.08f),
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, StarGold.copy(alpha = 0.18f))
+                    border = BorderStroke(1.dp, AppColors.gold.copy(alpha = 0.18f))
                 ) {
                     Text(
                         text = "Grazie per essere arrivato fin qui.",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
                     )
                 }
@@ -255,7 +277,7 @@ fun SettingsScreen(
                     Text(
                         text = AppLocale.creatorSectionBody,
                         fontSize = 12.sp,
-                        color = TextMuted,
+                        color = AppColors.textMuted,
                         lineHeight = 19.sp
                     )
 
@@ -264,7 +286,7 @@ fun SettingsScreen(
                     Text(
                         text = "Made with care in Italy",
                         fontSize = 11.sp,
-                        color = TextGray,
+                        color = AppColors.textSecondary,
                         letterSpacing = 0.3.sp
                     )
                 } else {
@@ -273,7 +295,7 @@ fun SettingsScreen(
                     Text(
                         text = "Tocca per leggere il messaggio completo",
                         fontSize = 11.sp,
-                        color = TextGray
+                        color = AppColors.textSecondary
                     )
                 }
             }
@@ -286,7 +308,7 @@ fun SettingsScreen(
                 title = AppLocale.logoutLabel,
                 subtitle = AppLocale.logoutSubtitle,
                 onClick = onLogout,
-                accentColor = RedCard
+                accentColor = AppColors.red
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -297,20 +319,20 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(DarkCard.copy(alpha = 0.6f))
+                    .background(AppColors.card.copy(alpha = 0.6f))
                     .padding(16.dp)
             ) {
                 Text(
                     text = AppLocale.disclaimerTitle,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextGray
+                    color = AppColors.textSecondary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = AppLocale.disclaimerBody,
                     fontSize = 12.sp,
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     lineHeight = 17.sp
                 )
             }
@@ -327,7 +349,7 @@ fun SettingsScreen(
                     text = AppLocale.dangerZone,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = RedCard,
+                    color = AppColors.red,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
@@ -336,8 +358,8 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = RedCard.copy(alpha = 0.15f),
-                        contentColor = RedCard
+                        containerColor = AppColors.red.copy(alpha = 0.15f),
+                        contentColor = AppColors.red
                     )
                 ) {
                     Icon(Icons.Default.DeleteForever, null, modifier = Modifier.size(20.dp))
@@ -351,7 +373,7 @@ fun SettingsScreen(
 
                 if (deleteError != null) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = deleteError!!, color = RedCard, fontSize = 13.sp)
+                    Text(text = deleteError!!, color = AppColors.red, fontSize = 13.sp)
                 }
             }
 
@@ -549,11 +571,11 @@ private fun HomeSpritePickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DarkSurface,
+        containerColor = AppColors.surface,
         title = {
             Text(
                 text = AppLocale.homeSpriteDialogTitle,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold
             )
         },
@@ -565,7 +587,7 @@ private fun HomeSpritePickerDialog(
                         onDismiss()
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selectedSpriteId == 0) BlueCard else DarkCard
+                        containerColor = if (selectedSpriteId == 0) AppColors.blue else AppColors.card
                     ),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
@@ -589,10 +611,10 @@ private fun HomeSpritePickerDialog(
                                 modifier = Modifier
                                     .size(60.dp)
                                     .clip(CircleShape)
-                                    .background(DarkCard)
+                                    .background(AppColors.card)
                                     .border(
                                         width = if (selectedSpriteId == spriteId) 2.dp else 1.dp,
-                                        color = if (selectedSpriteId == spriteId) BlueCard else Color.White.copy(alpha = 0.12f),
+                                        color = if (selectedSpriteId == spriteId) AppColors.blue else Color.White.copy(alpha = 0.12f),
                                         shape = CircleShape
                                     )
                                     .clickable {
@@ -614,7 +636,7 @@ private fun HomeSpritePickerDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(AppLocale.cancel, color = TextMuted)
+                Text(AppLocale.cancel, color = AppColors.textMuted)
             }
         }
     )
@@ -626,7 +648,7 @@ private fun SettingsItem(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    accentColor: androidx.compose.ui.graphics.Color = BlueCard
+    accentColor: androidx.compose.ui.graphics.Color = AppColors.blue
 ) {
     Row(
         modifier = Modifier
@@ -638,10 +660,10 @@ private fun SettingsItem(
         Icon(icon, null, tint = accentColor, modifier = Modifier.size(24.dp))
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = TextWhite)
-            Text(text = subtitle, fontSize = 12.sp, color = TextMuted)
+            Text(text = title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = AppColors.textPrimary)
+            Text(text = subtitle, fontSize = 12.sp, color = AppColors.textMuted)
         }
-        Icon(Icons.Default.ChevronRight, null, tint = TextMuted, modifier = Modifier.size(20.dp))
+        Icon(Icons.Default.ChevronRight, null, tint = AppColors.textMuted, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -658,14 +680,14 @@ private fun DeleteAccountDialog(
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(24.dp))
-                .background(DarkSurface)
+                .background(AppColors.surface)
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
                 Icons.Default.Warning,
                 null,
-                tint = RedCard,
+                tint = AppColors.red,
                 modifier = Modifier.size(48.dp)
             )
 
@@ -675,7 +697,7 @@ private fun DeleteAccountDialog(
                 text = AppLocale.deleteAccountTitle,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 textAlign = TextAlign.Center
             )
 
@@ -684,7 +706,7 @@ private fun DeleteAccountDialog(
             Text(
                 text = AppLocale.deleteAccountMessage,
                 fontSize = 14.sp,
-                color = TextGray,
+                color = AppColors.textSecondary,
                 textAlign = TextAlign.Center,
                 lineHeight = 20.sp
             )
@@ -692,15 +714,15 @@ private fun DeleteAccountDialog(
             Spacer(modifier = Modifier.height(24.dp))
 
             if (isDeleting) {
-                CircularProgressIndicator(color = RedCard, modifier = Modifier.size(32.dp))
+                CircularProgressIndicator(color = AppColors.red, modifier = Modifier.size(32.dp))
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(AppLocale.deletingAccount, color = TextMuted, fontSize = 13.sp)
+                Text(AppLocale.deletingAccount, color = AppColors.textMuted, fontSize = 13.sp)
             } else {
                 Button(
                     onClick = onConfirm,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = RedCard)
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.red)
                 ) {
                     Text(
                         text = AppLocale.deleteAccountConfirm,
@@ -715,7 +737,7 @@ private fun DeleteAccountDialog(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextGray)
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textSecondary)
                 ) {
                     Text(
                         text = AppLocale.cancel,
@@ -752,11 +774,11 @@ private fun ReauthenticateDeleteDialog(
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(24.dp))
-                .background(DarkSurface)
+                .background(AppColors.surface)
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.Default.Lock, null, tint = BlueCard, modifier = Modifier.size(44.dp))
+            Icon(Icons.Default.Lock, null, tint = AppColors.blue, modifier = Modifier.size(44.dp))
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -764,7 +786,7 @@ private fun ReauthenticateDeleteDialog(
                 text = title,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 textAlign = TextAlign.Center
             )
 
@@ -773,7 +795,7 @@ private fun ReauthenticateDeleteDialog(
             Text(
                 text = body,
                 fontSize = 14.sp,
-                color = TextGray,
+                color = AppColors.textSecondary,
                 textAlign = TextAlign.Center,
                 lineHeight = 20.sp
             )
@@ -798,7 +820,7 @@ private fun ReauthenticateDeleteDialog(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isBusy,
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = RedCard)
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.red)
                     ) {
                         Text(if (isItalian) "Conferma e elimina" else "Confirm and delete")
                     }
@@ -855,14 +877,14 @@ private fun ReauthenticateDeleteDialog(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isBusy,
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextGray)
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textSecondary)
             ) {
                 Text(AppLocale.cancel)
             }
 
             if (isBusy) {
                 Spacer(modifier = Modifier.height(12.dp))
-                CircularProgressIndicator(color = BlueCard, modifier = Modifier.size(26.dp))
+                CircularProgressIndicator(color = AppColors.blue, modifier = Modifier.size(26.dp))
             }
         }
     }

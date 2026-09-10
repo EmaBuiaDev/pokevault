@@ -42,22 +42,22 @@ fun GradedCardsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppColors.background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         TopAppBar(
-            title = { Text(AppLocale.gradedCardsTitle.replace("\n", " "), fontWeight = FontWeight.SemiBold, color = TextWhite) },
+            title = { Text(AppLocale.gradedCardsTitle.replace("\n", " "), fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
         )
 
         if (state.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = BlueCard)
+                CircularProgressIndicator(color = AppColors.blue)
             }
         } else if (state.totalGraded == 0) {
             // Empty state
@@ -68,11 +68,11 @@ fun GradedCardsScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("⭐", fontSize = 48.sp)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(AppLocale.emptyCollectionTitle, color = TextWhite, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(AppLocale.emptyCollectionTitle, color = AppColors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "Aggiungi carte con certificazione PSA, BGS o CGC dalla sezione Collezione.",
-                        color = TextMuted, fontSize = 14.sp, textAlign = TextAlign.Center
+                        color = AppColors.textMuted, fontSize = 14.sp, textAlign = TextAlign.Center
                     )
                 }
             }
@@ -80,9 +80,9 @@ fun GradedCardsScreen(
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 // ── Stat Cards ──
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    GradedStatCard("Totale", "${state.totalGraded}", StarGold, Modifier.weight(1f))
-                    GradedStatCard("Grade Medio", "${"%.1f".format(state.averageGrade)}", GreenCard, Modifier.weight(1f))
-                    GradedStatCard("Valore", "\u20AC${"%.0f".format(state.totalValue)}", BlueCard, Modifier.weight(1f))
+                    GradedStatCard("Totale", "${state.totalGraded}", AppColors.gold, Modifier.weight(1f))
+                    GradedStatCard("Grade Medio", "${"%.1f".format(state.averageGrade)}", AppColors.green, Modifier.weight(1f))
+                    GradedStatCard("Valore", "\u20AC${"%.0f".format(state.totalValue)}", AppColors.blue, Modifier.weight(1f))
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -128,12 +128,12 @@ fun GradedStatCard(label: String, value: String, color: Color, modifier: Modifie
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(DarkCard)
+            .background(AppColors.card)
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(value, color = color, fontWeight = FontWeight.Bold, fontSize = 18.sp, maxLines = 1)
-        Text(label, color = TextMuted, fontSize = 11.sp, maxLines = 1)
+        Text(label, color = AppColors.textMuted, fontSize = 11.sp, maxLines = 1)
     }
 }
 
@@ -141,12 +141,12 @@ fun GradedStatCard(label: String, value: String, color: Color, modifier: Modifie
 fun CompanyChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
     Text(
         text = label,
-        color = if (isSelected) TextWhite else TextMuted,
+        color = if (isSelected) AppColors.textPrimary else AppColors.textMuted,
         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
         fontSize = 12.sp,
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (isSelected) StarGold.copy(alpha = 0.4f) else DarkCard)
+            .background(if (isSelected) AppColors.gold.copy(alpha = 0.4f) else AppColors.card)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp)
     )
@@ -158,28 +158,28 @@ fun SearchField(query: String, onQueryChange: (String) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(DarkCard)
+            .background(AppColors.card)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.Search, contentDescription = null, tint = AppColors.textMuted, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             androidx.compose.foundation.text.BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                textStyle = androidx.compose.ui.text.TextStyle(color = TextWhite, fontSize = 14.sp),
+                textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.textPrimary, fontSize = 14.sp),
                 singleLine = true,
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(BlueCard),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(AppColors.blue),
                 modifier = Modifier.weight(1f),
                 decorationBox = { innerTextField ->
-                    if (query.isEmpty()) Text("${AppLocale.searchCard}...", color = TextMuted, fontSize = 14.sp)
+                    if (query.isEmpty()) Text("${AppLocale.searchCard}...", color = AppColors.textMuted, fontSize = 14.sp)
                     innerTextField()
                 }
             )
             if (query.isNotEmpty()) {
                 Icon(
                     Icons.Default.Close, contentDescription = AppLocale.clearSearch,
-                    tint = TextMuted, modifier = Modifier.size(18.dp).clickable { onQueryChange("") }
+                    tint = AppColors.textMuted, modifier = Modifier.size(18.dp).clickable { onQueryChange("") }
                 )
             }
         }
@@ -191,7 +191,7 @@ fun GradedCardItem(card: PokemonCard, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(DarkCard)
+            .background(AppColors.card)
             .clickable(onClick = onClick)
     ) {
         // Card image
@@ -207,7 +207,7 @@ fun GradedCardItem(card: PokemonCard, onClick: () -> Unit) {
             } else {
                 Box(
                     modifier = Modifier.fillMaxWidth().height(200.dp)
-                        .background(PurpleCard.copy(alpha = 0.1f)),
+                        .background(AppColors.purple.copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("🎴", fontSize = 48.sp)
@@ -220,7 +220,7 @@ fun GradedCardItem(card: PokemonCard, onClick: () -> Unit) {
                     .align(Alignment.TopEnd)
                     .padding(8.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(StarGold)
+                    .background(AppColors.gold)
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Text(
@@ -235,7 +235,7 @@ fun GradedCardItem(card: PokemonCard, onClick: () -> Unit) {
         // Card info
         Column(modifier = Modifier.padding(10.dp)) {
             Text(
-                card.name, color = TextWhite, fontWeight = FontWeight.SemiBold,
+                card.name, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold,
                 fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(2.dp))
@@ -245,18 +245,18 @@ fun GradedCardItem(card: PokemonCard, onClick: () -> Unit) {
             ) {
                 Text(
                     card.gradingCompany.ifBlank { "N/D" },
-                    color = StarGold, fontSize = 12.sp, fontWeight = FontWeight.Medium
+                    color = AppColors.gold, fontSize = 12.sp, fontWeight = FontWeight.Medium
                 )
                 if (card.estimatedValue > 0) {
                     Text(
                         "\u20AC${"%.2f".format(card.estimatedValue)}",
-                        color = GreenCard, fontSize = 12.sp, fontWeight = FontWeight.Medium
+                        color = AppColors.green, fontSize = 12.sp, fontWeight = FontWeight.Medium
                     )
                 }
             }
             Text(
                 AppLocale.displaySetName(card.set).ifBlank { "-" },
-                color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                color = AppColors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
         }
     }

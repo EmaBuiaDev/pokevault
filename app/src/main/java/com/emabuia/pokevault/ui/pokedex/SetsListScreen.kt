@@ -150,7 +150,7 @@ fun PokeballLoadingAnimation(
 
         Text(
             text = message,
-            color = TextGray,
+            color = AppColors.textSecondary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium
         )
@@ -216,24 +216,24 @@ fun SetsListScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppColors.background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         TopAppBar(
-            title = { Text("Pokédex", fontWeight = FontWeight.Bold, color = TextWhite) },
+            title = { Text("Pokédex", fontWeight = FontWeight.Bold, color = AppColors.textPrimary) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                 }
             },
             actions = {
                 if (!state.isLoading) {
                     IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(Icons.Default.Refresh, AppLocale.refresh, tint = TextMuted)
+                        Icon(Icons.Default.Refresh, AppLocale.refresh, tint = AppColors.textMuted)
                     }
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
         )
 
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -242,7 +242,7 @@ fun SetsListScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(DarkCard),
+                    .background(AppColors.card),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 TabItem(AppLocale.extensions, !isSearchingCards) {
@@ -260,29 +260,29 @@ fun SetsListScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(SearchBarBg)
+                    .background(AppColors.searchBar)
                     .padding(horizontal = 14.dp, vertical = 13.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Search, AppLocale.search, tint = TextMuted, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Search, AppLocale.search, tint = AppColors.textMuted, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Box(modifier = Modifier.weight(1f)) {
                         val placeholder = if (isSearchingCards) AppLocale.searchCardPlaceholder else AppLocale.searchSetPlaceholder
                         val query = if (isSearchingCards) state.cardSearchQuery else state.searchQuery
-                        if (query.isEmpty()) Text(placeholder, color = TextMuted, fontSize = 14.sp)
+                        if (query.isEmpty()) Text(placeholder, color = AppColors.textMuted, fontSize = 14.sp)
                         BasicTextField(
                             value = query,
                             onValueChange = {
                                 if (isSearchingCards) viewModel.searchCardsByName(it) else viewModel.updateSearch(it)
                             },
-                            textStyle = androidx.compose.ui.text.TextStyle(color = TextWhite, fontSize = 14.sp),
-                            singleLine = true, cursorBrush = SolidColor(BlueCard),
+                            textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.textPrimary, fontSize = 14.sp),
+                            singleLine = true, cursorBrush = SolidColor(AppColors.blue),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
                     val query = if (isSearchingCards) state.cardSearchQuery else state.searchQuery
                     if (query.isNotEmpty()) {
-                        Icon(Icons.Default.Close, AppLocale.cancel, tint = TextMuted,
+                        Icon(Icons.Default.Close, AppLocale.cancel, tint = AppColors.textMuted,
                             modifier = Modifier.size(20.dp).clickable {
                                 if (isSearchingCards) viewModel.clearCardSearch() else viewModel.updateSearch("")
                             })
@@ -310,12 +310,12 @@ fun SetsListScreen(
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = BlueCard,
-                            selectedLabelColor = TextWhite,
-                            selectedLeadingIconColor = TextWhite,
-                            containerColor = DarkCard,
-                            labelColor = TextMuted,
-                            iconColor = TextMuted
+                            selectedContainerColor = AppColors.blue,
+                            selectedLabelColor = AppColors.textPrimary,
+                            selectedLeadingIconColor = AppColors.textPrimary,
+                            containerColor = AppColors.card,
+                            labelColor = AppColors.textMuted,
+                            iconColor = AppColors.textMuted
                         )
                     )
                 }
@@ -403,12 +403,12 @@ fun SetsListScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("⚠️", fontSize = 48.sp)
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text(state.errorMessage, color = TextGray, textAlign = TextAlign.Center)
+                        Text(state.errorMessage, color = AppColors.textSecondary, textAlign = TextAlign.Center)
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = { viewModel.refresh() },
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
                         ) { Text(AppLocale.retry) }
                     }
                 }
@@ -453,13 +453,13 @@ private fun languageMacroToFlag(macro: String): String = when (macro) {
 fun RowScope.TabItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
     Text(
         text = label,
-        color = if (isSelected) TextWhite else TextMuted,
+        color = if (isSelected) AppColors.textPrimary else AppColors.textMuted,
         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
         fontSize = 14.sp, textAlign = TextAlign.Center,
         modifier = Modifier
             .weight(1f)
             .clickable(onClick = onClick)
-            .background(if (isSelected) BlueCard.copy(alpha = 0.3f) else Color.Transparent)
+            .background(if (isSelected) AppColors.blue.copy(alpha = 0.3f) else Color.Transparent)
             .padding(vertical = 12.dp)
     )
 }
@@ -476,7 +476,7 @@ fun SeriesFilterChip(
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (isSelected) BlueCard else DarkCard)
+            .background(if (isSelected) AppColors.blue else AppColors.card)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -484,7 +484,7 @@ fun SeriesFilterChip(
     ) {
         Text(
             text = label,
-            color = if (isSelected) TextWhite else TextMuted,
+            color = if (isSelected) AppColors.textPrimary else AppColors.textMuted,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
             fontSize = 13.sp, maxLines = 1
         )
@@ -494,13 +494,13 @@ fun SeriesFilterChip(
                     .clip(CircleShape)
                     .background(
                         if (isSelected) Color.White.copy(alpha = 0.2f)
-                        else TextMuted.copy(alpha = 0.15f)
+                        else AppColors.textMuted.copy(alpha = 0.15f)
                     )
                     .padding(horizontal = 6.dp, vertical = 1.dp)
             ) {
                 Text(
                     text = "$count",
-                    color = if (isSelected) TextWhite else TextMuted,
+                    color = if (isSelected) AppColors.textPrimary else AppColors.textMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -522,7 +522,7 @@ fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoLoadError: (String) -> Unit 
             .fillMaxWidth()
             .height(170.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(DarkCard)
+            .background(AppColors.card)
             .clickable(onClick = onClick)
     ) {
         Column(
@@ -561,14 +561,14 @@ fun SetCard(set: TcgSet, onClick: () -> Unit, onLogoLoadError: (String) -> Unit 
 
             Column {
                 Text(
-                    text = set.name, color = TextWhite, fontWeight = FontWeight.SemiBold,
+                    text = set.name, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold,
                     fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 15.sp
                 )
                 Spacer(modifier = Modifier.height(3.dp))
                 // Data formattata GG/MM/AAAA
                 Text(
                     text = formatDate(set.releaseDate),
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     fontSize = 10.sp
                 )
             }
@@ -583,13 +583,13 @@ private fun MissingSetLogoFallback(setName: String) {
             .fillMaxWidth()
             .height(58.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(BlueCard.copy(alpha = 0.12f))
+            .background(AppColors.blue.copy(alpha = 0.12f))
             .padding(horizontal = 10.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = setName,
-            color = TextWhite,
+            color = AppColors.textPrimary,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
@@ -616,7 +616,7 @@ fun CardSearchResults(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("🔍", fontSize = 48.sp)
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(AppLocale.writeAtLeast2, color = TextMuted, fontSize = 14.sp)
+                Text(AppLocale.writeAtLeast2, color = AppColors.textMuted, fontSize = 14.sp)
             }
         }
     } else if (isLoading) {
@@ -628,7 +628,7 @@ fun CardSearchResults(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("😔", fontSize = 48.sp)
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(AppLocale.noResults, color = TextGray, fontSize = 14.sp)
+                Text(AppLocale.noResults, color = AppColors.textSecondary, fontSize = 14.sp)
             }
         }
     } else {
@@ -651,14 +651,14 @@ fun CardSearchResults(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item(span = { GridItemSpan(3) }) {
-                Text(AppLocale.resultsCountInExpansions(cards.size, grouped.size), color = TextMuted, fontSize = 13.sp)
+                Text(AppLocale.resultsCountInExpansions(cards.size, grouped.size), color = AppColors.textMuted, fontSize = 13.sp)
             }
             orderedGroups.forEach { (setId, setCards) ->
                 val setName = setCards.firstOrNull()?.set?.name ?: AppLocale.unknown
                 val formattedReleaseDate = formatReleaseDateUi(setReleaseDateById[setId].orEmpty())
                 item(span = { GridItemSpan(3) }) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DarkCard)
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AppColors.card)
                             .clickable {
                                 setCards.firstOrNull()?.set?.id?.takeIf { id -> id.isNotBlank() }?.let { onCardSetClick(it) }
                             }
@@ -667,15 +667,15 @@ fun CardSearchResults(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text(setName, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(setName, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             val subtitle = if (formattedReleaseDate.isBlank()) {
                                 AppLocale.resultsCount(setCards.size)
                             } else {
                                 "${AppLocale.resultsCount(setCards.size)} • $formattedReleaseDate"
                             }
-                            Text(subtitle, color = TextMuted, fontSize = 11.sp)
+                            Text(subtitle, color = AppColors.textMuted, fontSize = 11.sp)
                         }
-                        Icon(Icons.Default.ChevronRight, null, tint = TextMuted, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.ChevronRight, null, tint = AppColors.textMuted, modifier = Modifier.size(20.dp))
                     }
                 }
                 items(
@@ -705,7 +705,7 @@ fun CardSearchResults(
                             ) {
                                 Text(
                                     text = "#${extractCardNumberForUi(card.number)} ${card.name}",
-                                    color = TextWhite,
+                                    color = AppColors.textPrimary,
                                     fontSize = 10.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -715,10 +715,10 @@ fun CardSearchResults(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(DarkSurface),
+                                    .background(AppColors.surface),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(AppLocale.noImage, color = TextMuted, fontSize = 10.sp)
+                                Text(AppLocale.noImage, color = AppColors.textMuted, fontSize = 10.sp)
                             }
                         }
                     }

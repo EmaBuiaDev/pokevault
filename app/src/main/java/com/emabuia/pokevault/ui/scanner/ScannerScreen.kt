@@ -196,7 +196,7 @@ fun ScannerScreen(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier
-                        .background(GreenCard.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
+                        .background(AppColors.green.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
@@ -205,7 +205,7 @@ fun ScannerScreen(
                 Icon(
                     if (state.flashEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
                     "Flash",
-                    tint = if (state.flashEnabled) StarGold else Color.White,
+                    tint = if (state.flashEnabled) AppColors.gold else Color.White,
                     modifier = Modifier
                         .size(36.dp)
                         .background(Color.Black.copy(alpha = 0.5f), CircleShape)
@@ -264,7 +264,7 @@ fun ScannerScreen(
                 ) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
-                        color = BlueCard,
+                        color = AppColors.blue,
                         strokeWidth = 2.dp
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -314,7 +314,7 @@ fun ScannerScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(GreenCard.copy(alpha = 0.95f), RoundedCornerShape(16.dp))
+                            .background(AppColors.green.copy(alpha = 0.95f), RoundedCornerShape(16.dp))
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -377,19 +377,19 @@ private fun CandidateCardPicker(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DarkSurface.copy(alpha = 0.96f), RoundedCornerShape(16.dp))
+            .background(AppColors.surface.copy(alpha = 0.96f), RoundedCornerShape(16.dp))
             .padding(12.dp)
     ) {
         Text(
             "Più risultati trovati",
-            color = BlueCard,
+            color = AppColors.blue,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             "Tocca la carta corretta per confermare.",
-            color = TextGray,
+            color = AppColors.textSecondary,
             fontSize = 12.sp
         )
         Spacer(modifier = Modifier.height(10.dp))
@@ -436,7 +436,7 @@ private fun CandidateCardPicker(
                             append(" · #")
                             append(card.number)
                         },
-                        color = TextGray,
+                        color = AppColors.textSecondary,
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -445,7 +445,7 @@ private fun CandidateCardPicker(
                     if (metadata.isNotEmpty()) {
                         Text(
                             metadata.joinToString(" · "),
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -460,7 +460,7 @@ private fun CandidateCardPicker(
             onClick = onDismiss,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = TextGray)
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textSecondary)
         ) {
             Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
@@ -482,14 +482,14 @@ private fun PendingCardConfirmation(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DarkSurface.copy(alpha = 0.95f), RoundedCornerShape(16.dp))
+            .background(AppColors.surface.copy(alpha = 0.95f), RoundedCornerShape(16.dp))
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Header
         Text(
             AppLocale.recognizedCard,
-            color = BlueCard,
+            color = AppColors.blue,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp
         )
@@ -529,19 +529,19 @@ private fun PendingCardConfirmation(
                 if (card.set != null) {
                     Text(
                         card.set.name,
-                        color = TextGray,
+                        color = AppColors.textSecondary,
                         fontSize = 13.sp
                     )
                 }
                 Text(
                     "#${card.number}" + (card.rarity?.let { " · $it" } ?: ""),
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     fontSize = 12.sp
                 )
                 if (card.hp != null) {
                     Text(
                         "${card.hp} HP",
-                        color = TextMuted,
+                        color = AppColors.textMuted,
                         fontSize = 12.sp
                     )
                 }
@@ -561,7 +561,7 @@ private fun PendingCardConfirmation(
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = TextGray
+                    contentColor = AppColors.textSecondary
                 )
             ) {
                 Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
@@ -575,7 +575,7 @@ private fun PendingCardConfirmation(
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = GreenCard
+                    containerColor = AppColors.green
                 )
             ) {
                 Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
@@ -598,9 +598,9 @@ private fun ScanZoneOverlay(
 ) {
     // Colore bordo: blu in scansione, verde se trovata, bianco default
     val borderColor = when {
-        hasResult -> GreenCard
-        isDetecting -> BlueCard
-        detectedName.isNotBlank() -> StarGold
+        hasResult -> AppColors.green
+        isDetecting -> AppColors.blue
+        detectedName.isNotBlank() -> AppColors.gold
         else -> Color.White.copy(alpha = 0.6f)
     }
 
@@ -677,7 +677,7 @@ private fun PermissionRequest(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppColors.background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -688,20 +688,20 @@ private fun PermissionRequest(
                 "La fotocamera serve per scansionare le carte Pokémon e aggiungerle alla collezione."
             else
                 "Per usare lo scanner serve il permesso fotocamera.",
-            color = TextGray,
+            color = AppColors.textSecondary,
             textAlign = TextAlign.Center,
             fontSize = 16.sp
         )
         Spacer(modifier = Modifier.height(24.dp))
         Button(
             onClick = onRequestPermission,
-            colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
         ) {
             Text(AppLocale.grantPermission)
         }
         Spacer(modifier = Modifier.height(12.dp))
         TextButton(onClick = onBack) {
-            Text(AppLocale.goBack, color = TextMuted)
+            Text(AppLocale.goBack, color = AppColors.textMuted)
         }
     }
 }

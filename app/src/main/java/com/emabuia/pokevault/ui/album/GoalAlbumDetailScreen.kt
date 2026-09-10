@@ -54,14 +54,14 @@ private fun CardImageFallback(card: TcgCard) {
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(0.72f)
-            .background(DarkSurface)
+            .background(AppColors.surface)
             .padding(6.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = card.name,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontSize = 10.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -71,7 +71,7 @@ private fun CardImageFallback(card: TcgCard) {
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = series,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 8.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -79,7 +79,7 @@ private fun CardImageFallback(card: TcgCard) {
             )
             Text(
                 text = setName,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 8.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -126,7 +126,7 @@ fun GoalAlbumDetailScreen(
             isLoading = viewModel.isLoading,
             message = AppLocale.chaseNotFound,
             onBack = onBack,
-            accentColor = OrangeCard
+            accentColor = AppColors.orange
         )
         return
     }
@@ -142,22 +142,22 @@ fun GoalAlbumDetailScreen(
     )
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(album.name, color = TextWhite, fontWeight = FontWeight.Bold) },
+                title = { Text(album.name, color = AppColors.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppLocale.back, tint = TextWhite)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppLocale.back, tint = AppColors.textPrimary)
                     }
                 },
                 actions = {
                     IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = AppLocale.delete, tint = TextMuted)
+                        Icon(Icons.Default.Delete, contentDescription = AppLocale.delete, tint = AppColors.textMuted)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         }
     ) { padding ->
@@ -172,12 +172,12 @@ fun GoalAlbumDetailScreen(
             // ── Tab row ───────────────────────────────────────────────────
             TabRow(
                 selectedTabIndex = selectedTab.ordinal,
-                containerColor = DarkSurface,
-                contentColor = OrangeCard,
+                containerColor = AppColors.surface,
+                contentColor = AppColors.orange,
                 indicator = { tabPositions ->
                     TabRowDefaults.SecondaryIndicator(
                         modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab.ordinal]),
-                        color = OrangeCard
+                        color = AppColors.orange
                     )
                 }
             ) {
@@ -189,7 +189,7 @@ fun GoalAlbumDetailScreen(
                             Text(
                                 text = tab.toLabel(progress),
                                 fontSize = 12.sp,
-                                color = if (selectedTab == tab) OrangeCard else TextGray,
+                                color = if (selectedTab == tab) AppColors.orange else AppColors.textSecondary,
                                 fontWeight = if (selectedTab == tab) FontWeight.SemiBold else FontWeight.Normal
                             )
                         }
@@ -199,7 +199,7 @@ fun GoalAlbumDetailScreen(
 
             if (isLoadingCards) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = OrangeCard)
+                    CircularProgressIndicator(color = AppColors.orange)
                 }
             } else {
                 // ── Grid carte ────────────────────────────────────────────
@@ -234,7 +234,7 @@ fun GoalAlbumDetailScreen(
                     ) {
                         Text(
                             text = selectedTab.emptyMessage(),
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 15.sp,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(32.dp)
@@ -276,19 +276,19 @@ fun GoalAlbumDetailScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            containerColor = DarkSurface,
-            title = { Text(AppLocale.chaseDeleteTitle, color = TextWhite) },
-            text = { Text(AppLocale.chaseDeleteMessage, color = TextGray) },
+            containerColor = AppColors.surface,
+            title = { Text(AppLocale.chaseDeleteTitle, color = AppColors.textPrimary) },
+            text = { Text(AppLocale.chaseDeleteMessage, color = AppColors.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteGoalAlbum(goalAlbumId)
                     showDeleteDialog = false
                     onBack()
-                }) { Text(AppLocale.delete, color = com.emabuia.pokevault.ui.theme.RedCard) }
+                }) { Text(AppLocale.delete, color = com.emabuia.pokevault.ui.theme.AppColors.red) }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text(AppLocale.cancel, color = TextGray)
+                    Text(AppLocale.cancel, color = AppColors.textSecondary)
                 }
             }
         )
@@ -302,7 +302,7 @@ private fun ChaseProgressHeader(progress: GoalProgress, animatedProgress: Float)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DarkSurface)
+            .background(AppColors.surface)
             .padding(horizontal = 24.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -312,21 +312,21 @@ private fun ChaseProgressHeader(progress: GoalProgress, animatedProgress: Float)
             CircularProgressIndicator(
                 progress = { 1f },
                 modifier = Modifier.size(72.dp),
-                color = DarkBackground,
+                color = AppColors.background,
                 strokeWidth = 7.dp,
                 strokeCap = StrokeCap.Round
             )
             CircularProgressIndicator(
                 progress = { animatedProgress },
                 modifier = Modifier.size(72.dp),
-                color = OrangeCard,
+                color = AppColors.orange,
                 strokeWidth = 7.dp,
                 strokeCap = StrokeCap.Round
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "${progress.percentage.toInt()}%",
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -337,17 +337,17 @@ private fun ChaseProgressHeader(progress: GoalProgress, animatedProgress: Float)
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
             StatRow(label = AppLocale.chaseStatTotal, value = "${progress.total}")
-            StatRow(label = AppLocale.chaseStatOwned, value = "${progress.owned}", color = com.emabuia.pokevault.ui.theme.GreenCard)
-            StatRow(label = AppLocale.chaseStatMissing, value = "${progress.missing.size}", color = com.emabuia.pokevault.ui.theme.RedCard)
-            StatRow(label = AppLocale.chaseStatDuplicates, value = "${progress.duplicates.size}", color = BlueCard)
+            StatRow(label = AppLocale.chaseStatOwned, value = "${progress.owned}", color = com.emabuia.pokevault.ui.theme.AppColors.green)
+            StatRow(label = AppLocale.chaseStatMissing, value = "${progress.missing.size}", color = com.emabuia.pokevault.ui.theme.AppColors.red)
+            StatRow(label = AppLocale.chaseStatDuplicates, value = "${progress.duplicates.size}", color = AppColors.blue)
         }
     }
 }
 
 @Composable
-private fun StatRow(label: String, value: String, color: Color = TextWhite) {
+private fun StatRow(label: String, value: String, color: Color = AppColors.textPrimary) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = TextGray, fontSize = 12.sp)
+        Text(label, color = AppColors.textSecondary, fontSize = 12.sp)
         Text(value, color = color, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
@@ -376,13 +376,13 @@ private fun ChaseCardItem(card: TcgCard, isOwned: Boolean, onAddTap: () -> Unit)
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(DarkBackground.copy(alpha = 0.65f))
+                    .background(AppColors.background.copy(alpha = 0.65f))
                     .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = AppLocale.chaseCardMissingLabel,
-                    color = TextGray,
+                    color = AppColors.textSecondary,
                     fontSize = 10.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

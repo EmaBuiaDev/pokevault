@@ -52,7 +52,7 @@ fun AlbumDetailScreen(
             isLoading = viewModel.isLoading,
             message = AppLocale.albumNotFound,
             onBack = onBack,
-            accentColor = OrangeCard
+            accentColor = AppColors.orange
         )
         return
     }
@@ -63,14 +63,14 @@ fun AlbumDetailScreen(
     val isFull = album.cardIds.size >= album.size
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Column {
                         Text(
                             album.name,
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
                             maxLines = 1,
@@ -78,7 +78,7 @@ fun AlbumDetailScreen(
                         )
                         Text(
                             AppLocale.albumSlots(album.cardIds.size, album.size),
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 12.sp
                         )
                     }
@@ -88,12 +88,12 @@ fun AlbumDetailScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
-                            tint = TextWhite
+                            tint = AppColors.textPrimary
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkBackground
+                    containerColor = AppColors.background
                 )
             )
         },
@@ -121,13 +121,13 @@ fun AlbumDetailScreen(
                     Icon(
                         Icons.Default.PhotoAlbum,
                         contentDescription = null,
-                        tint = TextMuted,
+                        tint = AppColors.textMuted,
                         modifier = Modifier.size(56.dp)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         AppLocale.albumAddCards,
-                        color = TextGray,
+                        color = AppColors.textSecondary,
                         fontSize = 16.sp
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -238,13 +238,13 @@ private fun EmptySlot(themeColors: List<Color>) {
         modifier = Modifier
             .aspectRatio(0.72f)
             .clip(RoundedCornerShape(10.dp))
-            .background(DarkCard.copy(alpha = 0.5f)),
+            .background(AppColors.card.copy(alpha = 0.5f)),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             Icons.Default.Add,
             contentDescription = null,
-            tint = TextMuted.copy(alpha = 0.3f),
+            tint = AppColors.textMuted.copy(alpha = 0.3f),
             modifier = Modifier.size(24.dp)
         )
     }
@@ -273,7 +273,7 @@ private fun AddCardsBottomSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = DarkSurface,
+        containerColor = AppColors.surface,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
         Column(
@@ -284,7 +284,7 @@ private fun AddCardsBottomSheet(
         ) {
             Text(
                 text = AppLocale.albumAddCards,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
             )
@@ -315,17 +315,17 @@ private fun AddCardsBottomSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = OrangeCard,
-                    unfocusedBorderColor = TextMuted,
-                    cursorColor = OrangeCard,
-                    focusedLabelColor = OrangeCard,
-                    unfocusedLabelColor = TextMuted,
-                    focusedTextColor = TextWhite,
-                    unfocusedTextColor = TextWhite,
-                    focusedPlaceholderColor = TextMuted,
-                    unfocusedPlaceholderColor = TextMuted,
-                    focusedLeadingIconColor = OrangeCard,
-                    unfocusedLeadingIconColor = TextMuted
+                    focusedBorderColor = AppColors.orange,
+                    unfocusedBorderColor = AppColors.textMuted,
+                    cursorColor = AppColors.orange,
+                    focusedLabelColor = AppColors.orange,
+                    unfocusedLabelColor = AppColors.textMuted,
+                    focusedTextColor = AppColors.textPrimary,
+                    unfocusedTextColor = AppColors.textPrimary,
+                    focusedPlaceholderColor = AppColors.textMuted,
+                    unfocusedPlaceholderColor = AppColors.textMuted,
+                    focusedLeadingIconColor = AppColors.orange,
+                    unfocusedLeadingIconColor = AppColors.textMuted
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
@@ -335,7 +335,7 @@ private fun AddCardsBottomSheet(
             if (isFull) {
                 Text(
                     text = AppLocale.albumFull,
-                    color = RedCard,
+                    color = AppColors.red,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(vertical = 16.dp)
@@ -343,7 +343,7 @@ private fun AddCardsBottomSheet(
             } else if (visibleCards.isEmpty()) {
                 Text(
                     text = AppLocale.albumNoMatchingCards,
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     fontSize = 14.sp,
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
@@ -403,12 +403,12 @@ private fun AddCardsBottomSheet(
 @Composable
 private fun FilterTag(text: String) {
     Surface(
-        color = OrangeCard.copy(alpha = 0.15f),
+        color = AppColors.orange.copy(alpha = 0.15f),
         shape = RoundedCornerShape(8.dp)
     ) {
         Text(
             text = text,
-            color = OrangeCard,
+            color = AppColors.orange,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)

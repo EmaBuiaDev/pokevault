@@ -105,7 +105,7 @@ fun CardDetailBottomSheet(
                     .fillMaxWidth()
                     .fillMaxHeight(0.92f)
                     .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .background(DarkBackground)
+                    .background(AppColors.background)
                     .clickable(enabled = false, onClick = {})
             ) {
                 // ── Handle ──
@@ -116,7 +116,7 @@ fun CardDetailBottomSheet(
                         .width(40.dp)
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(TextMuted.copy(alpha = 0.3f))
+                        .background(AppColors.textMuted.copy(alpha = 0.3f))
                 )
 
                 Column(
@@ -128,7 +128,7 @@ fun CardDetailBottomSheet(
                     // ── Header: nome, numero, set ──
                     Text(
                         text = card.name,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 24.sp
                     )
@@ -145,10 +145,10 @@ fun CardDetailBottomSheet(
                                     .background(getTypeColorForTcg(card.types.firstOrNull()))
                             )
                         }
-                        Text("#${card.number}", color = TextMuted, fontSize = 13.sp)
+                        Text("#${card.number}", color = AppColors.textMuted, fontSize = 13.sp)
                         if (card.set != null) {
-                            Text("·", color = TextMuted, fontSize = 13.sp)
-                            Text(card.set.name, color = TextGray, fontSize = 13.sp)
+                            Text("·", color = AppColors.textMuted, fontSize = 13.sp)
+                            Text(card.set.name, color = AppColors.textSecondary, fontSize = 13.sp)
                         }
                     }
 
@@ -219,7 +219,7 @@ fun CardDetailBottomSheet(
                         ) {
                             InfoPill(icon = "✦", text = card.rarity ?: "Sconosciuto", color = rarityInfo.color)
                             if (price != null && price > 0) {
-                                InfoPill(icon = "💰", text = "${"%.2f".format(price)} €", color = GreenCard)
+                                InfoPill(icon = "💰", text = "${"%.2f".format(price)} €", color = AppColors.green)
                             }
                         }
 
@@ -235,7 +235,7 @@ fun CardDetailBottomSheet(
                                     }
                                 },
                                 shape = RoundedCornerShape(20.dp),
-                                color = BlueCard
+                                color = AppColors.blue
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -273,8 +273,8 @@ fun CardDetailBottomSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(GreenCard.copy(alpha = 0.1f))
-                                .border(1.dp, GreenCard.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                                .background(AppColors.green.copy(alpha = 0.1f))
+                                .border(1.dp, AppColors.green.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
                                 .padding(16.dp)
                         ) {
                             Row(
@@ -290,14 +290,14 @@ fun CardDetailBottomSheet(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(CircleShape)
-                                            .background(GreenCard),
+                                            .background(AppColors.green),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(20.dp))
                                     }
                                     Column {
-                                        Text(AppLocale.inCollection, color = GreenCard, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                                        Text(AppLocale.tapToAddCopy, color = TextMuted, fontSize = 12.sp)
+                                        Text(AppLocale.inCollection, color = AppColors.green, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                        Text(AppLocale.tapToAddCopy, color = AppColors.textMuted, fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -311,7 +311,7 @@ fun CardDetailBottomSheet(
                                 onClick = { showAddForm = true },
                                 modifier = Modifier.weight(1f).height(44.dp),
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
                             ) {
                                 Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -322,9 +322,9 @@ fun CardDetailBottomSheet(
                                 onClick = { onRemoveCard(); onDismiss() },
                                 modifier = Modifier.height(44.dp),
                                 shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, RedCard.copy(alpha = 0.5f))
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AppColors.red.copy(alpha = 0.5f))
                             ) {
-                                Icon(Icons.Default.Delete, null, tint = RedCard, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Delete, null, tint = AppColors.red, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
@@ -333,7 +333,7 @@ fun CardDetailBottomSheet(
                     if (!isOwned || showAddForm) {
                         Text(
                             text = if (isOwned) "Personalizza copia" else "Personalizza",
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontWeight = FontWeight.Medium,
                             fontSize = 13.sp
                         )
@@ -347,12 +347,12 @@ fun CardDetailBottomSheet(
                         ) {
                             // Quantità
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(AppLocale.quantity, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                                Text(AppLocale.quantity, color = AppColors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(DarkCard)
+                                        .background(AppColors.card)
                                         .padding(4.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
@@ -362,13 +362,13 @@ fun CardDetailBottomSheet(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(DarkSurface)
+                                            .background(AppColors.surface)
                                     ) {
-                                        Icon(Icons.Default.Remove, null, tint = TextWhite, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Remove, null, tint = AppColors.textPrimary, modifier = Modifier.size(18.dp))
                                     }
                                     Text(
                                         text = "$quantity",
-                                        color = TextWhite,
+                                        color = AppColors.textPrimary,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 18.sp
                                     )
@@ -377,7 +377,7 @@ fun CardDetailBottomSheet(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(BlueCard)
+                                            .background(AppColors.blue)
                                     ) {
                                         Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(18.dp))
                                     }
@@ -386,7 +386,7 @@ fun CardDetailBottomSheet(
 
                             // Condizione
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(AppLocale.condition, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                                Text(AppLocale.condition, color = AppColors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
                                 OptionSelector(
                                     options = CardOptions.CONDITIONS,
                                     selected = selectedCondition,
@@ -404,7 +404,7 @@ fun CardDetailBottomSheet(
                         ) {
                             // Lingua
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(AppLocale.languageLabel, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                                Text(AppLocale.languageLabel, color = AppColors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
                                 OptionSelector(
                                     options = resolvedLanguageOptions,
                                     selected = selectedLanguage,
@@ -414,7 +414,7 @@ fun CardDetailBottomSheet(
 
                             // Versione/Variante
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(AppLocale.version, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                                Text(AppLocale.version, color = AppColors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
                                 OptionSelector(
                                     options = availableVariants,
                                     selected = selectedVariant,
@@ -426,14 +426,14 @@ fun CardDetailBottomSheet(
                     }
 
                     // ── Dettagli carta ──
-                    Text(AppLocale.details, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text(AppLocale.details, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(DarkCard)
+                            .background(AppColors.card)
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -451,8 +451,8 @@ fun CardDetailBottomSheet(
                         // Varianti disponibili con prezzi
                         val variants = card.tcgplayer?.prices
                         if (variants != null && variants.isNotEmpty()) {
-                            HorizontalDivider(color = TextMuted.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 4.dp))
-                            Text(AppLocale.pricesByVariant, color = TextWhite, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                            HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 4.dp))
+                            Text(AppLocale.pricesByVariant, color = AppColors.textPrimary, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                             variants.forEach { (key, priceInfo) ->
                                 val variantName = when (key) {
                                     "normal" -> "Normal"
@@ -479,9 +479,9 @@ fun CardDetailBottomSheet(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(14.dp),
                                 strokeWidth = 1.5.dp,
-                                color = BlueCard
+                                color = AppColors.blue
                             )
-                            Text(AppLocale.loadingPrices, color = TextMuted, fontSize = 12.sp)
+                            Text(AppLocale.loadingPrices, color = AppColors.textMuted, fontSize = 12.sp)
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                     } else if (pokeWalletPrices != null && pokeWalletPrices.hasEurPrices) {
@@ -499,7 +499,7 @@ fun CardDetailBottomSheet(
                         ) {
                             Text(
                                 text = AppLocale.livePrices,
-                                color = TextWhite,
+                                color = AppColors.textPrimary,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 16.sp,
                                 maxLines = 1,
@@ -529,7 +529,7 @@ fun CardDetailBottomSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(DarkCard)
+                                .background(AppColors.card)
                                 .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -541,10 +541,10 @@ fun CardDetailBottomSheet(
                             ) {
                                 if (mainEurPrice != null) {
                                     Column {
-                                        Text(AppLocale.averagePrice, color = TextMuted, fontSize = 11.sp)
+                                        Text(AppLocale.averagePrice, color = AppColors.textMuted, fontSize = 11.sp)
                                         Text(
                                             "\u20AC${".2f".format(mainEurPrice).let { String.format("%.2f", mainEurPrice) }}",
-                                            color = GreenCard,
+                                            color = AppColors.green,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 22.sp
                                         )
@@ -552,10 +552,10 @@ fun CardDetailBottomSheet(
                                 }
                                 if (pokeWalletPrices.eurTrend != null) {
                                     Column(horizontalAlignment = Alignment.End) {
-                                        Text(AppLocale.trend, color = TextMuted, fontSize = 11.sp)
+                                        Text(AppLocale.trend, color = AppColors.textMuted, fontSize = 11.sp)
                                         Text(
                                             "\u20AC${String.format("%.2f", pokeWalletPrices.eurTrend)}",
-                                            color = TextWhite,
+                                            color = AppColors.textPrimary,
                                             fontWeight = FontWeight.Medium,
                                             fontSize = 14.sp
                                         )
@@ -565,7 +565,7 @@ fun CardDetailBottomSheet(
 
                             if (pokeWalletPrices.hasSparklineData) {
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text("Cardmarket History", color = TextGray, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                                Text("Cardmarket History", color = AppColors.textSecondary, fontWeight = FontWeight.Medium, fontSize = 12.sp)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 PriceSparkline(
                                     avg30 = pokeWalletPrices.eurAvg30 ?: 0.0,
@@ -575,7 +575,7 @@ fun CardDetailBottomSheet(
                             }
 
                             if (pokeWalletPrices.eurLow != null) {
-                                HorizontalDivider(color = TextMuted.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 2.dp))
+                                HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 2.dp))
                                 DetailInfoRow(AppLocale.minPrice, "\u20AC${String.format("%.2f", pokeWalletPrices.eurLow)}")
                             }
 
@@ -587,7 +587,7 @@ fun CardDetailBottomSheet(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(DarkCard)
+                                    .background(AppColors.card)
                                     .padding(16.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
@@ -597,11 +597,11 @@ fun CardDetailBottomSheet(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Text("\uD83C\uDDFA\uD83C\uDDF8", fontSize = 14.sp)
-                                    Text("TCGPlayer", color = TextGray, fontSize = 13.sp)
+                                    Text("TCGPlayer", color = AppColors.textSecondary, fontSize = 13.sp)
                                 }
                                 Text(
                                     "\$${String.format("%.2f", pokeWalletPrices.usdMarket)}",
-                                    color = TextWhite,
+                                    color = AppColors.textPrimary,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 14.sp
                                 )
@@ -679,8 +679,8 @@ fun PriceSparkline(avg30: Double, avg7: Double, avg1: Double) {
                         else -> Alignment.CenterHorizontally
                     }
                 ) {
-                    Text(labels[i], color = TextMuted, fontSize = 10.sp)
-                    Text("\u20AC${String.format("%.2f", v)}", color = TextGray, fontSize = 10.sp)
+                    Text(labels[i], color = AppColors.textMuted, fontSize = 10.sp)
+                    Text("\u20AC${String.format("%.2f", v)}", color = AppColors.textSecondary, fontSize = 10.sp)
                 }
             }
         }
@@ -705,7 +705,7 @@ fun OptionSelector(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(DarkCard)
+                .background(AppColors.card)
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                 .clickable { expanded = true }
                 .padding(horizontal = 12.dp, vertical = 13.dp)
@@ -717,7 +717,7 @@ fun OptionSelector(
             ) {
                 Text(
                     text = selected,
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontSize = 13.sp,
                     maxLines = 1,
                     modifier = Modifier.weight(1f)
@@ -725,7 +725,7 @@ fun OptionSelector(
                 Icon(
                     imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = null,
-                    tint = TextMuted,
+                    tint = AppColors.textMuted,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -734,14 +734,14 @@ fun OptionSelector(
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.background(DarkSurface)
+            modifier = Modifier.background(AppColors.surface)
         ) {
             options.forEach { option ->
                 DropdownMenuItem(
                     text = {
                         Text(
                             option,
-                            color = if (option == selected) BlueCard else TextWhite,
+                            color = if (option == selected) AppColors.blue else AppColors.textPrimary,
                             fontSize = 13.sp,
                             fontWeight = if (option == selected) FontWeight.SemiBold else FontWeight.Normal
                         )
@@ -775,8 +775,8 @@ fun DetailInfoRow(label: String, value: String) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, color = TextMuted, fontSize = 13.sp)
-        Text(text = value, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Text(text = label, color = AppColors.textMuted, fontSize = 13.sp)
+        Text(text = value, color = AppColors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -796,10 +796,10 @@ private fun CompactMarketplaceHeaderButtonBottomSheet(
         },
         enabled = isEnabled,
         shape = RoundedCornerShape(10.dp),
-        color = if (isEnabled) BlueCard.copy(alpha = 0.14f) else DarkSurface,
+        color = if (isEnabled) AppColors.blue.copy(alpha = 0.14f) else AppColors.surface,
         border = BorderStroke(
             width = 1.dp,
-            color = if (isEnabled) BlueCard.copy(alpha = 0.45f) else TextMuted.copy(alpha = 0.25f)
+            color = if (isEnabled) AppColors.blue.copy(alpha = 0.45f) else AppColors.textMuted.copy(alpha = 0.25f)
         )
     ) {
         Row(
@@ -811,7 +811,7 @@ private fun CompactMarketplaceHeaderButtonBottomSheet(
         ) {
             Text(
                 text = label,
-                color = if (isEnabled) TextWhite else TextMuted,
+                color = if (isEnabled) AppColors.textPrimary else AppColors.textMuted,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -821,7 +821,7 @@ private fun CompactMarketplaceHeaderButtonBottomSheet(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                 contentDescription = if (isEnabled) "Open $label" else "$label unavailable",
-                tint = if (isEnabled) BlueCard else TextMuted.copy(alpha = 0.7f),
+                tint = if (isEnabled) AppColors.blue else AppColors.textMuted.copy(alpha = 0.7f),
                 modifier = Modifier.size(10.dp)
             )
         }
@@ -846,10 +846,10 @@ private fun MarketplaceLinkButtonBottomSheet(
         },
         enabled = isEnabled,
         shape = RoundedCornerShape(12.dp),
-        color = if (isEnabled) BlueCard.copy(alpha = 0.14f) else DarkSurface,
+        color = if (isEnabled) AppColors.blue.copy(alpha = 0.14f) else AppColors.surface,
         border = BorderStroke(
             width = 1.dp,
-            color = if (isEnabled) BlueCard.copy(alpha = 0.45f) else TextMuted.copy(alpha = 0.25f)
+            color = if (isEnabled) AppColors.blue.copy(alpha = 0.45f) else AppColors.textMuted.copy(alpha = 0.25f)
         )
     ) {
         Row(
@@ -861,7 +861,7 @@ private fun MarketplaceLinkButtonBottomSheet(
         ) {
             Text(
                 text = label,
-                color = if (isEnabled) TextWhite else TextMuted,
+                color = if (isEnabled) AppColors.textPrimary else AppColors.textMuted,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 11.sp,
                 maxLines = 1,
@@ -871,26 +871,13 @@ private fun MarketplaceLinkButtonBottomSheet(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                 contentDescription = if (isEnabled) "Open $label" else "$label unavailable",
-                tint = if (isEnabled) BlueCard else TextMuted.copy(alpha = 0.7f),
+                tint = if (isEnabled) AppColors.blue else AppColors.textMuted.copy(alpha = 0.7f),
                 modifier = Modifier.size(12.dp)
             )
         }
     }
 }
 
-fun getTypeColorForTcg(type: String?): Color {
-    return when (type?.lowercase()) {
-        "fire" -> Color(0xFFEF4444)
-        "water" -> Color(0xFF3B82F6)
-        "grass" -> Color(0xFF22C55E)
-        "lightning" -> Color(0xFFEAB308)
-        "psychic" -> Color(0xFF8B5CF6)
-        "fighting" -> Color(0xFFF97316)
-        "darkness" -> Color(0xFF6366F1)
-        "metal" -> Color(0xFF6B7280)
-        "dragon" -> Color(0xFF7C3AED)
-        "fairy" -> Color(0xFFEC4899)
-        "colorless" -> Color(0xFF9CA3AF)
-        else -> Color(0xFF6B7280)
-    }
-}
+/** Vedi [TypeColors]: i colori dei tipi stanno tutti in un punto solo. */
+@Composable
+fun getTypeColorForTcg(type: String?): Color = TypeColors.of(type)
