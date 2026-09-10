@@ -44,6 +44,32 @@ import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * Codice set da usare per la ricerca prezzi.
+ *
+ * Prima veniva passato `card.set`, cioe' il NOME VISUALIZZATO dell'espansione,
+ * dove getCardPrices si aspetta un codice: la ricerca bruciava tutti e sei i
+ * candidati di prioritizedSetLookupCandidates piu' due chiamate di fallback,
+ * fino a ~7 richieste HTTP per ogni apertura del dettaglio.
+ *
+ * apiCardId e' il TcgCard.id da cui SetDetailViewModel.resolvePriceLookup
+ * ricava lo stesso valore: "ita:<setCode>:..." per le carte italiane,
+ * "<setId>-<numero>" per le altre. Se non si ricava nulla si torna al
+ * comportamento precedente, cosi' il caso peggiore resta quello di prima.
+ */
+private fun resolveSetCodeForPrices(card: PokemonCard): String {
+    val apiId = card.apiCardId.trim()
+
+    if (apiId.startsWith("ita:", ignoreCase = true)) {
+        val overlayCode = apiId.split(':').getOrNull(1).orEmpty()
+        if (overlayCode.isNotBlank()) return overlayCode
+    }
+
+    val setCode = apiId.substringBeforeLast('-', missingDelimiterValue = "")
+        .substringBefore("__")
+    return setCode.ifBlank { card.set }
+}
+
 private fun safeImageUrl(url: String): String {
     return url
         .replace(" ", "%20")
@@ -119,6 +145,7 @@ fun CardDetailScreen(
     var tempCompany by remember { mutableStateOf("") }
 
     var expandedGrading by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     fun loadData() {
         scope.launch {
@@ -199,7 +226,7 @@ fun CardDetailScreen(
             pokeWalletRepository
                 .getCardPrices(
                     cardName = selected.name,
-                    setCode = selected.set,
+                    setCode = resolveSetCodeForPrices(selected),
                     cardNumber = selected.cardNumber
                 )
                 .getOrNull()
@@ -214,9 +241,17 @@ fun CardDetailScreen(
     }
 
     fun confirmVariantChange(card: PokemonCard, newQty: Int, isGraded: Boolean? = null, grade: Float? = null, company: String? = null) {
+        // Prima queste due validazioni facevano un return silenzioso: l'utente
+        // premeva conferma e non succedeva nulla, senza alcuna spiegazione.
         if (isGraded == true) {
-            if (grade == null) return
-            if (company.isNullOrBlank()) return 
+            if (grade == null) {
+                scope.launch { snackbarHostState.showSnackbar(AppLocale.gradingGradeRequired) }
+                return
+            }
+            if (company.isNullOrBlank()) {
+                scope.launch { snackbarHostState.showSnackbar(AppLocale.gradingCompanyRequired) }
+                return
+            }
         }
 
         scope.launch {
@@ -227,14 +262,25 @@ fun CardDetailScreen(
                 gradingCompany = company ?: card.gradingCompany
             )
             
+            // Prima ogni modifica chiamava loadData(), che rilegge l'INTERA
+            // collezione (getCards().first()) e ricalcola collectionGroupKey per
+            // ogni carta, solo per aggiornare una variante gia' in mano. Lo stato
+            // locale contiene tutto il necessario.
             if (newQty <= 0) {
                 repository.deleteCard(card.id).onSuccess {
                     val remaining = variants.filter { it.id != card.id }
-                    if (remaining.isEmpty()) onBack() else loadData()
+                    if (remaining.isEmpty()) {
+                        onBack()
+                    } else {
+                        variants = remaining
+                        editedQuantities = editedQuantities - card.id
+                        selectedVariantIndex = selectedVariantIndex.coerceAtMost(remaining.lastIndex)
+                    }
                 }
             } else {
                 repository.updateCard(card.id, updatedCard).onSuccess {
-                    loadData()
+                    variants = variants.map { if (it.id == card.id) updatedCard else it }
+                    editedQuantities = editedQuantities + (card.id to newQty)
                 }
             }
         }
@@ -252,6 +298,7 @@ fun CardDetailScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = DarkBackground
     ) { padding ->
         if (isLoading) {

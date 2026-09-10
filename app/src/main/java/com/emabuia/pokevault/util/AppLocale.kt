@@ -624,6 +624,29 @@ object AppLocale {
     val albumTitle: String get() = "Collector Lab"
     val albumNotFound: String get() = if (isItalian) "Album non trovato" else "Album not found"
     val priceUnavailable: String get() = if (isItalian) "Prezzo N/D" else "Price N/A"
+
+    // Etichette di ordinamento e categoria della collezione. Prima erano
+    // hardcoded in italiano nel foglio dei filtri, e nei chip dei filtri attivi
+    // veniva mostrato direttamente il nome dell'enum ("Ordine: PRICE_DESC").
+    val sortRecent: String get() = if (isItalian) "Recenti" else "Recent"
+    val sortPriceAsc: String get() = if (isItalian) "€ Crescente" else "€ Ascending"
+    val sortPriceDesc: String get() = if (isItalian) "€ Decrescente" else "€ Descending"
+    val sortNameAsc: String get() = if (isItalian) "Nome A-Z" else "Name A-Z"
+    val sortSetNumber: String get() = if (isItalian) "N° Set" else "Set no."
+    val categoryAll: String get() = if (isItalian) "Tutte" else "All"
+    val categoryPokemon: String get() = "Pokémon"
+    val categoryTrainer: String get() = if (isItalian) "Allenatore" else "Trainer"
+    val categoryEnergy: String get() = if (isItalian) "Energia" else "Energy"
+    val filterCategoryPrefix: String get() = if (isItalian) "Categoria" else "Category"
+    val filterSortPrefix: String get() = if (isItalian) "Ordine" else "Sort"
+    val gradingGradeRequired: String get() = if (isItalian)
+        "Inserisci il voto per una carta gradata"
+    else
+        "Enter the grade for a graded card"
+    val gradingCompanyRequired: String get() = if (isItalian)
+        "Seleziona la societa' di grading"
+    else
+        "Select the grading company"
     val ownedCardsLoadError: String get() = if (isItalian)
         "Impossibile verificare le carte possedute"
     else

@@ -93,6 +93,22 @@ private enum class ExpansionSortOrder {
     BY_TOTAL_CARDS_ASC
 }
 
+/** Etichette localizzate, al posto del nome grezzo dell'enum. */
+private fun SortOrder.label(): String = when (this) {
+    SortOrder.NEWEST -> AppLocale.sortRecent
+    SortOrder.PRICE_ASC -> AppLocale.sortPriceAsc
+    SortOrder.PRICE_DESC -> AppLocale.sortPriceDesc
+    SortOrder.NAME_ASC -> AppLocale.sortNameAsc
+    SortOrder.NUMBER -> AppLocale.sortSetNumber
+}
+
+private fun SupertypeFilter.label(): String = when (this) {
+    SupertypeFilter.ALL -> AppLocale.categoryAll
+    SupertypeFilter.POKEMON -> AppLocale.categoryPokemon
+    SupertypeFilter.TRAINER -> AppLocale.categoryTrainer
+    SupertypeFilter.ENERGY -> AppLocale.categoryEnergy
+}
+
 /**
  * Una sezione dell'accordion per espansione, con gli aggregati gia' calcolati.
  *
@@ -582,7 +598,11 @@ fun CollectionScreen(
                                                         isSelectionMode = true
                                                         selectedGroupKeys = selectedGroupKeys + groupKey
                                                     },
-                                                    onDelete = { viewModel.deleteCard(representative.id) }
+                                                    // La riga mostra la quantita' aggregata del gruppo,
+                                                    // quindi il delete deve rimuovere il gruppo intero:
+                                                    // prima cancellava solo il documento del
+                                                    // rappresentante e le altre varianti restavano.
+                                                    onDelete = { viewModel.deleteMultipleGroups(setOf(groupKey)) }
                                                 )
                                             }
                                         }
@@ -858,35 +878,35 @@ fun FilterBottomSheet(
             ) {
                 item {
                     FilterChip(
-                        label = "Recenti",
+                        label = AppLocale.sortRecent,
                         isSelected = state.sortOrder == SortOrder.NEWEST,
                         onClick = { viewModel.updateSortOrder(SortOrder.NEWEST) }
                     )
                 }
                 item {
                     FilterChip(
-                        label = "€ Crescente",
+                        label = AppLocale.sortPriceAsc,
                         isSelected = state.sortOrder == SortOrder.PRICE_ASC,
                         onClick = { viewModel.updateSortOrder(SortOrder.PRICE_ASC) }
                     )
                 }
                 item {
                     FilterChip(
-                        label = "€ Decrescente",
+                        label = AppLocale.sortPriceDesc,
                         isSelected = state.sortOrder == SortOrder.PRICE_DESC,
                         onClick = { viewModel.updateSortOrder(SortOrder.PRICE_DESC) }
                     )
                 }
                 item {
                     FilterChip(
-                        label = "Nome A-Z",
+                        label = AppLocale.sortNameAsc,
                         isSelected = state.sortOrder == SortOrder.NAME_ASC,
                         onClick = { viewModel.updateSortOrder(SortOrder.NAME_ASC) }
                     )
                 }
                 item {
                     FilterChip(
-                        label = "N° Set",
+                        label = AppLocale.sortSetNumber,
                         isSelected = state.sortOrder == SortOrder.NUMBER,
                         onClick = { viewModel.updateSortOrder(SortOrder.NUMBER) }
                     )
@@ -1045,7 +1065,7 @@ fun ActiveFiltersRow(
         if (state.supertypeFilter != SupertypeFilter.ALL) {
             item {
                 RemovableFilterChip(
-                    label = "Categoria: ${state.supertypeFilter.name}",
+                    label = "${AppLocale.filterCategoryPrefix}: ${state.supertypeFilter.label()}",
                     onRemove = { viewModel.filterBySupertype(SupertypeFilter.ALL) }
                 )
             }
@@ -1053,7 +1073,7 @@ fun ActiveFiltersRow(
         if (state.sortOrder != SortOrder.NUMBER) {
             item {
                 RemovableFilterChip(
-                    label = "Ordine: ${state.sortOrder.name}",
+                    label = "${AppLocale.filterSortPrefix}: ${state.sortOrder.label()}",
                     onRemove = { viewModel.updateSortOrder(SortOrder.NUMBER) }
                 )
             }
