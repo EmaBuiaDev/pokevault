@@ -421,6 +421,19 @@ object AppLocale {
     val handSimulatorSelectDeck: String get() = if (isItalian) "Seleziona un deck" else "Select a deck"
     val handSimulatorRunCount: String get() = if (isItalian) "Numero simulazioni" else "Simulations"
     val handSimulatorRunButton: String get() = if (isItalian) "Avvia simulazione" else "Run simulation"
+    val handSimulatorRunning: String get() = if (isItalian) "Simulazione in corso..." else "Simulating..."
+    val handSimulatorAccuracyTitle: String get() = if (isItalian)
+        "Attenzione all'accuratezza"
+    else
+        "Accuracy warning"
+    fun handSimulatorDeckSizeWarning(actual: Int, expected: Int): String = if (isItalian)
+        "Il mazzo ha $actual carte invece di $expected: tutte le probabilita' sono calcolate su $actual."
+    else
+        "This deck has $actual cards instead of $expected: every probability is computed over $actual."
+    fun handSimulatorUnknownStageWarning(count: Int): String = if (isItalian)
+        "$count carte non hanno lo stadio nei dati e sono contate come Base: il tasso di mulligan puo' risultare piu' basso del reale."
+    else
+        "$count cards have no stage in the data and are counted as Basic: the mulligan rate may read lower than it really is."
     val handSimulatorNoDecks: String get() = if (isItalian) "Nessun deck disponibile" else "No decks available"
     val handSimulatorNoDecksSubtitle: String get() = if (isItalian) "Crea o importa un deck nel Deck Lab" else "Create or import a deck in Deck Lab"
     val handSimulatorInvalidDeck: String get() = if (isItalian) "Deck non valido: servono almeno 7 carte" else "Invalid deck: at least 7 cards required"
@@ -653,11 +666,91 @@ object AppLocale {
 
     // Collector Lab (ex Album)
     val albumTitle: String get() = "Collector Lab"
-    val albumSubtitle: String get() = if (isItalian) "Album, Espositori e altro." else "Albums, Displays and more."
+    val albumNotFound: String get() = if (isItalian) "Album non trovato" else "Album not found"
+    val priceUnavailable: String get() = if (isItalian) "Prezzo N/D" else "Price N/A"
+    val unknownError: String get() = if (isItalian) "Errore sconosciuto" else "Unknown error"
+    val manageSubscriptionLabel: String get() = if (isItalian)
+        "Gestisci abbonamento"
+    else
+        "Manage subscription"
+    val manageSubscriptionSubtitle: String get() = if (isItalian)
+        "Apri Google Play per modificare o disdire"
+    else
+        "Open Google Play to change or cancel"
+    val premiumPurchaseSuccess: String get() = if (isItalian)
+        "Premium attivato. Grazie!"
+    else
+        "Premium activated. Thank you!"
+    val premiumPurchasePending: String get() = if (isItalian)
+        "Acquisto in attesa di conferma da Google. Il premium si attivera' appena viene confermato."
+    else
+        "Purchase awaiting confirmation from Google. Premium activates as soon as it clears."
+    fun premiumPurchaseError(reason: String): String = if (isItalian)
+        "Acquisto non riuscito: $reason"
+    else
+        "Purchase failed: $reason"
+    val themeLabel: String get() = if (isItalian) "Tema" else "Theme"
+    fun themeSubtitle(mode: String): String = when (mode) {
+        "light" -> if (isItalian) "Chiaro" else "Light"
+        "dark" -> if (isItalian) "Scuro" else "Dark"
+        else -> if (isItalian) "Come il sistema" else "Follow system"
+    }
+
+    // Etichette di ordinamento e categoria della collezione. Prima erano
+    // hardcoded in italiano nel foglio dei filtri, e nei chip dei filtri attivi
+    // veniva mostrato direttamente il nome dell'enum ("Ordine: PRICE_DESC").
+    val sortRecent: String get() = if (isItalian) "Recenti" else "Recent"
+    val sortPriceAsc: String get() = if (isItalian) "€ Crescente" else "€ Ascending"
+    val sortPriceDesc: String get() = if (isItalian) "€ Decrescente" else "€ Descending"
+    val sortNameAsc: String get() = if (isItalian) "Nome A-Z" else "Name A-Z"
+    val sortSetNumber: String get() = if (isItalian) "N° Set" else "Set no."
+    val categoryAll: String get() = if (isItalian) "Tutte" else "All"
+    val categoryPokemon: String get() = "Pokémon"
+    val categoryTrainer: String get() = if (isItalian) "Allenatore" else "Trainer"
+    val categoryEnergy: String get() = if (isItalian) "Energia" else "Energy"
+    val filterCategoryPrefix: String get() = if (isItalian) "Categoria" else "Category"
+    val filterSortPrefix: String get() = if (isItalian) "Ordine" else "Sort"
+    val gradingGradeRequired: String get() = if (isItalian)
+        "Inserisci il voto per una carta gradata"
+    else
+        "Enter the grade for a graded card"
+    val gradingCompanyRequired: String get() = if (isItalian)
+        "Seleziona la societa' di grading"
+    else
+        "Select the grading company"
+    val ownedCardsLoadError: String get() = if (isItalian)
+        "Impossibile verificare le carte possedute"
+    else
+        "Could not load your owned cards"
+    val chaseNotFound: String get() = if (isItalian) "Chase non trovato" else "Chase not found"
+    fun chaseCardsProgress(owned: Int, total: Int): String =
+        if (isItalian) "$owned / $total carte" else "$owned / $total cards"
+    val criteriaSet: String get() = "Set"
+    val criteriaRarity: String get() = if (isItalian) "Rarità" else "Rarity"
+    val criteriaSupertype: String get() = if (isItalian) "Categoria" else "Category"
+    val criteriaType: String get() = if (isItalian) "Tipo" else "Type"
+    val criteriaCustom: String get() = if (isItalian) "Personalizzato" else "Custom"
+    val albumSubtitle: String get() = if (isItalian) "Album e Chase." else "Albums and Chases."
     val collectorAlbumTitle: String get() = "Album"
-    val collectorAlbumSubtitle: String get() = if (isItalian) "Funzionalita album" else "Album features"
+    val collectorAlbumSubtitle: String get() = if (isItalian)
+        "Raccogli le tue carte in album personalizzati"
+    else
+        "Collect your cards in custom albums"
     val collectorChaseTitle: String get() = "Chase"
-    val collectorChaseSubtitle: String get() = if (isItalian) "Funzionalita chase" else "Chase features"
+    val collectorChaseSubtitle: String get() = if (isItalian)
+        "Segui il completamento di un set carta per carta"
+    else
+        "Track set completion card by card"
+    fun collectorAlbumCount(count: Int): String = if (isItalian) {
+        if (count == 1) "1 album creato" else "$count album creati"
+    } else {
+        if (count == 1) "1 album created" else "$count albums created"
+    }
+    fun collectorChaseCount(count: Int): String = if (isItalian) {
+        if (count == 1) "1 chase creato" else "$count chase creati"
+    } else {
+        if (count == 1) "1 chase created" else "$count chases created"
+    }
     val myAlbums: String get() = if (isItalian) "I miei Album" else "My Albums"
     val createAlbum: String get() = if (isItalian) "Crea Album" else "Create Album"
     val editAlbum: String get() = if (isItalian) "Modifica Album" else "Edit Album"

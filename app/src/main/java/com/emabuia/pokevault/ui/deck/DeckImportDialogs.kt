@@ -29,25 +29,25 @@ fun DeckImportDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DarkSurface,
+        containerColor = AppColors.surface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.FileDownload, contentDescription = null, tint = PurpleCard, modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.FileDownload, contentDescription = null, tint = AppColors.purple, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(AppLocale.importDeck, color = TextWhite, fontWeight = FontWeight.Bold)
+                Text(AppLocale.importDeck, color = AppColors.textPrimary, fontWeight = FontWeight.Bold)
             }
         },
         text = {
             Column {
                 Text(
                     text = "Incolla una decklist in formato PTCG standard:",
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     fontSize = 12.sp
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Es: 4 Charizard ex SVI 125",
-                    color = TextMuted.copy(alpha = 0.6f),
+                    color = AppColors.textMuted.copy(alpha = 0.6f),
                     fontSize = 11.sp
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -57,7 +57,7 @@ fun DeckImportDialog(
                     placeholder = {
                         Text(
                             "Pokémon: 12\n4 Charizard ex SVI 125\n2 Charmander SVI 10\n...",
-                            color = TextMuted.copy(alpha = 0.4f),
+                            color = AppColors.textMuted.copy(alpha = 0.4f),
                             fontSize = 12.sp
                         )
                     },
@@ -65,13 +65,13 @@ fun DeckImportDialog(
                         .fillMaxWidth()
                         .height(200.dp),
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor = DarkCard,
-                        unfocusedContainerColor = DarkCard,
-                        focusedIndicatorColor = PurpleCard,
+                        focusedContainerColor = AppColors.card,
+                        unfocusedContainerColor = AppColors.card,
+                        focusedIndicatorColor = AppColors.purple,
                         unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = PurpleCard,
-                        focusedTextColor = TextWhite,
-                        unfocusedTextColor = TextWhite
+                        cursorColor = AppColors.purple,
+                        focusedTextColor = AppColors.textPrimary,
+                        unfocusedTextColor = AppColors.textPrimary
                     ),
                     shape = RoundedCornerShape(12.dp),
                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
@@ -82,7 +82,7 @@ fun DeckImportDialog(
             Button(
                 onClick = { if (decklistText.isNotBlank()) onImport(decklistText) },
                 enabled = decklistText.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = PurpleCard),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.purple),
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -92,7 +92,7 @@ fun DeckImportDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(AppLocale.cancel, color = TextMuted)
+                Text(AppLocale.cancel, color = AppColors.textMuted)
             }
         }
     )
@@ -109,7 +109,7 @@ fun ImportResultDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isAddingMissingCards) onDismiss() },
-        containerColor = DarkSurface,
+        containerColor = AppColors.surface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -117,18 +117,18 @@ fun ImportResultDialog(
                     else if (hasMissingCards) Icons.Default.Warning
                     else Icons.Default.Warning,
                     contentDescription = null,
-                    tint = if (result.matched > 0 && !hasMissingCards) GreenCard else YellowCard,
+                    tint = if (result.matched > 0 && !hasMissingCards) AppColors.green else AppColors.yellow,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(AppLocale.importResultTitle, color = TextWhite, fontWeight = FontWeight.Bold)
+                Text(AppLocale.importResultTitle, color = AppColors.textPrimary, fontWeight = FontWeight.Bold)
             }
         },
         text = {
             Column {
                 Text(
                     text = "${result.matched} ${AppLocale.importCardsFound} ${result.totalRequested}",
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontSize = 14.sp
                 )
 
@@ -136,7 +136,7 @@ fun ImportResultDialog(
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "Carte abbinate con espansione diversa (${result.setMismatchWarnings.size}):",
-                            color = OrangeCard,
+                            color = AppColors.orange,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -144,14 +144,14 @@ fun ImportResultDialog(
                         result.setMismatchWarnings.take(8).forEach { card ->
                             Text(
                                 text = "• $card",
-                                color = TextMuted,
+                                color = AppColors.textMuted,
                                 fontSize = 11.sp
                             )
                         }
                         if (result.setMismatchWarnings.size > 8) {
                             Text(
                                 text = "... e altre ${result.setMismatchWarnings.size - 8}",
-                                color = TextMuted.copy(alpha = 0.6f),
+                                color = AppColors.textMuted.copy(alpha = 0.6f),
                                 fontSize = 11.sp
                             )
                         }
@@ -161,7 +161,7 @@ fun ImportResultDialog(
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "${AppLocale.importMissingTitle} (${result.missing}):",
-                        color = YellowCard,
+                        color = AppColors.yellow,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -169,14 +169,14 @@ fun ImportResultDialog(
                     result.missingCards.take(10).forEach { card ->
                         Text(
                             text = "• $card",
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 11.sp
                         )
                     }
                     if (result.missingCards.size > 10) {
                         Text(
                             text = "... ${AppLocale.importAndMore} ${result.missingCards.size - 10}",
-                            color = TextMuted.copy(alpha = 0.6f),
+                            color = AppColors.textMuted.copy(alpha = 0.6f),
                             fontSize = 11.sp
                         )
                     }
@@ -185,7 +185,7 @@ fun ImportResultDialog(
                 if (hasMissingCards) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Surface(
-                        color = OrangeCard.copy(alpha = 0.1f),
+                        color = AppColors.orange.copy(alpha = 0.1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Row(
@@ -195,13 +195,13 @@ fun ImportResultDialog(
                             Icon(
                                 Icons.Default.AddCircle,
                                 contentDescription = null,
-                                tint = OrangeCard,
+                                tint = AppColors.orange,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = AppLocale.importAddMissingMessage,
-                                color = TextWhite,
+                                color = AppColors.textPrimary,
                                 fontSize = 12.sp
                             )
                         }
@@ -210,14 +210,14 @@ fun ImportResultDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = AppLocale.importMatchedMessage,
-                        color = GreenCard.copy(alpha = 0.8f),
+                        color = AppColors.green.copy(alpha = 0.8f),
                         fontSize = 11.sp
                     )
                 } else {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = AppLocale.importNoMatchMessage,
-                        color = RedCard.copy(alpha = 0.8f),
+                        color = AppColors.red.copy(alpha = 0.8f),
                         fontSize = 11.sp
                     )
                 }
@@ -230,14 +230,14 @@ fun ImportResultDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CircularProgressIndicator(
-                            color = OrangeCard,
+                            color = AppColors.orange,
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = AppLocale.importAddingCards,
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 12.sp
                         )
                     }
@@ -248,7 +248,7 @@ fun ImportResultDialog(
             if (hasMissingCards && !isAddingMissingCards) {
                 Button(
                     onClick = onAddMissingCards,
-                    colors = ButtonDefaults.buttonColors(containerColor = OrangeCard),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.orange),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -258,7 +258,7 @@ fun ImportResultDialog(
             } else if (!isAddingMissingCards) {
                 Button(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(AppLocale.ok)
@@ -268,7 +268,7 @@ fun ImportResultDialog(
         dismissButton = {
             if (hasMissingCards && !isAddingMissingCards) {
                 TextButton(onClick = onDismiss) {
-                    Text(AppLocale.importAddMissingSkip, color = TextMuted)
+                    Text(AppLocale.importAddMissingSkip, color = AppColors.textMuted)
                 }
             }
         }

@@ -46,7 +46,7 @@ fun CollectionSection(
 
             Text(
                 text = AppLocale.cardsCount(cards.size),
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 14.sp
             )
         }
@@ -62,7 +62,7 @@ fun CollectionSection(
             ) {
                 Text(
                     text = AppLocale.noCardsFound,
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     textAlign = TextAlign.Center
                 )
             }
@@ -106,11 +106,11 @@ fun PokemonCardItem(
                     .clip(RoundedCornerShape(12.dp)),
                 loading = {
                     Box(
-                        Modifier.fillMaxSize().background(DarkCard),
+                        Modifier.fillMaxSize().background(AppColors.card),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
-                            color = BlueCard,
+                            color = AppColors.blue,
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp
                         )
@@ -118,7 +118,7 @@ fun PokemonCardItem(
                 },
                 error = {
                     Box(
-                        Modifier.fillMaxSize().background(DarkCard),
+                        Modifier.fillMaxSize().background(AppColors.card),
                         contentAlignment = Alignment.Center
                     ) {
                         Text("🎴", fontSize = 40.sp)
@@ -128,12 +128,12 @@ fun PokemonCardItem(
         } else {
             // Fallback emoji se non c'è immagine
             val typeColor = when (card.type.lowercase()) {
-                "fuoco", "fire" -> RedCard
-                "acqua", "water" -> BlueCard
-                "elettro", "lightning" -> YellowCard
-                "psico", "psychic" -> PurpleCard
-                "erba", "grass" -> GreenCard
-                else -> DarkCard
+                "fuoco", "fire" -> AppColors.red
+                "acqua", "water" -> AppColors.blue
+                "elettro", "lightning" -> AppColors.yellow
+                "psico", "psychic" -> AppColors.purple
+                "erba", "grass" -> AppColors.green
+                else -> AppColors.card
             }
             Box(
                 modifier = Modifier
@@ -161,7 +161,7 @@ fun PokemonCardItem(
 
         Text(
             text = card.name,
-            color = TextWhite,
+            color = AppColors.textPrimary,
             fontWeight = FontWeight.SemiBold,
             fontSize = 12.sp,
             maxLines = 1,

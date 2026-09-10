@@ -2,6 +2,7 @@ package com.emabuia.pokevault.viewmodel
 
 import android.app.Application
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -81,8 +82,23 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentSourceMacro: String? = null
     private var translationJob: Job? = null
     private var italianSetPriceWarmupJob: Job? = null
+    private var ownedCardsJob: Job? = null
     private var lastPricedCardId: String? = null
     private val requestedCardPriceIds = mutableSetOf<String>()
+
+    /**
+     * Carte con il prezzo gia' risolto, sovrapposte a uiState.cards al momento
+     * del render.
+     *
+     * Prima ogni prezzo che arrivava riscriveva l'intera lista
+     * (uiState.cards.map { ... } seguito da uiState.copy(cards = merged)):
+     * su un set da 250 carte erano 250 copie complete della lista e 250
+     * invalidazioni dell'intera griglia, cioe' O(n^2) di allocazioni.
+     *
+     * Una SnapshotStateMap si osserva per chiave: scrivere un prezzo
+     * ricompone solo la cella di quella carta.
+     */
+    val pricedCards = mutableStateMapOf<String, TcgCard>()
     private var italianSetPriceMap: Map<String, PokeWalletPriceData> = emptyMap()
     private var italianSetPriceMapSetId: String? = null
     private var italianSetPriceMapAttemptedSetId: String? = null
@@ -316,6 +332,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         currentSetId = setId
         currentSourceMacro = normalizedMacro
         requestedCardPriceIds.clear()
+        pricedCards.clear()
         lastPricedCardId = null
         italianSetPriceMap = emptyMap()
         italianSetPriceMapSetId = null
@@ -395,10 +412,16 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun observeOwnedCards(setName: String, currentCards: List<TcgCard>) {
-        viewModelScope.launch {
+        // loadSet puo' essere richiamato piu' volte sullo stesso ViewModel: senza
+        // cancellare il collector precedente ogni chiamata lasciava attivo un
+        // listener Firestore in piu', come gia' facevano translationJob e
+        // italianSetPriceWarmupJob qui sopra.
+        ownedCardsJob?.cancel()
+        ownedCardsJob = viewModelScope.launch {
             firestoreRepository.getOwnedCardsBySet(setName)
                 .catch { e ->
                     Timber.w(e, "Errore osservazione carte possedute")
+                    uiState = uiState.copy(errorMessage = AppLocale.ownedCardsLoadError)
                 }
                 .collectLatest { ownedCards ->
                     val currentCardIds = currentCards
@@ -600,7 +623,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun ensureCardPrice(card: TcgCard) {
-        val current = uiState.cards.firstOrNull { it.id == card.id } ?: card
+        val current = pricedCards[card.id] ?: card
         if (!requestedCardPriceIds.add(card.id)) return
 
         viewModelScope.launch {
@@ -617,10 +640,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             val setPrice = normalizeCardNumberKey(current.number)?.let(setPrices::get)
 
             if (setPrice?.hasEurPrices == true) {
-                val merged = uiState.cards.map { listCard ->
-                    if (listCard.id == current.id) withPriceData(listCard, setPrice) else listCard
-                }
-                uiState = uiState.copy(cards = merged)
+                pricedCards[current.id] = withPriceData(current, setPrice)
                 return@launch
             }
 
@@ -629,14 +649,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 forceRefreshRemote = false
             )
             if (mirroredPrices != null) {
-                val merged = uiState.cards.map { listCard ->
-                    if (listCard.id == current.id) {
-                        withPriceData(listCard, mirroredPrices)
-                    } else {
-                        listCard
-                    }
-                }
-                uiState = uiState.copy(cards = merged)
+                pricedCards[current.id] = withPriceData(current, mirroredPrices)
                 return@launch
             }
 
@@ -649,14 +662,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
             val priceData = result.getOrNull()
             if (priceData != null && ((priceData.eurAvg ?: 0.0) > 0.0 || (priceData.eurLow ?: 0.0) > 0.0)) {
-                val merged = uiState.cards.map { listCard ->
-                    if (listCard.id == current.id) {
-                        withPriceData(listCard, priceData)
-                    } else {
-                        listCard
-                    }
-                }
-                uiState = uiState.copy(cards = merged)
+                pricedCards[current.id] = withPriceData(current, priceData)
             }
         }
     }

@@ -27,9 +27,7 @@ import coil.compose.AsyncImage
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
-import com.emabuia.pokevault.ui.theme.DarkCard
-import com.emabuia.pokevault.ui.theme.TextGray
-import com.emabuia.pokevault.ui.theme.TextMuted
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ImageUrlUtils
 import kotlin.random.Random
@@ -111,7 +109,7 @@ fun WelcomeHeader(
             Text(
                 text = AppLocale.homeSubtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextGray.copy(alpha = 0.9f),
+                color = AppColors.textSecondary.copy(alpha = 0.9f),
                 letterSpacing = 0.2.sp
             )
         }
@@ -121,11 +119,11 @@ fun WelcomeHeader(
         Icon(
             imageVector = Icons.Default.Settings,
             contentDescription = AppLocale.settings,
-            tint = TextMuted,
+            tint = AppColors.textMuted,
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(DarkCard)
+                .background(AppColors.card)
                 .clickable(onClick = onSettingsClick)
                 .padding(8.dp)
         )

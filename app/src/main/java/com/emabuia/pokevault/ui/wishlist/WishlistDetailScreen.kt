@@ -46,13 +46,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.pokedex.CardDetailBottomSheet
-import com.emabuia.pokevault.ui.theme.DarkBackground
-import com.emabuia.pokevault.ui.theme.DarkCard
-import com.emabuia.pokevault.ui.theme.DarkSurface
-import com.emabuia.pokevault.ui.theme.RedCard
-import com.emabuia.pokevault.ui.theme.TextGray
-import com.emabuia.pokevault.ui.theme.TextMuted
-import com.emabuia.pokevault.ui.theme.TextWhite
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.SetDetailViewModel
@@ -68,14 +62,14 @@ private fun WishlistCardImageFallback(card: TcgCard) {
     Box(
         modifier = Modifier
             .size(width = 48.dp, height = 66.dp)
-            .background(DarkSurface, RoundedCornerShape(8.dp))
+            .background(AppColors.surface, RoundedCornerShape(8.dp))
             .padding(4.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = card.name,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontSize = 7.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
@@ -85,7 +79,7 @@ private fun WishlistCardImageFallback(card: TcgCard) {
             Spacer(modifier = Modifier.height(1.dp))
             Text(
                 text = series,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 6.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -93,7 +87,7 @@ private fun WishlistCardImageFallback(card: TcgCard) {
             )
             Text(
                 text = setName,
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 6.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -133,13 +127,13 @@ fun WishlistDetailScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = wishlist?.name ?: AppLocale.wishlistTitle,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -150,11 +144,11 @@ fun WishlistDetailScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
-                            tint = TextWhite
+                            tint = AppColors.textPrimary
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         }
     ) { padding ->
@@ -166,7 +160,7 @@ fun WishlistDetailScreen(
                         .padding(padding),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(AppLocale.wishlistNotFound, color = TextMuted, fontSize = 14.sp)
+                    Text(AppLocale.wishlistNotFound, color = AppColors.textMuted, fontSize = 14.sp)
                 }
             }
 
@@ -177,7 +171,7 @@ fun WishlistDetailScreen(
                         .padding(padding),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = RedCard)
+                    CircularProgressIndicator(color = AppColors.red)
                 }
             }
 
@@ -189,9 +183,9 @@ fun WishlistDetailScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(AppLocale.wishlistCardsEmpty, color = TextWhite, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        Text(AppLocale.wishlistCardsEmpty, color = AppColors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(AppLocale.wishlistCardsEmptySubtitle, color = TextMuted, fontSize = 13.sp)
+                        Text(AppLocale.wishlistCardsEmptySubtitle, color = AppColors.textMuted, fontSize = 13.sp)
                     }
                 }
             }
@@ -255,9 +249,9 @@ fun WishlistDetailScreen(
     if (cardToRemove != null) {
         AlertDialog(
             onDismissRequest = { removeCardId = null },
-            containerColor = DarkSurface,
-            title = { Text(AppLocale.wishlistRemoveCardTitle, color = TextWhite) },
-            text = { Text(cardToRemove.name, color = TextGray) },
+            containerColor = AppColors.surface,
+            title = { Text(AppLocale.wishlistRemoveCardTitle, color = AppColors.textPrimary) },
+            text = { Text(cardToRemove.name, color = AppColors.textSecondary) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -265,12 +259,12 @@ fun WishlistDetailScreen(
                         removeCardId = null
                     }
                 ) {
-                    Text(AppLocale.delete, color = RedCard)
+                    Text(AppLocale.delete, color = AppColors.red)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { removeCardId = null }) {
-                    Text(AppLocale.cancel, color = TextMuted)
+                    Text(AppLocale.cancel, color = AppColors.textMuted)
                 }
             }
         )
@@ -290,7 +284,7 @@ private fun WishlistCardRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DarkCard.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+            .background(AppColors.card.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -302,14 +296,14 @@ private fun WishlistCardRow(
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(width = 48.dp, height = 66.dp)
-                .background(DarkSurface, RoundedCornerShape(8.dp)),
+                .background(AppColors.surface, RoundedCornerShape(8.dp)),
             error = { WishlistCardImageFallback(card) }
         )
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = card.name,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp,
                 maxLines = 1,
@@ -317,7 +311,7 @@ private fun WishlistCardRow(
             )
             Text(
                 text = "#${card.number} · ${card.set?.name ?: "-"}",
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -325,7 +319,7 @@ private fun WishlistCardRow(
             if (price != null && price > 0) {
                 Text(
                     text = "${"%.2f".format(price)}€",
-                    color = TextGray,
+                    color = AppColors.textSecondary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -336,7 +330,7 @@ private fun WishlistCardRow(
             Icon(
                 Icons.Default.DeleteOutline,
                 contentDescription = AppLocale.delete,
-                tint = TextMuted
+                tint = AppColors.textMuted
             )
         }
     }

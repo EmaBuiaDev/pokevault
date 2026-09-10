@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.data.model.CardClassifier
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
@@ -41,7 +42,10 @@ fun DeckLabScreen(
     metaDeckViewModel: MetaDeckViewModel = viewModel()
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
-    val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
+    // isPremium NON viene raccolto qui: tutti i gate di questo schermo stanno
+    // dentro lambda di click, quindi leggono _isPremium.value al momento del
+    // tocco, che e' gia' il comportamento corretto. Raccoglierlo senza usarlo
+    // faceva solo ricomporre l'intero schermo a ogni cambio di stato premium.
     val context = LocalContext.current
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -87,6 +91,7 @@ fun DeckLabScreen(
     // Se siamo nella vista dettaglio di un Meta Deck archetype, mostriamola a tutto schermo
     val metaArchetypeDeck = metaDeckViewModel.selectedDeck.takeIf { selectedTabIndex == 1 }
     if (metaArchetypeDeck != null) {
+        BackHandler { metaDeckViewModel.selectDeck(null) }
         MetaDeckDetailView(
             deck = metaArchetypeDeck,
             onBack = { metaDeckViewModel.selectDeck(null) },
@@ -104,7 +109,7 @@ fun DeckLabScreen(
     }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             if (selectedDeck == null) {
                 Column(
@@ -119,16 +124,16 @@ fun DeckLabScreen(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(DarkCard)
+                                .background(AppColors.card)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppLocale.back, tint = TextWhite)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppLocale.back, tint = AppColors.textPrimary)
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
                             Text(
                                 text = "Deck Lab",
                                 style = MaterialTheme.typography.headlineMedium,
-                                color = TextWhite,
+                                color = AppColors.textPrimary,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
@@ -138,7 +143,7 @@ fun DeckLabScreen(
                                     else -> AppLocale.deckLabWinTournamentSubtitle
                                 },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextMuted
+                                color = AppColors.textMuted
                             )
                         }
                     }
@@ -149,7 +154,7 @@ fun DeckLabScreen(
                     SecondaryTabRow(
                         selectedTabIndex = selectedTabIndex,
                         containerColor = Color.Transparent,
-                        contentColor = BlueCard,
+                        contentColor = AppColors.blue,
                         divider = {}
                     ) {
                         deckLabTabs.forEachIndexed { index, title ->
@@ -163,8 +168,8 @@ fun DeckLabScreen(
                                         fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal
                                     )
                                 },
-                                selectedContentColor = BlueCard,
-                                unselectedContentColor = TextMuted
+                                selectedContentColor = AppColors.blue,
+                                unselectedContentColor = AppColors.textMuted
                             )
                         }
                     }
@@ -186,8 +191,8 @@ fun DeckLabScreen(
                                 showPremiumDeckDialog = true
                             }
                         },
-                        containerColor = PurpleCard,
-                        contentColor = TextWhite,
+                        containerColor = AppColors.purple,
+                        contentColor = AppColors.textPrimary,
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = AppLocale.importDeck)
@@ -202,8 +207,8 @@ fun DeckLabScreen(
                                 showPremiumDeckDialog = true
                             }
                         },
-                        containerColor = BlueCard,
-                        contentColor = TextWhite,
+                        containerColor = AppColors.blue,
+                        contentColor = AppColors.textPrimary,
                         shape = RoundedCornerShape(16.dp),
                         icon = { Icon(Icons.Default.Add, contentDescription = null) },
                         text = { Text(AppLocale.createNewDeck) }
@@ -254,6 +259,11 @@ fun DeckLabScreen(
                     if (viewModel.decks.isEmpty()) {
                         EmptyDecksPlaceholder()
                     } else {
+                        // Indice costruito una volta per l'intera lista, invece che
+                        // scandito da ogni riga.
+                        val ownedById = remember(viewModel.ownedCards) {
+                            viewModel.ownedCards.associateBy { it.id }
+                        }
                         LazyColumn(
                             contentPadding = PaddingValues(20.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -262,7 +272,7 @@ fun DeckLabScreen(
                                 DeckItem(
                                     deck = deck,
                                     onClick = { selectedDeck = deck },
-                                    allOwnedCards = viewModel.ownedCards
+                                    ownedById = ownedById
                                 )
                             }
                         }
@@ -283,7 +293,14 @@ fun DeckLabScreen(
                             }
                         },
                         onCardClick = { metaDeck ->
-                            metaDeckViewModel.selectDeck(metaDeck)
+                            // Stesso gate della tab Win Tournament: senza, questa tab
+                            // offriva decklist illimitate agli utenti free.
+                            if (premiumManager.canViewMetaDeck()) {
+                                premiumManager.consumeMetaDeckView()
+                                metaDeckViewModel.selectDeck(metaDeck)
+                            } else {
+                                showPremiumMetaDeckDialog = true
+                            }
                         }
                     )
                 }
@@ -314,8 +331,8 @@ fun DeckLabScreen(
                     viewModel.resetNewDeckState()
                 },
                 sheetState = sheetState,
-                containerColor = DarkSurface,
-                dragHandle = { BottomSheetDefaults.DragHandle(color = TextMuted) }
+                containerColor = AppColors.surface,
+                dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.textMuted) }
             ) {
                 NewDeckBottomSheetContent(
                     viewModel = viewModel,
@@ -424,21 +441,21 @@ fun EmptyDecksPlaceholder() {
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(DarkCard),
+                .background(AppColors.card),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Science, contentDescription = null, tint = LavenderCard, modifier = Modifier.size(40.dp))
+            Icon(Icons.Default.Science, contentDescription = null, tint = AppColors.lavender, modifier = Modifier.size(40.dp))
         }
         Spacer(modifier = Modifier.height(20.dp))
         Text(
             text = "Ancora nessun deck",
-            color = TextWhite,
+            color = AppColors.textPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
             text = "Inizia a sperimentare nel laboratorio e crea la tua squadra perfetta.",
-            color = TextMuted,
+            color = AppColors.textMuted,
             textAlign = TextAlign.Center,
             fontSize = 13.sp
         )

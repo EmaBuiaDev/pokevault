@@ -7,6 +7,8 @@
  * - Returns cache status headers for debugging
  */
 
+import { handleBillingRequest } from './billing';
+
 interface Env {
   CACHE: KVNamespace;
   IMAGES_BUCKET?: R2Bucket;
@@ -20,6 +22,13 @@ interface Env {
   // (it/catalog/cards.cleaned.json) served by /ita/catalog.json. New /v1/*
   // routes read from here; nothing existing was changed to use it yet.
   pokevault_catalog?: D1Database;
+
+  // Verifica lato server degli abbonamenti (vedi src/billing.ts e BILLING.md).
+  // Sono secret: si impostano con `wrangler secret put`, non in wrangler.toml.
+  PLAY_SERVICE_ACCOUNT_JSON?: string;
+  PLAY_PACKAGE_NAME?: string;
+  FIREBASE_PROJECT_ID?: string;
+  RTDN_SHARED_SECRET?: string;
 }
 
 interface CachedResponse {
@@ -1685,12 +1694,27 @@ async function createResponseFromCache(cached: CachedResponse, isHit: boolean, p
 // individual cards remain resolvable by id, matching the plan's coverage
 // rule (a set can be incomplete without breaking a user's existing collection).
 
-function jsonResponse(data: unknown, status = 200): Response {
+function jsonResponse(data: unknown, status = 200, cacheControl = 'public, max-age=300'): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=300' },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': cacheControl },
   });
 }
+
+/**
+ * Cache-control per le rotte di catalogo /v1.
+ *
+ * Il catalogo cambia al massimo una volta al giorno (cron catalog-ingest alle
+ * 06:00), ma queste risposte uscivano con "max-age=300" e nient'altro. I
+ * Worker non cachano da soli le risposte che generano, quindi ogni singola
+ * richiesta arrivava fino a D1: su /v1/expansions/{id}/cards significa
+ * scandire tutte le carte dell'espansione a ogni apertura di un set.
+ *
+ * s-maxage governa la cache edge, max-age quella del client, e
+ * stale-while-revalidate evita che la scadenza si traduca in una richiesta
+ * lenta per l'utente che capita nel momento sbagliato.
+ */
+const V1_CATALOG_CACHE_CONTROL = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400';
 
 async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response | null> {
   if (!pathname.startsWith('/v1/')) return null;
@@ -1709,9 +1733,23 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
     // the app build the Pokedex list (name/series/logo/release date, borrowed
     // from the linked English base set) from this one lightweight response
     // instead of fetching every card of every expansion to compute it itself.
+    // Ordered by release date, not sort_order: sort_order stayed 100 for every
+    // imported expansion (schema/002, scripts/import-catalog-to-d1.mjs), so
+    // "ORDER BY sort_order, id" was effectively alphabetical by id. Expansions
+    // with no date sort last instead of landing in the middle, and sort_order
+    // remains as a manual tiebreaker.
+    // Takedowns are honoured here: the table existed since schema v1 but no
+    // /v1 route consulted it, so the compliance kill-switch had no effect.
     const { results } = await db
       .prepare(
-        'SELECT id, name, card_count, sort_order, logo_key, base_set_code, release_date, series FROM expansions WHERE published = 1 ORDER BY sort_order, id'
+        `SELECT e.id, e.name, e.card_count, e.sort_order, e.logo_key, e.base_set_code, e.release_date, e.series
+         FROM expansions e
+         WHERE e.published = 1
+           AND NOT EXISTS (
+             SELECT 1 FROM takedowns t
+             WHERE t.target_type = 'expansion' AND t.target_id = e.id
+           )
+         ORDER BY (e.release_date IS NULL), e.release_date DESC, e.sort_order, e.id`
       )
       .all<{ id: string; name: string | null; card_count: number; sort_order: number; logo_key: string | null; base_set_code: string | null; release_date: string | null; series: string | null }>();
     // Remapped to camelCase to match ItalianExpansionSummary on the Android side
@@ -1727,12 +1765,23 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
       baseSetCode: r.base_set_code,
       releaseDate: r.release_date,
     }));
-    return jsonResponse({ expansions });
+    return jsonResponse({ expansions }, 200, V1_CATALOG_CACHE_CONTROL);
   }
 
   const cardsMatch = pathname.match(/^\/v1\/expansions\/([A-Za-z0-9._-]+)\/cards$/);
   if (cardsMatch) {
     const expansionId = cardsMatch[1].toLowerCase();
+
+    // Compliance kill-switch: an expansion under takedown must disappear from
+    // the per-set route too, not just from the /v1/expansions listing.
+    const expansionTakedown = await db
+      .prepare(`SELECT 1 FROM takedowns WHERE target_type = 'expansion' AND target_id = ?1`)
+      .bind(expansionId)
+      .first();
+    if (expansionTakedown) {
+      return jsonResponse({ error: 'expansion not available' }, 451);
+    }
+
     // Same field shape as /ita/catalog.json (see mapCardRow), scoped to one
     // expansion -- lets the app fetch a single set's ~100-200 cards instead of
     // the full ~15k-card blob when opening a set detail screen. Joins on
@@ -1744,6 +1793,10 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
         `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity
          FROM cards c JOIN expansions e ON e.id = c.expansion_id
          WHERE c.expansion_id = ?1 AND e.published = 1
+           AND NOT EXISTS (
+             SELECT 1 FROM takedowns t
+             WHERE t.target_type = 'card' AND t.target_id = c.card_id
+           )
          ORDER BY CAST(c.card_number AS INTEGER), c.card_number`
       )
       .bind(expansionId)
@@ -1751,15 +1804,26 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
     if (results.length === 0) {
       return jsonResponse({ error: 'expansion not found or has no cards' }, 404);
     }
-    return jsonResponse({ expansionId, cards: results.map(mapCardRow) });
+    return jsonResponse({ expansionId, cards: results.map(mapCardRow) }, 200, V1_CATALOG_CACHE_CONTROL);
   }
 
   const cardMatch = pathname.match(/^\/v1\/cards\/([A-Za-z0-9._-]+)$/);
   if (cardMatch) {
     const cardId = cardMatch[1];
-    const row = await db.prepare('SELECT * FROM cards WHERE card_id = ?1').bind(cardId).first();
+    const row = await db
+      .prepare(
+        `SELECT c.* FROM cards c
+         WHERE c.card_id = ?1
+           AND NOT EXISTS (
+             SELECT 1 FROM takedowns t
+             WHERE (t.target_type = 'card' AND t.target_id = c.card_id)
+                OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id)
+           )`
+      )
+      .bind(cardId)
+      .first();
     if (!row) return jsonResponse({ error: 'card not found' }, 404);
-    return jsonResponse(row);
+    return jsonResponse(row, 200, V1_CATALOG_CACHE_CONTROL);
   }
 
   return jsonResponse({ error: 'unknown /v1 route' }, 404);
@@ -1770,12 +1834,16 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const requestUrl = new URL(request.url);
+
+    // Le rotte di billing usano POST: vanno risolte PRIMA del filtro sui GET.
+    const billingResponse = await handleBillingRequest(request, requestUrl.pathname, env);
+    if (billingResponse) return billingResponse;
+
     // Only cache GET requests
     if (request.method !== 'GET') {
       return new Response('Method not allowed', { status: 405 });
     }
-
-    const requestUrl = new URL(request.url);
 
     // New D1-backed catalog API: independent of the CACHE/KV binding
     // required below, and does not affect any existing route.

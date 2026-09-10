@@ -21,10 +21,7 @@ import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.ui.components.OfflineBanner
 import com.emabuia.pokevault.ui.home.components.*
 import com.emabuia.pokevault.ui.navigation.Routes
-import com.emabuia.pokevault.ui.theme.BlueCard
-import com.emabuia.pokevault.ui.theme.DarkBackground
-import com.emabuia.pokevault.ui.theme.PurpleCard
-import com.emabuia.pokevault.ui.theme.TextWhite
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.HomeViewModel
 
@@ -41,7 +38,7 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(AppColors.background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
         Column(
@@ -102,26 +99,26 @@ fun HomeScreen(
             ) {
                 FloatingActionButton(
                     onClick = { onNavigate(Routes.WISHLIST_LIST) },
-                    containerColor = PurpleCard,
+                    containerColor = AppColors.purple,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.size(50.dp)
                 ) {
                     Icon(
                         Icons.Default.Favorite,
                         contentDescription = AppLocale.wishlistTitle,
-                        tint = TextWhite
+                        tint = AppColors.textPrimary
                     )
                 }
 
                 FloatingActionButton(
                     onClick = { onNavigate(Routes.SCANNER) },
-                    containerColor = BlueCard,
+                    containerColor = AppColors.blue,
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Icon(
                         Icons.Default.CameraAlt,
                         contentDescription = AppLocale.scanCard,
-                        tint = TextWhite
+                        tint = AppColors.textPrimary
                     )
                 }
             }

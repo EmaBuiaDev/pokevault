@@ -1,1 +1,5 @@
 /build
+
+# Output di build firmati/non firmati: rigenerabili, non vanno versionati.
+/release
+/debug

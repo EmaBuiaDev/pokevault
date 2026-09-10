@@ -39,11 +39,17 @@ fun AddTournamentScreen(
     viewModel: CompetitiveLogViewModel = viewModel()
 ) {
     LaunchedEffect(editTournamentId) {
-        if (editTournamentId != null) {
-            val tournament = viewModel.getTournamentById(editTournamentId)
-            if (tournament != null) viewModel.loadTournamentForEdit(tournament)
-        } else {
+        if (editTournamentId == null) {
             viewModel.resetTournamentForm()
+        }
+    }
+
+    // Come in AddMatchScreen: i tornei arrivano da un listener asincrono
+    // avviato nell'init del ViewModel, quindi al primo frame la lista e'
+    // vuota e il form di modifica restava vuoto. Va riletta quando arriva.
+    LaunchedEffect(editTournamentId, viewModel.tournaments) {
+        if (editTournamentId != null && viewModel.editingTournamentId != editTournamentId) {
+            viewModel.getTournamentById(editTournamentId)?.let { viewModel.loadTournamentForEdit(it) }
         }
     }
 
@@ -56,22 +62,22 @@ fun AddTournamentScreen(
     val currentDateStr = viewModel.tournamentDate.toDate().let { dateFormat.format(it) }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         if (isEditing) AppLocale.editTournament else AppLocale.addTournament,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         }
     ) { padding ->
@@ -93,20 +99,20 @@ fun AddTournamentScreen(
             ) {
                 Tournament.TYPES.forEach { type ->
                     val color = when (type) {
-                        "Cup" -> StarGold
-                        "Challenge" -> BlueCard
-                        "Local" -> GreenCard
-                        else -> TextMuted
+                        "Cup" -> AppColors.gold
+                        "Challenge" -> AppColors.blue
+                        "Local" -> AppColors.green
+                        else -> AppColors.textMuted
                     }
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(56.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (viewModel.tournamentType == type) color.copy(alpha = 0.2f) else DarkCard)
+                            .background(if (viewModel.tournamentType == type) color.copy(alpha = 0.2f) else AppColors.card)
                             .border(
                                 width = if (viewModel.tournamentType == type) 2.dp else 1.dp,
-                                color = if (viewModel.tournamentType == type) color else TextMuted.copy(alpha = 0.3f),
+                                color = if (viewModel.tournamentType == type) color else AppColors.textMuted.copy(alpha = 0.3f),
                                 shape = RoundedCornerShape(12.dp)
                             )
                             .clickable { viewModel.tournamentType = type },
@@ -114,7 +120,7 @@ fun AddTournamentScreen(
                     ) {
                         Text(
                             type,
-                            color = if (viewModel.tournamentType == type) color else TextGray,
+                            color = if (viewModel.tournamentType == type) color else AppColors.textSecondary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
@@ -130,7 +136,7 @@ fun AddTournamentScreen(
                 readOnly = true,
                 trailingIcon = {
                     IconButton(onClick = { showDatePicker = true }) {
-                        Icon(Icons.Default.CalendarToday, null, tint = OrangeCard)
+                        Icon(Icons.Default.CalendarToday, null, tint = AppColors.orange)
                     }
                 },
                 modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true },
@@ -191,11 +197,11 @@ fun AddTournamentScreen(
                 ExposedDropdownMenu(
                     expanded = showFormatDropdown,
                     onDismissRequest = { showFormatDropdown = false },
-                    containerColor = DarkSurface
+                    containerColor = AppColors.surface
                 ) {
                     Tournament.FORMATS.forEach { format ->
                         DropdownMenuItem(
-                            text = { Text(format, color = TextWhite) },
+                            text = { Text(format, color = AppColors.textPrimary) },
                             onClick = {
                                 viewModel.tournamentFormat = format
                                 showFormatDropdown = false
@@ -213,13 +219,13 @@ fun AddTournamentScreen(
                 Surface(
                     onClick = { useDeckFromList = false },
                     shape = RoundedCornerShape(10.dp),
-                    color = if (!useDeckFromList) OrangeCard.copy(alpha = 0.2f) else DarkCard,
-                    border = if (!useDeckFromList) androidx.compose.foundation.BorderStroke(1.dp, OrangeCard) else null,
+                    color = if (!useDeckFromList) AppColors.orange.copy(alpha = 0.2f) else AppColors.card,
+                    border = if (!useDeckFromList) androidx.compose.foundation.BorderStroke(1.dp, AppColors.orange) else null,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
                         AppLocale.tournamentDeckCustom,
-                        color = if (!useDeckFromList) OrangeCard else TextMuted,
+                        color = if (!useDeckFromList) AppColors.orange else AppColors.textMuted,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
@@ -228,13 +234,13 @@ fun AddTournamentScreen(
                 Surface(
                     onClick = { useDeckFromList = true },
                     shape = RoundedCornerShape(10.dp),
-                    color = if (useDeckFromList) OrangeCard.copy(alpha = 0.2f) else DarkCard,
-                    border = if (useDeckFromList) androidx.compose.foundation.BorderStroke(1.dp, OrangeCard) else null,
+                    color = if (useDeckFromList) AppColors.orange.copy(alpha = 0.2f) else AppColors.card,
+                    border = if (useDeckFromList) androidx.compose.foundation.BorderStroke(1.dp, AppColors.orange) else null,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
                         AppLocale.tournamentDeckFromList,
-                        color = if (useDeckFromList) OrangeCard else TextMuted,
+                        color = if (useDeckFromList) AppColors.orange else AppColors.textMuted,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
@@ -246,7 +252,7 @@ fun AddTournamentScreen(
                 if (viewModel.userDecks.isEmpty()) {
                     Text(
                         if (AppLocale.isItalian) "Nessun deck creato" else "No decks created",
-                        color = TextMuted,
+                        color = AppColors.textMuted,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
@@ -270,14 +276,14 @@ fun AddTournamentScreen(
                         ExposedDropdownMenu(
                             expanded = showDeckDropdown,
                             onDismissRequest = { showDeckDropdown = false },
-                            containerColor = DarkSurface
+                            containerColor = AppColors.surface
                         ) {
                             viewModel.userDecks.forEach { deck ->
                                 DropdownMenuItem(
                                     text = {
                                         Text(
                                             "${deck.name} (${deck.totalCards} carte)",
-                                            color = TextWhite,
+                                            color = AppColors.textPrimary,
                                             fontSize = 14.sp
                                         )
                                     },
@@ -312,8 +318,8 @@ fun AddTournamentScreen(
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = OrangeCard,
-                    disabledContainerColor = OrangeCard.copy(alpha = 0.4f)
+                    containerColor = AppColors.orange,
+                    disabledContainerColor = AppColors.orange.copy(alpha = 0.4f)
                 )
             ) {
                 if (viewModel.isSaving) {
@@ -342,32 +348,32 @@ fun AddTournamentScreen(
                         viewModel.tournamentDate = Timestamp(Date(millis))
                     }
                     showDatePicker = false
-                }) { Text(AppLocale.save, color = OrangeCard) }
+                }) { Text(AppLocale.save, color = AppColors.orange) }
             },
             dismissButton = {
                 TextButton(onClick = { showDatePicker = false }) {
-                    Text(AppLocale.cancel, color = TextGray)
+                    Text(AppLocale.cancel, color = AppColors.textSecondary)
                 }
             },
-            colors = DatePickerDefaults.colors(containerColor = DarkSurface)
+            colors = DatePickerDefaults.colors(containerColor = AppColors.surface)
         ) {
             DatePicker(
                 state = datePickerState,
                 colors = DatePickerDefaults.colors(
-                    containerColor = DarkSurface,
-                    titleContentColor = TextWhite,
-                    headlineContentColor = TextWhite,
-                    weekdayContentColor = TextMuted,
-                    subheadContentColor = TextGray,
-                    yearContentColor = TextWhite,
-                    currentYearContentColor = OrangeCard,
+                    containerColor = AppColors.surface,
+                    titleContentColor = AppColors.textPrimary,
+                    headlineContentColor = AppColors.textPrimary,
+                    weekdayContentColor = AppColors.textMuted,
+                    subheadContentColor = AppColors.textSecondary,
+                    yearContentColor = AppColors.textPrimary,
+                    currentYearContentColor = AppColors.orange,
                     selectedYearContentColor = Color.White,
-                    selectedYearContainerColor = OrangeCard,
-                    dayContentColor = TextWhite,
+                    selectedYearContainerColor = AppColors.orange,
+                    dayContentColor = AppColors.textPrimary,
                     selectedDayContentColor = Color.White,
-                    selectedDayContainerColor = OrangeCard,
-                    todayContentColor = OrangeCard,
-                    todayDateBorderColor = OrangeCard
+                    selectedDayContainerColor = AppColors.orange,
+                    todayContentColor = AppColors.orange,
+                    todayDateBorderColor = AppColors.orange
                 )
             )
         }
@@ -376,7 +382,7 @@ fun AddTournamentScreen(
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text, color = TextGray, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    Text(text, color = AppColors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
@@ -403,13 +409,13 @@ private fun TournamentTextField(
 
 @Composable
 private fun tournamentTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = OrangeCard,
-    unfocusedBorderColor = TextMuted,
-    cursorColor = OrangeCard,
-    focusedLabelColor = OrangeCard,
-    unfocusedLabelColor = TextMuted,
-    focusedTextColor = TextWhite,
-    unfocusedTextColor = TextWhite,
-    focusedPlaceholderColor = TextMuted,
-    unfocusedPlaceholderColor = TextMuted
+    focusedBorderColor = AppColors.orange,
+    unfocusedBorderColor = AppColors.textMuted,
+    cursorColor = AppColors.orange,
+    focusedLabelColor = AppColors.orange,
+    unfocusedLabelColor = AppColors.textMuted,
+    focusedTextColor = AppColors.textPrimary,
+    unfocusedTextColor = AppColors.textPrimary,
+    focusedPlaceholderColor = AppColors.textMuted,
+    unfocusedPlaceholderColor = AppColors.textMuted
 )

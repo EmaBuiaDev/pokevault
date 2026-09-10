@@ -119,7 +119,7 @@ fun NewDeckBottomSheetContent(
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(DarkCard)
+                .background(AppColors.card)
                 .padding(10.dp)
         ) {
             Column {
@@ -131,7 +131,7 @@ fun NewDeckBottomSheetContent(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = if (isEditing) "Modifica Deck" else "Nuovo Deck",
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -140,7 +140,7 @@ fun NewDeckBottomSheetContent(
                             Icon(
                                 imageVector = if (showSetupSection) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                 contentDescription = if (showSetupSection) "Chiudi impostazioni" else "Apri impostazioni",
-                                tint = TextMuted,
+                                tint = AppColors.textMuted,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -152,7 +152,7 @@ fun NewDeckBottomSheetContent(
                     ) {
                         Text(
                             text = "${viewModel.selectedCardsIds.size} / 60",
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
@@ -166,7 +166,7 @@ fun NewDeckBottomSheetContent(
                     TextField(
                         value = viewModel.newDeckName,
                         onValueChange = { viewModel.newDeckName = it },
-                        placeholder = { Text(AppLocale.deckNamePlaceholder, color = TextMuted, fontSize = 13.sp) },
+                        placeholder = { Text(AppLocale.deckNamePlaceholder, color = AppColors.textMuted, fontSize = 13.sp) },
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = androidx.compose.foundation.text.KeyboardActions(
@@ -175,11 +175,11 @@ fun NewDeckBottomSheetContent(
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = BlueCard,
-                            unfocusedIndicatorColor = TextMuted.copy(alpha = 0.5f),
-                            cursorColor = BlueCard,
-                            focusedTextColor = TextWhite,
-                            unfocusedTextColor = TextWhite
+                            focusedIndicatorColor = AppColors.blue,
+                            unfocusedIndicatorColor = AppColors.textMuted.copy(alpha = 0.5f),
+                            cursorColor = AppColors.blue,
+                            focusedTextColor = AppColors.textPrimary,
+                            unfocusedTextColor = AppColors.textPrimary
                         ),
                         singleLine = true,
                         textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp)
@@ -198,9 +198,9 @@ fun NewDeckBottomSheetContent(
                                 modifier = Modifier
                                     .size(32.dp, 46.dp)
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(DarkBackground)
+                                    .background(AppColors.background)
                                     .border(
-                                        BorderStroke(1.dp, BlueCard.copy(alpha = 0.5f)),
+                                        BorderStroke(1.dp, AppColors.blue.copy(alpha = 0.5f)),
                                         RoundedCornerShape(6.dp)
                                     )
                                     .clickable(enabled = !url.isNullOrBlank()) { viewModel.toggleCoverCard(url.orEmpty()) },
@@ -214,7 +214,7 @@ fun NewDeckBottomSheetContent(
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 } else {
-                                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
+                                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = AppColors.textMuted, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -225,8 +225,8 @@ fun NewDeckBottomSheetContent(
                             onClick = { showCoverPicker = true },
                             enabled = viewModel.selectedCardsIds.isNotEmpty(),
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BlueCard),
-                            border = BorderStroke(1.dp, if (viewModel.selectedCardsIds.isNotEmpty()) BlueCard.copy(alpha = 0.5f) else TextMuted.copy(alpha = 0.3f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.blue),
+                            border = BorderStroke(1.dp, if (viewModel.selectedCardsIds.isNotEmpty()) AppColors.blue.copy(alpha = 0.5f) else AppColors.textMuted.copy(alpha = 0.3f)),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -241,21 +241,21 @@ fun NewDeckBottomSheetContent(
         if (viewModel.isImportReviewMode) {
             Spacer(modifier = Modifier.height(8.dp))
             Surface(
-                color = BlueCard.copy(alpha = 0.12f),
+                color = AppColors.blue.copy(alpha = 0.12f),
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.PlaylistAddCheck, contentDescription = null, tint = BlueCard, modifier = Modifier.size(16.dp))
+                    Icon(Icons.AutoMirrored.Filled.PlaylistAddCheck, contentDescription = null, tint = AppColors.blue, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Revisione import", color = TextWhite, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text("Vedi solo le carte appena importate", color = TextMuted, fontSize = 10.sp)
+                        Text("Revisione import", color = AppColors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Vedi solo le carte appena importate", color = AppColors.textMuted, fontSize = 10.sp)
                     }
                     TextButton(onClick = { viewModel.exitImportReviewMode() }) {
-                        Text("Tutta la collezione", color = BlueCard, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Tutta la collezione", color = AppColors.blue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -266,7 +266,7 @@ fun NewDeckBottomSheetContent(
         SecondaryTabRow(
             selectedTabIndex = selectedTabIndex,
             containerColor = Color.Transparent,
-            contentColor = BlueCard,
+            contentColor = AppColors.blue,
             divider = {}
         ) {
             tabs.forEachIndexed { index, title ->
@@ -280,8 +280,8 @@ fun NewDeckBottomSheetContent(
                             fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal
                         )
                     },
-                    selectedContentColor = BlueCard,
-                    unselectedContentColor = TextMuted
+                    selectedContentColor = AppColors.blue,
+                    unselectedContentColor = AppColors.textMuted
                 )
             }
         }
@@ -302,7 +302,7 @@ fun NewDeckBottomSheetContent(
                 placeholder = {
                     Text(
                         text = "Cerca carte",
-                        color = TextMuted,
+                        color = AppColors.textMuted,
                         fontSize = 12.sp
                     )
                 },
@@ -311,7 +311,7 @@ fun NewDeckBottomSheetContent(
                     Icon(
                         Icons.Default.Search,
                         contentDescription = null,
-                        tint = TextMuted,
+                        tint = AppColors.textMuted,
                         modifier = Modifier.size(16.dp)
                     )
                 },
@@ -324,7 +324,7 @@ fun NewDeckBottomSheetContent(
                             Icon(
                                 Icons.Default.Close,
                                 contentDescription = AppLocale.clearSearch,
-                                tint = TextMuted,
+                                tint = AppColors.textMuted,
                                 modifier = Modifier.size(14.dp)
                             )
                         }
@@ -333,13 +333,13 @@ fun NewDeckBottomSheetContent(
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(12.dp),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = DarkCard,
-                    unfocusedContainerColor = DarkCard,
+                    focusedContainerColor = AppColors.card,
+                    unfocusedContainerColor = AppColors.card,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = BlueCard,
-                    focusedTextColor = TextWhite,
-                    unfocusedTextColor = TextWhite
+                    cursorColor = AppColors.blue,
+                    focusedTextColor = AppColors.textPrimary,
+                    unfocusedTextColor = AppColors.textPrimary
                 ),
                 textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
             )
@@ -357,9 +357,9 @@ fun NewDeckBottomSheetContent(
                 },
                 enabled = hasPendingSelection,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = BlueCard,
-                    disabledContainerColor = DarkCard,
-                    disabledContentColor = TextMuted
+                    containerColor = AppColors.blue,
+                    disabledContainerColor = AppColors.card,
+                    disabledContentColor = AppColors.textMuted
                 ),
                 shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
@@ -380,7 +380,7 @@ fun NewDeckBottomSheetContent(
                     filteredCards.isNotEmpty() -> "${filteredCards.size} risultati"
                     else -> "Nessun risultato locale"
                 },
-                color = if (hasPendingSelection) YellowCard else TextMuted,
+                color = if (hasPendingSelection) AppColors.yellow else AppColors.textMuted,
                 fontSize = 10.sp,
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
@@ -402,18 +402,18 @@ fun NewDeckBottomSheetContent(
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
                 ) {
                     if (viewModel.isSearchingCards) {
-                        CircularProgressIndicator(color = PurpleCard, modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(color = AppColors.purple, modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
                     } else {
-                        Icon(Icons.Default.Search, contentDescription = null, tint = PurpleCard, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.Search, contentDescription = null, tint = AppColors.purple, modifier = Modifier.size(14.dp))
                     }
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Cerca anche nei set TCG online", color = PurpleCard, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Cerca anche nei set TCG online", color = AppColors.purple, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
             if (viewModel.tcgSearchError != null) {
                 Text(
                     text = viewModel.tcgSearchError!!,
-                    color = YellowCard,
+                    color = AppColors.yellow,
                     fontSize = 11.sp,
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
@@ -424,7 +424,7 @@ fun NewDeckBottomSheetContent(
         if (filteredCards.isNotEmpty()) {
             Text(
                 text = "Nella tua collezione",
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
@@ -461,7 +461,7 @@ fun NewDeckBottomSheetContent(
             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                 Text(
                     text = "Nessuna carta trovata nella tua collezione.",
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center
                 )
@@ -470,7 +470,7 @@ fun NewDeckBottomSheetContent(
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
                     text = "Nessuna carta in questa categoria.\nAggiungi carte alla tua collezione o cerca nei set.",
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(32.dp)
@@ -482,7 +482,7 @@ fun NewDeckBottomSheetContent(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Risultati online (${viewModel.tcgSearchResults.size}) - tocca per aggiungere al deck",
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 11.sp,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
             )
@@ -508,7 +508,7 @@ fun NewDeckBottomSheetContent(
         if (viewModel.validationError != null) {
             Text(
                 text = viewModel.validationError!!,
-                color = RedCard,
+                color = AppColors.red,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(vertical = 4.dp)
             )
@@ -523,11 +523,11 @@ fun NewDeckBottomSheetContent(
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = if (canSave) BlueCard else DarkCard),
+            colors = ButtonDefaults.buttonColors(containerColor = if (canSave) AppColors.blue else AppColors.card),
             enabled = canSave && !viewModel.isSaving
         ) {
             if (viewModel.isSaving) {
-                CircularProgressIndicator(color = TextWhite, modifier = Modifier.size(20.dp))
+                CircularProgressIndicator(color = AppColors.textPrimary, modifier = Modifier.size(20.dp))
             } else {
                 Text(text = if (isEditing) "Salva Modifiche" else "Salva Deck", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
@@ -538,11 +538,11 @@ fun NewDeckBottomSheetContent(
     tcgCardToAdd?.let { dialogCard ->
         AlertDialog(
             onDismissRequest = { tcgCardToAdd = null },
-            containerColor = DarkCard,
+            containerColor = AppColors.card,
             title = {
                 Text(
                     text = dialogCard.name,
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
@@ -558,12 +558,12 @@ fun NewDeckBottomSheetContent(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     dialogCard.set?.name?.let { setName ->
-                        Text(text = setName, color = TextMuted, fontSize = 11.sp)
+                        Text(text = setName, color = AppColors.textMuted, fontSize = 11.sp)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = AppLocale.howManyCopiesToAdd,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -577,13 +577,13 @@ fun NewDeckBottomSheetContent(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(DarkBackground)
+                                .background(AppColors.background)
                         ) {
-                            Icon(Icons.Default.Remove, contentDescription = AppLocale.minus, tint = TextWhite)
+                            Icon(Icons.Default.Remove, contentDescription = AppLocale.minus, tint = AppColors.textPrimary)
                         }
                         Text(
                             text = "$tcgAddQty",
-                            color = TextWhite,
+                            color = AppColors.textPrimary,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Black
                         )
@@ -592,15 +592,15 @@ fun NewDeckBottomSheetContent(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(DarkBackground)
+                                .background(AppColors.background)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = AppLocale.plus, tint = TextWhite)
+                            Icon(Icons.Default.Add, contentDescription = AppLocale.plus, tint = AppColors.textPrimary)
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = AppLocale.addedToCollectionAndDeck,
-                        color = TextMuted,
+                        color = AppColors.textMuted,
                         fontSize = 10.sp,
                         textAlign = TextAlign.Center
                     )
@@ -614,15 +614,15 @@ fun NewDeckBottomSheetContent(
                         tcgCardToAdd = null
                         viewModel.addTcgCardToDeck(card, qty, context)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text(AppLocale.addCopiesToDeck(tcgAddQty), color = TextWhite, fontWeight = FontWeight.Bold)
+                    Text(AppLocale.addCopiesToDeck(tcgAddQty), color = AppColors.textPrimary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { tcgCardToAdd = null }) {
-                    Text(AppLocale.cancel, color = TextMuted)
+                    Text(AppLocale.cancel, color = AppColors.textMuted)
                 }
             }
         )
@@ -631,18 +631,18 @@ fun NewDeckBottomSheetContent(
     if (showCoverPicker && viewModel.selectedCardsIds.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { showCoverPicker = false },
-            containerColor = DarkCard,
+            containerColor = AppColors.card,
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(AppLocale.choose2Covers, color = TextWhite, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Text("${viewModel.coverImageUrls.size}/2", color = TextMuted, fontSize = 12.sp)
+                    Text(AppLocale.choose2Covers, color = AppColors.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("${viewModel.coverImageUrls.size}/2", color = AppColors.textMuted, fontSize = 12.sp)
                 }
             },
             text = {
                 Column {
                     Text(
                         text = AppLocale.onlyDeckCardsCanBeCover,
-                        color = TextMuted,
+                        color = AppColors.textMuted,
                         fontSize = 10.sp
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -655,7 +655,7 @@ fun NewDeckBottomSheetContent(
                                     .size(56.dp, 80.dp)
                                     .clip(RoundedCornerShape(6.dp))
                                     .border(
-                                        BorderStroke(if (isSelectedCover) 2.dp else 1.dp, if (isSelectedCover) BlueCard else TextMuted.copy(alpha = 0.35f)),
+                                        BorderStroke(if (isSelectedCover) 2.dp else 1.dp, if (isSelectedCover) AppColors.blue else AppColors.textMuted.copy(alpha = 0.35f)),
                                         RoundedCornerShape(6.dp)
                                     )
                                     .clickable { viewModel.toggleCoverCard(card.imageUrl) }
@@ -672,7 +672,7 @@ fun NewDeckBottomSheetContent(
 
                                 if (isSelectedCover) {
                                     Surface(
-                                        color = BlueCard,
+                                        color = AppColors.blue,
                                         shape = CircleShape,
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
@@ -680,7 +680,7 @@ fun NewDeckBottomSheetContent(
                                             .size(18.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.Check, contentDescription = AppLocale.selectedCover, tint = TextWhite, modifier = Modifier.size(12.dp))
+                                            Icon(Icons.Default.Check, contentDescription = AppLocale.selectedCover, tint = AppColors.textPrimary, modifier = Modifier.size(12.dp))
                                         }
                                     }
                                 }
@@ -692,15 +692,15 @@ fun NewDeckBottomSheetContent(
             confirmButton = {
                 Button(
                     onClick = { showCoverPicker = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = BlueCard),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text(AppLocale.close, color = TextWhite, fontWeight = FontWeight.Bold)
+                    Text(AppLocale.close, color = AppColors.textPrimary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCoverPicker = false }) {
-                    Text(AppLocale.cancel, color = TextMuted)
+                    Text(AppLocale.cancel, color = AppColors.textMuted)
                 }
             }
         )

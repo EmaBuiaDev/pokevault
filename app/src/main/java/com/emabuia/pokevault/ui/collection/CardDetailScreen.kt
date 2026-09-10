@@ -45,19 +45,45 @@ import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * Codice set da usare per la ricerca prezzi.
+ *
+ * Prima veniva passato `card.set`, cioe' il NOME VISUALIZZATO dell'espansione,
+ * dove getCardPrices si aspetta un codice: la ricerca bruciava tutti e sei i
+ * candidati di prioritizedSetLookupCandidates piu' due chiamate di fallback,
+ * fino a ~7 richieste HTTP per ogni apertura del dettaglio.
+ *
+ * apiCardId e' il TcgCard.id da cui SetDetailViewModel.resolvePriceLookup
+ * ricava lo stesso valore: "ita:<setCode>:..." per le carte italiane,
+ * "<setId>-<numero>" per le altre. Se non si ricava nulla si torna al
+ * comportamento precedente, cosi' il caso peggiore resta quello di prima.
+ */
+private fun resolveSetCodeForPrices(card: PokemonCard): String {
+    val apiId = card.apiCardId.trim()
+
+    if (apiId.startsWith("ita:", ignoreCase = true)) {
+        val overlayCode = apiId.split(':').getOrNull(1).orEmpty()
+        if (overlayCode.isNotBlank()) return overlayCode
+    }
+
+    val setCode = apiId.substringBeforeLast('-', missingDelimiterValue = "")
+        .substringBefore("__")
+    return setCode.ifBlank { card.set }
+}
+
 @Composable
 private fun CollectionDetailImageFallback(card: PokemonCard) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkCard)
+            .background(AppColors.card)
             .padding(12.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = card.name,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
@@ -67,7 +93,7 @@ private fun CollectionDetailImageFallback(card: PokemonCard) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "-",
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -75,7 +101,7 @@ private fun CollectionDetailImageFallback(card: PokemonCard) {
             )
             Text(
                 text = AppLocale.displaySetName(card.set).ifBlank { "-" },
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 12.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -113,6 +139,7 @@ fun CardDetailScreen(
     var tempCompany by remember { mutableStateOf("") }
 
     var expandedGrading by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     fun loadData() {
         scope.launch {
@@ -193,7 +220,7 @@ fun CardDetailScreen(
             pokeWalletRepository
                 .getCardPrices(
                     cardName = selected.name,
-                    setCode = selected.set,
+                    setCode = resolveSetCodeForPrices(selected),
                     cardNumber = selected.cardNumber
                 )
                 .getOrNull()
@@ -208,9 +235,17 @@ fun CardDetailScreen(
     }
 
     fun confirmVariantChange(card: PokemonCard, newQty: Int, isGraded: Boolean? = null, grade: Float? = null, company: String? = null) {
+        // Prima queste due validazioni facevano un return silenzioso: l'utente
+        // premeva conferma e non succedeva nulla, senza alcuna spiegazione.
         if (isGraded == true) {
-            if (grade == null) return
-            if (company.isNullOrBlank()) return 
+            if (grade == null) {
+                scope.launch { snackbarHostState.showSnackbar(AppLocale.gradingGradeRequired) }
+                return
+            }
+            if (company.isNullOrBlank()) {
+                scope.launch { snackbarHostState.showSnackbar(AppLocale.gradingCompanyRequired) }
+                return
+            }
         }
 
         scope.launch {
@@ -221,14 +256,25 @@ fun CardDetailScreen(
                 gradingCompany = company ?: card.gradingCompany
             )
             
+            // Prima ogni modifica chiamava loadData(), che rilegge l'INTERA
+            // collezione (getCards().first()) e ricalcola collectionGroupKey per
+            // ogni carta, solo per aggiornare una variante gia' in mano. Lo stato
+            // locale contiene tutto il necessario.
             if (newQty <= 0) {
                 repository.deleteCard(card.id).onSuccess {
                     val remaining = variants.filter { it.id != card.id }
-                    if (remaining.isEmpty()) onBack() else loadData()
+                    if (remaining.isEmpty()) {
+                        onBack()
+                    } else {
+                        variants = remaining
+                        editedQuantities = editedQuantities - card.id
+                        selectedVariantIndex = selectedVariantIndex.coerceAtMost(remaining.lastIndex)
+                    }
                 }
             } else {
                 repository.updateCard(card.id, updatedCard).onSuccess {
-                    loadData()
+                    variants = variants.map { if (it.id == card.id) updatedCard else it }
+                    editedQuantities = editedQuantities + (card.id to newQty)
                 }
             }
         }
@@ -237,24 +283,25 @@ fun CardDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(variants.firstOrNull()?.name ?: "Dettaglio", fontWeight = FontWeight.Bold, color = TextWhite) },
+                title = { Text(variants.firstOrNull()?.name ?: "Dettaglio", fontWeight = FontWeight.Bold, color = AppColors.textPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = TextWhite)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back, tint = AppColors.textPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         },
-        containerColor = DarkBackground
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = AppColors.background
     ) { padding ->
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = BlueCard)
+                CircularProgressIndicator(color = AppColors.blue)
             }
         } else if (variants.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(AppLocale.noCardFound, color = TextGray)
+                Text(AppLocale.noCardFound, color = AppColors.textSecondary)
             }
         } else {
             val currentCard = variants.getOrNull(selectedVariantIndex) ?: variants.first()
@@ -283,7 +330,7 @@ fun CardDetailScreen(
                         .fillMaxWidth(0.8f)
                         .aspectRatio(0.71f)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(DarkCard)
+                        .background(AppColors.card)
                 ) {
                     if (currentCard.imageUrl.isNotBlank()) {
                         SubcomposeAsyncImage(
@@ -303,7 +350,7 @@ fun CardDetailScreen(
                             .padding(10.dp)
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(BlueCard),
+                            .background(AppColors.blue),
                         contentAlignment = Alignment.Center
                     ) {
                         Text("x$totalQty", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -314,7 +361,7 @@ fun CardDetailScreen(
 
                 Text(
                     AppLocale.myVariantsLabel,
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
@@ -346,11 +393,11 @@ fun CardDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Stars, contentDescription = null, tint = StarGold, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Stars, contentDescription = null, tint = AppColors.gold, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
-                                Text(AppLocale.gradedCardSection, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                Text(AppLocale.insertInGradedCards, color = TextMuted, fontSize = 11.sp)
+                                Text(AppLocale.gradedCardSection, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(AppLocale.insertInGradedCards, color = AppColors.textMuted, fontSize = 11.sp)
                             }
                         }
                         
@@ -363,13 +410,13 @@ fun CardDetailScreen(
                                         tempCompany = "PSA"
                                     }
                                 },
-                                colors = SwitchDefaults.colors(checkedThumbColor = StarGold)
+                                colors = SwitchDefaults.colors(checkedThumbColor = AppColors.gold)
                             )
                             
                             AnimatedVisibility(visible = isGradingChanged && canSaveGrading) {
                                 IconButton(
                                     onClick = { confirmVariantChange(currentCard, currentCard.quantity, tempIsGraded, tempGrade, tempCompany) },
-                                    modifier = Modifier.padding(start = 8.dp).size(28.dp).background(GreenCard, CircleShape)
+                                    modifier = Modifier.padding(start = 8.dp).size(28.dp).background(AppColors.green, CircleShape)
                                 ) {
                                     Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
                                 }
@@ -414,10 +461,10 @@ fun CardDetailScreen(
                                     keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
                                 ),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = TextWhite, 
-                                    unfocusedTextColor = TextWhite,
-                                    focusedLabelColor = BlueCard,
-                                    unfocusedLabelColor = TextMuted
+                                    focusedTextColor = AppColors.textPrimary, 
+                                    unfocusedTextColor = AppColors.textPrimary,
+                                    focusedLabelColor = AppColors.blue,
+                                    unfocusedLabelColor = AppColors.textMuted
                                 )
                             )
                             
@@ -434,20 +481,20 @@ fun CardDetailScreen(
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedGrading) },
                                     modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                                     colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = TextWhite, 
-                                        unfocusedTextColor = TextWhite,
-                                        focusedLabelColor = BlueCard,
-                                        unfocusedLabelColor = TextMuted
+                                        focusedTextColor = AppColors.textPrimary, 
+                                        unfocusedTextColor = AppColors.textPrimary,
+                                        focusedLabelColor = AppColors.blue,
+                                        unfocusedLabelColor = AppColors.textMuted
                                     )
                                 )
                                 ExposedDropdownMenu(
                                     expanded = expandedGrading,
                                     onDismissRequest = { expandedGrading = false },
-                                    modifier = Modifier.background(DarkSurface)
+                                    modifier = Modifier.background(AppColors.surface)
                                 ) {
                                     CardOptions.GRADING_COMPANIES.forEach { company ->
                                         DropdownMenuItem(
-                                            text = { Text(company, color = TextWhite) },
+                                            text = { Text(company, color = AppColors.textPrimary) },
                                             onClick = {
                                                 tempCompany = company
                                                 expandedGrading = false
@@ -468,7 +515,7 @@ fun CardDetailScreen(
                     DetailRow(AppLocale.estimatedValue, "€${"%.2f".format(currentCard.estimatedValue)}")
                     if (currentCard.notes.isNotBlank()) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(currentCard.notes, color = TextGray, fontSize = 13.sp)
+                        Text(currentCard.notes, color = AppColors.textSecondary, fontSize = 13.sp)
                     }
                 }
 
@@ -505,9 +552,9 @@ fun CardDetailScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(14.dp),
                                 strokeWidth = 1.5.dp,
-                                color = BlueCard
+                                color = AppColors.blue
                             )
-                            Text(AppLocale.loadingPrices, color = TextMuted, fontSize = 12.sp)
+                            Text(AppLocale.loadingPrices, color = AppColors.textMuted, fontSize = 12.sp)
                         }
                     } else if (livePrices != null && livePrices?.hasEurPrices == true) {
                         Spacer(modifier = Modifier.height(2.dp))
@@ -520,10 +567,10 @@ fun CardDetailScreen(
                         ) {
                             if (mainEurPrice != null) {
                                 Column {
-                                    Text(AppLocale.averagePrice, color = TextMuted, fontSize = 11.sp)
+                                    Text(AppLocale.averagePrice, color = AppColors.textMuted, fontSize = 11.sp)
                                     Text(
                                         "€${String.format("%.2f", mainEurPrice)}",
-                                        color = GreenCard,
+                                        color = AppColors.green,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 22.sp
                                     )
@@ -531,10 +578,10 @@ fun CardDetailScreen(
                             }
                             if (livePrices?.eurTrend != null) {
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text(AppLocale.trend, color = TextMuted, fontSize = 11.sp)
+                                    Text(AppLocale.trend, color = AppColors.textMuted, fontSize = 11.sp)
                                     Text(
                                         "€${String.format("%.2f", livePrices?.eurTrend)}",
-                                        color = TextWhite,
+                                        color = AppColors.textPrimary,
                                         fontWeight = FontWeight.Medium,
                                         fontSize = 14.sp
                                     )
@@ -544,7 +591,7 @@ fun CardDetailScreen(
 
                         if (livePrices?.hasSparklineData == true) {
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Cardmarket History", color = TextGray, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                            Text("Cardmarket History", color = AppColors.textSecondary, fontWeight = FontWeight.Medium, fontSize = 12.sp)
                             Spacer(modifier = Modifier.height(4.dp))
                             PriceSparkline(
                                 avg30 = livePrices?.eurAvg30 ?: 0.0,
@@ -555,16 +602,16 @@ fun CardDetailScreen(
 
                         if (livePrices?.eurLow != null) {
                             Spacer(modifier = Modifier.height(6.dp))
-                            HorizontalDivider(color = TextMuted.copy(alpha = 0.15f))
+                            HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.15f))
                             DetailRow(AppLocale.minPrice, "€${String.format("%.2f", livePrices?.eurLow)}")
                         }
 
                         if (livePrices?.usdMarket != null) {
-                            HorizontalDivider(color = TextMuted.copy(alpha = 0.15f), modifier = Modifier.padding(top = 2.dp))
+                            HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.15f), modifier = Modifier.padding(top = 2.dp))
                             DetailRow("TCGPlayer", "$${String.format("%.2f", livePrices?.usdMarket)}")
                         }
                     } else {
-                        Text(AppLocale.livePricesUnavailable, color = TextMuted, fontSize = 12.sp)
+                        Text(AppLocale.livePricesUnavailable, color = AppColors.textMuted, fontSize = 12.sp)
                     }
                 }
 
@@ -608,10 +655,10 @@ fun VariantRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isSelected) BlueCard.copy(alpha = 0.2f) else DarkCard)
+            .background(if (isSelected) AppColors.blue.copy(alpha = 0.2f) else AppColors.card)
             .border(
                 width = 1.dp,
-                color = if (isSelected) BlueCard else Color.Transparent,
+                color = if (isSelected) AppColors.blue else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
@@ -622,20 +669,20 @@ fun VariantRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = variant.variant,
-                    color = if (isSelected) BlueCard else TextWhite,
+                    color = if (isSelected) AppColors.blue else AppColors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
                 )
                 if (variant.isGraded) {
                     Spacer(modifier = Modifier.width(6.dp))
-                    Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(StarGold).padding(horizontal = 4.dp, vertical = 1.dp)) {
+                    Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(AppColors.gold).padding(horizontal = 4.dp, vertical = 1.dp)) {
                         Text("⭐ ${variant.grade}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
             Text(
                 text = "${variant.condition} · ${variant.language}",
-                color = TextMuted,
+                color = AppColors.textMuted,
                 fontSize = 12.sp
             )
         }
@@ -652,14 +699,14 @@ fun VariantRow(
                 Icon(
                     imageVector = if (editedQuantity <= 1) Icons.Default.Delete else Icons.Default.Remove,
                     contentDescription = null,
-                    tint = if (editedQuantity <= 1) RedCard.copy(alpha = if(editedQuantity > 0) 1f else 0.3f) else TextWhite,
+                    tint = if (editedQuantity <= 1) AppColors.red.copy(alpha = if(editedQuantity > 0) 1f else 0.3f) else AppColors.textPrimary,
                     modifier = Modifier.size(18.dp)
                 )
             }
 
             Text(
                 text = "x$editedQuantity",
-                color = if (editedQuantity == 0) RedCard else TextWhite,
+                color = if (editedQuantity == 0) AppColors.red else AppColors.textPrimary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
                 modifier = Modifier.widthIn(min = 24.dp),
@@ -667,7 +714,7 @@ fun VariantRow(
             )
 
             IconButton(onClick = { onQtyChange(editedQuantity + 1) }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Add, null, tint = BlueCard, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Add, null, tint = AppColors.blue, modifier = Modifier.size(18.dp))
             }
 
             AnimatedVisibility(
@@ -680,7 +727,7 @@ fun VariantRow(
                     modifier = Modifier
                         .padding(start = 12.dp)
                         .size(32.dp)
-                        .background(if (editedQuantity == 0) RedCard else GreenCard, CircleShape)
+                        .background(if (editedQuantity == 0) AppColors.red else AppColors.green, CircleShape)
                 ) {
                     Icon(
                         imageVector = if (editedQuantity == 0) Icons.Default.DeleteForever else Icons.Default.Check,
@@ -701,7 +748,7 @@ fun DetailSection(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DarkCard).padding(16.dp)
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(AppColors.card).padding(16.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -710,7 +757,7 @@ fun DetailSection(
         ) {
             Text(
                 text = title,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp,
                 maxLines = 1,
@@ -730,58 +777,8 @@ fun DetailRow(label: String, value: String) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, color = TextMuted, fontSize = 14.sp)
-        Text(text = value, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun MarketplaceLinkButton(
-    label: String,
-    url: String?,
-    modifier: Modifier = Modifier,
-    onOpenUrl: (String) -> Unit
-) {
-    val isEnabled = !url.isNullOrBlank()
-
-    Surface(
-        modifier = modifier,
-        onClick = {
-            if (isEnabled) {
-                onOpenUrl(url!!)
-            }
-        },
-        enabled = isEnabled,
-        shape = RoundedCornerShape(12.dp),
-        color = if (isEnabled) BlueCard.copy(alpha = 0.14f) else DarkSurface,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (isEnabled) BlueCard.copy(alpha = 0.45f) else TextMuted.copy(alpha = 0.25f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                color = if (isEnabled) TextWhite else TextMuted,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 11.sp,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                contentDescription = if (isEnabled) "Open $label" else "$label unavailable",
-                tint = if (isEnabled) BlueCard else TextMuted.copy(alpha = 0.7f),
-                modifier = Modifier.size(12.dp)
-            )
-        }
+        Text(text = label, color = AppColors.textMuted, fontSize = 14.sp)
+        Text(text = value, color = AppColors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -801,10 +798,10 @@ private fun CompactMarketplaceHeaderButton(
         },
         enabled = isEnabled,
         shape = RoundedCornerShape(10.dp),
-        color = if (isEnabled) BlueCard.copy(alpha = 0.14f) else DarkSurface,
+        color = if (isEnabled) AppColors.blue.copy(alpha = 0.14f) else AppColors.surface,
         border = BorderStroke(
             width = 1.dp,
-            color = if (isEnabled) BlueCard.copy(alpha = 0.45f) else TextMuted.copy(alpha = 0.25f)
+            color = if (isEnabled) AppColors.blue.copy(alpha = 0.45f) else AppColors.textMuted.copy(alpha = 0.25f)
         )
     ) {
         Row(
@@ -816,7 +813,7 @@ private fun CompactMarketplaceHeaderButton(
         ) {
             Text(
                 text = label,
-                color = if (isEnabled) TextWhite else TextMuted,
+                color = if (isEnabled) AppColors.textPrimary else AppColors.textMuted,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -826,7 +823,7 @@ private fun CompactMarketplaceHeaderButton(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                 contentDescription = if (isEnabled) "Open $label" else "$label unavailable",
-                tint = if (isEnabled) BlueCard else TextMuted.copy(alpha = 0.7f),
+                tint = if (isEnabled) AppColors.blue else AppColors.textMuted.copy(alpha = 0.7f),
                 modifier = Modifier.size(10.dp)
             )
         }

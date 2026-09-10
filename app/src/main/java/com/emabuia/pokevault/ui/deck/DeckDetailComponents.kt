@@ -148,7 +148,7 @@ fun DeckDetailView(
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(DarkBackground)) {
+    Column(modifier = Modifier.fillMaxSize().background(AppColors.background)) {
         Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
             if (deck.coverImageUrl.isNotEmpty()) {
                 AsyncImage(
@@ -170,7 +170,7 @@ fun DeckDetailView(
                             colors = listOf(
                                 Color.Black.copy(alpha = 0.4f),
                                 Color.Transparent,
-                                DarkBackground
+                                AppColors.background
                             )
                         )
                     )
@@ -196,25 +196,25 @@ fun DeckDetailView(
                         onClick = onEdit,
                         modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
                     ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, tint = BlueCard, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = AppColors.blue, modifier = Modifier.size(18.dp))
                     }
                     IconButton(
                         onClick = onDuplicate,
                         modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
                     ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, tint = GreenCard, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, tint = AppColors.green, modifier = Modifier.size(18.dp))
                     }
                     IconButton(
                         onClick = onDelete,
                         modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
                     ) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = RedCard, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = AppColors.red, modifier = Modifier.size(18.dp))
                     }
                     IconButton(
                         onClick = onExport,
                         modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = null, tint = StarGold, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Share, contentDescription = null, tint = AppColors.gold, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -232,7 +232,7 @@ fun DeckDetailView(
                 )
                 Text(
                     text = "Totale: ${deck.cards.size} carte",
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     fontSize = 13.sp
                 )
             }
@@ -257,7 +257,7 @@ fun DeckDetailView(
                         }
                         Text(
                             text = displayTitle,
-                            color = LavenderCard,
+                            color = AppColors.lavender,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp
@@ -267,7 +267,7 @@ fun DeckDetailView(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "${cardsList.sumOf { it.second }}",
-                            color = TextMuted,
+                            color = AppColors.textMuted,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -338,11 +338,11 @@ fun DeckExportDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DarkSurface,
+        containerColor = AppColors.surface,
         title = {
             Text(
                 text = AppLocale.deckExportTitle,
-                color = TextWhite,
+                color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold
             )
         },
@@ -356,12 +356,12 @@ fun DeckExportDialog(
                         .fillMaxWidth()
                         .heightIn(min = 180.dp, max = 360.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BlueCard,
-                        unfocusedBorderColor = TextMuted.copy(alpha = 0.4f),
-                        focusedTextColor = TextWhite,
-                        unfocusedTextColor = TextWhite,
-                        focusedContainerColor = DarkCard,
-                        unfocusedContainerColor = DarkCard
+                        focusedBorderColor = AppColors.blue,
+                        unfocusedBorderColor = AppColors.textMuted.copy(alpha = 0.4f),
+                        focusedTextColor = AppColors.textPrimary,
+                        unfocusedTextColor = AppColors.textPrimary,
+                        focusedContainerColor = AppColors.card,
+                        unfocusedContainerColor = AppColors.card
                     )
                 )
 
@@ -376,7 +376,7 @@ fun DeckExportDialog(
                             Toast.makeText(context, AppLocale.deckExportCopied, Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextWhite)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textPrimary)
                     ) {
                         Text(AppLocale.deckExportCopy)
                     }
@@ -393,7 +393,7 @@ fun DeckExportDialog(
                             )
                         },
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
                     ) {
                         Text(AppLocale.deckExportShare)
                     }
@@ -402,7 +402,7 @@ fun DeckExportDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(AppLocale.cancel, color = TextMuted)
+                Text(AppLocale.cancel, color = AppColors.textMuted)
             }
         }
     )
@@ -414,13 +414,13 @@ fun AnalysisSection(analysis: DeckAnalysis) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(DarkCard)
+            .background(AppColors.card)
             .padding(12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Analytics, contentDescription = null, tint = LavenderCard, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.Analytics, contentDescription = null, tint = AppColors.lavender, modifier = Modifier.size(14.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text(text = "Analisi Lab", color = LavenderCard, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(text = "Analisi Lab", color = AppColors.lavender, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
         
         Spacer(modifier = Modifier.height(8.dp))
@@ -434,8 +434,8 @@ fun AnalysisSection(analysis: DeckAnalysis) {
             val e = analysis.supertypesCount["Energy"] ?: 0
             
             Column(horizontalAlignment = Alignment.End) {
-                Text(text = "Ripartizione", color = TextMuted, fontSize = 10.sp)
-                Text(text = "$p Pokémon / $t Trainer / $e Energy", color = TextWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Ripartizione", color = AppColors.textMuted, fontSize = 10.sp)
+                Text(text = "$p Pokémon / $t Trainer / $e Energy", color = AppColors.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -444,8 +444,8 @@ fun AnalysisSection(analysis: DeckAnalysis) {
 @Composable
 fun AnalysisInfoItem(label: String, value: String) {
     Column {
-        Text(text = label, color = TextMuted, fontSize = 10.sp)
-        Text(text = value, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(text = label, color = AppColors.textMuted, fontSize = 10.sp)
+        Text(text = value, color = AppColors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
 

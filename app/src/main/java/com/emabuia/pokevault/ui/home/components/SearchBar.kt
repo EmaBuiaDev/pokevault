@@ -16,9 +16,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.emabuia.pokevault.ui.theme.SearchBarBg
-import com.emabuia.pokevault.ui.theme.TextMuted
-import com.emabuia.pokevault.ui.theme.TextWhite
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 
 @Composable
@@ -32,7 +30,7 @@ fun SearchBar(
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(SearchBarBg)
+            .background(AppColors.searchBar)
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(
@@ -41,7 +39,7 @@ fun SearchBar(
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = AppLocale.search,
-                tint = TextMuted,
+                tint = AppColors.textMuted,
                 modifier = Modifier.size(20.dp)
             )
 
@@ -51,7 +49,7 @@ fun SearchBar(
                 if (query.isEmpty()) {
                     Text(
                         text = AppLocale.searchCard,
-                        color = TextMuted,
+                        color = AppColors.textMuted,
                         fontSize = 14.sp
                     )
                 }
@@ -59,11 +57,11 @@ fun SearchBar(
                     value = query,
                     onValueChange = onQueryChange,
                     textStyle = TextStyle(
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontSize = 14.sp
                     ),
                     singleLine = true,
-                    cursorBrush = SolidColor(TextWhite),
+                    cursorBrush = SolidColor(AppColors.textPrimary),
                     modifier = Modifier.fillMaxWidth()
                 )
             }

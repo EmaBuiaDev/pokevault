@@ -50,13 +50,13 @@ fun AlbumListScreen(
     var showChasePremiumDialog by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         AppLocale.albumTitle,
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -65,12 +65,12 @@ fun AlbumListScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
-                            tint = TextWhite
+                            tint = AppColors.textPrimary
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkBackground
+                    containerColor = AppColors.background
                 )
             )
         }
@@ -126,12 +126,12 @@ private fun CollectorLabCardsRow(
     val albumSubtitle = if (albumCount == 0) {
         AppLocale.collectorAlbumSubtitle
     } else {
-        "$albumCount album creati"
+        AppLocale.collectorAlbumCount(albumCount)
     }
     val chaseSubtitle = if (chaseCount == 0) {
         AppLocale.collectorChaseSubtitle
     } else {
-        "$chaseCount chase creati"
+        AppLocale.collectorChaseCount(chaseCount)
     }
 
     Row(
@@ -142,7 +142,7 @@ private fun CollectorLabCardsRow(
             title = AppLocale.collectorAlbumTitle,
             subtitle = albumSubtitle,
             icon = Icons.Default.PhotoLibrary,
-            accent = OrangeCard,
+            accent = AppColors.orange,
             onClick = onAlbumClick,
             modifier = Modifier.weight(1f)
         )
@@ -150,7 +150,7 @@ private fun CollectorLabCardsRow(
             title = AppLocale.collectorChaseTitle,
             subtitle = chaseSubtitle,
             icon = Icons.Default.TrackChanges,
-            accent = RedCard,
+            accent = AppColors.red,
             onClick = onChaseClick,
             modifier = Modifier.weight(1f)
         )
@@ -171,7 +171,7 @@ private fun CollectorLabCard(
             .height(108.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkSurface)
+        colors = CardDefaults.cardColors(containerColor = AppColors.surface)
     ) {
         Column(
             modifier = Modifier
@@ -189,8 +189,8 @@ private fun CollectorLabCard(
                 Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
             }
             Column {
-                Text(title, color = TextWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Text(subtitle, color = TextMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(title, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(subtitle, color = AppColors.textMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -198,43 +198,10 @@ private fun CollectorLabCard(
 
 // ── New Chase Card (CTA) ──────────────────────────────────────────────────────
 
-@Composable
-private fun NewChaseCard(onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkSurface)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(OrangeCard.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = OrangeCard, modifier = Modifier.size(26.dp))
-            }
-            Column {
-                Text(AppLocale.newChaseLabel, color = OrangeCard, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text(AppLocale.newChaseSubtitle, color = TextMuted, fontSize = 12.sp)
-            }
-        }
-    }
-}
-
 // ── Chase Card ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ChaseCard(
+internal fun ChaseCard(
     goalAlbum: GoalAlbum,
     ownedCount: Int,
     onClick: () -> Unit,
@@ -248,7 +215,7 @@ private fun ChaseCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkSurface)
+        colors = CardDefaults.cardColors(containerColor = AppColors.surface)
     ) {
         Row(
             modifier = Modifier
@@ -261,18 +228,18 @@ private fun ChaseCard(
                 CircularProgressIndicator(
                     progress = { 1f },
                     modifier = Modifier.size(52.dp),
-                    color = DarkBackground,
+                    color = AppColors.background,
                     strokeWidth = 4.dp
                 )
                 CircularProgressIndicator(
                     progress = { pct / 100f },
                     modifier = Modifier.size(52.dp),
-                    color = OrangeCard,
+                    color = AppColors.orange,
                     strokeWidth = 4.dp
                 )
                 Text(
                     "${pct.toInt()}%",
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -283,20 +250,20 @@ private fun ChaseCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     goalAlbum.name,
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "$ownedCount / ${goalAlbum.targetCardApiIds.size} carte",
-                    color = TextMuted,
+                    AppLocale.chaseCardsProgress(ownedCount, goalAlbum.targetCardApiIds.size),
+                    color = AppColors.textMuted,
                     fontSize = 12.sp
                 )
                 Text(
                     goalAlbum.criteriaType.displayName() + (if (goalAlbum.criteriaValue.isNotBlank()) " · ${goalAlbum.criteriaValue}" else ""),
-                    color = TextMuted,
+                    color = AppColors.textMuted,
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -304,18 +271,18 @@ private fun ChaseCard(
             }
 
             IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Delete, contentDescription = AppLocale.delete, tint = TextMuted, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Delete, contentDescription = AppLocale.delete, tint = AppColors.textMuted, modifier = Modifier.size(18.dp))
             }
         }
     }
 }
 
-private fun com.emabuia.pokevault.data.model.GoalCriteriaType.displayName(): String = when (this) {
-    com.emabuia.pokevault.data.model.GoalCriteriaType.SET -> "Set"
-    com.emabuia.pokevault.data.model.GoalCriteriaType.RARITY -> "Rarità"
-    com.emabuia.pokevault.data.model.GoalCriteriaType.SUPERTYPE -> "Categoria"
-    com.emabuia.pokevault.data.model.GoalCriteriaType.TYPE -> "Tipo"
-    com.emabuia.pokevault.data.model.GoalCriteriaType.CUSTOM -> "Personalizzato"
+internal fun com.emabuia.pokevault.data.model.GoalCriteriaType.displayName(): String = when (this) {
+    com.emabuia.pokevault.data.model.GoalCriteriaType.SET -> AppLocale.criteriaSet
+    com.emabuia.pokevault.data.model.GoalCriteriaType.RARITY -> AppLocale.criteriaRarity
+    com.emabuia.pokevault.data.model.GoalCriteriaType.SUPERTYPE -> AppLocale.criteriaSupertype
+    com.emabuia.pokevault.data.model.GoalCriteriaType.TYPE -> AppLocale.criteriaType
+    com.emabuia.pokevault.data.model.GoalCriteriaType.CUSTOM -> AppLocale.criteriaCustom
 }
 
 @Composable
@@ -335,7 +302,7 @@ fun AlbumCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard)
+        colors = CardDefaults.cardColors(containerColor = AppColors.card)
     ) {
         Row(
             modifier = Modifier
@@ -379,7 +346,7 @@ fun AlbumCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = album.name,
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     maxLines = 1,
@@ -388,7 +355,7 @@ fun AlbumCard(
                 if (album.description.isNotBlank()) {
                     Text(
                         text = album.description,
-                        color = TextGray,
+                        color = AppColors.textSecondary,
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -398,7 +365,7 @@ fun AlbumCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = AppLocale.albumSlots(cardsCount, album.size),
-                        color = TextMuted,
+                        color = AppColors.textMuted,
                         fontSize = 12.sp
                     )
                     if (album.pokemonType.isNotBlank()) {
@@ -422,7 +389,7 @@ fun AlbumCard(
                     Icon(
                         Icons.Default.Edit,
                         contentDescription = AppLocale.editAlbum,
-                        tint = TextMuted,
+                        tint = AppColors.textMuted,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -433,7 +400,7 @@ fun AlbumCard(
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = AppLocale.delete,
-                        tint = TextMuted,
+                        tint = AppColors.textMuted,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -442,14 +409,6 @@ fun AlbumCard(
     }
 }
 
-fun getThemeColors(theme: String): List<Color> {
-    return when (theme) {
-        "fire" -> listOf(Color(0xFFEF4444), Color(0xFFFF8C00))
-        "water" -> listOf(Color(0xFF3B82F6), Color(0xFF06B6D4))
-        "grass" -> listOf(Color(0xFF22C55E), Color(0xFF84CC16))
-        "electric" -> listOf(Color(0xFFEAB308), Color(0xFFFBBF24))
-        "dark" -> listOf(Color(0xFF6B21A8), Color(0xFF4C1D95))
-        "psychic" -> listOf(Color(0xFFD946EF), Color(0xFF8B5CF6))
-        else -> listOf(OrangeCard, OrangeCard.copy(alpha = 0.7f)) // classic
-    }
-}
+/** Vedi [TypeColors]: i colori dei tipi stanno tutti in un punto solo. */
+@Composable
+fun getThemeColors(theme: String): List<Color> = TypeColors.gradientFor(theme)

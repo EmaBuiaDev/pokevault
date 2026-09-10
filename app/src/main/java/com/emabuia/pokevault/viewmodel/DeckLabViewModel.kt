@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
+import com.emabuia.pokevault.data.model.CardClassifier
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.DeckAnalysis
 import com.emabuia.pokevault.data.model.DeckImportParser
@@ -72,6 +73,29 @@ class DeckLabViewModel : ViewModel() {
         ownedCards.associate { it.id to getCardKey(it) }
     }
 
+    /** Indice per id: evita ownedCards.find { } dentro i loop di validazione. */
+    private val ownedCardsById by derivedStateOf {
+        ownedCards.associateBy { it.id }
+    }
+
+    /** Documenti posseduti raggruppati per chiave carta. */
+    private val ownedCardsByKey by derivedStateOf {
+        ownedCards.groupBy { getCardKey(it) }
+    }
+
+    /**
+     * Copie possedute per chiave carta.
+     *
+     * getTotalOwnedQuantity filtrava l'intera lista posseduta costruendo una
+     * stringa chiave per ogni elemento. Veniva chiamata anche dentro gli item
+     * di una LazyVerticalGrid a 5 colonne, cioe' per ogni cella visibile a ogni
+     * frame durante lo scroll, e in un loop da addAllCopiesToDeck.
+     */
+    private val ownedQuantitiesByKey by derivedStateOf {
+        ownedCards.groupingBy { getCardKey(it) }
+            .fold(0) { acc, card -> acc + card.quantity }
+    }
+
     // Counts of each card key currently in the deck
     private val deckQuantitiesByKey by derivedStateOf {
         selectedCardsIds.mapNotNull { cardIdToKeyMap[it] }
@@ -126,79 +150,11 @@ class DeckLabViewModel : ViewModel() {
     }
 
     fun getTotalOwnedQuantity(card: PokemonCard): Int {
-        val key = getCardKey(card)
-        return ownedCards.filter { getCardKey(it) == key }.sumOf { it.quantity }
+        return ownedQuantitiesByKey[getCardKey(card)] ?: 0
     }
 
-    fun classifyCard(card: PokemonCard): String {
-        val supertype = card.supertype.lowercase()
-        val type = card.type.lowercase()
-        val name = card.name.lowercase()
-        val subtypes = card.subtypes.map { it.lowercase() }
-
-        val hasEnergyMarker =
-            supertype.contains("energy") ||
-                supertype.contains("energ") ||
-                type.contains("energy") ||
-                type.contains("energia") ||
-                subtypes.any { it.contains("energy") || it.contains("energia") } ||
-                name.contains("energy") ||
-                name.contains("energia")
-        if (hasEnergyMarker) return "Energy"
-
-        val hasTrainerMarker =
-            supertype.contains("trainer") ||
-                supertype.contains("allenat") ||
-                supertype.contains("aiuto") ||
-                type.contains("trainer") ||
-                type.contains("supporter") ||
-                type.contains("item") ||
-                type.contains("stadium") ||
-                type.contains("tool") ||
-                type.contains("allenat") ||
-                type.contains("aiuto") ||
-                type.contains("stadio") ||
-                type.contains("strumento") ||
-                subtypes.any {
-                    it == "item" ||
-                        it == "stadium" ||
-                        it == "supporter" ||
-                        it == "tool" ||
-                        it == "strumento" ||
-                        it == "stadio" ||
-                        it == "aiuto"
-                }
-
-        val hasPokemonSubtypeMarker = subtypes.any {
-            it == "basic" ||
-                it == "stage 1" ||
-                it == "stage 2" ||
-                it == "baby" ||
-                it == "ex" ||
-                it == "v" ||
-                it == "vmax" ||
-                it == "vstar"
-        }
-        val hasPokemonTypeMarker =
-            type in listOf(
-                "grass", "fire", "water", "lightning", "electric", "fighting",
-                "psychic", "darkness", "metal", "dragon", "fairy"
-            )
-        val hasExplicitPokemonSupertype = supertype.contains("pok")
-        val hasStrongPokemonMarker =
-            card.hp > 0 ||
-                hasPokemonSubtypeMarker ||
-                hasPokemonTypeMarker
-
-        if (hasTrainerMarker && !hasStrongPokemonMarker) return "Trainer"
-        if (hasStrongPokemonMarker) return "Pokémon"
-
-        // Legacy fallback: molte carte erano salvate con supertype=Pokémon di default.
-        // Consideriamo Pokémon solo se supertype è esplicito e non ci sono segnali da Trainer.
-        if (hasExplicitPokemonSupertype && !hasTrainerMarker && type != "colorless") return "Pokémon"
-
-        return "Trainer"
-    }
+    /** Vedi [CardClassifier]: implementazione unica condivisa da tutta l'app. */
+    fun classifyCard(card: PokemonCard): String = CardClassifier.classify(card)
 
     private fun isEnergy(card: PokemonCard): Boolean {
         return classifyCard(card) == "Energy"
@@ -220,8 +176,11 @@ class DeckLabViewModel : ViewModel() {
         }
 
         if (!isEnergy(card)) {
+            // Era ownedCards.find { } per ogni carta gia' nel deck, cioe'
+            // O(deck x possedute) a ogni tocco -- e addAllCopiesToDeck chiama
+            // questa funzione fino a 60 volte di fila.
             val sameNameCount = selectedCardsIds.count { id ->
-                ownedCards.find { it.id == id }?.name == card.name
+                ownedCardsById[id]?.name == card.name
             }
             if (sameNameCount >= 4) {
                 validationError = "Massimo 4 copie di ${card.name}."
@@ -229,8 +188,8 @@ class DeckLabViewModel : ViewModel() {
             }
         }
 
-        val availableId = ownedCards
-            .filter { getCardKey(it) == key }
+        val availableId = ownedCardsByKey[key]
+            .orEmpty()
             .firstOrNull { doc ->
                 val docInDeckCount = selectedCardsIds.count { it == doc.id }
                 docInDeckCount < doc.quantity

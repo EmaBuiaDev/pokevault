@@ -43,7 +43,9 @@ class GoalAlbumViewModel : ViewModel() {
     var ownedCards by mutableStateOf<List<PokemonCard>>(emptyList())
         private set
 
-    var isLoading by mutableStateOf(false)
+    // Parte a true: il loader viene avviato in init, quindi al primo frame
+    // stiamo gia' caricando. Con false, un dettaglio lampeggiava "non trovato".
+    var isLoading by mutableStateOf(true)
         private set
 
     var isSaving by mutableStateOf(false)
@@ -119,6 +121,23 @@ class GoalAlbumViewModel : ViewModel() {
     }
 
     // ── Progress ───────────────────────────────────────────────────────────
+
+    /**
+     * Quante carte obiettivo l'utente possiede, senza bisogno delle TcgCard.
+     *
+     * Serve alla lista chase, che deve mostrare l'avanzamento senza scaricare
+     * le carte di ogni chase: getProgress richiede targetCards, che arrivano
+     * dalla rete solo nel dettaglio.
+     */
+    fun getOwnedTargetCount(album: GoalAlbum): Int {
+        if (album.targetCardApiIds.isEmpty()) return 0
+        val ownedIds = ownedCards
+            .asSequence()
+            .filter { it.quantity >= 1 }
+            .map { it.apiCardId.trim() }
+            .toHashSet()
+        return album.targetCardApiIds.count { it in ownedIds }
+    }
 
     /**
      * Calcola il progresso on-the-fly confrontando targetCardApiIds con

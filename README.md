@@ -62,3 +62,11 @@ ingest e comandi di troubleshooting nel suo
 Un elenco vivo di bug noti, pulizia repository e lavoro rimandato è nella
 sezione 8 di [`MIGRATION_PLAN.md`](MIGRATION_PLAN.md#8-lista-bugfix-e-pulizia-m7).
 Non duplicato qui per evitare che i due documenti divergano.
+
+## Convenzioni di codice
+
+- **Colori**: token in `ui/theme/`, con tema chiaro e scuro. Vanno letti da
+  `AppColors`, mai scritti come costanti fisse nei composable. Dentro lo scope
+  di disegno di `Canvas` i token vanno risolti prima, non letti nel blocco.
+- **Testi dell'interfaccia**: `util/AppLocale.kt`. Il progetto non usa
+  `res/values-*/strings.xml` per le stringhe della UI.

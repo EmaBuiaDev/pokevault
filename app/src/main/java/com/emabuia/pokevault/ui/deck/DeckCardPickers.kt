@@ -49,7 +49,7 @@ fun CardSelectionItem(
             .border(
                 BorderStroke(
                     if (pendingSelectionCount > 0) 2.dp else if (inDeckCount > 0 && isEditable) 2.dp else 1.dp,
-                    if (pendingSelectionCount > 0) YellowCard else if (inDeckCount > 0 && isEditable) BlueCard else Color.White.copy(alpha = 0.1f)
+                    if (pendingSelectionCount > 0) AppColors.yellow else if (inDeckCount > 0 && isEditable) AppColors.blue else Color.White.copy(alpha = 0.1f)
                 ),
                 RoundedCornerShape(8.dp)
             )
@@ -72,9 +72,9 @@ fun CardSelectionItem(
         }
 
         if (pendingSelectionCount > 0) {
-            Box(modifier = Modifier.fillMaxSize().background(YellowCard.copy(alpha = 0.18f)))
+            Box(modifier = Modifier.fillMaxSize().background(AppColors.yellow.copy(alpha = 0.18f)))
             Surface(
-                color = YellowCard,
+                color = AppColors.yellow,
                 shape = CircleShape,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -85,7 +85,7 @@ fun CardSelectionItem(
                 Box(contentAlignment = Alignment.Center) {
                     Text(
                         text = pendingSelectionCount.toString(),
-                        color = TextWhite,
+                        color = AppColors.textPrimary,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Black
                     )
@@ -95,7 +95,7 @@ fun CardSelectionItem(
 
         if (inDeckCount > 0 && isEditable) {
             Surface(
-                color = BlueCard,
+                color = AppColors.blue,
                 shape = CircleShape,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -141,7 +141,7 @@ fun TcgCardSearchItem(
         modifier = Modifier
             .aspectRatio(0.71f)
             .clip(RoundedCornerShape(8.dp))
-            .border(BorderStroke(1.dp, PurpleCard.copy(alpha = 0.5f)), RoundedCornerShape(8.dp))
+            .border(BorderStroke(1.dp, AppColors.purple.copy(alpha = 0.5f)), RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
     ) {
         AsyncImage(
@@ -163,7 +163,7 @@ fun TcgCardSearchItem(
             ) {
                 Text(
                     text = setName,
-                    color = TextWhite,
+                    color = AppColors.textPrimary,
                     fontSize = 8.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -172,7 +172,7 @@ fun TcgCardSearchItem(
             }
         }
         Surface(
-            color = PurpleCard,
+            color = AppColors.purple,
             shape = CircleShape,
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -180,7 +180,7 @@ fun TcgCardSearchItem(
                 .size(20.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Add, contentDescription = AppLocale.add, tint = TextWhite, modifier = Modifier.size(12.dp))
+                Icon(Icons.Default.Add, contentDescription = AppLocale.add, tint = AppColors.textPrimary, modifier = Modifier.size(12.dp))
             }
         }
     }

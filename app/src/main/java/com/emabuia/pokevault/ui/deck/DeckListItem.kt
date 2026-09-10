@@ -38,7 +38,7 @@ import com.emabuia.pokevault.ui.theme.*
 fun DeckItem(
     deck: Deck,
     onClick: () -> Unit,
-    allOwnedCards: List<PokemonCard>
+    ownedById: Map<String, PokemonCard>
 ) {
     val deckCardAnimation = rememberInfiniteTransition(label = "deckCardBackgroundAnimation")
     val sheenOffset by deckCardAnimation.animateFloat(
@@ -62,8 +62,11 @@ fun DeckItem(
 
     val coverUrls = remember(deck) { deck.displayCoverImageUrls() }
     val cardCounts = remember(deck.cards) { deck.cards.groupingBy { it }.eachCount() }
-    val uniqueDeckCards = remember(deck.cards, allOwnedCards) {
-        allOwnedCards.filter { it.id in cardCounts.keys }
+    // Indice precalcolato dal chiamante: prima ogni riga della lista filtrava
+    // l'intera collezione posseduta, quindi il costo cresceva con
+    // (numero di mazzi x carte possedute) a ogni ricomposizione.
+    val uniqueDeckCards = remember(cardCounts, ownedById) {
+        cardCounts.keys.mapNotNull { ownedById[it] }
     }
 
     fun classifyForDeckSections(card: PokemonCard): String {
@@ -148,7 +151,7 @@ fun DeckItem(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        colors = CardDefaults.cardColors(containerColor = AppColors.card),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Box(
@@ -182,7 +185,7 @@ fun DeckItem(
                                 listOf(
                                     Color(0xFF10151F),
                                     Color(0xFF1C2D44),
-                                    BlueCard.copy(alpha = 0.28f)
+                                    AppColors.blue.copy(alpha = 0.28f)
                                 )
                             )
                         )
@@ -196,7 +199,7 @@ fun DeckItem(
                         Brush.horizontalGradient(
                             colors = listOf(
                                 Color(0xFF0E1A29).copy(alpha = 0.14f),
-                                BlueCard.copy(alpha = 0.08f),
+                                AppColors.blue.copy(alpha = 0.08f),
                                 Color(0xFF0D131E).copy(alpha = 0.16f)
                             )
                         )
@@ -227,7 +230,7 @@ fun DeckItem(
                         translationY = 12f
                     )
                     .background(
-                        color = BlueCard.copy(alpha = glowAlpha),
+                        color = AppColors.blue.copy(alpha = glowAlpha),
                         shape = CircleShape
                     )
             )
@@ -307,7 +310,7 @@ fun DeckItem(
                 )
                 Text(
                     text = "$pokemonCount Pokémon • $trainerCount Trainer • $energyCount Energy",
-                    color = BlueCard,
+                    color = AppColors.blue,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
