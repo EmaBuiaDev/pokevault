@@ -828,56 +828,6 @@ private fun CompactMarketplaceHeaderButtonBottomSheet(
     }
 }
 
-@Composable
-private fun MarketplaceLinkButtonBottomSheet(
-    label: String,
-    url: String?,
-    modifier: Modifier = Modifier,
-    onOpenUrl: (String) -> Unit
-) {
-    val isEnabled = !url.isNullOrBlank()
-
-    Surface(
-        modifier = modifier,
-        onClick = {
-            if (isEnabled) {
-                onOpenUrl(url!!)
-            }
-        },
-        enabled = isEnabled,
-        shape = RoundedCornerShape(12.dp),
-        color = if (isEnabled) AppColors.blue.copy(alpha = 0.14f) else AppColors.surface,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (isEnabled) AppColors.blue.copy(alpha = 0.45f) else AppColors.textMuted.copy(alpha = 0.25f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                color = if (isEnabled) AppColors.textPrimary else AppColors.textMuted,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 11.sp,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                contentDescription = if (isEnabled) "Open $label" else "$label unavailable",
-                tint = if (isEnabled) AppColors.blue else AppColors.textMuted.copy(alpha = 0.7f),
-                modifier = Modifier.size(12.dp)
-            )
-        }
-    }
-}
-
 /** Vedi [TypeColors]: i colori dei tipi stanno tutti in un punto solo. */
 @Composable
 fun getTypeColorForTcg(type: String?): Color = TypeColors.of(type)

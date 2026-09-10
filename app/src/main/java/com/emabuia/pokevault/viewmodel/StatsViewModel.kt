@@ -20,8 +20,7 @@ import kotlinx.coroutines.withContext
 data class SetCompletion(
     val setName: String,
     val ownedUnique: Int,
-    val totalCards: Int,
-    val symbolUrl: String? = null
+    val totalCards: Int
 ) {
     /**
      * Limitata a 0..1: e' usata direttamente come frazione in
@@ -128,7 +127,7 @@ class StatsViewModel : ViewModel() {
                     .distinct()
                     .count()
                 val tcgSet = setsByName[rawSetName] ?: setsByName[displayName]
-                SetCompletion(displayName, uniqueOwned, tcgSet?.total ?: 0, tcgSet?.images?.symbol)
+                SetCompletion(displayName, uniqueOwned, tcgSet?.total ?: 0)
             }
             .filter { it.totalCards > 0 }
             .sortedByDescending { it.percentage }

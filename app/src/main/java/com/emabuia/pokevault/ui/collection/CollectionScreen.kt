@@ -1204,105 +1204,6 @@ private fun ExpansionAccordionHeader(
 }
 
 @Composable
-fun ExpansionAccordionSection(
-    expansionName: String,
-    totalCards: Int,
-    uniqueCards: Int,
-    isCollapsed: Boolean,
-    onToggle: () -> Unit,
-    content: @Composable () -> Unit
-) {
-    Surface(
-        color = AppColors.card,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onToggle)
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = AppColors.blue.copy(alpha = 0.15f),
-                    border = BorderStroke(1.dp, AppColors.blue.copy(alpha = 0.25f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesomeMosaic,
-                        contentDescription = null,
-                        tint = AppColors.blue,
-                        modifier = Modifier.padding(6.dp).size(14.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = expansionName,
-                            color = AppColors.textPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = AppColors.blue.copy(alpha = 0.2f),
-                            border = BorderStroke(1.dp, AppColors.blue.copy(alpha = 0.3f))
-                        ) {
-                            Text(
-                                text = "x$totalCards",
-                                color = AppColors.blue,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                    Text(
-                        text = "$uniqueCards uniche · $totalCards tot.",
-                        color = AppColors.textMuted,
-                        fontSize = 11.sp
-                    )
-                }
-                Icon(
-                    imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                    contentDescription = null,
-                    tint = AppColors.textMuted,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            AnimatedVisibility(
-                visible = !isCollapsed,
-                enter = expandVertically(),
-                exit = shrinkVertically()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp)
-                ) {
-                    content()
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun FilterSectionCard(
     title: String,
     icon: ImageVector,
@@ -1333,17 +1234,6 @@ fun FilterSectionCard(
             )
         }
     }
-}
-
-@Composable
-fun FilterSectionTitle(title: String) {
-    Text(
-        text = title,
-        color = AppColors.textMuted,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-    )
 }
 
 @Composable

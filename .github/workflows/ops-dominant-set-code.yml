@@ -1,5 +1,10 @@
 name: Ops - dominant_set_code migration + backfill + deploy
 
+# STATO: gia' eseguito in produzione il 2026-09-07 (vedi il checkpoint in
+# MIGRATION_PLAN.md e il commit 086ec07). Resta qui perche' e' idempotente e
+# puo' servire per ricostruire un ambiente da zero, ma NON va rieseguito
+# sull'ambiente di produzione senza un motivo preciso.
+
 # One-off/reusable operator utility: applies schema/003_add_dominant_set_code.sql
 # to D1, backfills expansions.dominant_set_code for all existing expansions from
 # the current catalog blob on R2, then deploys the Worker so GET /v1/expansions

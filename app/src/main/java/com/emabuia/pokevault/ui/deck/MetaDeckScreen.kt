@@ -36,12 +36,6 @@ import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
 import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MetaDeckSection(
-    viewModel: MetaDeckViewModel,
-    onImportDeck: ((MetaDeck) -> Unit)? = null,
-    onPremiumRequired: () -> Unit = {}
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
     val selectedDeck = viewModel.selectedDeck
@@ -70,10 +64,6 @@ fun MetaDeckSection(
     }
 }
 
-@Composable
-fun MetaDeckListView(
-    viewModel: MetaDeckViewModel,
-    onSelectDeck: (MetaDeck) -> Unit = { viewModel.selectDeck(it) }
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()

@@ -197,39 +197,6 @@ private fun CollectorLabCard(
 
 // ── New Chase Card (CTA) ──────────────────────────────────────────────────────
 
-@Composable
-private fun NewChaseCard(onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = AppColors.surface)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(AppColors.orange.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = AppColors.orange, modifier = Modifier.size(26.dp))
-            }
-            Column {
-                Text(AppLocale.newChaseLabel, color = AppColors.orange, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text(AppLocale.newChaseSubtitle, color = AppColors.textMuted, fontSize = 12.sp)
-            }
-        }
-    }
-}
-
 // ── Chase Card ────────────────────────────────────────────────────────────────
 
 @Composable

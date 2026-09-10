@@ -45,6 +45,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Senza questo testDebugUnitTest non produce alcun file .exec,
+            // quindi il report Jacoco risulterebbe vuoto.
+            enableUnitTestCoverage = true
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -166,7 +171,6 @@ dependencies {
     implementation(libs.accompanist.permissions)
 
     // ── Splash Screen ──
-    implementation(libs.androidx.core.splashscreen)
 
     // ── Google Play Billing ──
     implementation(libs.billing.ktx)
@@ -206,4 +210,44 @@ dependencies {
 // Configurazione Jacoco per Code Coverage
 jacoco {
     toolVersion = "0.8.11"
+}
+
+/**
+ * Report di coverage per la variante debug.
+ *
+ * Il plugin jacoco era applicato ma nessun task JacocoReport era registrato:
+ * AGP non li crea da solo per variante. Di conseguenza
+ * `jacocoTestDebugUnitTestReport`, invocato da android-advanced-tests.yml,
+ * non esisteva e quel workflow falliva prima ancora di eseguire i test.
+ */
+tasks.register<JacocoReport>("jacocoTestDebugUnitTestReport") {
+    dependsOn("testDebugUnitTest")
+    group = "verification"
+    description = "Genera il report Jacoco per i test unitari della variante debug."
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+
+    // Codice generato: escluso, altrimenti falsa la percentuale.
+    val excludes = listOf(
+        "**/R.class", "**/R$*.class", "**/BuildConfig.*", "**/Manifest*.*",
+        "**/*Test*.*", "android/**/*.*",
+        "**/*_Factory.*", "**/*_MembersInjector.*",
+        "**/*Composable*.class",
+        "**/databinding/**", "**/generated/**",
+        "**/*_Impl*.*"          // DAO generati da Room
+    )
+
+    classDirectories.setFrom(
+        files(
+            fileTree("${layout.buildDirectory.get()}/tmp/kotlin-classes/debug") { exclude(excludes) },
+            fileTree("${layout.buildDirectory.get()}/intermediates/javac/debug/classes") { exclude(excludes) }
+        )
+    )
+    sourceDirectories.setFrom(files("$projectDir/src/main/java"))
+    executionData.setFrom(
+        fileTree(layout.buildDirectory) { include("**/*.exec", "**/*.ec") }
+    )
 }

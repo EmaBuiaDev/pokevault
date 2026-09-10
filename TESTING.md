@@ -359,7 +359,12 @@ Metriche importanti:
 - Branch Coverage: % di branch (if/else) testati
 - Method Coverage: % di metodi testati
 
-✅ Target minimo: 70% line coverage
+⚠️ Non esiste alcun gate di coverage nel progetto: il plugin jacoco e'
+applicato in app/build.gradle.kts ma nessun task JacocoReport e' registrato,
+quindi `jacocoTestDebugUnitTestReport` (invocato da android-advanced-tests.yml)
+non esiste. Il 70% qui sotto e' un obiettivo, non un controllo automatico.
+
+Obiettivo indicativo: 70% line coverage
 ```
 
 ### Report Instrumentati

@@ -1832,48 +1832,6 @@ fun TcgCardSearchItem(
     }
 }
 
-@Composable
-fun AnalysisSection(viewModel: DeckLabViewModel) {
-    val analysis = viewModel.currentAnalysis
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(AppColors.card)
-            .padding(12.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Analytics, contentDescription = null, tint = AppColors.lavender, modifier = Modifier.size(14.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(text = "Analisi Lab", color = AppColors.lavender, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        }
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            AnalysisInfoItem("Media HP", analysis.averageHp.toInt().toString())
-            AnalysisInfoItem("Tipi", analysis.typesCount.size.toString())
-            
-            val p = analysis.supertypesCount["Pokémon"] ?: 0
-            val t = (analysis.supertypesCount["Trainer"] ?: 0)
-            val e = analysis.supertypesCount["Energy"] ?: 0
-            
-            Column(horizontalAlignment = Alignment.End) {
-                Text(text = "Ripartizione", color = AppColors.textMuted, fontSize = 10.sp)
-                Text(text = "$p Pokémon / $t Trainer / $e Energy", color = AppColors.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
-fun AnalysisInfoItem(label: String, value: String) {
-    Column {
-        Text(text = label, color = AppColors.textMuted, fontSize = 10.sp)
-        Text(text = value, color = AppColors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
 // ══════════════════════════════════════
 // IMPORT DIALOGS
 // ══════════════════════════════════════

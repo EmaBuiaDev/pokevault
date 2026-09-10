@@ -48,7 +48,6 @@ import com.emabuia.pokevault.ui.collection.AddCardScreen
 import com.emabuia.pokevault.ui.collection.CardDetailScreen
 import com.emabuia.pokevault.ui.collection.CollectionScreen
 import com.emabuia.pokevault.ui.home.HomeScreen
-import com.emabuia.pokevault.ui.placeholder.PlaceholderScreen
 import com.emabuia.pokevault.ui.pokedex.SetDetailScreen
 import com.emabuia.pokevault.ui.pokedex.SetsListScreen
 import com.emabuia.pokevault.ui.graded.GradedCardsScreen
