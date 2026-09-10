@@ -12,8 +12,13 @@ import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.data.remote.PokeTcgRepository
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
+import com.emabuia.pokevault.data.model.CardClassifier
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class SortOrder {
     NEWEST, PRICE_ASC, PRICE_DESC, NAME_ASC, NUMBER
@@ -52,6 +57,9 @@ class CollectionViewModel : ViewModel() {
     var uiState by mutableStateOf(CollectionUiState())
         private set
 
+    private var filterJob: Job? = null
+    private var hydrationJob: Job? = null
+
     init {
         loadCards()
     }
@@ -67,28 +75,44 @@ class CollectionViewModel : ViewModel() {
                 }
                 .collect { cards ->
                     applyCardsSnapshot(cards)
-
-                    hydrateMissingPrices(cards)
+                    scheduleMissingPriceHydration(cards)
                 }
         }
     }
 
-    private fun applyCardsSnapshot(cards: List<PokemonCard>) {
-        val newStats = CollectionStats(
-            totalCards = cards.sumOf { it.quantity },
-            uniqueCards = cards.map { it.collectionGroupKey() }.toSet().size,
-            totalValue = cards.sumOf { it.estimatedValue * it.quantity }
-        )
+    private suspend fun applyCardsSnapshot(cards: List<PokemonCard>) {
+        val criteria = uiState
+        // Statistiche e filtro scorrono l'intera collezione: su Dispatchers.Default,
+        // non sul main thread come prima.
+        val (newStats, filtered) = withContext(Dispatchers.Default) {
+            val stats = CollectionStats(
+                totalCards = cards.sumOf { it.quantity },
+                uniqueCards = cards.map { it.collectionGroupKey() }.toSet().size,
+                totalValue = cards.sumOf { it.estimatedValue * it.quantity }
+            )
+            stats to applyFilters(cards, criteria)
+        }
 
         uiState = uiState.copy(
             cards = cards,
-            filteredCards = applyFilters(cards),
+            filteredCards = filtered,
             stats = newStats,
             isLoading = false
         )
     }
 
-    private fun hydrateMissingPrices(cards: List<PokemonCard>) {
+    /**
+     * Recupera i prezzi mancanti, un lotto alla volta.
+     *
+     * Girava dentro il collector dello snapshot, e ogni updateCard provoca un
+     * nuovo snapshot: era un ciclo di amplificazione delle scritture, tenuto a
+     * bada solo dai due insiemi di guardia. Ora un lotto alla volta: finche' il
+     * giro precedente e' in corso i nuovi snapshot non ne avviano altri, e il
+     * successivo riparte dallo snapshot che il giro stesso ha prodotto.
+     */
+    private fun scheduleMissingPriceHydration(cards: List<PokemonCard>) {
+        if (hydrationJob?.isActive == true) return
+
         val candidates = cards
             .filter { card ->
                 card.estimatedValue <= 0.0 &&
@@ -96,11 +120,11 @@ class CollectionViewModel : ViewModel() {
                     card.id !in hydratedPriceCardIds &&
                     card.id !in hydratingPriceCardIds
             }
-            .take(8)
+            .take(PRICE_HYDRATION_BATCH_SIZE)
 
         if (candidates.isEmpty()) return
 
-        viewModelScope.launch {
+        hydrationJob = viewModelScope.launch {
             candidates.forEach { card ->
                 hydratingPriceCardIds += card.id
                 try {
@@ -120,7 +144,9 @@ class CollectionViewModel : ViewModel() {
 
     fun updateSearchQuery(query: String) {
         uiState = uiState.copy(searchQuery = query)
-        refreshFilteredCards()
+        // Con debounce: prima ogni tasto premuto rifiltrava e riordinava l'intera
+        // collezione in modo sincrono sul main thread.
+        refreshFilteredCards(debounceMs = SEARCH_DEBOUNCE_MS)
     }
 
     fun filterBySet(setName: String?) {
@@ -152,10 +178,15 @@ class CollectionViewModel : ViewModel() {
         refreshFilteredCards()
     }
 
-    private fun refreshFilteredCards() {
-        uiState = uiState.copy(
-            filteredCards = applyFilters(uiState.cards)
-        )
+    private fun refreshFilteredCards(debounceMs: Long = 0L) {
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
+            if (debounceMs > 0L) delay(debounceMs)
+            val source = uiState.cards
+            val criteria = uiState
+            val filtered = withContext(Dispatchers.Default) { applyFilters(source, criteria) }
+            uiState = uiState.copy(filteredCards = filtered)
+        }
     }
 
     fun toggleViewMode() {
@@ -220,52 +251,57 @@ class CollectionViewModel : ViewModel() {
             .replace(Regex("\\s+"), " ")
     }
 
-    private fun applyFilters(cards: List<PokemonCard>): List<PokemonCard> {
+    /**
+     * Filtro e ordinamento della collezione.
+     *
+     * Prende i criteri come parametro invece di leggere uiState: viene eseguita
+     * su Dispatchers.Default, e leggere lo stato da un altro thread mentre
+     * l'utente continua a digitare avrebbe potuto mischiare criteri di due
+     * ricerche diverse a meta' calcolo.
+     */
+    private fun applyFilters(
+        cards: List<PokemonCard>,
+        criteria: CollectionUiState
+    ): List<PokemonCard> {
+        val query = criteria.searchQuery
+        val hasQuery = query.isNotBlank()
+        // Normalizzazioni e liste di marcatori sollevate fuori dal loop: prima
+        // venivano ricostruite per ogni carta a ogni tasto premuto.
+        val selectedSetNormalized = criteria.selectedSet?.let { normalizeSetForFilter(it) }
+        val unknownSetNormalized = normalizeSetForFilter("Espansione sconosciuta")
+
         val filtered = cards.filter { card ->
-            val matchesQuery = uiState.searchQuery.isBlank() ||
-                card.name.contains(uiState.searchQuery, ignoreCase = true) ||
-                card.set.contains(uiState.searchQuery, ignoreCase = true) ||
-                card.rarity.contains(uiState.searchQuery, ignoreCase = true)
-            
-            val selectedSetNormalized = normalizeSetForFilter(uiState.selectedSet)
-            val cardRawSetNormalized = normalizeSetForFilter(card.set)
-            val matchesSet = uiState.selectedSet == null ||
-                selectedSetNormalized == cardRawSetNormalized ||
-                (selectedSetNormalized == normalizeSetForFilter("Espansione sconosciuta") && card.set.isBlank())
-            
-            // Il filtro tipo si applica solo nel contesto Pokémon.
+            val matchesQuery = !hasQuery ||
+                card.name.contains(query, ignoreCase = true) ||
+                card.set.contains(query, ignoreCase = true) ||
+                card.rarity.contains(query, ignoreCase = true)
+
+            val matchesSet = selectedSetNormalized == null ||
+                selectedSetNormalized == normalizeSetForFilter(card.set) ||
+                (selectedSetNormalized == unknownSetNormalized && card.set.isBlank())
+
+            // Il filtro tipo si applica solo nel contesto Pokemon.
             val matchesType = when {
-                uiState.selectedType == null -> true
-                uiState.supertypeFilter == SupertypeFilter.TRAINER || uiState.supertypeFilter == SupertypeFilter.ENERGY -> true
-                else -> AppLocale.translateType(card.type).equals(uiState.selectedType, ignoreCase = true)
-            }
-            
-            val matchesRarity = uiState.selectedRarity == null ||
-                card.rarity.equals(uiState.selectedRarity, ignoreCase = true)
-
-            val supertypeLower = card.supertype.lowercase()
-            val typeLower = card.type.lowercase()
-            val subtypeLower = card.subtypes.map { it.lowercase() }
-            val trainerMarkers = listOf("trainer", "allenat", "supporter", "item", "stadium", "stadio", "tool", "strumento", "aiuto")
-            val energyMarkers = listOf("energy", "energia", "energ")
-            val hasTrainerMarkers = trainerMarkers.any { marker ->
-                supertypeLower.contains(marker) || typeLower.contains(marker) || subtypeLower.any { it.contains(marker) }
-            }
-            val hasEnergyMarkers = energyMarkers.any { marker ->
-                supertypeLower.contains(marker) || typeLower.contains(marker) || subtypeLower.any { it.contains(marker) }
+                criteria.selectedType == null -> true
+                criteria.supertypeFilter == SupertypeFilter.TRAINER ||
+                    criteria.supertypeFilter == SupertypeFilter.ENERGY -> true
+                else -> AppLocale.translateType(card.type).equals(criteria.selectedType, ignoreCase = true)
             }
 
-            val matchesSupertype = when (uiState.supertypeFilter) {
+            val matchesRarity = criteria.selectedRarity == null ||
+                card.rarity.equals(criteria.selectedRarity, ignoreCase = true)
+
+            val matchesSupertype = when (criteria.supertypeFilter) {
                 SupertypeFilter.ALL -> true
-                SupertypeFilter.POKEMON -> !hasTrainerMarkers && !hasEnergyMarkers && card.classify() == "Pokémon"
-                SupertypeFilter.TRAINER -> hasTrainerMarkers || card.classify() == "Trainer"
-                SupertypeFilter.ENERGY -> hasEnergyMarkers || card.classify() == "Energy"
+                SupertypeFilter.POKEMON -> card.classify() == CardClassifier.POKEMON
+                SupertypeFilter.TRAINER -> card.classify() == CardClassifier.TRAINER
+                SupertypeFilter.ENERGY -> card.classify() == CardClassifier.ENERGY
             }
 
             matchesQuery && matchesSet && matchesType && matchesRarity && matchesSupertype
         }
 
-        return when (uiState.sortOrder) {
+        return when (criteria.sortOrder) {
             // getCards() non ha un orderBy, quindi Firestore restituisce ordine di
             // document-id: il precedente reversed() "assumendo che l'ordine sia
             // cronologico" produceva un ordinamento di fatto arbitrario.
@@ -276,7 +312,24 @@ class CollectionViewModel : ViewModel() {
             SortOrder.PRICE_ASC -> filtered.sortedBy { it.estimatedValue }
             SortOrder.PRICE_DESC -> filtered.sortedByDescending { it.estimatedValue }
             SortOrder.NAME_ASC -> filtered.sortedBy { it.name }
-            SortOrder.NUMBER -> filtered.sortedBy { it.cardNumber.toIntOrNull() ?: Int.MAX_VALUE }
+            SortOrder.NUMBER -> filtered.sortedWith(cardNumberComparator)
         }
     }
+
+    /**
+     * Ordinamento per numero di carta allineato a quello della vista raggruppata
+     * (CollectionScreen): la parte numerica si confronta come numero, il resto
+     * come testo. Il precedente sortedBy { cardNumber.toIntOrNull() ?: MAX_VALUE }
+     * ammassava insieme ogni numero non puramente numerico ("TG12", "025/198"),
+     * e dava un ordine diverso da quello mostrato nella vista per espansione.
+     */
+    private companion object {
+        const val SEARCH_DEBOUNCE_MS = 250L
+        const val PRICE_HYDRATION_BATCH_SIZE = 8
+    }
+
+    private val cardNumberComparator = compareBy<PokemonCard>(
+        { it.cardNumber.takeWhile { c -> c.isDigit() }.toIntOrNull() ?: Int.MAX_VALUE },
+        { it.cardNumber }
+    )
 }

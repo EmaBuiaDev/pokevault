@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -91,6 +92,22 @@ private enum class ExpansionSortOrder {
     BY_TOTAL_CARDS_DESC,
     BY_TOTAL_CARDS_ASC
 }
+
+/**
+ * Una sezione dell'accordion per espansione, con gli aggregati gia' calcolati.
+ *
+ * Totali e righe della griglia venivano ricalcolati dentro il builder della
+ * LazyColumn, quindi su tutte le carte di tutte le espansioni a ogni
+ * ricomposizione del contenuto. Qui sono calcolati una volta sola, dentro il
+ * remember che costruisce le sezioni.
+ */
+private data class ExpansionSection(
+    val name: String,
+    val groups: List<Pair<String, List<PokemonCard>>>,
+    val totalQuantity: Int,
+    val totalValue: Double,
+    val gridRows: List<List<Pair<String, List<PokemonCard>>>>
+)
 
 @Composable
 private fun CollectionCardImageFallback(card: PokemonCard, compact: Boolean) {
@@ -403,18 +420,35 @@ fun CollectionScreen(
                             Text(AppLocale.emptyCollectionTitle, color = TextMuted)
                         }
                     } else {
-                        val expansionSections = remember(groupedByExpansion, expansionSortOrder) {
+                        // Totali e righe della griglia precalcolati qui, non dentro il
+                        // builder della LazyColumn: prima venivano risommati su tutte le
+                        // carte di tutte le espansioni a ogni ricomposizione del
+                        // contenuto, e chunked() riallocava una lista di liste per ogni
+                        // sezione espansa.
+                        val expansionSections = remember(groupedByExpansion, expansionSortOrder, state.gridColumns) {
                             groupedByExpansion
                                 .toList()
+                                .map { (name, groups) ->
+                                    ExpansionSection(
+                                        name = name,
+                                        groups = groups,
+                                        totalQuantity = groups.sumOf { (_, cards) -> cards.sumOf { it.quantity } },
+                                        totalValue = groups.sumOf { (_, cards) ->
+                                            cards.sumOf { card -> card.estimatedValue * card.quantity }
+                                        },
+                                        gridRows = groups.chunked(state.gridColumns)
+                                    )
+                                }
                                 .sortedWith(
                                     when (expansionSortOrder) {
-                                        ExpansionSortOrder.BY_NAME_ASC -> compareBy { it.first.lowercase() }
-                                        ExpansionSortOrder.BY_TOTAL_CARDS_DESC -> compareByDescending<Pair<String, List<Pair<String, List<PokemonCard>>>>> {
-                                            it.second.sumOf { (_, cards) -> cards.sumOf { card -> card.quantity } }
-                                        }.thenBy { it.first.lowercase() }
-                                        ExpansionSortOrder.BY_TOTAL_CARDS_ASC -> compareBy<Pair<String, List<Pair<String, List<PokemonCard>>>>> {
-                                            it.second.sumOf { (_, cards) -> cards.sumOf { card -> card.quantity } }
-                                        }.thenBy { it.first.lowercase() }
+                                        ExpansionSortOrder.BY_NAME_ASC ->
+                                            compareBy { it.name.lowercase() }
+                                        ExpansionSortOrder.BY_TOTAL_CARDS_DESC ->
+                                            compareByDescending<ExpansionSection> { it.totalQuantity }
+                                                .thenBy { it.name.lowercase() }
+                                        ExpansionSortOrder.BY_TOTAL_CARDS_ASC ->
+                                            compareBy<ExpansionSection> { it.totalQuantity }
+                                                .thenBy { it.name.lowercase() }
                                     }
                                 )
                         }
@@ -429,11 +463,11 @@ fun CollectionScreen(
                                 bottom = if (isSelectionMode) 80.dp else 20.dp
                             )
                         ) {
-                            expansionSections.forEachIndexed { sectionIndex, (expansionName, cardsInExpansion) ->
-                                val totalQuantity = cardsInExpansion.sumOf { (_, group) -> group.sumOf { it.quantity } }
-                                val totalExpansionValue = cardsInExpansion.sumOf { (_, group) ->
-                                    group.sumOf { card -> card.estimatedValue * card.quantity }
-                                }
+                            expansionSections.forEachIndexed { sectionIndex, section ->
+                                val expansionName = section.name
+                                val cardsInExpansion = section.groups
+                                val totalQuantity = section.totalQuantity
+                                val totalExpansionValue = section.totalValue
                                 val isExpanded = expansionName in expandedExpansions
                                 val cardSpacing = if (state.gridColumns > 4) 6.dp else 10.dp
 
@@ -465,11 +499,15 @@ fun CollectionScreen(
                                 // Carte: lazy item per riga/carta, solo quando espansa
                                 if (isExpanded) {
                                     if (state.isGridView) {
-                                        val rows = cardsInExpansion.chunked(state.gridColumns)
-                                        items(
+                                        val rows = section.gridRows
+                                        itemsIndexed(
                                             items = rows,
-                                            key = { row -> "row_${expansionName}_${row.firstOrNull()?.first ?: ""}" }
-                                        ) { row ->
+                                            // Chiave sull'indice di riga: la precedente usava il
+                                            // primo elemento della riga, quindi cambiava a ogni
+                                            // variazione del contenuto e due righe che iniziavano
+                                            // con lo stesso gruppo potevano collidere.
+                                            key = { rowIndex, _ -> "row_${expansionName}_$rowIndex" }
+                                        ) { _, row ->
                                             Row(
                                                 horizontalArrangement = Arrangement.spacedBy(cardSpacing),
                                                 modifier = Modifier
