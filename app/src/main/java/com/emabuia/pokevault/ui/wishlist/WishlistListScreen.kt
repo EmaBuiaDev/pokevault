@@ -66,6 +66,7 @@ import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.model.WishlistIcons
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.WishlistViewModel
 
@@ -76,6 +77,9 @@ private data class WishlistIconOption(
     val color: Color
 )
 
+// @Composable perche' i colori vengono dai token del tema, non piu' da
+// costanti fisse.
+@Composable
 private fun wishlistIconOptions(): List<WishlistIconOption> = listOf(
     WishlistIconOption(WishlistIcons.POKEBALL, "Poke Ball", Icons.Default.CatchingPokemon, AppColors.red),
     WishlistIconOption(WishlistIcons.MASTER_BALL, "Master Ball", Icons.Default.Stars, AppColors.purple),
@@ -84,6 +88,7 @@ private fun wishlistIconOptions(): List<WishlistIconOption> = listOf(
     WishlistIconOption(WishlistIcons.EEVEE, "Eevee", Icons.Default.Pets, AppColors.blue)
 )
 
+@Composable
 private fun iconForKey(iconKey: String): WishlistIconOption {
     return wishlistIconOptions().firstOrNull { it.key == iconKey } ?: wishlistIconOptions().first()
 }
@@ -349,7 +354,7 @@ fun CreateWishlistDialog(
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
     var selectedIconKey by remember(initialIconKey) { mutableStateOf(initialIconKey) }
-    val options = remember { wishlistIconOptions() }
+    val options = wishlistIconOptions()
 
     AlertDialog(
         onDismissRequest = { if (canDismiss && !isSaving) onDismiss() },

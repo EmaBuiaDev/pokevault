@@ -393,17 +393,22 @@ private fun ArchetypeCard(
         else                          -> AppColors.red
     }
 
-    // Trend: confronta i primi 2 piazzamenti recenti con gli ultimi 2
+    // Trend: confronta i primi 2 piazzamenti recenti con gli ultimi 2.
+    // I colori si leggono FUORI dal remember: il blocco di calcolo di remember
+    // non e' un contesto @Composable, quindi non puo' leggere i token del tema.
+    val trendUpColor = AppColors.green
+    val trendDownColor = AppColors.red
+    val trendFlatColor = AppColors.textMuted
     val trendInfo: Pair<androidx.compose.ui.graphics.vector.ImageVector, Color>? =
-        remember(archetype.recentResults) {
+        remember(archetype.recentResults, trendUpColor, trendDownColor, trendFlatColor) {
             val results = archetype.recentResults
             if (results.size >= 4) {
                 val early = results.take(2).average()
                 val late  = results.takeLast(2).average()
                 when {
-                    late < early - 4  -> Icons.AutoMirrored.Filled.TrendingUp   to AppColors.green
-                    late > early + 4  -> Icons.AutoMirrored.Filled.TrendingDown to AppColors.red
-                    else              -> Icons.AutoMirrored.Filled.TrendingFlat to AppColors.textMuted
+                    late < early - 4  -> Icons.AutoMirrored.Filled.TrendingUp   to trendUpColor
+                    late > early + 4  -> Icons.AutoMirrored.Filled.TrendingDown to trendDownColor
+                    else              -> Icons.AutoMirrored.Filled.TrendingFlat to trendFlatColor
                 }
             } else null
         }

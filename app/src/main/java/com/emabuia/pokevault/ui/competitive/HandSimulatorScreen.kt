@@ -70,6 +70,7 @@ import com.emabuia.pokevault.data.simulator.ProblemHandSample
 import com.emabuia.pokevault.data.simulator.SavedProblemHand
 import com.emabuia.pokevault.data.simulator.SimulatorCard
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.DeckLabViewModel
 import kotlinx.coroutines.Dispatchers

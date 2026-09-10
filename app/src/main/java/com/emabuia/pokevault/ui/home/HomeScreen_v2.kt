@@ -21,6 +21,7 @@ import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.ui.components.OfflineBanner
 import com.emabuia.pokevault.ui.home.components.*
 import com.emabuia.pokevault.ui.navigation.Routes
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.HomeViewModel
 

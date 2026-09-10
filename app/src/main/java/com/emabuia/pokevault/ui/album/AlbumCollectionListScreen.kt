@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.Album
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.AlbumViewModel
 

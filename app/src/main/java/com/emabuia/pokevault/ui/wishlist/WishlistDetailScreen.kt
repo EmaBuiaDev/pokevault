@@ -46,6 +46,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.pokedex.CardDetailBottomSheet
+import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.SetDetailViewModel
 import com.emabuia.pokevault.viewmodel.WishlistViewModel
