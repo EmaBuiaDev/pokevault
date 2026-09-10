@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.model.WishlistIcons
@@ -22,7 +23,14 @@ import kotlinx.coroutines.supervisorScope
 class WishlistViewModel : ViewModel() {
 
     companion object {
-        const val FREE_WISHLIST_LIMIT = 1
+        /**
+         * Il limite e' uno solo, quello di PremiumManager.
+         *
+         * Prima era duplicato qui, e l'unico test esistente sui limiti free
+         * verificava QUESTA copia, non quella che governa davvero i gate:
+         * potevano divergere senza che nulla se ne accorgesse.
+         */
+        const val FREE_WISHLIST_LIMIT = PremiumManager.FREE_WISHLIST_LIMIT
 
         fun isValidWishlistName(name: String): Boolean {
             val normalized = name.trim()

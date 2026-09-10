@@ -30,6 +30,16 @@ class PremiumManager private constructor(private val context: Context) {
         private const val KEY_HOME_SPRITE_ID = "home_sprite_id"
         private const val KEY_HAND_SIM_RUN_PREFIX = "hand_sim_runs_"
 
+        /**
+         * Regola unica dei limiti free, in forma pura e testabile.
+         *
+         * Le funzioni di gate leggevano _isPremium.value direttamente, quindi
+         * non erano verificabili senza un BillingClient e un Context: non
+         * esisteva alcun test su PremiumManager.
+         */
+        fun isWithinFreeLimit(isPremium: Boolean, currentCount: Int, freeLimit: Int): Boolean =
+            isPremium || currentCount < freeLimit
+
         private const val ACK_MAX_ATTEMPTS = 3
         private const val ACK_RETRY_DELAY_MS = 1500L
 
@@ -379,29 +389,23 @@ class PremiumManager private constructor(private val context: Context) {
         scope.launch { queryExistingPurchases() }
     }
 
-    fun canCreateDeck(currentDeckCount: Int): Boolean {
-        return _isPremium.value || currentDeckCount < FREE_DECK_LIMIT
-    }
+    fun canCreateDeck(currentDeckCount: Int): Boolean =
+        isWithinFreeLimit(_isPremium.value, currentDeckCount, FREE_DECK_LIMIT)
 
-    fun canCreateAlbum(currentAlbumCount: Int): Boolean {
-        return _isPremium.value || currentAlbumCount < FREE_ALBUM_LIMIT
-    }
+    fun canCreateAlbum(currentAlbumCount: Int): Boolean =
+        isWithinFreeLimit(_isPremium.value, currentAlbumCount, FREE_ALBUM_LIMIT)
 
-    fun canCreateGoalAlbum(currentGoalAlbumCount: Int): Boolean {
-        return _isPremium.value || currentGoalAlbumCount < FREE_GOAL_ALBUM_LIMIT
-    }
+    fun canCreateGoalAlbum(currentGoalAlbumCount: Int): Boolean =
+        isWithinFreeLimit(_isPremium.value, currentGoalAlbumCount, FREE_GOAL_ALBUM_LIMIT)
 
-    fun canCreateWishlist(currentWishlistCount: Int): Boolean {
-        return _isPremium.value || currentWishlistCount < FREE_WISHLIST_LIMIT
-    }
+    fun canCreateWishlist(currentWishlistCount: Int): Boolean =
+        isWithinFreeLimit(_isPremium.value, currentWishlistCount, FREE_WISHLIST_LIMIT)
 
-    fun canCreateTournament(currentTournamentCount: Int): Boolean {
-        return _isPremium.value || currentTournamentCount < FREE_TOURNAMENT_LIMIT
-    }
+    fun canCreateTournament(currentTournamentCount: Int): Boolean =
+        isWithinFreeLimit(_isPremium.value, currentTournamentCount, FREE_TOURNAMENT_LIMIT)
 
-    fun canViewMetaDeck(): Boolean {
-        return _isPremium.value || _metaDeckViewsUsed.value < FREE_META_DECK_VIEWS
-    }
+    fun canViewMetaDeck(): Boolean =
+        isWithinFreeLimit(_isPremium.value, _metaDeckViewsUsed.value, FREE_META_DECK_VIEWS)
 
     fun canExportDecklist(): Boolean {
         return _isPremium.value
