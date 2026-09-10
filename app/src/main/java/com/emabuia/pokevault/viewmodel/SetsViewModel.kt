@@ -23,9 +23,11 @@ import com.emabuia.pokevault.data.remote.TranslationService
 import com.emabuia.pokevault.util.hasPositiveEurPrice
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 import java.text.Normalizer
 import java.time.LocalDate
@@ -81,32 +83,20 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         /** Finestra minima fra due rivalidazioni di rete del catalogo set. */
         const val REVALIDATION_MIN_INTERVAL_MS = 15L * 60 * 1000
-    }
 
-    /**
-     * Display order inside a single series group:
-     *   1. Release date DESC (most recent first).
-     *   2. Sets without a parseable release date go to the bottom.
-     *   3. Stable tiebreaker by lowercase name.
-     *
-     * Deliberately NOT keyed on logo-load state (see hasPrioritizedLogo):
-     * doing so used to re-sort the whole list every time a logo finished or
-     * failed loading in the background, which is what made sets visibly
-     * "jump" while scrolling. A missing logo shows a placeholder; it must
-     * never change a set's position.
-     */
-    private val setDisplayComparator: Comparator<TcgSet> =
-        Comparator<TcgSet> { a, b ->
-            val da = parseReleaseDate(a.releaseDate)
-            val db = parseReleaseDate(b.releaseDate)
-            val aMissing = da == LocalDate.MIN
-            val bMissing = db == LocalDate.MIN
-            when {
-                aMissing && !bMissing -> 1
-                !aMissing && bMissing -> -1
-                else -> db.compareTo(da) // DESC by release date
-            }
-        }.thenBy { it.name.lowercase(Locale.ROOT) }
+        /**
+         * Costruiti una volta sola: prima venivano ricreati a ogni chiamata di
+         * parseReleaseDate, che il comparatore invoca due volte per confronto.
+         */
+        val ORDINAL_SUFFIX_REGEX = Regex("""(\d+)(st|nd|rd|th)""")
+        val LONG_DATE_FORMAT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("d MMMM, uuuu", Locale.ENGLISH)
+        val SHORT_DATE_FORMAT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH)
+
+        /** Riconosce "uuuu-MM-dd" senza far lanciare e catturare un'eccezione. */
+        val ISO_DATE_REGEX = Regex("""\d{4}-\d{2}-\d{2}""")
+    }
 
     init {
         TranslationService.loadCache(application.applicationContext)
@@ -117,7 +107,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
-            repository.getSets(context = context)
+            withContext(Dispatchers.IO) { repository.getSets(context = context) }
                 .onSuccess { sets ->
                     uiState = uiState.copy(
                         allSets = sets,
@@ -148,7 +138,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshFromCache() {
         viewModelScope.launch {
             val context = getApplication<Application>().applicationContext
-            repository.getSets(context = context)
+            withContext(Dispatchers.IO) { repository.getSets(context = context) }
                 .onSuccess { sets ->
                     uiState = uiState.copy(
                         allSets = sets,
@@ -178,7 +168,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         lastRevalidationAtMs = now
 
         viewModelScope.launch {
-            repository.getSets(context = context, forceRefresh = true)
+            withContext(Dispatchers.IO) { repository.getSets(context = context, forceRefresh = true) }
                 .onSuccess { freshSets ->
                     if (!hasSetCatalogChanged(uiState.allSets, freshSets)) return@onSuccess
                     uiState = uiState.copy(
@@ -209,7 +199,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
-            repository.getSets(context = context, forceRefresh = true)
+            withContext(Dispatchers.IO) { repository.getSets(context = context, forceRefresh = true) }
                 .onSuccess { sets ->
                     uiState = uiState.copy(
                         allSets = sets,
@@ -390,20 +380,35 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         uiState = uiState.copy(successMessage = null, errorMessage = null)
     }
 
-    private fun applyFilters() {
-        val displayableSets = uiState.allSets.filter(::isDisplayableExpansion)
-        val italianSets = displayableSets.filter { it.language.equals("ITA", ignoreCase = true) }
+    /**
+     * Filtra e raggruppa fuori dal main thread.
+     *
+     * Prima girava dentro viewModelScope.launch, che parte su Dispatchers.Main:
+     * con ~107 espansioni il lavoro bloccava il thread della UI per centinaia
+     * di millisecondi, ed e' quello che si vedeva come freeze aprendo il
+     * Pokedex. Qui resta sul main solo l'assegnazione dello stato.
+     */
+    private suspend fun applyFilters() {
+        val query = uiState.searchQuery
+        val allSets = uiState.allSets
 
-        val searched = if (uiState.searchQuery.isBlank()) {
-            italianSets
-        } else {
-            italianSets.filter { set ->
-                set.name.contains(uiState.searchQuery, ignoreCase = true) ||
-                    set.series.contains(uiState.searchQuery, ignoreCase = true)
+        val groups = withContext(Dispatchers.Default) {
+            val displayableSets = allSets.filter(::isDisplayableExpansion)
+            val italianSets = displayableSets.filter { it.language.equals("ITA", ignoreCase = true) }
+
+            val searched = if (query.isBlank()) {
+                italianSets
+            } else {
+                italianSets.filter { set ->
+                    set.name.contains(query, ignoreCase = true) ||
+                        set.series.contains(query, ignoreCase = true)
+                }
             }
+
+            buildSeriesGroups(searched)
         }
 
-        uiState = uiState.copy(seriesGroups = buildSeriesGroups(searched))
+        uiState = uiState.copy(seriesGroups = groups)
     }
 
     private fun buildSetsErrorMessage(error: Throwable): String {
@@ -432,21 +437,60 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
      * reads "latest releases first" the way the user asked -- group and set
      * alike, and it self-updates when a new series shows up, no code change.
      */
+    /**
+     * Ordine di visualizzazione dentro un gruppo di serie:
+     *   1. Data di uscita DESC (la piu' recente per prima).
+     *   2. I set senza data interpretabile finiscono in fondo.
+     *   3. Tiebreak stabile sul nome in minuscolo.
+     *
+     * Deliberatamente NON dipendente dallo stato di caricamento dei loghi (vedi
+     * hasPrioritizedLogo): farlo ri-ordinava l'intera lista ogni volta che un
+     * logo finiva o falliva il caricamento in background, ed e' cio' che faceva
+     * "saltare" i set durante lo scroll. Un logo mancante mostra un
+     * placeholder, e non deve mai cambiare la posizione di un set.
+     */
     private fun buildSeriesGroups(italianSets: List<TcgSet>): List<SeriesSetsGroup> {
         if (italianSets.isEmpty()) return emptyList()
 
-        return italianSets
+        // Data e nome normalizzato calcolati UNA volta per set. Prima il
+        // comparatore chiamava parseReleaseDate due volte per ogni confronto e
+        // rifaceva lowercase() a ogni tiebreak: su ~107 espansioni sono oltre
+        // mille parse di data (piu' quelle di maxOfOrNull), tutte sul main
+        // thread, ed e' il grosso del freeze all'apertura del Pokedex.
+        val sortKeys = HashMap<String, Pair<LocalDate, String>>(italianSets.size)
+        italianSets.forEach { set ->
+            sortKeys[set.id] = parseReleaseDate(set.releaseDate) to set.name.lowercase(Locale.ROOT)
+        }
+        fun dateOf(set: TcgSet): LocalDate = sortKeys[set.id]?.first ?: LocalDate.MIN
+        fun nameOf(set: TcgSet): String = sortKeys[set.id]?.second.orEmpty()
+
+        val bySeries = italianSets
             .groupBy { it.series.ifBlank { ItalianTranslations.translateSeriesName(OTHER_SERIES_KEY) } }
             .map { (seriesLabel, sets) ->
                 SeriesSetsGroup(
                     seriesKey = seriesLabel,
                     seriesLabel = seriesLabel,
-                    sets = sets.sortedWith(setDisplayComparator)
+                    sets = sets.sortedWith(
+                        Comparator<TcgSet> { a, b ->
+                            val da = dateOf(a)
+                            val db = dateOf(b)
+                            val aMissing = da == LocalDate.MIN
+                            val bMissing = db == LocalDate.MIN
+                            when {
+                                aMissing && !bMissing -> 1
+                                !aMissing && bMissing -> -1
+                                else -> db.compareTo(da) // DESC per data di uscita
+                            }
+                        }.thenBy { nameOf(it) }
+                    )
                 )
             }
-            .sortedByDescending { group ->
-                group.sets.maxOfOrNull { parseReleaseDate(it.releaseDate) } ?: LocalDate.MIN
-            }
+
+        // sortedByDescending valuta la chiave una volta per elemento, e le date
+        // sono gia' in sortKeys: nessun altro parse.
+        return bySeries.sortedByDescending { group ->
+            group.sets.maxOfOrNull { dateOf(it) } ?: LocalDate.MIN
+        }
     }
 
     private fun isDisplayableExpansion(set: TcgSet): Boolean {
@@ -465,21 +509,22 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     private fun parseReleaseDate(raw: String): LocalDate {
         val source = raw.trim()
         if (source.isBlank()) return LocalDate.MIN
-        // 1. ISO
-        runCatching { LocalDate.parse(source) }.getOrNull()?.let { return it }
-        // Clean ordinal suffixes (1st, 2nd, 3rd, 4th…) and underscores
-        val cleaned = source
-            .replace(Regex("""(\d+)(st|nd|rd|th)"""), "$1")
+        // 1. ISO -- il formato servito dal Worker per tutte le espansioni.
+        //    Controllato con una regex prima di chiamare parse: il vecchio
+        //    runCatching lasciava lanciare DateTimeParseException per ogni data
+        //    non-ISO, e il costo di riempire lo stack trace si moltiplicava per
+        //    i ~1400 confronti dell'ordinamento.
+        if (ISO_DATE_REGEX.matches(source)) {
+            runCatching { LocalDate.parse(source) }.getOrNull()?.let { return it }
+        }
+        // Ripulisce i suffissi ordinali (1st, 2nd, 3rd, 4th...) e gli underscore
+        val cleaned = ORDINAL_SUFFIX_REGEX.replace(source, "$1")
             .replace('_', ' ')
             .trim()
         // 2. "d MMMM, yyyy"
-        runCatching {
-            LocalDate.parse(cleaned, DateTimeFormatter.ofPattern("d MMMM, uuuu", Locale.ENGLISH))
-        }.getOrNull()?.let { return it }
+        runCatching { LocalDate.parse(cleaned, LONG_DATE_FORMAT) }.getOrNull()?.let { return it }
         // 3. "d MMM yyyy"
-        runCatching {
-            LocalDate.parse(cleaned, DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH))
-        }.getOrNull()?.let { return it }
+        runCatching { LocalDate.parse(cleaned, SHORT_DATE_FORMAT) }.getOrNull()?.let { return it }
         return LocalDate.MIN
     }
 
