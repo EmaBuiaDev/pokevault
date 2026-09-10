@@ -71,7 +71,10 @@ fun DeckLabScreen(
     metaDeckViewModel: MetaDeckViewModel = viewModel()
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
-    val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
+    // isPremium NON viene raccolto qui: tutti i gate di questo schermo stanno
+    // dentro lambda di click, quindi leggono _isPremium.value al momento del
+    // tocco, che e' gia' il comportamento corretto. Raccoglierlo senza usarlo
+    // faceva solo ricomporre l'intero schermo a ogni cambio di stato premium.
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSheet by remember { mutableStateOf(false) }
