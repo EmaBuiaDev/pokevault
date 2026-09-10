@@ -358,13 +358,19 @@ fun SetDetailScreen(
 
     if (pickerCard != null) {
         val card = pickerCard
+        // canCreateWishlist() legge _isPremium.value, che non e' uno stato Compose:
+        // da solo non farebbe ricomporre all'attivazione del premium. Passando da
+        // isPremium (raccolto qui sopra) la composizione si iscrive davvero.
+        val canCreateWishlist = remember(isPremium, wishlistViewModel.wishlists.size) {
+            premiumManager.canCreateWishlist(wishlistViewModel.wishlists.size)
+        }
         WishlistPickerDialog(
             wishlists = wishlistViewModel.wishlists,
             selectedWishlistIds = card?.let { wishlistViewModel.getWishlistIdsForCard(it.id) } ?: emptySet(),
-            canCreateNew = premiumManager.canCreateWishlist(wishlistViewModel.wishlists.size),
+            canCreateNew = canCreateWishlist,
             onDismiss = { pickerCard = null },
             onCreateNewRequested = {
-                if (premiumManager.canCreateWishlist(wishlistViewModel.wishlists.size)) {
+                if (canCreateWishlist) {
                     createDialogCard = pickerCard
                     pickerCard = null
                 } else {
@@ -723,18 +729,19 @@ fun SetDetailScreen(
                         }
                     } else {
                         when (state.viewMode) {
-                            "grid" -> items(displayedCards, key = { "${it.id}_${it.number}" }) { card ->
-                                if (premiumManager.canViewPrices()) {
-                                    LaunchedEffect(card.id) {
-                                        viewModel.ensureCardPrice(card)
-                                    }
+                            "grid" -> items(displayedCards, key = { "${it.id}_${it.number}" }) { baseCard ->
+                                // Lettura per chiave sulla SnapshotStateMap: quando arriva
+                                // il prezzo di questa carta ricompone solo questa cella.
+                                val card = viewModel.pricedCards[baseCard.id] ?: baseCard
+
+                                LaunchedEffect(baseCard.id) {
+                                    viewModel.ensureCardPrice(baseCard)
                                 }
 
                                 TcgCardCompactItem(
                                     card = card,
                                     isOwned = card.id in state.ownedCardIds,
                                     isWishlisted = wishlistViewModel.isCardWishlisted(card.id),
-                                    canViewPrices = premiumManager.canViewPrices(),
                                     isAdding = state.isAddingCard == card.id,
                                     isPopupOpen = quickAddCard?.id == card.id,
                                     isSelected = card.id in selectedCardIds,
@@ -782,18 +789,17 @@ fun SetDetailScreen(
                                     }
                                 )
                             }
-                            "list" -> items(displayedCards, key = { "${it.id}_${it.number}" }, span = { GridItemSpan(3) }) { card ->
-                                if (premiumManager.canViewPrices()) {
-                                    LaunchedEffect(card.id) {
-                                        viewModel.ensureCardPrice(card)
-                                    }
+                            "list" -> items(displayedCards, key = { "${it.id}_${it.number}" }, span = { GridItemSpan(3) }) { baseCard ->
+                                val card = viewModel.pricedCards[baseCard.id] ?: baseCard
+
+                                LaunchedEffect(baseCard.id) {
+                                    viewModel.ensureCardPrice(baseCard)
                                 }
 
                                 TcgCardListRow(
                                     card = card,
                                     isOwned = card.id in state.ownedCardIds,
                                     isWishlisted = wishlistViewModel.isCardWishlisted(card.id),
-                                    canViewPrices = premiumManager.canViewPrices(),
                                     onClick = { selectedCard = card },
                                     onWishlistClick = {
                                         val wishlists = wishlistViewModel.wishlists
@@ -1088,7 +1094,6 @@ fun TcgCardCompactItem(
     card: TcgCard,
     isOwned: Boolean,
     isWishlisted: Boolean,
-    canViewPrices: Boolean,
     isAdding: Boolean = false,
     isPopupOpen: Boolean = false,
     isSelected: Boolean = false,
@@ -1305,30 +1310,26 @@ fun TcgCardCompactItem(
                                     horizontalAlignment = Alignment.End,
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    if (canViewPrices) {
-                                        val priceText = resolveDisplayPriceText(card)
-                                        if (priceText != null) {
-                                            Text(
-                                                text = priceText,
-                                                color = GreenCard,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(999.dp))
-                                                    .border(1.dp, GreenCard.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
-                                                    .background(DarkCard)
-                                                    .padding(horizontal = 7.dp, vertical = 1.dp)
-                                            )
-                                        } else {
-                                            Text(
-                                                text = if (AppLocale.isItalian) "Prezzo N/D" else "Price N/A",
-                                                color = TextMuted,
-                                                fontSize = 8.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        }
+                                    val priceText = resolveDisplayPriceText(card)
+                                    if (priceText != null) {
+                                        Text(
+                                            text = priceText,
+                                            color = GreenCard,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .border(1.dp, GreenCard.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+                                                .background(DarkCard)
+                                                .padding(horizontal = 7.dp, vertical = 1.dp)
+                                        )
                                     } else {
-                                        Text("🔒", color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            text = AppLocale.priceUnavailable,
+                                            color = TextMuted,
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
                                     }
 
                                     Row(
@@ -1398,7 +1399,6 @@ fun TcgCardListRow(
     card: TcgCard,
     isOwned: Boolean,
     isWishlisted: Boolean,
-    canViewPrices: Boolean,
     onClick: () -> Unit,
     onWishlistClick: () -> Unit
 ) {
@@ -1476,30 +1476,26 @@ fun TcgCardListRow(
             }
             Text("#${card.number} · ${AppLocale.translateRarity(card.rarity ?: "")}", color = TextMuted, fontSize = 11.sp)
         }
-        if (canViewPrices) {
-            val priceText = resolveDisplayPriceText(card)
-            if (priceText != null) {
-                Text(
-                    text = priceText,
-                    color = GreenCard,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .border(1.dp, GreenCard.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
-                        .background(DarkCard)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            } else {
-                Text(
-                    text = if (AppLocale.isItalian) "Prezzo N/D" else "Price N/A",
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
+        val priceText = resolveDisplayPriceText(card)
+        if (priceText != null) {
+            Text(
+                text = priceText,
+                color = GreenCard,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .border(1.dp, GreenCard.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+                    .background(DarkCard)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            )
         } else {
-            Text("🔒 Premium", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Text(
+                text = AppLocale.priceUnavailable,
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
         }
         Icon(
             imageVector = if (isWishlisted) Icons.Default.Favorite else Icons.Default.FavoriteBorder,

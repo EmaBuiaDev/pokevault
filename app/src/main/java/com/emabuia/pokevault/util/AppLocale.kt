@@ -623,6 +623,7 @@ object AppLocale {
     // Collector Lab (ex Album)
     val albumTitle: String get() = "Collector Lab"
     val albumNotFound: String get() = if (isItalian) "Album non trovato" else "Album not found"
+    val priceUnavailable: String get() = if (isItalian) "Prezzo N/D" else "Price N/A"
     val ownedCardsLoadError: String get() = if (isItalian)
         "Impossibile verificare le carte possedute"
     else
