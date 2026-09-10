@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
@@ -73,6 +76,9 @@ import com.emabuia.pokevault.ui.theme.TextGray
 import com.emabuia.pokevault.ui.theme.TextWhite
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.DeckLabViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import androidx.compose.ui.text.input.KeyboardType
 import java.text.SimpleDateFormat
@@ -109,6 +115,9 @@ fun HandSimulatorScreen(
     var showMetricInfoDialog by remember { mutableStateOf(false) }
     var savedReloadTick by remember { mutableStateOf(0) }
     var savedHands by remember { mutableStateOf<List<SavedProblemHand>>(emptyList()) }
+    var isSimulating by remember { mutableStateOf(false) }
+
+    val simulationScope = rememberCoroutineScope()
 
     val decks = viewModel.decks
     val selectedDeck = decks.firstOrNull { it.id == selectedDeckId }
@@ -346,31 +355,53 @@ fun HandSimulatorScreen(
                                     return@Button
                                 }
 
-                                val result = HandSimulationEngine.run(
-                                    cardPool = cardPool,
-                                    runs = runCount,
-                                    keyCardNames = selectedKeyCardNames
-                                )
-
-                                summary = result
-                                insights = buildInsights(result)
+                                // Fino a 10.000 mescolate di una lista da 60 carte: fuori dal
+                                // main thread, altrimenti la UI resta bloccata per secondi.
                                 validationMessage = null
                                 saveFeedback = null
+                                isSimulating = true
 
-                                if (!isPremium) {
-                                    premiumManager.consumeHandSimulatorRun(deck.id)
+                                simulationScope.launch {
+                                    val result = withContext(Dispatchers.Default) {
+                                        HandSimulationEngine.run(
+                                            cardPool = cardPool,
+                                            runs = runCount,
+                                            keyCardNames = selectedKeyCardNames
+                                        )
+                                    }
+
+                                    summary = result
+                                    insights = buildInsights(result)
+                                    isSimulating = false
+
+                                    if (!isPremium) {
+                                        premiumManager.consumeHandSimulatorRun(deck.id)
+                                    }
                                 }
                             },
+                            enabled = !isSimulating,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = BlueCard)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Shuffle,
-                                contentDescription = null
-                            )
+                            if (isSimulating) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = TextWhite
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Shuffle,
+                                    contentDescription = null
+                                )
+                            }
                             Text(
-                                text = AppLocale.handSimulatorRunButton,
+                                text = if (isSimulating) {
+                                    AppLocale.handSimulatorRunning
+                                } else {
+                                    AppLocale.handSimulatorRunButton
+                                },
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.padding(start = 8.dp)
                             )

@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
+import com.emabuia.pokevault.data.model.CardClassifier
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.DeckAnalysis
 import com.emabuia.pokevault.data.model.DeckImportParser
@@ -145,75 +146,8 @@ class DeckLabViewModel : ViewModel() {
         return ownedCards.filter { getCardKey(it) == key }.sumOf { it.quantity }
     }
 
-    fun classifyCard(card: PokemonCard): String {
-        val supertype = card.supertype.lowercase()
-        val type = card.type.lowercase()
-        val name = card.name.lowercase()
-        val subtypes = card.subtypes.map { it.lowercase() }
-
-        val hasEnergyMarker =
-            supertype.contains("energy") ||
-                supertype.contains("energ") ||
-                type.contains("energy") ||
-                type.contains("energia") ||
-                subtypes.any { it.contains("energy") || it.contains("energia") } ||
-                name.contains("energy") ||
-                name.contains("energia")
-        if (hasEnergyMarker) return "Energy"
-
-        val hasTrainerMarker =
-            supertype.contains("trainer") ||
-                supertype.contains("allenat") ||
-                supertype.contains("aiuto") ||
-                type.contains("trainer") ||
-                type.contains("supporter") ||
-                type.contains("item") ||
-                type.contains("stadium") ||
-                type.contains("tool") ||
-                type.contains("allenat") ||
-                type.contains("aiuto") ||
-                type.contains("stadio") ||
-                type.contains("strumento") ||
-                subtypes.any {
-                    it == "item" ||
-                        it == "stadium" ||
-                        it == "supporter" ||
-                        it == "tool" ||
-                        it == "strumento" ||
-                        it == "stadio" ||
-                        it == "aiuto"
-                }
-
-        val hasPokemonSubtypeMarker = subtypes.any {
-            it == "basic" ||
-                it == "stage 1" ||
-                it == "stage 2" ||
-                it == "baby" ||
-                it == "ex" ||
-                it == "v" ||
-                it == "vmax" ||
-                it == "vstar"
-        }
-        val hasPokemonTypeMarker =
-            type in listOf(
-                "grass", "fire", "water", "lightning", "electric", "fighting",
-                "psychic", "darkness", "metal", "dragon", "fairy"
-            )
-        val hasExplicitPokemonSupertype = supertype.contains("pok")
-        val hasStrongPokemonMarker =
-            card.hp > 0 ||
-                hasPokemonSubtypeMarker ||
-                hasPokemonTypeMarker
-
-        if (hasTrainerMarker && !hasStrongPokemonMarker) return "Trainer"
-        if (hasStrongPokemonMarker) return "Pokémon"
-
-        // Legacy fallback: molte carte erano salvate con supertype=Pokémon di default.
-        // Consideriamo Pokémon solo se supertype è esplicito e non ci sono segnali da Trainer.
-        if (hasExplicitPokemonSupertype && !hasTrainerMarker && type != "colorless") return "Pokémon"
-
-        return "Trainer"
-    }
+    /** Vedi [CardClassifier]: implementazione unica condivisa da tutta l'app. */
+    fun classifyCard(card: PokemonCard): String = CardClassifier.classify(card)
 
     private fun isEnergy(card: PokemonCard): Boolean {
         return classifyCard(card) == "Energy"

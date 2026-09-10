@@ -389,6 +389,7 @@ object AppLocale {
     val handSimulatorSelectDeck: String get() = if (isItalian) "Seleziona un deck" else "Select a deck"
     val handSimulatorRunCount: String get() = if (isItalian) "Numero simulazioni" else "Simulations"
     val handSimulatorRunButton: String get() = if (isItalian) "Avvia simulazione" else "Run simulation"
+    val handSimulatorRunning: String get() = if (isItalian) "Simulazione in corso..." else "Simulating..."
     val handSimulatorNoDecks: String get() = if (isItalian) "Nessun deck disponibile" else "No decks available"
     val handSimulatorNoDecksSubtitle: String get() = if (isItalian) "Crea o importa un deck nel Deck Lab" else "Create or import a deck in Deck Lab"
     val handSimulatorInvalidDeck: String get() = if (isItalian) "Deck non valido: servono almeno 7 carte" else "Invalid deck: at least 7 cards required"
