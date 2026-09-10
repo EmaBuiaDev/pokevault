@@ -2,7 +2,7 @@ name: Android CI/CD Tests
 
 on:
   push:
-    branches: [ main, develop, 'release/**', 'feature/**', 'fix/**' ]
+    branches: [ main, develop, 'release/**', 'feature/**', 'fix/**', 'claude/**' ]
   pull_request:
     branches: [ main, develop ]
 

@@ -7,9 +7,18 @@
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+/.idea/deploymentTargetSelector.xml
+/.idea/deviceManager.xml
+/.idea/studiobot.xml
 .DS_Store
 /build
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+
+# Log di crash del compilatore Kotlin, puramente locali.
+.kotlin/
+
+# Cache di wrangler: contiene l'account id Cloudflare, non va nel repository.
+.wrangler/
