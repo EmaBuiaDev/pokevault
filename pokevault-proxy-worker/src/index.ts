@@ -205,7 +205,12 @@ const ITA_PRICE_SNAPSHOT_KEY = 'it:prices:snapshot:v2';
 const ITA_PRICE_SNAPSHOT_TTL = 7 * 24 * 60 * 60; // survives missed rebuilds
 const ITA_PRICE_EXPANSION_STALE_MS = 24 * 60 * 60 * 1000; // refresh cadence per expansion
 const ITA_PRICE_INLINE_REBUILD_MIN_AGE_MS = 30 * 60 * 1000; // ?rebuild=1 throttle
-const ITA_PRICE_MAX_UPSTREAM_FETCHES = 30; // per run; KV-cached pages are free
+// Per run; KV-cached pages are free. Sized from the measured cost of a real
+// sweep (2026-09-11: 106 expansions covered in 11 runs, ~2.5 fetches each).
+// 12/run still completes a full daily sweep inside ~30 of the 48 cron runs,
+// while capping this job at ~24 of PokeWallet's 100 hourly calls -- at 30 two
+// runs landing in the same hour could take 60 and starve live app traffic.
+const ITA_PRICE_MAX_UPSTREAM_FETCHES = 12;
 const ITA_PRICE_SEARCH_PAGE_LIMIT = 100;
 const ITA_PRICE_MAX_PAGES_PER_SET = 4;
 // Catalog expansion id -> upstream numeric set_id(s). set_id is unambiguous
@@ -323,12 +328,19 @@ const ITA_EXPANSION_QUERY_OVERRIDE: Record<string, string[]> = {
   swsh35: ['Champion'], // apostrophe in "Champion's Path" breaks upstream search
   swshp: ['SWSH Promo', 'Sword Shield Promo'],
 };
-// Mirrors preferredBaseSetCodeForItalianExpansion in the Android app.
+// Fallback only since schema/007: expansions.upstream_set_code in D1 is the
+// primary source, filled at ingest time. Kept for the pre-schema/007 sets
+// whose upstream code TCGdex cannot supply (swsh1/SSH, sm1/SUM, cel25/CEL) and
+// for the case where D1 is unreachable. Mirrors
+// preferredBaseSetCodeForItalianExpansion in the Android app, except me05:
+// the app map is only consulted on the per-card fallback path, which a covered
+// snapshot never reaches, so it does not need an app release to follow.
 const ITA_EXPANSION_BASE_SET: Record<string, string> = {
   me01: 'MEG',
   me02: 'PFL',
   me03: 'ME03',
   me04: 'CRI',
+  me05: 'PBL',
   me2pt5: 'ASC',
   mep: 'MEP',
   sv01: 'SVI',
@@ -1444,6 +1456,77 @@ async function loadItalianCatalogCards(env: Env): Promise<ItalianCatalogRecordPa
   }
 }
 
+type ItalianExpansionIndex = {
+  rawCodeCounts: Map<string, Map<string, number>>;
+  upstreamSetCodes: Map<string, string>;
+};
+
+/**
+ * Expansion index for the price snapshot, read from D1 -- the same store that
+ * backs /v1/expansions and /ita/catalog.json.
+ *
+ * This index used to come from the legacy R2 blob (it/catalog/cards.cleaned.json),
+ * which scripts/ingest-tcgdex-set.mjs stopped regenerating once ingest moved to
+ * D1 rows + R2 images. The effect was invisible but total: a freshly ingested
+ * set (me05 "Buio Pesto", published and complete in the Pokedex) never entered
+ * the price loop at all, so it could not go stale -- it simply had no prices,
+ * forever, and no amount of refresh tuning would have produced any. Sourcing
+ * the index from D1 keeps catalog and prices in lockstep by construction.
+ *
+ * `upstream_set_code` (schema/007) carries the English trading abbreviation
+ * PokeWallet files the set under (me05 -> PBL), which the hand-written tables
+ * above were the only previous source of.
+ *
+ * Scoped to published = 1 for parity with /ita/catalog.json: a set hidden from
+ * the Pokedex must not spend upstream fetch budget either.
+ *
+ * Returns null on any failure so the caller falls back to the R2 blob exactly
+ * as before -- this must never make the snapshot worse than it is today.
+ */
+async function loadItalianExpansionIndexFromD1(db: D1Database): Promise<ItalianExpansionIndex | null> {
+  try {
+    // Same '_IT_' prefix extraction as schema/003, which verified that all
+    // 15526 production card_ids match the format.
+    const { results } = await db
+      .prepare(
+        `SELECT c.expansion_id AS expansion_id,
+                UPPER(SUBSTR(c.card_id, 1, INSTR(c.card_id, '_IT_') - 1)) AS raw_code,
+                COUNT(*) AS cnt,
+                MAX(e.upstream_set_code) AS upstream_set_code
+         FROM cards c JOIN expansions e ON e.id = c.expansion_id
+         WHERE e.published = 1 AND INSTR(c.card_id, '_IT_') > 0
+         GROUP BY c.expansion_id, raw_code`
+      )
+      .all<{ expansion_id: string; raw_code: string; cnt: number; upstream_set_code: string | null }>();
+
+    if (results.length === 0) return null; // suspiciously empty -- prefer the R2 fallback
+
+    const rawCodeCounts = new Map<string, Map<string, number>>();
+    const upstreamSetCodes = new Map<string, string>();
+    for (const row of results) {
+      const expansionId = (row.expansion_id ?? '').trim().toLowerCase();
+      if (!expansionId) continue;
+
+      let counts = rawCodeCounts.get(expansionId);
+      if (!counts) {
+        counts = new Map();
+        rawCodeCounts.set(expansionId, counts);
+      }
+      const rawCode = (row.raw_code ?? '').trim().toUpperCase();
+      if (rawCode) {
+        counts.set(rawCode, (counts.get(rawCode) ?? 0) + Number(row.cnt ?? 0));
+      }
+
+      const upstream = (row.upstream_set_code ?? '').trim().toUpperCase();
+      if (upstream) upstreamSetCodes.set(expansionId, upstream);
+    }
+    return { rawCodeCounts, upstreamSetCodes };
+  } catch (error) {
+    console.error('ITA price snapshot: D1 expansion index failed, falling back to R2 blob:', error);
+    return null;
+  }
+}
+
 async function buildItalianPriceSnapshot(
   env: Env,
   cache: KVNamespace,
@@ -1451,27 +1534,41 @@ async function buildItalianPriceSnapshot(
 ): Promise<ItalianPriceSnapshot | null> {
   const existing = await cache.get(ITA_PRICE_SNAPSHOT_KEY, 'json') as ItalianPriceSnapshot | null;
 
-  const records = await loadItalianCatalogCards(env);
-  if (records.length === 0) {
-    return existing;
-  }
+  // D1 is the catalog source of truth (it backs /v1/expansions and, since the
+  // 2026-09-07 migration, /ita/catalog.json). The R2 blob below is the legacy
+  // fallback and stopped tracking new ingests, so reading it here made the
+  // price loop blind to every newly published set.
+  const d1Index = env.pokevault_catalog
+    ? await loadItalianExpansionIndexFromD1(env.pokevault_catalog)
+    : null;
+  const upstreamSetCodesByExpansion = d1Index?.upstreamSetCodes ?? new Map<string, string>();
 
-  // Group catalog records by expansion and tally raw image set codes.
-  const rawCodeCountsByExpansion = new Map<string, Map<string, number>>();
-  for (const record of records) {
-    const expansionId = (record.espansioneId ?? '').trim().toLowerCase();
-    if (!expansionId) {
-      continue;
+  let rawCodeCountsByExpansion: Map<string, Map<string, number>>;
+  if (d1Index) {
+    rawCodeCountsByExpansion = d1Index.rawCodeCounts;
+  } else {
+    const records = await loadItalianCatalogCards(env);
+    if (records.length === 0) {
+      return existing;
     }
-    let counts = rawCodeCountsByExpansion.get(expansionId);
-    if (!counts) {
-      counts = new Map();
-      rawCodeCountsByExpansion.set(expansionId, counts);
-    }
-    const match = (record.cardId ?? '').trim().match(ITALIAN_CARD_ID_PREFIX_REGEX);
-    if (match) {
-      const code = match[1].toUpperCase();
-      counts.set(code, (counts.get(code) ?? 0) + 1);
+
+    // Group catalog records by expansion and tally raw image set codes.
+    rawCodeCountsByExpansion = new Map<string, Map<string, number>>();
+    for (const record of records) {
+      const expansionId = (record.espansioneId ?? '').trim().toLowerCase();
+      if (!expansionId) {
+        continue;
+      }
+      let counts = rawCodeCountsByExpansion.get(expansionId);
+      if (!counts) {
+        counts = new Map();
+        rawCodeCountsByExpansion.set(expansionId, counts);
+      }
+      const match = (record.cardId ?? '').trim().match(ITALIAN_CARD_ID_PREFIX_REGEX);
+      if (match) {
+        const code = match[1].toUpperCase();
+        counts.set(code, (counts.get(code) ?? 0) + 1);
+      }
     }
   }
 
@@ -1542,9 +1639,14 @@ async function buildItalianPriceSnapshot(
       }
     } else {
       // Fallback path: resolve by set_code candidates.
+      // D1's upstream_set_code (schema/007, filled from TCGdex at ingest) goes
+      // first: it is the only candidate that is right for a set nobody ever
+      // hand-mapped. ITA_EXPANSION_UPSTREAM_SET_IDS still wins above this
+      // branch -- a numeric set_id cannot collide, a set_code can.
+      const upstreamFromD1 = upstreamSetCodesByExpansion.get(expansionId);
       const preferredBase = ITA_EXPANSION_BASE_SET[expansionId];
       const candidates = [...new Set(
-        [preferredBase, dominantRawCode, expansionId.toUpperCase()]
+        [upstreamFromD1, preferredBase, dominantRawCode, expansionId.toUpperCase()]
           .filter((candidate): candidate is string => !!candidate)
       )];
 
@@ -1725,7 +1827,37 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
 
   if (pathname === '/v1/health') {
     const row = await db.prepare('SELECT catalog_version FROM catalog_meta WHERE id = 1').first<{ catalog_version: number }>();
-    return jsonResponse({ status: 'ok', catalog_version: row?.catalog_version ?? null });
+    // Price-snapshot coverage and staleness ride along here so an expansion
+    // that silently drops out of the refresh loop shows up in a health check
+    // instead of in a user noticing missing prices -- which is exactly how
+    // me05 "Buio Pesto" stayed unpriced. `expansions` short of
+    // `total_expansions`, or oldest_expansion_age_hours climbing past ~24h,
+    // means the loop is no longer keeping up.
+    let prices: Record<string, unknown> = { available: false };
+    if (env.CACHE) {
+      try {
+        const snapshot = await env.CACHE.get(ITA_PRICE_SNAPSHOT_KEY, 'json') as ItalianPriceSnapshot | null;
+        if (snapshot) {
+          const now = Date.now();
+          const ages = Object.values(snapshot.expansions ?? {})
+            .map((entry) => now - (entry.updatedAt ?? 0))
+            .filter((age) => Number.isFinite(age))
+            .sort((a, b) => a - b);
+          const toHours = (ms: number) => Math.round((ms / 3_600_000) * 10) / 10;
+          prices = {
+            available: true,
+            built_at: new Date(snapshot.builtAt).toISOString(),
+            expansions: Object.keys(snapshot.expansions ?? {}).length,
+            total_expansions: snapshot.totalExpansions ?? null,
+            oldest_expansion_age_hours: ages.length ? toHours(ages[ages.length - 1]) : null,
+            median_expansion_age_hours: ages.length ? toHours(ages[Math.floor(ages.length / 2)]) : null,
+          };
+        }
+      } catch (error) {
+        console.error('/v1/health: price snapshot read failed:', error);
+      }
+    }
+    return jsonResponse({ status: 'ok', catalog_version: row?.catalog_version ?? null, prices });
   }
 
   if (pathname === '/v1/expansions') {
