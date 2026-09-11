@@ -105,6 +105,17 @@ async function main() {
   const cardRefs = [...uniqueByLocalId.values()];
   console.log(`Set: ${setSummary.name} (${setSummary.releaseDate}) - ${cardRefs.length} carte distinte`);
 
+  // Abbreviazione ufficiale inglese (me05 -> "PBL"): e' il codice con cui
+  // PokeWallet indicizza il set, diverso dal nostro setId maiuscolo ("ME05")
+  // che finisce in base_set_code/dominant_set_code. Senza questo campo il set
+  // entra nel Pokedex ma resta senza prezzi finche' qualcuno non modifica a
+  // mano le tabelle nel Worker (e' quello che e' successo a Buio Pesto).
+  // Verificato il 2026-09-11 sulla directory /sets di PokeWallet: risolve a un
+  // unico set inglese per 18/18 dei set gia' mappati a mano, zero collisioni.
+  // Presente anche nel payload italiano, quindi non costa una chiamata in piu'.
+  const upstreamSetCode = (setSummary.abbreviation?.official ?? '').trim().toUpperCase() || null;
+  console.log(`Codice upstream (abbreviation.official): ${upstreamSetCode ?? "-- assente, il Worker usera' i fallback"}`);
+
   console.log('Recupero dettaglio carte + verifica immagini...');
   const enriched = await mapWithConcurrency(cardRefs, CONCURRENCY, async (ref) => {
     const detail = await fetchJson(`https://api.tcgdex.net/v2/it/cards/${ref.id}`);
@@ -158,9 +169,9 @@ async function main() {
     // base_set_code and dominant_set_code hold the same value here (schema/003 was
     // added twice under different names by two branches worked in parallel) --
     // written together so neither column goes stale for newly-ingested sets.
-    `INSERT INTO expansions (id, card_count, sort_order, logo_key, published, coverage_pct, release_date, dominant_set_code, base_set_code) VALUES (` +
-    `${sqlString(setId)}, ${enriched.length}, 100, NULL, ${published ? 1 : 0}, ${coverage.toFixed(4)}, ${sqlString(setSummary.releaseDate)}, ${sqlString(setCodeUpper)}, ${sqlString(setCodeUpper)}) ` +
-    `ON CONFLICT(id) DO UPDATE SET card_count = excluded.card_count, published = excluded.published, coverage_pct = excluded.coverage_pct, release_date = excluded.release_date, dominant_set_code = excluded.dominant_set_code, base_set_code = excluded.base_set_code;`
+    `INSERT INTO expansions (id, card_count, sort_order, logo_key, published, coverage_pct, release_date, dominant_set_code, base_set_code, upstream_set_code) VALUES (` +
+    `${sqlString(setId)}, ${enriched.length}, 100, NULL, ${published ? 1 : 0}, ${coverage.toFixed(4)}, ${sqlString(setSummary.releaseDate)}, ${sqlString(setCodeUpper)}, ${sqlString(setCodeUpper)}, ${sqlString(upstreamSetCode)}) ` +
+    `ON CONFLICT(id) DO UPDATE SET card_count = excluded.card_count, published = excluded.published, coverage_pct = excluded.coverage_pct, release_date = excluded.release_date, dominant_set_code = excluded.dominant_set_code, base_set_code = excluded.base_set_code, upstream_set_code = COALESCE(excluded.upstream_set_code, expansions.upstream_set_code);`
   );
 
   const cardRows = enriched.map((e) => {
