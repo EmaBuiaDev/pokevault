@@ -1697,6 +1697,75 @@ async function buildItalianPriceSnapshot(
   return snapshot;
 }
 
+
+/**
+ * Single-expansion slice of the price snapshot: /ita/prices/{code}.json
+ *
+ * The full snapshot is ~2.5 MB (354 KB gzipped) and carries every expansion.
+ * Opening one set in the Pokedex needs ~120 of those ~15.850 entries, so the
+ * app paid for the whole catalogue to price a single set -- on a cold start
+ * that is the whole download and parse before any price can render.
+ *
+ * `code` accepts anything the snapshot knows how to alias: the expansion id
+ * (me05), the English base set code (pbl) or the raw Italian set code, so the
+ * caller does not need to know which one it is holding.
+ *
+ * Never triggers a rebuild: this is the latency-sensitive path, and a set the
+ * snapshot has not covered yet is a 404 the client falls back from, not a
+ * request that blocks on upstream fetches.
+ */
+async function handleItalianExpansionPricesRequest(
+  requestUrl: URL,
+  env: Env,
+  cache: KVNamespace
+): Promise<Response> {
+  const rawCode = decodeURIComponent(
+    requestUrl.pathname.slice('/ita/prices/'.length).replace(/\.json$/i, '')
+  ).trim().toLowerCase();
+
+  const notFound = (error: string) => new Response(JSON.stringify({ error }), {
+    status: 404,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      // Short: a set missing today is usually one the next cron run will cover.
+      'Cache-Control': `public, max-age=${TTL_5_MINUTES}`,
+    },
+  });
+
+  if (!rawCode) {
+    return notFound('expansion code required');
+  }
+
+  const snapshot = await cache.get(ITA_PRICE_SNAPSHOT_KEY, 'json') as ItalianPriceSnapshot | null;
+  if (!snapshot) {
+    return notFound('Italian price snapshot not available');
+  }
+
+  const expansionId = snapshot.aliases?.[rawCode] ?? rawCode;
+  const entry = snapshot.expansions?.[expansionId];
+  if (!entry) {
+    return notFound(`no prices for "${rawCode}"`);
+  }
+
+  const body = JSON.stringify({
+    expansionId,
+    baseSetCode: entry.baseSetCode,
+    updatedAt: entry.updatedAt,
+    builtAt: snapshot.builtAt,
+    prices: entry.prices,
+  });
+
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'public, max-age=1800',
+      'X-Snapshot-Built-At': new Date(snapshot.builtAt).toISOString(),
+      'X-Expansion-Updated-At': new Date(entry.updatedAt).toISOString(),
+      'X-Expansion-Prices': Object.keys(entry.prices).length.toString(),
+    },
+  });
+}
 async function handleItalianPricesRequest(
   requestUrl: URL,
   env: Env,
@@ -2005,6 +2074,10 @@ export default {
 
     if (requestUrl.pathname === '/ita/prices.json') {
       return handleItalianPricesRequest(requestUrl, env, cache);
+    }
+
+    if (requestUrl.pathname.startsWith('/ita/prices/')) {
+      return handleItalianExpansionPricesRequest(requestUrl, env, cache);
     }
 
     if (parseItalianCatalogRequest(requestUrl)) {
