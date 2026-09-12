@@ -1,7 +1,6 @@
 package com.emabuia.pokevault.viewmodel
 
 import android.app.Application
-import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import timber.log.Timber
 import androidx.compose.runtime.mutableStateOf
@@ -10,18 +9,24 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.model.ScannerMatcher
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.SetCodeMapper
 import com.emabuia.pokevault.data.remote.TcgCard
+import com.emabuia.pokevault.ocr.CardFieldParser
 import com.emabuia.pokevault.ocr.CardOCRResult
-import com.emabuia.pokevault.ocr.CardSupertype
-import com.emabuia.pokevault.ocr.OCRManager
+import com.emabuia.pokevault.ocr.CardReading
+import com.emabuia.pokevault.ocr.ScanAggregator
+import com.emabuia.pokevault.ocr.ScanConsensus
+import com.emabuia.pokevault.ocr.ScannedFrame
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.max
 import java.util.Locale
+
+/** Condizione di partenza: la grande maggioranza delle carte scansionate e' questa. */
+private const val DEFAULT_CONDITION = "Near Mint"
 
 data class ScannerUiState(
     val isSearching: Boolean = false,
@@ -33,311 +38,326 @@ data class ScannerUiState(
     val lastAddedCard: TcgCard? = null,
     val addedCount: Int = 0,
     val errorMessage: String? = null,
+    /** Suggerimento su come inquadrare, quando la lettura non basta */
+    val hintMessage: String? = null,
     val flashEnabled: Boolean = false,
+    /** Condizione applicata a tutto cio' che si scansiona, scelta prima di partire. */
+    val condition: String = DEFAULT_CONDITION,
+    /** Quando attiva, le carte certe entrano da sole senza toccare lo schermo. */
+    val continuousMode: Boolean = false,
     val detectedName: String = "",
-    val detectedNumber: String = "",
-    val lastOCRResult: CardOCRResult? = null,
-    val ocrEngineName: String = ""
+    /** ID letto in basso a sinistra, nella forma "67/87" */
+    val detectedNumber: String = ""
 )
 
+/**
+ * Orchestratore dello scanner: riceve i frame, decide quando i dati sono
+ * abbastanza solidi per cercare, e porta in collezione la carta scelta.
+ *
+ * Le due parti delicate vivono fuori da qui, per poter essere messe sotto test
+ * senza una camera e senza Firestore: [ScanAggregator] decide quando i frame
+ * concordano, [ScannerMatcher] decide quale carta del catalogo corrisponde.
+ */
 class ScannerViewModel(application: Application) : AndroidViewModel(application) {
-
-    private data class ScannerCandidate(
-        val card: TcgCard,
-        val nameSimilarity: Double,
-        val totalMatches: Boolean
-    )
 
     private val repository = RepositoryProvider.tcgRepository
     private val firestoreRepository = FirestoreRepository()
     private val appContext: Application get() = getApplication()
     private var searchJob: Job? = null
 
-    private val ocrManager = OCRManager()
-
-    private val recentlyAddedIds = mutableSetOf<String>()
+    /**
+     * Carte scartate dall'utente per il numero che sta inquadrando adesso.
+     *
+     * Serve a "nessuna di queste", che deve proporre le tre successive. E' legato
+     * al numero inquadrato, non alla sessione: uno scarto non puo' rendere una
+     * carta introvabile per sempre. Per lo stesso motivo non esiste un elenco
+     * delle carte aggiunte: di una carta si possono avere due copie e si
+     * scansionano una dopo l'altra.
+     */
+    private val rejectedIds = mutableSetOf<String>()
+    private var rejectionScope = ""
     private val recentSearchAttempts = mutableMapOf<String, Long>()
     private var lastSearchTimestamp = 0L
 
     /**
      * Chiave della ricerca attualmente in corso o completata.
-     * Basata SOLO sul numero carta (dato OCR piu stabile).
      * Impedisce di rilanciare la stessa ricerca su ogni frame.
      */
     private var activeSearchKey = ""
 
     /**
-     * Contatore di stabilita: quante volte consecutive abbiamo visto
-     * lo stesso numero carta. Dopo STABILITY_THRESHOLD frame stabili,
-     * lanciamo la ricerca immediatamente.
+     * Accumula le letture dei frame recenti e dice quando concordano: conta voti
+     * in una finestra di tempo, non frame consecutivi, perche' un singolo frame
+     * in cui l'ID non si legge non deve azzerare tutto.
      */
-    private var stableNumber = ""
-    private var stableTotal = ""
-    private var stableName = ""
-    private var stableSetHint = ""
-    private var stableSupertype: CardSupertype = CardSupertype.POKEMON
-    private var stabilityCount = 0
+    private val aggregator = ScanAggregator()
+
+    /** Istante della prima lettura senza ID, per il suggerimento di inquadratura. */
+    private var firstFrameWithoutIdAt = 0L
+
+    /** Frame consecutivi senza niente di leggibile davanti all'obiettivo. */
+    private var emptyFrames = 0
+
+    /** Ultima carta entrata da sola in modalita' continua, per non contarla due volte. */
+    private var lastAutoAddedNumber = ""
+    private var lastAutoAddedAt = 0L
+
+    /** Avviso che deve restare leggibile per qualche frame, non lampeggiare. */
+    private var stickyHint: String? = null
+    private var stickyHintUntil = 0L
 
     var uiState by mutableStateOf(ScannerUiState())
         private set
 
-    init {
-        viewModelScope.launch {
-            try {
-                ocrManager.initialize()
-                uiState = uiState.copy(ocrEngineName = ocrManager.activeEngineName)
-                Timber.i("OCR inizializzato: ${ocrManager.activeEngineName}")
-            } catch (e: Exception) {
-                Timber.e(e, "Errore inizializzazione OCR: ${e.message}")
-            }
-        }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        ocrManager.release()
-    }
-
     // ═══════════════════════════════════════════
-    // OCR DA CAMERA FRAME
+    // FRAME DALLA CAMERA
     // ═══════════════════════════════════════════
 
     /**
-     * Chiamata dalla camera ad ogni frame con testo OCR grezzo.
+     * Chiamata dalla camera a ogni frame analizzato.
      *
-     * Logica di stabilita:
-     * - Estrae il numero carta (dato piu stabile dall'OCR)
-     * - Conta i frame consecutivi con lo stesso numero
-     * - Dopo N frame stabili, lancia la ricerca SENZA attendere
-     * - Non cancella ricerche in corso se il numero non cambia
+     * Il frame porta due letture: il testo dell'intera carta con le posizioni
+     * dei blocchi, e il testo della striscia in basso ingrandita, da cui esce
+     * l'ID. Quando abbastanza frame recenti concordano, parte la ricerca.
      */
-    fun onTextDetected(rawText: String) {
-        if (rawText.isBlank()) return
+    fun onFrameScanned(frame: ScannedFrame) {
         if (uiState.pendingCard != null || uiState.candidateCards.isNotEmpty() || uiState.lastAddedCard != null) return
 
-        val ocrResult = ocrManager.extractCardFields(rawText)
-        if (!ocrResult.isSearchable()) return
-
-        val number = ocrResult.cardNumber ?: ""
-        val total = ocrResult.setTotal ?: ""
-        val name = ocrResult.cardName ?: ""
-        val setHint = ocrResult.setCode ?: ocrResult.setName ?: ""
-
-        // Aggiorna UI con il testo rilevato
-        if (number.isNotBlank() || name.isNotBlank()) {
-            uiState = uiState.copy(
-                detectedName = name,
-                detectedNumber = if (number.isNotBlank() && total.isNotBlank()) "$number/$total" else number,
-                lastOCRResult = ocrResult
-            )
+        if (frame.isEmpty()) {
+            viewModelScope.launch { onEmptyFrame() }
+            return
         }
 
-        // Chiave ricerca: numero+totale (obbligatori) piu nome/set quando leggibili.
-        val normalizedNameKey = normalizeNameForMatching(name)
-        val searchKey = listOf(number, total, normalizedNameKey, setHint.trim().lowercase(Locale.ROOT))
-            .joinToString("|")
-        if (searchKey.isBlank()) return
+        // Il parsing resta sul thread dell'analyzer (e' gia' qui, e costa qualche
+        // ms), ma lo stato si tocca solo dal main: viewModelScope usa
+        // Dispatchers.Main, cosi' le scritture di uiState restano serializzate.
+        val ocrResult = CardFieldParser.parseFrame(frame)
+        viewModelScope.launch { onCardRead(ocrResult) }
+    }
 
-        // Se la ricerca per questa chiave e gia partita o completata, non rilanciarla
-        if (searchKey == activeSearchKey) return
+    /**
+     * Davanti all'obiettivo non c'e' niente di leggibile: la carta e' stata
+     * spostata. E' il momento giusto per ripartire da zero, ed e' l'unico modo
+     * per riconoscere che una seconda copia della stessa carta e' una carta
+     * nuova: il numero letto sarebbe identico, quindi nessun altro segnale
+     * potrebbe distinguerle.
+     */
+    private fun onEmptyFrame() {
+        emptyFrames++
+        // Una volta sola per ogni passaggio a vuoto, non a ogni frame.
+        if (emptyFrames != FRAMES_TO_REARM) return
+
+        Timber.d("Obiettivo libero: scanner riarmato")
+        lastAutoAddedNumber = ""
+        lastAutoAddedAt = 0L
+        resetStability()
+        uiState = uiState.copy(detectedName = "", detectedNumber = "", hintMessage = null)
+    }
+
+    private fun onCardRead(ocrResult: CardOCRResult) {
+        if (uiState.pendingCard != null || uiState.candidateCards.isNotEmpty() || uiState.lastAddedCard != null) return
+
+        emptyFrames = 0
 
         val now = System.currentTimeMillis()
+        aggregator.record(
+            CardReading(
+                number = ocrResult.cardNumber?.takeIf { it.isNotBlank() },
+                setTotal = ocrResult.setTotal?.takeIf { it.isNotBlank() },
+                name = ocrResult.cardName?.takeIf { ScannerMatcher.isUsableName(it) },
+                setHint = (ocrResult.setCode ?: ocrResult.setName)?.takeIf { it.isNotBlank() },
+                hp = ocrResult.hp,
+                supertype = ocrResult.supertype
+            ),
+            nowMs = now
+        )
+
+        val consensus = aggregator.consensus(now) ?: return
+        publishReadout(consensus = consensus, nowMs = now)
+        syncRejectionScope(consensus.number)
+        if (!consensus.isReady) return
+
+        val searchKey = consensus.searchKey
+        if (searchKey == activeSearchKey) return
         if (now - lastSearchTimestamp < SEARCH_MIN_INTERVAL_MS) return
-        val lastAttempt = recentSearchAttempts[searchKey] ?: 0L
-        if (now - lastAttempt < SEARCH_KEY_COOLDOWN_MS) return
+        if (now - (recentSearchAttempts[searchKey] ?: 0L) < SEARCH_KEY_COOLDOWN_MS) return
+        if (searchJob?.isActive == true) return
 
-        // Aggiorna contatore di stabilita
-        if (number.isNotBlank() && number == stableNumber) {
-            stabilityCount++
-            // Aggiorna nome e totale col valore piu recente (possono migliorare frame dopo frame)
-            if (name.isNotBlank()) stableName = name
-            if (total.isNotBlank()) stableTotal = total
-            if (setHint.isNotBlank()) stableSetHint = setHint
-            // Supertype non-Pokemon ha priorita (TRAINER/ENERGY sono segnali forti e affidabili)
-            if (ocrResult.supertype != CardSupertype.POKEMON) stableSupertype = ocrResult.supertype
-        } else {
-            // Numero cambiato: reset stabilita
-            stableNumber = number
-            stableTotal = total
-            stableName = name
-            stableSetHint = setHint
-            stableSupertype = ocrResult.supertype
-            stabilityCount = 1
-            // Cancella ricerca precedente solo se il numero e davvero cambiato
-            searchJob?.cancel()
+        Timber.d(
+            "Consenso: ${consensus.displayId} ${consensus.name} " +
+                "(id x${consensus.numberVotes}, nome x${consensus.nameVotes})"
+        )
+
+        activeSearchKey = searchKey
+        recentSearchAttempts[searchKey] = now
+        lastSearchTimestamp = now
+        searchJob = viewModelScope.launch { searchCard(consensus) }
+    }
+
+    /**
+     * Gli scarti valgono per la carta inquadrata: appena il numero cambia,
+     * ricominciano da zero. Senza questo, scartare una carta la rendeva
+     * introvabile per tutto il resto della sessione.
+     */
+    private fun syncRejectionScope(number: String?) {
+        // Un numero che non si legge per un frame non e' un cambio di carta: senza
+        // questa guardia, dopo "nessuna di queste" gli scarti sparivano al primo
+        // frame sporco e tornavano in scena gli stessi tre candidati.
+        val scope = number?.takeIf { it.isNotBlank() } ?: return
+        if (scope == rejectionScope) return
+        rejectedIds.clear()
+        rejectionScope = scope
+    }
+
+    /**
+     * Mostra il consenso, non la lettura del singolo frame: e' il motivo per cui
+     * il nome non cambia a ogni fotogramma sotto la cornice. Se l'ID non si
+     * legge per qualche secondo, dice anche come rimediare.
+     */
+    private fun publishReadout(consensus: ScanConsensus, nowMs: Long) {
+        val missingId = aggregator.hasNoIdInWindow(nowMs)
+        when {
+            !missingId -> firstFrameWithoutIdAt = 0L
+            firstFrameWithoutIdAt == 0L -> firstFrameWithoutIdAt = nowMs
         }
 
-        // Lancio ricerca quando numero+totale sono stabili.
-        // Il nome OCR aiuta ma NON blocca: numero/totale sono i dati piu affidabili
-        // e il totale set basta a disambiguare l'espansione (es. 067/087 -> me04).
-        val hasNumberAndTotal = stableNumber.isNotBlank() && stableTotal.isNotBlank()
-        val hasUsableStableName = isUsableSearchName(stableName)
-        val requiredStability = when {
-            hasNumberAndTotal && hasUsableStableName && stableSetHint.isNotBlank() -> FAST_STABILITY_THRESHOLD
-            hasNumberAndTotal && hasUsableStableName -> STABILITY_THRESHOLD
-            else -> NO_NAME_STABILITY_THRESHOLD
+        val hint = when {
+            nowMs < stickyHintUntil -> stickyHint
+            missingId && nowMs - firstFrameWithoutIdAt >= HINT_AFTER_MS ->
+                "Non leggo il numero in basso a sinistra: avvicina la carta e riempi la cornice."
+            else -> null
         }
 
-        if (hasNumberAndTotal && stabilityCount >= requiredStability && searchJob?.isActive != true) {
-            activeSearchKey = searchKey
-            recentSearchAttempts[searchKey] = now
-            lastSearchTimestamp = now
-            searchJob = viewModelScope.launch {
-                searchCard(
-                    name = stableName.takeIf { isUsableSearchName(it) },
-                    number = stableNumber.takeIf { it.isNotBlank() },
-                    setTotal = stableTotal.takeIf { it.isNotBlank() },
-                    setHint = stableSetHint.takeIf { it.isNotBlank() },
-                    supertype = stableSupertype
-                )
-            }
-        }
+        uiState = uiState.copy(
+            detectedName = consensus.name.orEmpty(),
+            detectedNumber = consensus.displayId,
+            hintMessage = hint
+        )
     }
 
     // ═══════════════════════════════════════════
-    // OCR DA BITMAP
-    // ═══════════════════════════════════════════
-
-    fun analyzeCardImage(bitmap: Bitmap) {
-        if (uiState.pendingCard != null || uiState.candidateCards.isNotEmpty()) return
-        searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            uiState = uiState.copy(isSearching = true, errorMessage = null)
-            try {
-                val result = ocrManager.analyzeCardImage(bitmap)
-                uiState = uiState.copy(
-                    detectedName = result.cardName ?: "",
-                    detectedNumber = result.cardNumber ?: "",
-                    lastOCRResult = result
-                )
-                if (result.isSearchable()) {
-                    searchCard(
-                        name = result.cardName,
-                        number = result.cardNumber,
-                        setTotal = result.setTotal,
-                        setHint = result.setCode ?: result.setName,
-                        supertype = result.supertype
-                    )
-                } else {
-                    uiState = uiState.copy(
-                        isSearching = false,
-                        errorMessage = "Testo non riconosciuto. Riprova con una foto più nitida."
-                    )
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Errore analisi immagine: ${e.message}")
-                uiState = uiState.copy(
-                    isSearching = false,
-                    errorMessage = "Errore OCR: ${e.message}"
-                )
-            }
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    // RICERCA CON SET MATCHING
+    // RICERCA NEL CATALOGO
     // ═══════════════════════════════════════════
 
     /**
-     * Pipeline scanner SOLO ITA cloud, una sola ricerca nel catalogo:
+     * Una sola ricerca nel catalogo ITA:
      *  - numero carta = filtro hard
-     *  - totale set + setHint OCR = disambiguazione espansione
-     *  - nome OCR = conferma (mai bloccante: se sporco si mostra il picker)
+     *  - totale set + set letto = disambiguazione dell'espansione
+     *  - nome = conferma, mai bloccante
      *
-     * Auto-proposta solo con segnali coerenti; in dubbio si mostrano i candidati.
+     * Poi decide [ScannerMatcher]: un candidato che stacca gli altri si propone
+     * da solo, in ogni altro caso si mostrano le tre carte piu' probabili.
      */
-    private suspend fun searchCard(
-        name: String?,
-        number: String?,
-        setTotal: String? = null,
-        setHint: String? = null,
-        supertype: CardSupertype = CardSupertype.POKEMON
-    ) {
+    private suspend fun searchCard(consensus: ScanConsensus) {
         uiState = uiState.copy(isSearching = true, errorMessage = null)
 
         try {
-            val normalizedSetHint = setHint
+            val normalizedSetHint = consensus.setHint
                 ?.let(SetCodeMapper::normalizeDecklistSetCode)
                 ?.lowercase(Locale.ROOT)
                 ?.takeIf { it.isNotBlank() }
 
-            Timber.d("Ricerca scanner ITA: name=$name number=$number total=$setTotal set=$normalizedSetHint")
+            Timber.d(
+                "Ricerca scanner ITA: name=${consensus.name} number=${consensus.number} " +
+                    "total=${consensus.setTotal} set=$normalizedSetHint"
+            )
             val candidates = repository.searchItalianScannerCandidates(
-                name = name,
-                number = number,
-                setTotal = setTotal,
+                name = consensus.name,
+                number = consensus.number,
+                setTotal = consensus.setTotal,
                 targetSetId = normalizedSetHint,
                 context = appContext,
-                limit = 6
+                limit = CANDIDATE_POOL_SIZE
             ).getOrDefault(emptyList())
 
-            val viable = candidates.filterNot { it.id in recentlyAddedIds }
+            val viable = candidates.filterNot { it.id in rejectedIds }
             if (viable.isEmpty()) {
                 uiState = uiState.copy(
                     isSearching = false,
                     pendingCard = null,
                     candidateCards = emptyList(),
-                    errorMessage = if (candidates.isEmpty()) "Nessuna carta trovata. Riprova." else null
+                    errorMessage = emptyResultMessage(consensus, hadCandidates = candidates.isNotEmpty())
                 )
                 activeSearchKey = ""
                 return
             }
 
-            // Preferenza soft sul supertype OCR (TRAINER/ENERGY): mai svuotare il pool.
-            val pool = when (supertype) {
-                CardSupertype.TRAINER -> viable.filter { it.supertype.equals("trainer", ignoreCase = true) }.ifEmpty { viable }
-                CardSupertype.ENERGY -> viable.filter { it.supertype.equals("energy", ignoreCase = true) }.ifEmpty { viable }
-                CardSupertype.POKEMON -> viable
-            }
+            val ranked = ScannerMatcher.rank(
+                cards = viable,
+                signals = ScannerMatcher.Signals(
+                    name = consensus.name,
+                    number = consensus.number,
+                    setTotal = consensus.setTotal,
+                    hp = consensus.hp,
+                    supertype = consensus.supertype
+                )
+            )
+            val top = ranked.first()
+            val clearWinner = ScannerMatcher.hasClearWinner(ranked)
 
-            val totalValue = setTotal?.toIntOrNull()
-            val hasUsableName = !name.isNullOrBlank() && isUsableSearchName(name)
-            val scored = pool.map { card ->
-                val similarity = if (hasUsableName) {
-                    maxOf(
-                        computeNameSimilarity(name, card.name),
-                        computeNameSimilarity(stripAccents(name), stripAccents(card.name))
-                    )
-                } else {
-                    0.0
-                }
-                val printedTotal = card.set?.printedTotal?.takeIf { it > 0 }
-                val totalMatches = totalValue != null && printedTotal != null &&
-                    kotlin.math.abs(printedTotal - totalValue) <= SET_TOTAL_TOLERANCE
-                ScannerCandidate(card = card, nameSimilarity = similarity, totalMatches = totalMatches)
-            }.sortedWith(
-                compareByDescending<ScannerCandidate> { it.totalMatches }
-                    .thenByDescending { it.nameSimilarity }
+            Timber.d(
+                "Scanner: top=${top.card.name} (${top.score}) " +
+                    "second=${ranked.getOrNull(1)?.card?.name} netto=$clearWinner " +
+                    "nome=${top.nameSimilarity} totaleEsatto=${top.totalExact}"
             )
 
-            val top = scored.first()
-            val second = scored.getOrNull(1)
-            // Auto-proposta SOLO con segnali coerenti:
-            //  - candidato unico, oppure
-            //  - totale set compatibile + (nome convincente o nessun rivale col totale giusto).
-            // Mai auto-proporre un match "solo numero": in dubbio si mostra il picker.
-            val autoSelect = when {
-                scored.size == 1 -> top.totalMatches || (hasUsableName && top.nameSimilarity >= MIN_NAME_SIMILARITY)
-                !top.totalMatches -> false
-                !hasUsableName -> second?.totalMatches != true
-                top.nameSimilarity < STRONG_NAME_SIMILARITY -> second?.totalMatches != true
-                else -> second == null || !second.totalMatches ||
-                    top.nameSimilarity - second.nameSimilarity >= NAME_SIMILARITY_MARGIN
+            if (uiState.continuousMode && !ScannerMatcher.isCertain(ranked)) {
+                // Se il continuo non scatta, si deve poter leggere perche: le due
+                // condizioni sono queste, e il log dice quale e mancata.
+                Timber.d(
+                    "Continuo: chiedo conferma (netto=$clearWinner, " +
+                        "nome=${top.nameSimilarity} serve >= 0.80)"
+                )
             }
 
-            uiState = if (autoSelect) {
+            // Modalita' continua: la carta entra da sola, ma solo col verdetto di
+            // prima qualita'. Tutto cio' che e' meno di questo torna a passare
+            // dalle mani dell'utente: il continuo risparmia tocchi, non precisione.
+            if (uiState.continuousMode && ScannerMatcher.isCertain(ranked)) {
+                if (!canAutoAddNow(consensus.number)) {
+                    // La carta e' ancora davanti all'obiettivo. Non la conto due
+                    // volte, ma non interrompo nemmeno la scansione con una proposta
+                    // che l'utente dovrebbe scartare a mano: basta dirglielo.
+                    showStickyHint("Già aggiunta: passa alla carta successiva.")
+                    uiState = uiState.copy(
+                        isSearching = false,
+                        pendingCard = null,
+                        candidateCards = emptyList(),
+                        errorMessage = null,
+                        hintMessage = stickyHint
+                    )
+                    return
+                }
+
+                Timber.d("Continuo: aggiungo ${top.card.name} senza conferma")
+                lastAutoAddedNumber = consensus.number.orEmpty()
+                lastAutoAddedAt = System.currentTimeMillis()
+                uiState = uiState.copy(
+                    isSearching = true,
+                    pendingCard = null,
+                    candidateCards = emptyList(),
+                    errorMessage = null,
+                    hintMessage = null
+                )
+                addToFirestore(top.card)
+                return
+            }
+
+            uiState = if (clearWinner) {
                 uiState.copy(
                     isSearching = false,
                     pendingCard = top.card,
                     candidateCards = emptyList(),
-                    errorMessage = null
+                    errorMessage = null,
+                    hintMessage = null
                 )
             } else {
                 uiState.copy(
                     isSearching = false,
                     pendingCard = null,
-                    candidateCards = scored.take(MAX_AMBIGUOUS_CANDIDATES).map { it.card },
-                    errorMessage = "Più risultati possibili. Seleziona la carta corretta."
+                    candidateCards = ranked.take(ScannerMatcher.MAX_CANDIDATES).map { it.card },
+                    errorMessage = null,
+                    hintMessage = null
                 )
             }
         } catch (e: Exception) {
@@ -350,89 +370,14 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun computeNameSimilarity(expectedName: String?, actualName: String): Double {
-        val normalizedExpected = normalizeNameForMatching(expectedName)
-        val normalizedActual = normalizeNameForMatching(actualName)
-
-        if (normalizedExpected.isBlank() || normalizedActual.isBlank()) return 0.0
-        if (normalizedExpected == normalizedActual) return 1.0
-        if (normalizedActual.startsWith(normalizedExpected) || normalizedExpected.startsWith(normalizedActual)) {
-            return 0.92
+    /** Messaggio che dice cosa manca, non solo che non ha trovato niente. */
+    private fun emptyResultMessage(consensus: ScanConsensus, hadCandidates: Boolean): String {
+        return when {
+            hadCandidates -> "Ho finito le carte da proporre per questo numero."
+            consensus.number == null -> "Non riesco a leggere il numero in basso a sinistra. Avvicina la carta."
+            consensus.setTotal == null -> "Numero ${consensus.number} letto, ma non il totale del set. Avvicina la carta."
+            else -> "Nessuna carta ${consensus.number}/${consensus.setTotal} nel catalogo italiano."
         }
-
-        val distance = levenshtein(normalizedExpected, normalizedActual)
-        val maxLength = max(normalizedExpected.length, normalizedActual.length)
-        val charSimilarity = (1.0 - distance.toDouble() / maxLength.toDouble()).coerceIn(0.0, 1.0)
-
-        val expectedTokens = normalizedExpected.split(" ").filter { it.isNotBlank() }.toSet()
-        val actualTokens = normalizedActual.split(" ").filter { it.isNotBlank() }.toSet()
-        val tokenSimilarity = if (expectedTokens.isNotEmpty() && actualTokens.isNotEmpty()) {
-            expectedTokens.intersect(actualTokens).size.toDouble() /
-                max(expectedTokens.size, actualTokens.size).toDouble()
-        } else {
-            0.0
-        }
-
-        return (charSimilarity * 0.75) + (tokenSimilarity * 0.25)
-    }
-
-    private fun normalizeNameForMatching(name: String?): String {
-        if (name.isNullOrBlank()) return ""
-
-        val stopWords = setOf(
-            "trainer", "allenatore", "supporter", "aiuto", "item", "strumento",
-            "stadium", "stadio", "tool", "energy", "energia", "pokemon", "pokmon",
-            "basic", "base", "lotta", "fight", "fighting", "ability", "abilita",
-            "attack", "attacco"
-        )
-
-        return name
-            .lowercase()
-            .replace(NAME_INVALID_CHARS_REGEX, " ")
-            .split(WHITESPACE_REGEX)
-            .filter { token -> token.length >= 2 && token !in stopWords }
-            .joinToString(" ")
-            .trim()
-    }
-
-    private fun isUsableSearchName(name: String): Boolean {
-        val normalized = normalizeNameForMatching(name)
-        return normalized.length >= 3 && normalized.any { it.isLetter() }
-    }
-
-    /**
-     * Strips Unicode combining diacritics (accents) from a string.
-     * Used to enable cross-language name matching between ITA and ENG cards
-     * where Pokémon names are identical but may carry accented chars.
-     */
-    private fun stripAccents(s: String?): String {
-        if (s.isNullOrBlank()) return ""
-        val nfd = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
-        return COMBINING_MARKS_REGEX.replace(nfd, "")
-    }
-
-    private fun levenshtein(left: String, right: String): Int {
-        if (left == right) return 0
-        if (left.isEmpty()) return right.length
-        if (right.isEmpty()) return left.length
-
-        val previous = IntArray(right.length + 1) { it }
-        val current = IntArray(right.length + 1)
-
-        for (leftIndex in left.indices) {
-            current[0] = leftIndex + 1
-            for (rightIndex in right.indices) {
-                val substitutionCost = if (left[leftIndex] == right[rightIndex]) 0 else 1
-                current[rightIndex + 1] = minOf(
-                    current[rightIndex] + 1,
-                    previous[rightIndex + 1] + 1,
-                    previous[rightIndex] + substitutionCost
-                )
-            }
-            previous.indices.forEach { index -> previous[index] = current[index] }
-        }
-
-        return previous[right.length]
     }
 
     // ═══════════════════════════════════════════
@@ -453,21 +398,28 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
+    /**
+     * "Nessuna di queste": le carte mostrate escono di scena per il numero
+     * inquadrato e la stessa inquadratura viene ricercata di nuovo, cosi' la
+     * rosa successiva propone le tre carte che vengono dopo.
+     */
     fun dismissCard() {
-        val card = uiState.pendingCard
+        rejectedIds += uiState.candidateCards.map { it.id }
+        uiState.pendingCard?.let { rejectedIds += it.id }
+
         uiState = uiState.copy(
             pendingCard = null,
             candidateCards = emptyList(),
             detectedName = "",
             detectedNumber = "",
-            errorMessage = null
+            errorMessage = null,
+            hintMessage = null
         )
         resetStability()
-        if (card != null) recentlyAddedIds.add(card.id)
     }
 
     // ═══════════════════════════════════════════
-    // SALVATAGGIO FIRESTORE
+    // SALVATAGGIO
     // ═══════════════════════════════════════════
 
     private suspend fun addToFirestore(tcgCard: TcgCard) {
@@ -481,16 +433,23 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             rarity = resolvedCard.rarity ?: "",
             type = resolvedCard.types?.firstOrNull() ?: resolvedCard.supertype,
             hp = resolvedCard.hp?.toIntOrNull() ?: 0,
+            // Senza questi due, ogni carta scansionata entrava in collezione come
+            // Pokemon: CardClassifier si basa su supertype/subtypes, quindi gli
+            // Allenatori e le Energie finivano nella categoria sbagliata in
+            // statistiche e filtri.
+            supertype = resolvedCard.supertype.ifBlank { "Pokémon" },
+            subtypes = resolvedCard.subtypes.orEmpty(),
             estimatedValue = price,
             quantity = 1,
-            condition = "Near Mint",
+            condition = uiState.condition,
             apiCardId = resolvedCard.id,
             cardNumber = resolvedCard.number
         )
 
+        // La quantita' non si somma qui: addCard riconosce la carta gia' in
+        // collezione (stesso apiCardId, variante e lingua) e incrementa la riga.
         firestoreRepository.addCard(pokemonCard)
             .onSuccess {
-                recentlyAddedIds.add(tcgCard.id)
                 uiState = uiState.copy(
                     isSearching = false,
                     lastAddedCard = tcgCard,
@@ -498,8 +457,11 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     errorMessage = null
                 )
                 val addedCardId = tcgCard.id
+                // In continuo il banner e' solo un riscontro di passaggio: tenerlo
+                // 2,5 secondi vorrebbe dire una carta ogni tre secondi.
+                val bannerMs = if (uiState.continuousMode) CONTINUOUS_BANNER_MS else ADDED_BANNER_MS
                 viewModelScope.launch {
-                    delay(2500)
+                    delay(bannerMs)
                     if (uiState.lastAddedCard?.id == addedCardId) {
                         uiState = uiState.copy(
                             lastAddedCard = null,
@@ -511,7 +473,6 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
             .onFailure { error ->
-                recentlyAddedIds.remove(tcgCard.id)
                 uiState = uiState.copy(
                     isSearching = false,
                     errorMessage = "Errore salvataggio: ${error.message}"
@@ -521,32 +482,57 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ═══════════════════════════════════════════
-    // UTILITY
+    // PREFERENZE E RESET
     // ═══════════════════════════════════════════
 
     private fun resetStability() {
         activeSearchKey = ""
-        stableNumber = ""
-        stableTotal = ""
-        stableName = ""
-        stableSetHint = ""
-        stableSupertype = CardSupertype.POKEMON
-        stabilityCount = 0
-        recentSearchAttempts.entries.removeIf { System.currentTimeMillis() - it.value > SEARCH_KEY_COOLDOWN_MS * 2 }
+        aggregator.reset()
+        firstFrameWithoutIdAt = 0L
+        recentSearchAttempts.clear()
+    }
+
+    /**
+     * In continuo manca la protezione che il tocco dava gratis: una carta
+     * lasciata davanti all'obiettivo non deve entrare due volte. Una carta
+     * diversa passa subito; la stessa va riproposta solo dopo una pausa, che
+     * nella pratica vuol dire "l'hai davvero sostituita con una seconda copia".
+     */
+    private fun canAutoAddNow(number: String?): Boolean {
+        if (number.orEmpty() != lastAutoAddedNumber) return true
+        return System.currentTimeMillis() - lastAutoAddedAt >= CONTINUOUS_SAME_CARD_MS
+    }
+
+    private fun showStickyHint(message: String) {
+        stickyHint = message
+        stickyHintUntil = System.currentTimeMillis() + STICKY_HINT_MS
     }
 
     fun toggleFlash() {
         uiState = uiState.copy(flashEnabled = !uiState.flashEnabled)
     }
 
+    fun setCondition(condition: String) {
+        uiState = uiState.copy(condition = condition)
+    }
+
+    fun toggleContinuousMode() {
+        uiState = uiState.copy(continuousMode = !uiState.continuousMode)
+    }
+
     fun resetScanner() {
-        recentlyAddedIds.clear()
+        rejectedIds.clear()
+        rejectionScope = ""
         searchJob?.cancel()
         resetStability()
+        lastAutoAddedNumber = ""
+        lastAutoAddedAt = 0L
+        emptyFrames = 0
         uiState = ScannerUiState(
             flashEnabled = uiState.flashEnabled,
-            addedCount = uiState.addedCount,
-            ocrEngineName = ocrManager.activeEngineName
+            condition = uiState.condition,
+            continuousMode = uiState.continuousMode,
+            addedCount = uiState.addedCount
         )
     }
 
@@ -555,23 +541,25 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     companion object {
-        private const val TAG = "ScannerViewModel"
-        private const val STABILITY_THRESHOLD = 3
-        private const val FAST_STABILITY_THRESHOLD = 2
-        private const val NO_NAME_STABILITY_THRESHOLD = 4
-        private const val MAX_AMBIGUOUS_CANDIDATES = 3
-        private const val MIN_NAME_SIMILARITY = 0.42
-        private const val STRONG_NAME_SIMILARITY = 0.60
-        private const val NAME_SIMILARITY_MARGIN = 0.18
-        private const val SET_TOTAL_TOLERANCE = 2
-        private const val SEARCH_MIN_INTERVAL_MS = 1500L
-        private const val SEARCH_KEY_COOLDOWN_MS = 6000L
+        /** Dopo quanto, senza mai leggere l'ID, si suggerisce di avvicinare la carta. */
+        private const val HINT_AFTER_MS = 2_500L
 
-        // Regex pre-compilati: erano ricreati ad ogni chiamata di normalize(),
-        // sprecando GC durante il live preview dello scanner.
-        private val NAME_INVALID_CHARS_REGEX = Regex("""[^a-z0-9à-ÿ\s'-]""")
-        private val WHITESPACE_REGEX = Regex("""\s+""")
-        /** Unicode combining diacritical marks (NFD decomposition artifacts). */
-        private val COMBINING_MARKS_REGEX = Regex("""\p{InCombiningDiacriticalMarks}""")
+        /** Durata di un avviso puntuale, abbastanza da leggerlo. */
+        private const val STICKY_HINT_MS = 1_800L
+
+        /** Frame a vuoto dopo i quali si considera che la carta sia stata spostata. */
+        private const val FRAMES_TO_REARM = 2
+
+        /** Quante carte chiedere al catalogo: piu' di quante se ne mostrino. */
+        private const val CANDIDATE_POOL_SIZE = 10
+
+        /** Quanto deve passare prima che la stessa carta possa rientrare da sola. */
+        private const val CONTINUOUS_SAME_CARD_MS = 3_000L
+
+        private const val ADDED_BANNER_MS = 2_500L
+        private const val CONTINUOUS_BANNER_MS = 1_100L
+
+        private const val SEARCH_MIN_INTERVAL_MS = 1_200L
+        private const val SEARCH_KEY_COOLDOWN_MS = 6_000L
     }
 }

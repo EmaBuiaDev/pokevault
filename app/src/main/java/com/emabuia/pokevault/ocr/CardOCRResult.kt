@@ -1,68 +1,61 @@
 package com.emabuia.pokevault.ocr
 
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
-
 /**
  * Risultato strutturato dell'OCR su una carta Pokemon.
  * Tutti i campi estratti dalla pipeline di riconoscimento.
  */
 data class CardOCRResult(
-    @SerializedName("card_name")
     val cardName: String? = null,
-
-    @SerializedName("card_number")
     val cardNumber: String? = null,
-
-    @SerializedName("set_total")
     val setTotal: String? = null,
-
-    @SerializedName("set_name")
     val setName: String? = null,
-
-    @SerializedName("set_code")
     val setCode: String? = null,
-
-    @SerializedName("rarity")
     val rarity: String? = null,
-
-    @SerializedName("hp")
     val hp: Int? = null,
-
-    @SerializedName("supertype")
     val supertype: CardSupertype = CardSupertype.POKEMON,
-
-    @SerializedName("variant")
     val variant: CardVariant = CardVariant.NORMAL,
-
-    @SerializedName("stage")
     val stage: String? = null,
-
-    @SerializedName("illustrator")
     val illustrator: String? = null,
-
-    @SerializedName("raw_text")
     val rawText: String = "",
-
-    @SerializedName("confidence")
     val confidence: Float = 0f,
-
-    @SerializedName("detected_zones")
     val detectedZones: List<DetectedTextZone> = emptyList()
+)
+
+/**
+ * Blocco di testo riconosciuto, con la sua posizione sulla carta.
+ *
+ * Le posizioni sono cio' che permette di sapere che il nome sta in alto e l'ID
+ * in basso, invece di indovinarlo dall'ordine delle righe.
+ */
+data class OCRTextBlock(
+    val text: String,
+    val confidence: Float,
+    val boundingBox: ZoneBoundingBox? = null,
+    /** Posizione verticale normalizzata [0..1] nell'immagine originale */
+    val normalizedY: Float = 0f
 ) {
-    fun toJson(): String = Gson().toJson(this)
+    /** Posizione orizzontale del bordo sinistro [0..1]; 0 se il box manca. */
+    val normalizedLeft: Float get() = boundingBox?.left ?: 0f
+}
 
-    /** Indica se il risultato ha abbastanza dati per una ricerca */
-    fun isSearchable(): Boolean {
-        return (cardName != null && cardName.length >= 3) || cardNumber != null
-    }
+/**
+ * Un frame della carta gia' passato all'OCR, con le due letture che lo scanner
+ * fa su ogni fotogramma:
+ *  - [blocks], il testo dell'intera carta con la posizione di ogni blocco;
+ *  - [idStripText], il testo della sola striscia in fondo, ritagliata e
+ *    ingrandita perche' il numero da collezione e' troppo piccolo per essere
+ *    letto insieme al resto.
+ *
+ * Un frame vuoto non e' un frame inutile: dice che davanti all'obiettivo non
+ * c'e' niente di leggibile, e lo scanner lo usa per riarmarsi.
+ */
+data class ScannedFrame(
+    val blocks: List<OCRTextBlock> = emptyList(),
+    val idStripText: String = ""
+) {
+    val fullText: String get() = blocks.joinToString("\n") { it.text }
 
-    /** Genera una search key univoca per il debounce */
-    fun searchKey(): String = "${cardName.orEmpty()}_${cardNumber.orEmpty()}"
-
-    companion object {
-        fun fromJson(json: String): CardOCRResult = Gson().fromJson(json, CardOCRResult::class.java)
-    }
+    fun isEmpty(): Boolean = blocks.isEmpty() && idStripText.isBlank()
 }
 
 /** Zone di testo rilevate sull'immagine con bounding box */

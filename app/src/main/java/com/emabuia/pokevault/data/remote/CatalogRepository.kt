@@ -630,6 +630,13 @@ class CatalogRepository {
             .getOrElse { return Result.success(emptyList()) }
         val expansionManifests = catalog.expansions.associateBy { it.espansioneId.trim().lowercase(Locale.ROOT) }
 
+        // Il totale letto in basso a sinistra ("/087") vale come discriminante solo
+        // se sappiamo il totale stampato di ogni espansione. Quello reale sta nei set
+        // gia' mergiati (ereditato dal set base ENG, vedi buildItalianTcgSet): il
+        // cardCount del manifest conta anche le segrete, quindi non combacia mai.
+        if (memorySets == null) runCatching { getSets(context) }
+        val printedTotals = italianPrintedTotalsByExpansion()
+
         return runCatching {
             withContext(Dispatchers.Default) {
                 val baseCandidates = catalog.cards.filter { record ->
@@ -660,18 +667,23 @@ class CatalogRepository {
                             return@mapNotNull null
                         }
 
-                        var score = 0
-                        if (!normalizedNumber.isNullOrBlank()) score += 120
-                        score += nameScore
-                        if (normalizedTargetSet != null) score += 120
+                        // Numero e set hint sono gia' filtri: aggiungerli al punteggio
+                        // darebbe lo stesso bonus a tutti. Discriminano solo nome e totale.
+                        var score = nameScore
 
-                        val printedTotal = ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId]
-                            ?: expansionManifests[expansionId]?.cardCount?.takeIf { it > 0 }
+                        val printedTotal = resolveItalianPrintedTotal(
+                            expansionId = expansionId,
+                            printedTotals = printedTotals,
+                            manifests = expansionManifests
+                        )
                         if (targetTotal != null && printedTotal != null) {
                             score += when {
-                                printedTotal == targetTotal -> 45
-                                abs(printedTotal - targetTotal) <= 2 -> 18
-                                else -> 0
+                                printedTotal == targetTotal -> 90
+                                abs(printedTotal - targetTotal) <= 2 -> 25
+                                // Totale letto e totale del set incompatibili: e' un'altra
+                                // espansione. Penalizza senza escludere, perche' la cifra
+                                // puo' sempre essere stata letta male.
+                                else -> -45
                             }
                         }
 
@@ -694,8 +706,11 @@ class CatalogRepository {
 
                 ranked.map { (record, _) ->
                     val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
-                    val printedTotal = ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId]
-                        ?: expansionManifests[expansionId]?.cardCount?.takeIf { it > 0 }
+                    val printedTotal = resolveItalianPrintedTotal(
+                        expansionId = expansionId,
+                        printedTotals = printedTotals,
+                        manifests = expansionManifests
+                    )
                     toItalianTcgCard(
                         record = record,
                         setInfo = TcgSet(
@@ -709,6 +724,37 @@ class CatalogRepository {
                 }.distinctBy { it.id }
             }
         }
+    }
+
+    /**
+     * Mappa `id espansione ITA -> totale stampato` presa dai set gia' mergiati,
+     * che ereditano il valore reale dal set base inglese. Vuota finche' i set
+     * non sono stati caricati almeno una volta.
+     */
+    private fun italianPrintedTotalsByExpansion(): Map<String, Int> {
+        return memorySets.orEmpty()
+            .mapNotNull { set ->
+                val expansionId = parseItalianExpansionId(set.id) ?: return@mapNotNull null
+                val printedTotal = set.printedTotal.takeIf { it > 0 } ?: return@mapNotNull null
+                expansionId to printedTotal
+            }
+            .toMap()
+    }
+
+    /**
+     * Totale stampato di un'espansione ITA, dalla fonte piu' attendibile
+     * disponibile: override manuale (esiste proprio dove il dato ereditato e'
+     * sbagliato), set mergiato, conteggio del manifest. L'ultimo e' un
+     * ripiego: include le segrete, quindi sovrastima.
+     */
+    private fun resolveItalianPrintedTotal(
+        expansionId: String,
+        printedTotals: Map<String, Int>,
+        manifests: Map<String, ItalianExpansionManifest>
+    ): Int? {
+        return ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId]
+            ?: printedTotals[expansionId]
+            ?: manifests[expansionId]?.cardCount?.takeIf { it > 0 }
     }
 
     /**
