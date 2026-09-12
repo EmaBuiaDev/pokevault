@@ -93,6 +93,17 @@ android {
     // Escludi le architetture x86/x86_64 e non tentare strip su librerie terze parti
     // che arrivano gia' non strip-pabili (evita warning ripetuti in fase assemble).
     packaging {
+        resources {
+            // I jar di JUnit 5 arrivano transitivamente nell'APK di test e ognuno
+            // porta il proprio META-INF/LICENSE.md: senza escluderli il task
+            // mergeDebugAndroidTestJavaResource non riesce a impacchettare nulla
+            // e i test strumentati non partono.
+            excludes += setOf(
+                "META-INF/LICENSE.md",
+                "META-INF/LICENSE-notice.md",
+                "META-INF/NOTICE.md"
+            )
+        }
         jniLibs {
             useLegacyPackaging = false
             excludes += setOf("lib/x86/**", "lib/x86_64/**")
