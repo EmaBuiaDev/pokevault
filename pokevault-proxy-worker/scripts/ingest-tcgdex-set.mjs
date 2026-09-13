@@ -197,14 +197,26 @@ async function main() {
   console.log(`Upload completato: ${uploaded} ok, ${uploadFailed} falliti`);
 
   console.log('\nGenerazione SQL per D1...');
+  // I promo non hanno un totale stampato (le loro carte portano "SVP 001", non
+  // un "x/y"): li' TCGdex non espone cardCount.official e la colonna resta
+  // NULL, che l'app tratta come "non lo so", mai come "non e' questa".
+  const officialCount = Number(setSummary.cardCount?.official) > 0
+    ? Number(setSummary.cardCount.official)
+    : null;
   const lines = [];
   lines.push(
     // base_set_code and dominant_set_code hold the same value here (schema/003 was
     // added twice under different names by two branches worked in parallel) --
     // written together so neither column goes stale for newly-ingested sets.
-    `INSERT INTO expansions (id, card_count, sort_order, logo_key, published, coverage_pct, release_date, dominant_set_code, base_set_code, upstream_set_code) VALUES (` +
-    `${sqlString(setId)}, ${enriched.length}, 100, NULL, ${published ? 1 : 0}, ${coverage.toFixed(4)}, ${sqlString(setSummary.releaseDate)}, ${sqlString(setCodeUpper)}, ${sqlString(setCodeUpper)}, ${sqlString(upstreamSetCode)}) ` +
-    `ON CONFLICT(id) DO UPDATE SET card_count = excluded.card_count, published = excluded.published, coverage_pct = excluded.coverage_pct, release_date = excluded.release_date, dominant_set_code = excluded.dominant_set_code, base_set_code = excluded.base_set_code, upstream_set_code = COALESCE(excluded.upstream_set_code, expansions.upstream_set_code);`
+    //
+    // official_count e' il conteggio delle sole carte base -- il numero stampato
+    // sulle carte dopo la barra ("066/217") -- mentre card_count conta anche le
+    // segrete e i fuori serie, che si numerano superandolo ("219/217"). Va scritto
+    // qui perche' la ricerca per ID nell'app confronta quel numero (schema/008):
+    // un set ingerito senza sarebbe irraggiungibile digitandone un ID.
+    `INSERT INTO expansions (id, card_count, official_count, sort_order, logo_key, published, coverage_pct, release_date, dominant_set_code, base_set_code, upstream_set_code) VALUES (` +
+    `${sqlString(setId)}, ${enriched.length}, ${officialCount ?? 'NULL'}, 100, NULL, ${published ? 1 : 0}, ${coverage.toFixed(4)}, ${sqlString(setSummary.releaseDate)}, ${sqlString(setCodeUpper)}, ${sqlString(setCodeUpper)}, ${sqlString(upstreamSetCode)}) ` +
+    `ON CONFLICT(id) DO UPDATE SET card_count = excluded.card_count, official_count = COALESCE(excluded.official_count, expansions.official_count), published = excluded.published, coverage_pct = excluded.coverage_pct, release_date = excluded.release_date, dominant_set_code = excluded.dominant_set_code, base_set_code = excluded.base_set_code, upstream_set_code = COALESCE(excluded.upstream_set_code, expansions.upstream_set_code);`
   );
 
   const cardRows = enriched.map((e) => {
