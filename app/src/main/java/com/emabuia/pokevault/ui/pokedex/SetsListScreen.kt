@@ -42,6 +42,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -57,6 +59,7 @@ import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.SetsViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -166,12 +169,16 @@ fun PokeballLoadingAnimation(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SetsListScreen(
+    openCardSearch: Boolean = false,
     onBack: () -> Unit,
     onSetClick: (String, String) -> Unit,
     viewModel: SetsViewModel = viewModel()
 ) {
     val state = viewModel.uiState
-    var isSearchingCards by remember { mutableStateOf(false) }
+    // Arrivando dalla barra della Home la schermata parte gia' sulla ricerca
+    // carte invece che sull'elenco espansioni.
+    var isSearchingCards by remember { mutableStateOf(openCardSearch) }
+    val cardSearchFocus = remember { FocusRequester() }
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     var collapsedSeriesKeys by remember { mutableStateOf(emptySet<String>()) }
     var showFilterSheet by remember { mutableStateOf(false) }
@@ -190,6 +197,18 @@ fun SetsListScreen(
             onToggleSubtype = viewModel::toggleCardSubtypeFilter,
             onReset = viewModel::clearCardResultFilters
         )
+    }
+
+    // Il campo si prende il fuoco solo se ci siamo arrivati dalla barra della
+    // Home: chi apre il Pokedex dalla bottom bar vuole sfogliare le espansioni,
+    // e una tastiera che salta su da sola gli coprirebbe meta' schermo.
+    //
+    // Il giro di frame serve perche' alla prima composizione il campo non e'
+    // ancora agganciato e requestFocus() lancerebbe.
+    LaunchedEffect(openCardSearch) {
+        if (!openCardSearch) return@LaunchedEffect
+        delay(120)
+        runCatching { cardSearchFocus.requestFocus() }
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -288,7 +307,9 @@ fun SetsListScreen(
                             },
                             textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.textPrimary, fontSize = 14.sp),
                             singleLine = true, cursorBrush = SolidColor(AppColors.blue),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(cardSearchFocus)
                         )
                     }
                     val query = if (isSearchingCards) state.cardSearchQuery else state.searchQuery

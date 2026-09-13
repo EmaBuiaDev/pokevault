@@ -100,6 +100,13 @@ object Routes {
     const val EDIT_CARD = "edit_card/{cardId}"
     const val CARD_DETAIL = "card_detail/{cardId}"
     const val POKEDEX = "pokedex"
+
+    // Il Pokedex accetta un flag opzionale: arrivando dalla barra di ricerca
+    // della Home la schermata si apre gia' sul tab "Cerca carte" invece che
+    // sull'elenco espansioni. E' un booleano e non la query vera perche' la
+    // barra in Home non e' un campo editabile: passa solo l'intenzione, e il
+    // testo si scrive una volta sola, nel campo di destinazione.
+    const val POKEDEX_ROUTE = "pokedex?search={search}"
     const val SET_DETAIL = "set_detail/{setId}/{setName}?macro={macro}"
     const val STATS = "stats"
     const val SCANNER = "scanner"
@@ -124,6 +131,9 @@ object Routes {
     const val GOAL_ALBUM_DETAIL = "goal_album_detail/{goalAlbumId}"
 
     fun goalAlbumDetail(goalAlbumId: String) = "goal_album_detail/$goalAlbumId"
+
+    /** Pokedex aperto direttamente sulla ricerca carte, col campo gia' a fuoco. */
+    fun pokedexSearch() = "pokedex?search=true"
 
     fun cardDetail(cardId: String) = "card_detail/$cardId"
     fun editCard(cardId: String) = "edit_card/$cardId"
@@ -453,8 +463,17 @@ fun AppNavigation(
                 }
 
                 // ── Pokédex (Lista Espansioni) ──
-                composable(Routes.POKEDEX) {
+                composable(
+                    route = Routes.POKEDEX_ROUTE,
+                    arguments = listOf(
+                        navArgument("search") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        }
+                    )
+                ) { backStackEntry ->
                     SetsListScreen(
+                        openCardSearch = backStackEntry.arguments?.getBoolean("search") == true,
                         onBack = { navController.popBackStack() },
                         onSetClick = { setId, macro ->
                             // Naviga al dettaglio set
@@ -760,7 +779,10 @@ fun AppNavigation(
  * cresce mai oltre Home + tab corrente.
  */
 private fun NavHostController.navigateToBottomTab(tab: BottomTab) {
-    if (currentDestination?.route == tab.route) return
+    // Confronto sulla parte prima di "?": le rotte con argomenti opzionali
+    // (il Pokedex) hanno come pattern "pokedex?search={search}", che non
+    // sarebbe mai uguale alla rotta nuda della voce di barra.
+    if (currentDestination?.route?.substringBefore('?') == tab.route) return
 
     navigate(tab.route) {
         popUpTo(Routes.HOME) {

@@ -74,8 +74,17 @@ enum class BottomTab(val route: String, val icon: ImageVector) {
         }
 
     companion object {
-        /** La voce che corrisponde a [route], o null se la barra non va mostrata. */
-        fun forRoute(route: String?): BottomTab? = entries.firstOrNull { it.route == route }
+        /**
+         * La voce che corrisponde a [route], o null se la barra non va mostrata.
+         *
+         * Il confronto taglia la query string: il Pokedex e' registrato come
+         * "pokedex?search={search}" per poter essere aperto direttamente sulla
+         * ricerca carte, e senza il taglio la barra sparirebbe su quella tab.
+         */
+        fun forRoute(route: String?): BottomTab? {
+            val base = route?.substringBefore('?')
+            return entries.firstOrNull { it.route == base }
+        }
     }
 }
 

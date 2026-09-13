@@ -79,7 +79,17 @@ fun HomeScreen(
             // Offline banner
             OfflineBanner()
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Ricerca su tutto il catalogo, non sulla collezione: e' il primo
+            // gesto che uno fa aprendo l'app, e dalla Home costava due tocchi
+            // (tab Pokedex, poi tab "Cerca carte"). Qui e' un pulsante, non un
+            // campo: porta dentro la ricerca vera col campo gia' a fuoco.
+            HomeSearchEntry(
+                onClick = { onNavigate(Routes.pokedexSearch()) }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Griglia menu
             MenuGrid(
