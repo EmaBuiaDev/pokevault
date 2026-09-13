@@ -408,7 +408,26 @@ object AppLocale {
     val searchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
     val searchInSets: String get() = if (isItalian) "Cerca tra tutte le espansioni..." else "Search across all expansions..."
     val searchSetPlaceholder: String get() = if (isItalian) "Cerca un'espansione..." else "Search an expansion..."
-    val searchCardPlaceholder: String get() = if (isItalian) "Cerca in italiano o inglese (es. Gabbia di Lotta)..." else "Search in Italian or English (e.g. Battle Cage)..."
+    // Filtri della ricerca carte: le voci vengono dal catalogo, le etichette no.
+    val searchFiltersHint: String get() = if (isItalian) "Restringono i risultati della ricerca" else "They narrow down the search results"
+    val noResultsWithFilters: String get() = if (isItalian) "Nessun risultato con i filtri attivi" else "No results with the active filters"
+    val clearFilters: String get() = if (isItalian) "Azzera i filtri" else "Clear the filters"
+    val noFiltersForSearch: String get() = if (isItalian) "Questa ricerca non ha filtri da offrire" else "This search has no filters to offer"
+    val loadingFilters: String get() = if (isItalian) "Carico i filtri dal catalogo..." else "Loading filters from the catalog..."
+    val cardType: String get() = if (isItalian) "Tipo" else "Type"
+    val cardVariant: String get() = if (isItalian) "Meccanica" else "Mechanic"
+    val cardHp: String get() = if (isItalian) "Punti salute" else "Hit points"
+    val cardSeries: String get() = if (isItalian) "Serie" else "Series"
+    val cardPrice: String get() = if (isItalian) "Prezzo" else "Price"
+    val showLess: String get() = if (isItalian) "Mostra meno" else "Show less"
+    fun showAllExpansions(count: Int) = if (isItalian) "Tutte le $count espansioni" else "All $count expansions"
+    val priceFilterCaveat: String get() = if (isItalian)
+        "Il prezzo c'e' solo per le espansioni gia' scaricate: filtrando per fascia, le carte senza prezzo restano fuori."
+    else
+        "Prices exist only for expansions already downloaded: filtering by range leaves cards without a price out."
+    val searchEmptyHint: String get() = if (isItalian) "Scrivi un nome o un numero (67/87)" else "Type a name or a number (67/87)"
+
+    val searchCardPlaceholder: String get() = if (isItalian) "Cerca carte" else "Search cards"
     val loadingSets: String get() = if (isItalian) "Caricamento espansioni..." else "Loading expansions..."
     fun expansionsCount(count: Int) = if (isItalian) "$count espansioni" else "$count expansions"
     fun searchFor(query: String) = if (isItalian) "Cerco \"$query\"..." else "Searching for \"$query\"..."

@@ -6,6 +6,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -59,6 +61,8 @@ import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.SetsViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.emabuia.pokevault.data.italian.ItalianHpBucket
+import com.emabuia.pokevault.data.italian.ItalianPriceBucket
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -194,9 +198,20 @@ fun SetsListScreen(
             onToggleRarity = viewModel::toggleCardRarityFilter,
             onToggleType = viewModel::toggleCardTypeFilter,
             onToggleSupertype = viewModel::toggleCardSupertypeFilter,
-            onToggleSubtype = viewModel::toggleCardSubtypeFilter,
+            onToggleVariant = viewModel::toggleCardVariantFilter,
+            onToggleHp = viewModel::toggleCardHpFilter,
+            onToggleExpansion = viewModel::toggleCardExpansionFilter,
+            onToggleSeries = viewModel::toggleCardSeriesFilter,
+            onTogglePrice = viewModel::toggleCardPriceFilter,
             onReset = viewModel::clearCardResultFilters
         )
+    }
+
+    // Il vocabolario dei filtri si carica appena si entra nella ricerca, non
+    // all'apertura del Pokedex: chi sfoglia le espansioni non paga una scansione
+    // del catalogo che non gli serve.
+    LaunchedEffect(isSearchingCards) {
+        if (isSearchingCards) viewModel.loadSearchFacets()
     }
 
     // Il campo si prende il fuoco solo se ci siamo arrivati dalla barra della
@@ -324,33 +339,34 @@ fun SetsListScreen(
 
             if (isSearchingCards) {
                 Spacer(modifier = Modifier.height(8.dp))
-                val activeFilterCount = state.cardRarityFilter.size + state.cardTypeFilter.size +
-                    state.cardSupertypeFilter.size + state.cardSubtypeFilter.size
-                val hasFilterOptions = state.availableCardRarities.isNotEmpty() ||
-                    state.availableCardTypes.isNotEmpty() ||
-                    state.availableCardSupertypes.isNotEmpty() ||
-                    state.availableCardSubtypes.isNotEmpty()
+                val activeFilterCount = state.activeCardFilterCount
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Il pulsante c'e' sempre, anche col campo vuoto, cosi' i filtri si
+                    // possono scegliere in anticipo; ma restringono i risultati della
+                    // ricerca, non li producono da soli. Al posto del vecchio "Match
+                    // esatto ON/OFF" non c'e' niente: il nome identico lo mette in cima
+                    // il ranking da solo, e la ricerca per numero ("67/87") ora vale
+                    // sempre invece che solo a toggle acceso.
                     FilterChip(
-                        selected = state.isExactCardSearch,
-                        onClick = { viewModel.setExactCardSearch(!state.isExactCardSearch) },
+                        selected = activeFilterCount > 0,
+                        onClick = { showFilterSheet = true },
                         label = {
                             Text(
-                                text = if (state.isExactCardSearch) "Match esatto: ON" else "Match esatto",
+                                text = if (activeFilterCount > 0) {
+                                    "${AppLocale.filters} ($activeFilterCount)"
+                                } else {
+                                    AppLocale.filters
+                                },
                                 fontSize = 12.sp
                             )
                         },
                         leadingIcon = {
-                            Icon(
-                                imageVector = if (state.isExactCardSearch) Icons.Default.Check else Icons.Default.Tune,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(16.dp))
                         },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = AppColors.blue,
@@ -362,40 +378,12 @@ fun SetsListScreen(
                         )
                     )
 
-                    // Filtri rarita'/tipo/categoria/sottotipo raccolti in un unico
-                    // pannello (invece di piu' righe di chip sempre visibili) per non
-                    // affollare la barra di ricerca -- valori reali dal risultato
-                    // corrente (rarity ora nostra in D1, vedi MIGRATION_PLAN.md M4.6).
-                    if (hasFilterOptions) {
-                        FilterChip(
-                            selected = activeFilterCount > 0,
-                            onClick = { showFilterSheet = true },
-                            label = {
-                                Text(
-                                    text = if (activeFilterCount > 0) "Filtri ($activeFilterCount)" else "Filtri",
-                                    fontSize = 12.sp
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(16.dp))
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = AppColors.blue,
-                                selectedLabelColor = AppColors.textPrimary,
-                                selectedLeadingIconColor = AppColors.textPrimary,
-                                containerColor = AppColors.card,
-                                labelColor = AppColors.textMuted,
-                                iconColor = AppColors.textMuted
-                            )
-                        )
-                    }
-
                     Spacer(modifier = Modifier.weight(1f))
 
                     IconButton(onClick = { cardViewMode = cardViewMode.toggled() }) {
                         Icon(
                             imageVector = if (cardViewMode == CardViewMode.GRID) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
-                            contentDescription = "Cambia visualizzazione",
+                            contentDescription = AppLocale.changeView,
                             tint = AppColors.textMuted
                         )
                     }
@@ -413,6 +401,8 @@ fun SetsListScreen(
                 cards = state.searchedCards,
                 isLoading = state.isSearchingCards,
                 query = state.cardSearchQuery,
+                hasActiveFilters = state.hasActiveCardFilters,
+                onClearFilters = viewModel::clearCardResultFilters,
                 viewMode = cardViewMode,
                 setReleaseDateById = setReleaseDateById,
                 onCardClick = { card -> selectedCard = card },
@@ -528,9 +518,12 @@ enum class CardViewMode {
     fun toggled(): CardViewMode = if (this == GRID) LIST else GRID
 }
 
-// ── Pannello filtri ricerca carte: rarita'/tipo/categoria/sottotipo raccolti in un
-// unico bottom sheet (invece di piu' righe di chip sempre visibili) cosi' la barra di
-// ricerca resta pulita anche con molte dimensioni di filtro disponibili. ──
+// ── Pannello filtri ricerca carte ──
+//
+// Le voci arrivano dal catalogo, non dal risultato corrente: si possono
+// scegliere prima di scrivere il nome, e restano accese passando da una ricerca
+// all'altra. Con dei filtri accesi e il campo vuoto la ricerca gira lo stesso,
+// e diventa uno sfoglia-catalogo ("tutte le ex di Scintille Folgoranti").
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun CardFilterSheet(
@@ -539,10 +532,22 @@ private fun CardFilterSheet(
     onToggleRarity: (String) -> Unit,
     onToggleType: (String) -> Unit,
     onToggleSupertype: (String) -> Unit,
-    onToggleSubtype: (String) -> Unit,
+    onToggleVariant: (String) -> Unit,
+    onToggleHp: (ItalianHpBucket) -> Unit,
+    onToggleExpansion: (String) -> Unit,
+    onToggleSeries: (String) -> Unit,
+    onTogglePrice: (ItalianPriceBucket) -> Unit,
     onReset: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val facets = state.searchFacets
+    val filter = state.cardFilter
+
+    // Le espansioni sono oltre cento: mostrarle tutte fa del pannello un muro.
+    // Si parte dalle piu' grandi e si apre il resto solo se serve.
+    var showAllExpansions by remember { mutableStateOf(false) }
+    val expansionsToShow = if (showAllExpansions) facets.expansions else facets.expansions.take(12)
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -551,20 +556,26 @@ private fun CardFilterSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp)
+                .padding(bottom = 32.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Filtri", color = AppColors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                val activeCount = state.cardRarityFilter.size + state.cardTypeFilter.size +
-                    state.cardSupertypeFilter.size + state.cardSubtypeFilter.size
-                if (activeCount > 0) {
+                Column {
+                    Text(AppLocale.filters, color = AppColors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Text(
-                        text = "Azzera",
+                        text = AppLocale.searchFiltersHint,
+                        color = AppColors.textMuted,
+                        fontSize = 12.sp
+                    )
+                }
+                if (state.hasActiveCardFilters) {
+                    Text(
+                        text = AppLocale.resetFilters,
                         color = AppColors.blue,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -572,64 +583,153 @@ private fun CardFilterSheet(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
 
-            if (state.availableCardSupertypes.isNotEmpty()) {
-                FilterSection(title = "Categoria") {
-                    state.availableCardSupertypes.forEach { supertype ->
+            if (facets.isEmpty) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    // Col campo vuoto il vocabolario del catalogo sta ancora
+                    // arrivando; con una ricerca in corso, invece, vuol dire che
+                    // quei risultati non hanno niente da filtrare.
+                    text = if (state.cardSearchQuery.isBlank()) AppLocale.loadingFilters else AppLocale.noFiltersForSearch,
+                    color = AppColors.textMuted,
+                    fontSize = 13.sp
+                )
+                return@Column
+            }
+
+            if (facets.supertypes.isNotEmpty()) {
+                FilterSection(title = AppLocale.filterCategoryPrefix) {
+                    facets.supertypes.forEach { supertype ->
                         SeriesFilterChip(
                             label = AppLocale.translateSupertype(supertype),
                             count = 0,
                             showCount = false,
-                            isSelected = supertype in state.cardSupertypeFilter,
+                            isSelected = supertype in filter.supertypes,
                             onClick = { onToggleSupertype(supertype) }
                         )
                     }
                 }
             }
 
-            if (state.availableCardTypes.isNotEmpty()) {
-                FilterSection(title = "Tipo") {
-                    state.availableCardTypes.forEach { type ->
+            if (facets.types.isNotEmpty()) {
+                FilterSection(title = AppLocale.cardType) {
+                    facets.types.forEach { type ->
                         SeriesFilterChip(
                             label = AppLocale.translateType(type),
                             count = 0,
                             showCount = false,
-                            isSelected = type in state.cardTypeFilter,
+                            isSelected = type in filter.types,
                             onClick = { onToggleType(type) }
                         )
                     }
                 }
             }
 
-            if (state.availableCardSubtypes.isNotEmpty()) {
-                FilterSection(title = "Sottotipo") {
-                    state.availableCardSubtypes.forEach { subtype ->
+            if (facets.variants.isNotEmpty()) {
+                FilterSection(title = AppLocale.cardVariant) {
+                    facets.variants.forEach { variant ->
                         SeriesFilterChip(
-                            label = AppLocale.translateSubtype(subtype),
+                            label = variant,
                             count = 0,
                             showCount = false,
-                            isSelected = subtype in state.cardSubtypeFilter,
-                            onClick = { onToggleSubtype(subtype) }
+                            isSelected = variant in filter.variants,
+                            onClick = { onToggleVariant(variant) }
                         )
                     }
                 }
             }
 
-            if (state.availableCardRarities.isNotEmpty()) {
-                FilterSection(title = "Rarità") {
-                    state.availableCardRarities.forEach { rarity ->
+            if (facets.rarities.isNotEmpty()) {
+                FilterSection(title = AppLocale.rarity) {
+                    facets.rarities.forEach { rarity ->
                         val info = RarityUtils.getRarityInfo(rarity)
                         SeriesFilterChip(
                             label = "${info.emoji} ${AppLocale.translateRarity(rarity)}",
                             count = 0,
                             showCount = false,
-                            isSelected = rarity in state.cardRarityFilter,
+                            isSelected = rarity in filter.rarities,
                             onClick = { onToggleRarity(rarity) }
                         )
                     }
                 }
             }
+
+            if (facets.hpBuckets.isNotEmpty()) {
+                FilterSection(title = AppLocale.cardHp) {
+                    facets.hpBuckets.forEach { bucket ->
+                        SeriesFilterChip(
+                            label = bucket.label,
+                            count = 0,
+                            showCount = false,
+                            isSelected = bucket in filter.hpBuckets,
+                            onClick = { onToggleHp(bucket) }
+                        )
+                    }
+                }
+            }
+
+            val series = facets.series
+            if (series.isNotEmpty()) {
+                FilterSection(title = AppLocale.cardSeries) {
+                    series.forEach { name ->
+                        SeriesFilterChip(
+                            label = name,
+                            count = 0,
+                            showCount = false,
+                            isSelected = name in state.cardSeriesFilter,
+                            onClick = { onToggleSeries(name) }
+                        )
+                    }
+                }
+            }
+
+            if (facets.expansions.isNotEmpty()) {
+                FilterSection(title = AppLocale.extensions) {
+                    expansionsToShow.forEach { expansion ->
+                        SeriesFilterChip(
+                            label = expansion.label,
+                            count = 0,
+                            showCount = false,
+                            isSelected = expansion.id in filter.expansionIds,
+                            onClick = { onToggleExpansion(expansion.id) }
+                        )
+                    }
+                    if (facets.expansions.size > expansionsToShow.size || showAllExpansions) {
+                        SeriesFilterChip(
+                            label = if (showAllExpansions) {
+                                AppLocale.showLess
+                            } else {
+                                AppLocale.showAllExpansions(facets.expansions.size)
+                            },
+                            count = 0,
+                            showCount = false,
+                            isSelected = false,
+                            onClick = { showAllExpansions = !showAllExpansions }
+                        )
+                    }
+                }
+            }
+
+            // Anche le fasce di prezzo seguono la ricerca: se fra i risultati non
+            // c'e' niente sopra i 50 euro, quel chip non ha motivo di esserci.
+            val priceBuckets = facets.priceBuckets.ifEmpty { ItalianPriceBucket.entries }
+            FilterSection(title = AppLocale.cardPrice) {
+                priceBuckets.forEach { bucket ->
+                    SeriesFilterChip(
+                        label = bucket.label,
+                        count = 0,
+                        showCount = false,
+                        isSelected = bucket in state.cardPriceFilter,
+                        onClick = { onTogglePrice(bucket) }
+                    )
+                }
+            }
+            Text(
+                text = AppLocale.priceFilterCaveat,
+                color = AppColors.textMuted,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }
@@ -879,6 +979,8 @@ fun CardSearchResults(
     isLoading: Boolean,
     query: String,
     setReleaseDateById: Map<String, String>,
+    hasActiveFilters: Boolean = false,
+    onClearFilters: () -> Unit = {},
     viewMode: CardViewMode = CardViewMode.GRID,
     onCardClick: (TcgCard) -> Unit = {},
     onCardSetClick: (String) -> Unit
@@ -888,7 +990,7 @@ fun CardSearchResults(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("🔍", fontSize = 48.sp)
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(AppLocale.writeAtLeast2, color = AppColors.textMuted, fontSize = 14.sp)
+                Text(AppLocale.searchEmptyHint, color = AppColors.textMuted, fontSize = 14.sp)
             }
         }
     } else if (isLoading) {
@@ -900,7 +1002,24 @@ fun CardSearchResults(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("😔", fontSize = 48.sp)
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(AppLocale.noResults, color = AppColors.textSecondary, fontSize = 14.sp)
+                Text(
+                    // Con dei filtri accesi il vuoto non e' "questa carta non
+                    // esiste": e' "non esiste cosi'". Senza dirlo, e coi chip
+                    // nascosti dentro il pannello, sembra una ricerca rotta.
+                    text = if (hasActiveFilters) AppLocale.noResultsWithFilters else AppLocale.noResults,
+                    color = AppColors.textSecondary,
+                    fontSize = 14.sp
+                )
+                if (hasActiveFilters) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = AppLocale.clearFilters,
+                        color = AppColors.blue,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable(onClick = onClearFilters)
+                    )
+                }
             }
         }
     } else {

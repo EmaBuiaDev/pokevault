@@ -1,7 +1,11 @@
 package com.emabuia.pokevault.data.remote
 
 import android.content.Context
+import com.emabuia.pokevault.data.italian.ItalianCardFacets
 import com.emabuia.pokevault.data.italian.ItalianCardRecord
+import com.emabuia.pokevault.data.italian.ItalianExpansionFacet
+import com.emabuia.pokevault.data.italian.ItalianHpBucket
+import com.emabuia.pokevault.data.italian.ItalianSearchFacets
 import com.emabuia.pokevault.data.italian.ItalianCatalogRemoteRepository
 import com.emabuia.pokevault.data.italian.ItalianExpansionManifest
 import com.emabuia.pokevault.data.local.toEntity
@@ -534,7 +538,6 @@ class CatalogRepository {
     suspend fun searchItalianCardsByName(
         query: String,
         context: Context,
-        exactMode: Boolean = false,
         limit: Int = 60,
         targetSetId: String? = null
     ): Result<List<TcgCard>> {
@@ -542,7 +545,10 @@ class CatalogRepository {
         val normalizedQuery = normalizeNameForLookup(cleanQuery)
         if (normalizedQuery.isBlank()) return Result.success(emptyList())
 
-        val safeLimit = limit.coerceIn(1, 100)
+        // Il tetto e' salito da 100 a 300: i filtri della ricerca restringono
+        // questo insieme a valle, e su 100 corrispondenze lascerebbero le
+        // briciole. La scansione e' in memoria, il costo e' la lista piu' lunga.
+        val safeLimit = limit.coerceIn(1, 300)
         val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
         val normalizedTargetSet = targetSetId
             ?.let(SetCodeMapper::normalizeDecklistSetCode)
@@ -569,8 +575,7 @@ class CatalogRepository {
                         val score = scoreItalianNameMatch(
                             normalizedName = normalizedName,
                             normalizedQuery = normalizedQuery,
-                            queryTokens = queryTokens,
-                            exactMode = exactMode
+                            queryTokens = queryTokens
                         )
 
                         if (score <= 0) null else record to score
@@ -602,6 +607,88 @@ class CatalogRepository {
                     )
                     toItalianTcgCard(record = record, setInfo = setInfo)
                 }.distinctBy { it.id }
+            }
+        }
+    }
+
+    @Volatile
+    private var italianSearchFacetsCache: ItalianSearchFacets? = null
+
+    /**
+     * Il vocabolario dei filtri di ricerca, ricavato scandendo il catalogo ITA.
+     *
+     * Serve per poter scegliere i filtri *prima* di scrivere il nome: finche' le
+     * voci si ricavavano dal risultato corrente, senza risultato non c'era
+     * niente da selezionare, e ogni ricerca nuova azzerava la selezione.
+     *
+     * La scansione e' la stessa che fa la ricerca (il catalogo e' gia' in cache
+     * su disco), e il risultato si memorizza: dentro una sessione il catalogo
+     * non cambia, e rifarla a ogni apertura del pannello si sentirebbe.
+     */
+    suspend fun getItalianSearchFacets(context: Context): Result<ItalianSearchFacets> {
+        italianSearchFacetsCache?.let { return Result.success(it) }
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
+            .getOrElse { return Result.failure(it) }
+        val expansionNames = italianExpansionNamesById()
+
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                val counts = mutableMapOf<String, Int>()
+                fun bump(dimension: String, value: String) {
+                    if (value.isBlank()) return
+                    counts["$dimension:$value"] = (counts["$dimension:$value"] ?: 0) + 1
+                }
+
+                val expansionCardCounts = mutableMapOf<String, Int>()
+
+                catalog.cards.forEach { record ->
+                    bump(ItalianCardFacets.DIMENSION_SUPERTYPE, ItalianCardFacets.supertypeOf(record))
+                    ItalianCardFacets.typesOf(record).forEach { bump(ItalianCardFacets.DIMENSION_TYPE, it) }
+                    ItalianCardFacets.rarityOf(record)?.let { bump(ItalianCardFacets.DIMENSION_RARITY, it) }
+                    bump(ItalianCardFacets.DIMENSION_VARIANT, ItalianCardFacets.variantOf(record))
+                    ItalianCardFacets.hpBucketOf(record)?.let { bump(ItalianCardFacets.DIMENSION_HP, it.key) }
+
+                    val expansionId = ItalianCardFacets.expansionIdOf(record)
+                    if (expansionId.isNotBlank()) {
+                        bump(ItalianCardFacets.DIMENSION_EXPANSION, expansionId)
+                        expansionCardCounts[expansionId] = (expansionCardCounts[expansionId] ?: 0) + 1
+                    }
+                }
+
+                val expansions = expansionCardCounts.entries
+                    .map { (id, count) ->
+                        val label = expansionNames[id] ?: id.uppercase(Locale.ROOT)
+                        ItalianExpansionFacet(
+                            id = id,
+                            label = label,
+                            series = deriveSeriesName(setCode = id, language = "ITA", setName = label),
+                            cardCount = count
+                        )
+                    }
+                    // Le espansioni piu' grandi per prime: sono quelle in cui si
+                    // cerca piu' spesso, e l'elenco alfabetico le sparpagliava.
+                    .sortedWith(compareByDescending<ItalianExpansionFacet> { it.cardCount }.thenBy { it.label })
+
+                fun distinctFor(dimension: String): List<String> =
+                    counts.keys.asSequence()
+                        .filter { it.startsWith("$dimension:") }
+                        .map { it.removePrefix("$dimension:") }
+                        .sortedByDescending { counts["$dimension:$it"] ?: 0 }
+                        .toList()
+
+                val facets = ItalianSearchFacets(
+                    supertypes = distinctFor(ItalianCardFacets.DIMENSION_SUPERTYPE),
+                    types = distinctFor(ItalianCardFacets.DIMENSION_TYPE).sorted(),
+                    rarities = distinctFor(ItalianCardFacets.DIMENSION_RARITY),
+                    variants = distinctFor(ItalianCardFacets.DIMENSION_VARIANT),
+                    // Le fasce restano nell'ordine dell'enum, non per frequenza:
+                    // sono una scala, e una scala fuori ordine non si legge.
+                    hpBuckets = ItalianHpBucket.entries.filter { (counts["${ItalianCardFacets.DIMENSION_HP}:${it.key}"] ?: 0) > 0 },
+                    expansions = expansions
+                )
+                italianSearchFacetsCache = facets
+                facets
             }
         }
     }
@@ -758,20 +845,34 @@ class CatalogRepository {
     }
 
     /**
-     * Cerca le carte ITA nel catalogo locale filtrando per numero carta e, se fornito, per totale stampato del set.
-     * Il filtro totale usa i set ITA gia mergiati in memorySets, cosi eredita il printedTotal reale dal set base ENG.
+     * Cerca le carte ITA per numero stampato ("001/217" -> numero 1, totale 217).
+     *
+     * Una query di cifre non e' un nome, e cercarla fra i nomi non trova mai
+     * niente: e' il motivo per cui digitare un ID non dava alcun risultato. Questa
+     * funzione esisteva gia' ma non la chiamava nessuno.
+     *
+     * Il totale dopo la barra dice di quale espansione si parla -- la carta
+     * numero 1 esiste in tutte -- ma pesa senza escludere: un totale che non
+     * combacia con niente (promo, cifra sbagliata) non deve lasciare lo schermo
+     * vuoto. Il totale stampato reale arriva dai set gia' mergiati, che lo
+     * ereditano dal set base ENG; il cardCount del manifest conta anche le
+     * segrete e non combacia mai con la cifra stampata sulla carta.
      */
     suspend fun searchItalianCardsByNumber(
         number: String,
         context: Context,
-        setTotal: String? = null,
-        targetSetId: String? = null
+        printedTotal: Int? = null,
+        targetSetId: String? = null,
+        limit: Int = 300
     ): Result<List<TcgCard>> {
         val normalizedTarget = number.trimStart('0').ifBlank { number }
         if (normalizedTarget.isBlank()) return Result.success(emptyList())
 
         val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
             .getOrElse { return Result.success(emptyList()) }
+        val expansionManifests = catalog.expansions.associateBy { it.espansioneId.trim().lowercase(Locale.ROOT) }
+        if (memorySets == null) runCatching { getSets(context) }
+        val printedTotals = italianPrintedTotalsByExpansion()
 
         return runCatching {
             withContext(Dispatchers.Default) {
@@ -804,21 +905,42 @@ class CatalogRepository {
 
                 if (matchingRecords.isEmpty()) return@withContext emptyList()
 
-                matchingRecords.map { record ->
-                    val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
-                    val italianSetId = buildItalianSetId(expansionId)
-                    val setInfo = TcgSet(
-                        id = italianSetId,
-                        name = italianExpansionDisplayName(expansionId),
-                        series = deriveSeriesName(
-                            setCode = expansionId,
-                            language = "ITA",
-                            setName = expansionId
-                        ),
-                        language = "ITA"
+                matchingRecords
+                    .map { record ->
+                        val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+                        val total = resolveItalianPrintedTotal(
+                            expansionId = expansionId,
+                            printedTotals = printedTotals,
+                            manifests = expansionManifests
+                        )
+                        val score = when {
+                            printedTotal == null || total == null -> 0
+                            total == printedTotal -> 90
+                            abs(total - printedTotal) <= 2 -> 25
+                            else -> -45
+                        }
+                        Triple(record, score, total ?: 0)
+                    }
+                    .sortedWith(
+                        compareByDescending<Triple<ItalianCardRecord, Int, Int>> { it.second }
+                            .thenBy { it.first.espansioneId }
                     )
-                    toItalianTcgCard(record = record, setInfo = setInfo)
-                }.distinctBy { it.id }
+                    .take(limit.coerceIn(1, 300))
+                    .map { (record, _, total) ->
+                        val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+                        val setInfo = TcgSet(
+                            id = buildItalianSetId(expansionId),
+                            name = italianExpansionDisplayName(expansionId),
+                            series = deriveSeriesName(
+                                setCode = expansionId,
+                                language = "ITA",
+                                setName = expansionId
+                            ),
+                            printedTotal = total,
+                            language = "ITA"
+                        )
+                        toItalianTcgCard(record = record, setInfo = setInfo)
+                    }.distinctBy { it.id }
             }
         }
     }
@@ -1502,21 +1624,12 @@ class CatalogRepository {
     private fun scoreItalianNameMatch(
         normalizedName: String,
         normalizedQuery: String,
-        queryTokens: List<String>,
-        exactMode: Boolean
+        queryTokens: List<String>
     ): Int {
         if (normalizedName == normalizedQuery) return 1000
 
         val startsWith = normalizedName.startsWith(normalizedQuery)
         val wordContains = " $normalizedName ".contains(" $normalizedQuery ")
-
-        if (exactMode) {
-            return when {
-                startsWith -> 850
-                wordContains -> 700
-                else -> 0
-            }
-        }
 
         if (startsWith) return 850
         if (wordContains) return 700
@@ -2616,20 +2729,10 @@ class CatalogRepository {
         }
     }
 
-    private fun deriveItalianSupertype(record: ItalianCardRecord): String {
-        // record.tipo is the elemental type (Fuoco/Acqua/...), only ever populated for
-        // Pokemon cards -- Trainer/Energy cards always have tipo = NULL (confirmed via
-        // D1: `SELECT COUNT(*) FROM cards WHERE nome LIKE 'Energia %' AND ps IS NOT NULL`
-        // returns 0). Checking tipo.contains("energ")/"allenator" here never matched
-        // anything, so every Energy card fell through to the ps-based else branch below
-        // with ps also null -- misclassified as "Trainer", never "Energy".
-        if ((record.ps?.toIntOrNull() ?: 0) > 0) return "Pokémon"
-        // Every real (basic or special) energy card name in the catalog starts with
-        // "Energia" (verified against the full distinct-name list); item cards that merely
-        // mention energy, e.g. "Recupero di Energia Plus", do not start with it.
-        val nome = record.nome.trim()
-        return if (nome.startsWith("Energia", ignoreCase = true)) "Energy" else "Trainer"
-    }
+    // Una sola derivazione, condivisa col vocabolario dei filtri: se le due
+    // divergessero, il pannello offrirebbe categorie che poi non pescano niente.
+    private fun deriveItalianSupertype(record: ItalianCardRecord): String =
+        ItalianCardFacets.supertypeOf(record)
 
     private suspend fun resolveItalianCardRarity(canonicalSetCode: String, normalizedNumber: String): String? {
         val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(canonicalSetCode)
