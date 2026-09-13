@@ -30,8 +30,30 @@ data class TournamentResult(
     val tournamentName: String,
     val date: String?,
     val players: Int,
-    val top3: List<MetaDeck>  // Ordinati per placement (1, 2, 3)
-)
+    val top3: List<MetaDeck>,  // Ordinati per placement (1, 2, 3)
+    /**
+     * false per un torneo giocato di persona, true per uno online, null
+     * quando il dettaglio non e' stato recuperato.
+     *
+     * Finora la sezione mostrava insieme i Regional in presenza e le serate su
+     * PTCG Live senza distinguerli: due cose che si leggono in modo diverso,
+     * perche' un piazzamento a un evento dal vivo pesa quanto il viaggio che e'
+     * costato.
+     */
+    val isOnline: Boolean? = null,
+    val organizerName: String? = null,
+    val organizerLogo: String? = null
+) {
+    /** Vero solo quando sappiamo con certezza che si e' giocato di persona. */
+    val isLive: Boolean get() = isOnline == false
+}
+
+/** Che tipo di tornei mostrare nella sezione Win Tournament. */
+enum class TournamentKind {
+    ALL,
+    LIVE,
+    ONLINE
+}
 
 /**
  * Rappresenta un archetipo del meta competitivo,

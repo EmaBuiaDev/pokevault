@@ -93,47 +93,26 @@ fun MetaArchetypeSection(
         if (rateLimitedMessage != null) { delay(3_000); rateLimitedMessage = null }
     }
 
+    // Come per Win Tournament: i dati si chiedono all'apertura della tab, non
+    // alla creazione del ViewModel.
+    LaunchedEffect(Unit) { viewModel.ensureArchetypesLoaded() }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // Info banner
-        MetaInfoBanner(
-            title = AppLocale.metaArchetypeInfoTitle,
-            body = AppLocale.metaArchetypeInfoBody,
+        MetaToolbar(
+            infoBody = AppLocale.metaArchetypeInfoBody,
+            selectedFormat = viewModel.selectedFormat,
+            onFormatChange = { viewModel.selectFormat(it) },
             lastUpdated = viewModel.lastUpdated,
             rateLimitMessage = rateLimitedMessage,
+            onRefresh = {
+                rateLimitedMessage = if (!viewModel.refresh()) {
+                    AppLocale.metaRefreshCooldown(viewModel.refreshCooldownSeconds)
+                } else {
+                    null
+                }
+            },
             tick = tick
         )
-
-        // Format + Refresh
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FormatChip(
-                label = "Standard",
-                selected = viewModel.selectedFormat == "standard",
-                onClick = { viewModel.selectFormat("standard") }
-            )
-            FormatChip(
-                label = "Expanded",
-                selected = viewModel.selectedFormat == "expanded",
-                onClick = { viewModel.selectFormat("expanded") }
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(
-                onClick = {
-                    val started = viewModel.refresh()
-                    rateLimitedMessage = if (!started)
-                        AppLocale.metaRefreshCooldown(viewModel.refreshCooldownSeconds)
-                    else null
-                },
-                modifier = Modifier.size(32.dp).clip(CircleShape).background(AppColors.card)
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, tint = AppColors.textMuted, modifier = Modifier.size(18.dp))
-            }
-        }
 
         // Sort selector + info tier
         if (viewModel.archetypes.isNotEmpty()) {
@@ -190,7 +169,18 @@ fun MetaArchetypeSection(
             }
         }
 
+        val rateLimitWait = remember(viewModel.rateLimitedForSeconds, tick) {
+            viewModel.currentRateLimitWait()
+        }
+        if (viewModel.rateLimitedForSeconds != null && viewModel.archetypes.isNotEmpty()) {
+            MetaRateLimitNotice(secondsRemaining = rateLimitWait, hasData = true)
+        }
+
         when {
+            viewModel.rateLimitedForSeconds != null && viewModel.archetypes.isEmpty() -> {
+                MetaRateLimitNotice(secondsRemaining = rateLimitWait, hasData = false)
+            }
+
             viewModel.isLoadingArchetypes -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {

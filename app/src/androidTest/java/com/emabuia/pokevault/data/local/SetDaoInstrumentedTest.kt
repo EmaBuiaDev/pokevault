@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.data.local
 
+import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -12,7 +13,7 @@ import org.junit.runner.RunWith
 
 /**
  * Instrumented integration tests per SetDao
- * 
+ *
  * Usa AndroidJUnit4Runner e il database vero in memoria
  * Testa:
  * - Inserimento/aggiornamento set
@@ -27,7 +28,7 @@ class SetDaoInstrumentedTest {
 
     @Before
     fun setup() {
-        val context = ApplicationProvider.getApplicationContext()
+        val context = ApplicationProvider.getApplicationContext<Context>()
         database = Room.inMemoryDatabaseBuilder(
             context,
             PokeVaultDatabase::class.java
@@ -41,31 +42,37 @@ class SetDaoInstrumentedTest {
         database.close()
     }
 
+    /**
+     * Costruttore unico per i set di prova: quando [CachedSetEntity] cambia forma
+     * c'e' un solo punto da aggiornare, invece di ogni caso di test.
+     */
+    private fun cachedSet(
+        id: String,
+        name: String = "Set $id",
+        series: String = "Scarlet & Violet",
+        releaseDate: String = "2023-01-01",
+        total: Int = 100,
+        cachedAt: Long = System.currentTimeMillis()
+    ) = CachedSetEntity(
+        id = id,
+        name = name,
+        series = series,
+        language = "ENG",
+        printedTotal = total,
+        total = total,
+        releaseDate = releaseDate,
+        symbolUrl = "https://example.com/${id}_symbol.png",
+        logoUrl = "https://example.com/$id.png",
+        cachedAt = cachedAt
+    )
+
     @Test
     fun testInsertAndRetrieveSets() {
         runBlocking {
             // Arrange
             val sets = listOf(
-                CachedSetEntity(
-                    id = "sv01",
-                    name = "Scarlet & Violet",
-                    series = "Scarlet & Violet",
-                    releaseDate = "2023-04-14",
-                    totalCards = 198,
-                    logoUrl = "https://example.com/sv01.png",
-                    symbolUrl = "https://example.com/sv01_symbol.png",
-                    cachedAt = System.currentTimeMillis()
-                ),
-                CachedSetEntity(
-                    id = "sv04pt",
-                    name = "Paradox Rift",
-                    series = "Scarlet & Violet",
-                    releaseDate = "2023-11-03",
-                    totalCards = 182,
-                    logoUrl = "https://example.com/sv04pt.png",
-                    symbolUrl = "https://example.com/sv04pt_symbol.png",
-                    cachedAt = System.currentTimeMillis()
-                )
+                cachedSet(id = "sv01", name = "Scarlet & Violet", releaseDate = "2023-04-14", total = 198),
+                cachedSet(id = "sv04pt", name = "Paradox Rift", releaseDate = "2023-11-03", total = 182)
             )
 
             // Act
@@ -80,31 +87,30 @@ class SetDaoInstrumentedTest {
     }
 
     @Test
+    fun testUpsertReplacesExistingSet() {
+        runBlocking {
+            // Arrange
+            setDao.upsertSets(listOf(cachedSet(id = "sv01", name = "Nome vecchio", total = 198)))
+
+            // Act
+            setDao.upsertSets(listOf(cachedSet(id = "sv01", name = "Nome nuovo", total = 200)))
+            val retrieved = setDao.getAll()
+
+            // Assert
+            assertEquals("l'upsert aggiorna, non duplica", 1, retrieved.size)
+            assertEquals("Nome nuovo", retrieved.first().name)
+            assertEquals(200, retrieved.first().printedTotal)
+        }
+    }
+
+    @Test
     fun testGetLastCacheTime() {
         runBlocking {
             // Arrange
             val now = System.currentTimeMillis()
             val sets = listOf(
-                CachedSetEntity(
-                    id = "sv01",
-                    name = "Set 1",
-                    series = "Series 1",
-                    releaseDate = "2023-01-01",
-                    totalCards = 100,
-                    logoUrl = "https://example.com/1.png",
-                    symbolUrl = "https://example.com/1_symbol.png",
-                    cachedAt = now - 10000
-                ),
-                CachedSetEntity(
-                    id = "sv02",
-                    name = "Set 2",
-                    series = "Series 1",
-                    releaseDate = "2023-02-01",
-                    totalCards = 120,
-                    logoUrl = "https://example.com/2.png",
-                    symbolUrl = "https://example.com/2_symbol.png",
-                    cachedAt = now
-                )
+                cachedSet(id = "sv01", total = 100, cachedAt = now - 10_000),
+                cachedSet(id = "sv02", total = 120, cachedAt = now)
             )
 
             // Act
@@ -118,24 +124,33 @@ class SetDaoInstrumentedTest {
     }
 
     @Test
+    fun testDeleteExpiredKeepsFreshSets() {
+        runBlocking {
+            // Arrange
+            val now = System.currentTimeMillis()
+            val sets = listOf(
+                cachedSet(id = "scaduto", cachedAt = now - 60_000),
+                cachedSet(id = "fresco", cachedAt = now)
+            )
+            setDao.upsertSets(sets)
+
+            // Act
+            setDao.deleteExpired(threshold = now - 30_000)
+            val retrieved = setDao.getAll()
+
+            // Assert
+            assertEquals(1, retrieved.size)
+            assertEquals("fresco", retrieved.first().id)
+        }
+    }
+
+    @Test
     fun testDeleteAll() {
         runBlocking {
             // Arrange
-            val sets = listOf(
-                CachedSetEntity(
-                    id = "sv01",
-                    name = "Set 1",
-                    series = "Series 1",
-                    releaseDate = "2023-01-01",
-                    totalCards = 100,
-                    logoUrl = "https://example.com/1.png",
-                    symbolUrl = "https://example.com/1_symbol.png",
-                    cachedAt = System.currentTimeMillis()
-                )
-            )
+            setDao.upsertSets(listOf(cachedSet(id = "sv01")))
 
             // Act
-            setDao.upsertSets(sets)
             var retrieved = setDao.getAll()
             assertEquals(1, retrieved.size)
 

@@ -1,7 +1,12 @@
 package com.emabuia.pokevault.data.remote
 
 import android.content.Context
+import com.emabuia.pokevault.data.italian.ItalianCardFacets
 import com.emabuia.pokevault.data.italian.ItalianCardRecord
+import com.emabuia.pokevault.data.italian.ItalianExpansionFacet
+import com.emabuia.pokevault.data.italian.ItalianHpBucket
+import com.emabuia.pokevault.data.italian.ItalianPrintedTotals
+import com.emabuia.pokevault.data.italian.ItalianSearchFacets
 import com.emabuia.pokevault.data.italian.ItalianCatalogRemoteRepository
 import com.emabuia.pokevault.data.italian.ItalianExpansionManifest
 import com.emabuia.pokevault.data.local.toEntity
@@ -534,7 +539,6 @@ class CatalogRepository {
     suspend fun searchItalianCardsByName(
         query: String,
         context: Context,
-        exactMode: Boolean = false,
         limit: Int = 60,
         targetSetId: String? = null
     ): Result<List<TcgCard>> {
@@ -542,7 +546,10 @@ class CatalogRepository {
         val normalizedQuery = normalizeNameForLookup(cleanQuery)
         if (normalizedQuery.isBlank()) return Result.success(emptyList())
 
-        val safeLimit = limit.coerceIn(1, 100)
+        // Il tetto e' salito da 100 a 300: i filtri della ricerca restringono
+        // questo insieme a valle, e su 100 corrispondenze lascerebbero le
+        // briciole. La scansione e' in memoria, il costo e' la lista piu' lunga.
+        val safeLimit = limit.coerceIn(1, 300)
         val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
         val normalizedTargetSet = targetSetId
             ?.let(SetCodeMapper::normalizeDecklistSetCode)
@@ -569,8 +576,7 @@ class CatalogRepository {
                         val score = scoreItalianNameMatch(
                             normalizedName = normalizedName,
                             normalizedQuery = normalizedQuery,
-                            queryTokens = queryTokens,
-                            exactMode = exactMode
+                            queryTokens = queryTokens
                         )
 
                         if (score <= 0) null else record to score
@@ -606,6 +612,88 @@ class CatalogRepository {
         }
     }
 
+    @Volatile
+    private var italianSearchFacetsCache: ItalianSearchFacets? = null
+
+    /**
+     * Il vocabolario dei filtri di ricerca, ricavato scandendo il catalogo ITA.
+     *
+     * Serve per poter scegliere i filtri *prima* di scrivere il nome: finche' le
+     * voci si ricavavano dal risultato corrente, senza risultato non c'era
+     * niente da selezionare, e ogni ricerca nuova azzerava la selezione.
+     *
+     * La scansione e' la stessa che fa la ricerca (il catalogo e' gia' in cache
+     * su disco), e il risultato si memorizza: dentro una sessione il catalogo
+     * non cambia, e rifarla a ogni apertura del pannello si sentirebbe.
+     */
+    suspend fun getItalianSearchFacets(context: Context): Result<ItalianSearchFacets> {
+        italianSearchFacetsCache?.let { return Result.success(it) }
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
+            .getOrElse { return Result.failure(it) }
+        val expansionNames = italianExpansionNamesById()
+
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                val counts = mutableMapOf<String, Int>()
+                fun bump(dimension: String, value: String) {
+                    if (value.isBlank()) return
+                    counts["$dimension:$value"] = (counts["$dimension:$value"] ?: 0) + 1
+                }
+
+                val expansionCardCounts = mutableMapOf<String, Int>()
+
+                catalog.cards.forEach { record ->
+                    bump(ItalianCardFacets.DIMENSION_SUPERTYPE, ItalianCardFacets.supertypeOf(record))
+                    ItalianCardFacets.typesOf(record).forEach { bump(ItalianCardFacets.DIMENSION_TYPE, it) }
+                    ItalianCardFacets.rarityOf(record)?.let { bump(ItalianCardFacets.DIMENSION_RARITY, it) }
+                    bump(ItalianCardFacets.DIMENSION_VARIANT, ItalianCardFacets.variantOf(record))
+                    ItalianCardFacets.hpBucketOf(record)?.let { bump(ItalianCardFacets.DIMENSION_HP, it.key) }
+
+                    val expansionId = ItalianCardFacets.expansionIdOf(record)
+                    if (expansionId.isNotBlank()) {
+                        bump(ItalianCardFacets.DIMENSION_EXPANSION, expansionId)
+                        expansionCardCounts[expansionId] = (expansionCardCounts[expansionId] ?: 0) + 1
+                    }
+                }
+
+                val expansions = expansionCardCounts.entries
+                    .map { (id, count) ->
+                        val label = expansionNames[id] ?: id.uppercase(Locale.ROOT)
+                        ItalianExpansionFacet(
+                            id = id,
+                            label = label,
+                            series = deriveSeriesName(setCode = id, language = "ITA", setName = label),
+                            cardCount = count
+                        )
+                    }
+                    // Le espansioni piu' grandi per prime: sono quelle in cui si
+                    // cerca piu' spesso, e l'elenco alfabetico le sparpagliava.
+                    .sortedWith(compareByDescending<ItalianExpansionFacet> { it.cardCount }.thenBy { it.label })
+
+                fun distinctFor(dimension: String): List<String> =
+                    counts.keys.asSequence()
+                        .filter { it.startsWith("$dimension:") }
+                        .map { it.removePrefix("$dimension:") }
+                        .sortedByDescending { counts["$dimension:$it"] ?: 0 }
+                        .toList()
+
+                val facets = ItalianSearchFacets(
+                    supertypes = distinctFor(ItalianCardFacets.DIMENSION_SUPERTYPE),
+                    types = distinctFor(ItalianCardFacets.DIMENSION_TYPE).sorted(),
+                    rarities = distinctFor(ItalianCardFacets.DIMENSION_RARITY),
+                    variants = distinctFor(ItalianCardFacets.DIMENSION_VARIANT),
+                    // Le fasce restano nell'ordine dell'enum, non per frequenza:
+                    // sono una scala, e una scala fuori ordine non si legge.
+                    hpBuckets = ItalianHpBucket.entries.filter { (counts["${ItalianCardFacets.DIMENSION_HP}:${it.key}"] ?: 0) > 0 },
+                    expansions = expansions
+                )
+                italianSearchFacetsCache = facets
+                facets
+            }
+        }
+    }
+
     suspend fun searchItalianScannerCandidates(
         name: String?,
         number: String?,
@@ -629,6 +717,16 @@ class CatalogRepository {
         val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
             .getOrElse { return Result.success(emptyList()) }
         val expansionManifests = catalog.expansions.associateBy { it.espansioneId.trim().lowercase(Locale.ROOT) }
+
+        // Il totale letto in basso a sinistra ("/087") vale come discriminante solo
+        // se sappiamo il totale stampato di ogni espansione. Quello reale sta nei set
+        // gia' mergiati (ereditato dal set base ENG, vedi buildItalianTcgSet): il
+        // cardCount del manifest conta anche le segrete, quindi non combacia mai.
+        if (memorySets == null) runCatching { getSets(context) }
+        val printedTotals = italianPrintedTotalsByExpansion()
+        // Il conteggio ufficiale e' il numero stampato sulle carte: e' lui che una
+        // ricerca per ID digita, e che uno scanner legge in basso a sinistra.
+        val officialCounts = italianOfficialCountsById()
 
         return runCatching {
             withContext(Dispatchers.Default) {
@@ -660,18 +758,24 @@ class CatalogRepository {
                             return@mapNotNull null
                         }
 
-                        var score = 0
-                        if (!normalizedNumber.isNullOrBlank()) score += 120
-                        score += nameScore
-                        if (normalizedTargetSet != null) score += 120
+                        // Numero e set hint sono gia' filtri: aggiungerli al punteggio
+                        // darebbe lo stesso bonus a tutti. Discriminano solo nome e totale.
+                        var score = nameScore
 
-                        val printedTotal = ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId]
-                            ?: expansionManifests[expansionId]?.cardCount?.takeIf { it > 0 }
+                        val printedTotal = resolveItalianPrintedTotal(
+                            expansionId = expansionId,
+                            printedTotals = printedTotals,
+                            manifests = expansionManifests,
+                            officialCounts = officialCounts
+                        )
                         if (targetTotal != null && printedTotal != null) {
                             score += when {
-                                printedTotal == targetTotal -> 45
-                                abs(printedTotal - targetTotal) <= 2 -> 18
-                                else -> 0
+                                printedTotal == targetTotal -> 90
+                                abs(printedTotal - targetTotal) <= 2 -> 25
+                                // Totale letto e totale del set incompatibili: e' un'altra
+                                // espansione. Penalizza senza escludere, perche' la cifra
+                                // puo' sempre essere stata letta male.
+                                else -> -45
                             }
                         }
 
@@ -694,8 +798,12 @@ class CatalogRepository {
 
                 ranked.map { (record, _) ->
                     val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
-                    val printedTotal = ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId]
-                        ?: expansionManifests[expansionId]?.cardCount?.takeIf { it > 0 }
+                    val printedTotal = resolveItalianPrintedTotal(
+                        expansionId = expansionId,
+                        printedTotals = printedTotals,
+                        manifests = expansionManifests,
+                        officialCounts = officialCounts
+                    )
                     toItalianTcgCard(
                         record = record,
                         setInfo = TcgSet(
@@ -712,20 +820,92 @@ class CatalogRepository {
     }
 
     /**
-     * Cerca le carte ITA nel catalogo locale filtrando per numero carta e, se fornito, per totale stampato del set.
-     * Il filtro totale usa i set ITA gia mergiati in memorySets, cosi eredita il printedTotal reale dal set base ENG.
+     * Mappa `id espansione ITA -> totale stampato` presa dai set gia' mergiati,
+     * che ereditano il valore reale dal set base inglese. Vuota finche' i set
+     * non sono stati caricati almeno una volta.
+     */
+    private fun italianPrintedTotalsByExpansion(): Map<String, Int> {
+        return memorySets.orEmpty()
+            .mapNotNull { set ->
+                val expansionId = parseItalianExpansionId(set.id) ?: return@mapNotNull null
+                val printedTotal = set.printedTotal.takeIf { it > 0 } ?: return@mapNotNull null
+                expansionId to printedTotal
+            }
+            .toMap()
+    }
+
+    /**
+     * Totale stampato di un'espansione ITA, dalla fonte piu' attendibile
+     * disponibile: override manuale (esiste proprio dove il dato ereditato e'
+     * sbagliato), conteggio ufficiale dal manifest (schema/008: e' il numero
+     * davvero stampato sulle carte), set mergiato, conteggio del manifest.
+     * L'ultimo e' un ripiego: include le segrete, quindi sovrastima.
+     */
+    private fun resolveItalianPrintedTotal(
+        expansionId: String,
+        printedTotals: Map<String, Int>,
+        manifests: Map<String, ItalianExpansionManifest>,
+        officialCounts: Map<String, Int> = emptyMap()
+    ): Int? {
+        return ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId]
+            ?: officialCounts[expansionId]
+            ?: printedTotals[expansionId]
+            ?: manifests[expansionId]?.cardCount?.takeIf { it > 0 }
+    }
+
+    /**
+     * Tutti i totali noti per un'espansione, senza sceglierne uno.
+     *
+     * Per *mostrare* un totale ne serve uno solo, il piu' attendibile, ed e'
+     * quello che fa [resolveItalianPrintedTotal]. Per *riconoscere* il totale
+     * che una persona ha digitato servono tutti: il preferito puo' essere
+     * quello gonfiato dalle segrete, e allora l'espansione giusta non si
+     * troverebbe mai (vedi [ItalianPrintedTotals]).
+     */
+    private fun italianPrintedTotalCandidates(
+        expansionId: String,
+        printedTotals: Map<String, Int>,
+        manifests: Map<String, ItalianExpansionManifest>,
+        officialCounts: Map<String, Int> = emptyMap()
+    ): Set<Int> = setOfNotNull(
+        ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId],
+        officialCounts[expansionId],
+        printedTotals[expansionId],
+        manifests[expansionId]?.cardCount?.takeIf { it > 0 }
+    )
+
+    /**
+     * Cerca le carte ITA per numero stampato ("001/217" -> numero 1, totale 217).
+     *
+     * Una query di cifre non e' un nome, e cercarla fra i nomi non trova mai
+     * niente: e' il motivo per cui digitare un ID non dava alcun risultato. Questa
+     * funzione esisteva gia' ma non la chiamava nessuno.
+     *
+     * Il totale dopo la barra dice di quale espansione si parla -- la carta
+     * numero 1 esiste in tutte -- ma pesa senza escludere: un totale che non
+     * combacia con niente (promo, cifra sbagliata) non deve lasciare lo schermo
+     * vuoto. Il totale stampato reale arriva dai set gia' mergiati, che lo
+     * ereditano dal set base ENG; il cardCount del manifest conta anche le
+     * segrete e non combacia mai con la cifra stampata sulla carta.
      */
     suspend fun searchItalianCardsByNumber(
         number: String,
         context: Context,
-        setTotal: String? = null,
-        targetSetId: String? = null
+        printedTotal: Int? = null,
+        targetSetId: String? = null,
+        limit: Int = 300
     ): Result<List<TcgCard>> {
         val normalizedTarget = number.trimStart('0').ifBlank { number }
         if (normalizedTarget.isBlank()) return Result.success(emptyList())
 
         val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
             .getOrElse { return Result.success(emptyList()) }
+        val expansionManifests = catalog.expansions.associateBy { it.espansioneId.trim().lowercase(Locale.ROOT) }
+        if (memorySets == null) runCatching { getSets(context) }
+        val printedTotals = italianPrintedTotalsByExpansion()
+        // Il conteggio ufficiale e' il numero stampato sulle carte: e' lui che una
+        // ricerca per ID digita, e che uno scanner legge in basso a sinistra.
+        val officialCounts = italianOfficialCountsById()
 
         return runCatching {
             withContext(Dispatchers.Default) {
@@ -758,21 +938,60 @@ class CatalogRepository {
 
                 if (matchingRecords.isEmpty()) return@withContext emptyList()
 
-                matchingRecords.map { record ->
+                // Il totale confrontato con tutti quelli noti, non col solo
+                // preferito: tenerne uno per priorita' faceva mancare l'espansione
+                // giusta ogni volta che il preferito era il conteggio gonfiato
+                // dalle segrete, ed e' quello che restituiva la carta sbagliata.
+                val scored = matchingRecords.map { record ->
                     val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
-                    val italianSetId = buildItalianSetId(expansionId)
-                    val setInfo = TcgSet(
-                        id = italianSetId,
-                        name = italianExpansionDisplayName(expansionId),
-                        series = deriveSeriesName(
-                            setCode = expansionId,
-                            language = "ITA",
-                            setName = expansionId
+                    record to ItalianPrintedTotals.matchScore(
+                        knownTotals = italianPrintedTotalCandidates(
+                            expansionId = expansionId,
+                            printedTotals = printedTotals,
+                            manifests = expansionManifests,
+                            officialCounts = officialCounts
                         ),
-                        language = "ITA"
+                        typedTotal = printedTotal
                     )
-                    toItalianTcgCard(record = record, setInfo = setInfo)
-                }.distinctBy { it.id }
+                }
+
+                ItalianPrintedTotals.keepBestMatches(scored)
+                    .sortedWith(
+                        compareBy<ItalianCardRecord> { it.espansioneId }
+                    )
+                    .take(limit.coerceIn(1, 300))
+                    .map { record ->
+                        val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+                        val candidates = italianPrintedTotalCandidates(
+                            expansionId = expansionId,
+                            printedTotals = printedTotals,
+                            manifests = expansionManifests,
+                            officialCounts = officialCounts
+                        )
+                        // Fra i totali noti si mostra quello che l'utente ha
+                        // riconosciuto, se c'e': averlo letto su una carta vera lo
+                        // rende piu' credibile del conteggio che include le segrete.
+                        val total = candidates.firstOrNull { it == printedTotal }
+                            ?: resolveItalianPrintedTotal(
+                                expansionId = expansionId,
+                                printedTotals = printedTotals,
+                                manifests = expansionManifests,
+                                officialCounts = officialCounts
+                            )
+                            ?: 0
+                        val setInfo = TcgSet(
+                            id = buildItalianSetId(expansionId),
+                            name = italianExpansionDisplayName(expansionId),
+                            series = deriveSeriesName(
+                                setCode = expansionId,
+                                language = "ITA",
+                                setName = expansionId
+                            ),
+                            printedTotal = total,
+                            language = "ITA"
+                        )
+                        toItalianTcgCard(record = record, setInfo = setInfo)
+                    }.distinctBy { it.id }
             }
         }
     }
@@ -1456,21 +1675,12 @@ class CatalogRepository {
     private fun scoreItalianNameMatch(
         normalizedName: String,
         normalizedQuery: String,
-        queryTokens: List<String>,
-        exactMode: Boolean
+        queryTokens: List<String>
     ): Int {
         if (normalizedName == normalizedQuery) return 1000
 
         val startsWith = normalizedName.startsWith(normalizedQuery)
         val wordContains = " $normalizedName ".contains(" $normalizedQuery ")
-
-        if (exactMode) {
-            return when {
-                startsWith -> 850
-                wordContains -> 700
-                else -> 0
-            }
-        }
 
         if (startsWith) return 850
         if (wordContains) return 700
@@ -1920,6 +2130,27 @@ class CatalogRepository {
             val id = summary.id.trim().lowercase(Locale.ROOT).takeIf { it.isNotBlank() }
             val name = summary.name?.trim()?.takeIf { it.isNotBlank() }
             if (id != null && name != null) id to name else null
+        }.toMap()
+    }
+
+    /**
+     * Mappa `id espansione minuscolo -> conteggio delle carte base` (es. "me2pt5"
+     * -> 217), dal manifest D1 (schema/008).
+     *
+     * E' il numero stampato sulle carte dopo la barra, ed e' l'unica fonte che
+     * lo conosce davvero: il cardCount conta anche le segrete (295 per la stessa
+     * espansione) e il set mergiato eredita il totale stampato dal set inglese
+     * solo quando l'aggancio riesce. Vuota se il manifest non e' raggiungibile.
+     */
+    suspend fun italianOfficialCountsById(): Map<String, Int> {
+        val summaries = italianCatalogRepository
+            .getExpansionsSummary(baseUrl = PokeVaultApiClient.imageBaseUrl)
+            .getOrNull()
+            .orEmpty()
+        return summaries.mapNotNull { summary ->
+            val id = summary.id.trim().lowercase(Locale.ROOT).takeIf { it.isNotBlank() }
+            val count = summary.officialCount?.takeIf { it > 0 }
+            if (id != null && count != null) id to count else null
         }.toMap()
     }
 
@@ -2570,20 +2801,10 @@ class CatalogRepository {
         }
     }
 
-    private fun deriveItalianSupertype(record: ItalianCardRecord): String {
-        // record.tipo is the elemental type (Fuoco/Acqua/...), only ever populated for
-        // Pokemon cards -- Trainer/Energy cards always have tipo = NULL (confirmed via
-        // D1: `SELECT COUNT(*) FROM cards WHERE nome LIKE 'Energia %' AND ps IS NOT NULL`
-        // returns 0). Checking tipo.contains("energ")/"allenator" here never matched
-        // anything, so every Energy card fell through to the ps-based else branch below
-        // with ps also null -- misclassified as "Trainer", never "Energy".
-        if ((record.ps?.toIntOrNull() ?: 0) > 0) return "Pokémon"
-        // Every real (basic or special) energy card name in the catalog starts with
-        // "Energia" (verified against the full distinct-name list); item cards that merely
-        // mention energy, e.g. "Recupero di Energia Plus", do not start with it.
-        val nome = record.nome.trim()
-        return if (nome.startsWith("Energia", ignoreCase = true)) "Energy" else "Trainer"
-    }
+    // Una sola derivazione, condivisa col vocabolario dei filtri: se le due
+    // divergessero, il pannello offrirebbe categorie che poi non pescano niente.
+    private fun deriveItalianSupertype(record: ItalianCardRecord): String =
+        ItalianCardFacets.supertypeOf(record)
 
     private suspend fun resolveItalianCardRarity(canonicalSetCode: String, normalizedNumber: String): String? {
         val normalizedSet = SetCodeMapper.normalizeDecklistSetCode(canonicalSetCode)

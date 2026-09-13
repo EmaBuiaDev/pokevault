@@ -1,7 +1,6 @@
 package com.emabuia.pokevault.ui.home.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 
@@ -90,9 +90,9 @@ fun PokemonCardItem(
 ) {
     Column(
         modifier = modifier
+            .pressScale(onClick = onClick)
             .width(120.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
+            .clip(RoundedCornerShape(12.dp)),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (card.imageUrl.isNotBlank()) {

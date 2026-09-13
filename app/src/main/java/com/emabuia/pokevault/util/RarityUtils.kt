@@ -10,6 +10,25 @@ data class RarityInfo(
 )
 
 object RarityUtils {
+    /**
+     * Se la rarita' merita l'effetto holo-foil sull'immagine della carta.
+     *
+     * Filtro stretto di proposito: la foil e' un'animazione continua per ogni
+     * carta che la porta, e in una griglia da sessanta carte accenderla su
+     * tutte vuol dire sessanta gradienti animati per niente. Passano solo le
+     * rarita' che *in mano* sono davvero lucide, dall'Illustration Rare in su.
+     */
+    fun hasFoilFinish(rarity: String?): Boolean {
+        val order = getRarityInfo(rarity).sortOrder
+
+        // Promo (11) e "Altro" (12) hanno sortOrder alto ma non sono rarita'
+        // lucide: il primo e' una categoria di distribuzione, il secondo il
+        // ripiego per le stringhe che non riconosciamo.
+        if (order == 11 || order == 12) return false
+
+        return order >= 5
+    }
+
     fun getRarityInfo(rarity: String?): RarityInfo {
         val r = rarity?.lowercase()?.trim() ?: ""
         val isIt = AppLocale.isItalian

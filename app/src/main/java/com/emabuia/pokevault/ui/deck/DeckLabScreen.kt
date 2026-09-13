@@ -48,8 +48,33 @@ fun DeckLabScreen(
     // faceva solo ricomporre l'intero schermo a ogni cambio di stato premium.
     val context = LocalContext.current
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSheet by remember { mutableStateOf(false) }
+    var showDiscardDeckDialog by remember { mutableStateOf(false) }
+
+    /** C'e' del lavoro che uno swipe distruggerebbe. */
+    fun hasDeckWork(): Boolean =
+        viewModel.selectedCardsIds.isNotEmpty() || viewModel.newDeckName.isNotBlank()
+
+    // Uno swipe leggero verso il basso non puo' buttare via un deck appena
+    // importato: cinquanta carte riconosciute, il nome, la copertina scelta.
+    // Il gesto viene rifiutato e al suo posto si chiede conferma.
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { target ->
+            if (target == SheetValue.Hidden && hasDeckWork()) {
+                showDiscardDeckDialog = true
+                false
+            } else {
+                true
+            }
+        }
+    )
+
+    fun closeDeckSheet() {
+        showDiscardDeckDialog = false
+        showSheet = false
+        viewModel.resetNewDeckState()
+    }
     var showImportDialog by remember { mutableStateOf(false) }
     var showPremiumDeckDialog by remember { mutableStateOf(false) }
     var showPremiumMetaDeckDialog by remember { mutableStateOf(false) }
@@ -327,8 +352,9 @@ fun DeckLabScreen(
         if (showSheet) {
             ModalBottomSheet(
                 onDismissRequest = {
-                    showSheet = false
-                    viewModel.resetNewDeckState()
+                    // Vale anche per il tasto indietro e per il tocco fuori:
+                    // sono tre modi di dire la stessa cosa per sbaglio.
+                    if (hasDeckWork()) showDiscardDeckDialog = true else closeDeckSheet()
                 },
                 sheetState = sheetState,
                 containerColor = AppColors.surface,
@@ -337,6 +363,9 @@ fun DeckLabScreen(
                 NewDeckBottomSheetContent(
                     viewModel = viewModel,
                     isEditing = viewModel.editingDeckId != null,
+                    onRequestClose = {
+                        if (hasDeckWork()) showDiscardDeckDialog = true else closeDeckSheet()
+                    },
                     onSave = {
                         viewModel.saveDeck {
                             showSheet = false
@@ -345,6 +374,43 @@ fun DeckLabScreen(
                     }
                 )
             }
+        }
+
+        if (showDiscardDeckDialog) {
+            AlertDialog(
+                onDismissRequest = { showDiscardDeckDialog = false },
+                containerColor = AppColors.card,
+                title = {
+                    Text(
+                        text = AppLocale.deckDiscardTitle,
+                        color = AppColors.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        text = AppLocale.deckDiscardBody,
+                        color = AppColors.textSecondary,
+                        fontSize = 13.sp
+                    )
+                },
+                confirmButton = {
+                    // Continuare e' la scelta sicura, quindi sta dove il pollice
+                    // arriva per primo e ha il peso visivo.
+                    Button(
+                        onClick = { showDiscardDeckDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(AppLocale.deckDiscardKeepEditing, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { closeDeckSheet() }) {
+                        Text(AppLocale.deckDiscardConfirm, color = AppColors.red)
+                    }
+                }
+            )
         }
 
         // Dialog Importa da Testo

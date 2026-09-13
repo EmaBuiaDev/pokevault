@@ -7,7 +7,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.model.MetaArchetype
 import com.emabuia.pokevault.data.model.MetaDeck
+import com.emabuia.pokevault.data.model.TournamentKind
 import com.emabuia.pokevault.data.model.TournamentResult
+import com.emabuia.pokevault.data.remote.LimitlessRateLimitException
 import com.emabuia.pokevault.data.remote.LimitlessTcgRepository
 import kotlinx.coroutines.launch
 
@@ -15,19 +17,12 @@ class MetaDeckViewModel : ViewModel() {
 
     private val repository = LimitlessTcgRepository()
 
-    // Win Tournament (ex Meta Deck) - tournament winners
-    var metaDecks by mutableStateOf<List<MetaDeck>>(emptyList())
-        private set
-
     // Risultati strutturati per torneo (Win Tournament section)
     var tournamentResults by mutableStateOf<List<TournamentResult>>(emptyList())
         private set
 
-    // Meta Deck (NEW) - archetype standings
+    // Meta Deck - archetype standings
     var archetypes by mutableStateOf<List<MetaArchetype>>(emptyList())
-        private set
-
-    var isLoading by mutableStateOf(false)
         private set
 
     var isLoadingTournaments by mutableStateOf(false)
@@ -36,16 +31,29 @@ class MetaDeckViewModel : ViewModel() {
     var isLoadingArchetypes by mutableStateOf(false)
         private set
 
-    var errorMessage by mutableStateOf<String?>(null)
-        private set
-
     var tournamentsError by mutableStateOf<String?>(null)
         private set
 
     var archetypeError by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * Secondi da aspettare prima che l'API Limitless torni disponibile, o null
+     * se non siamo in pausa.
+     *
+     * E' separato dagli errori perche' non e' un errore: l'API concede 50
+     * richieste ogni 5 minuti, e quando sono finite l'unica cosa da fare e'
+     * aspettare. Mostrarlo come "errore di connessione" faceva riprovare
+     * l'utente, il che allungava l'attesa invece di accorciarla.
+     */
+    var rateLimitedForSeconds by mutableStateOf<Long?>(null)
+        private set
+
     var selectedFormat by mutableStateOf("standard")
+        private set
+
+    /** Dal vivo, online o entrambi. Vale solo per la sezione Win Tournament. */
+    var selectedKind by mutableStateOf(TournamentKind.ALL)
         private set
 
     var selectedDeck by mutableStateOf<MetaDeck?>(null)
@@ -72,47 +80,57 @@ class MetaDeckViewModel : ViewModel() {
             return (remaining / 1000L).coerceAtLeast(0L)
         }
 
-    init {
-        loadMetaDecks()
+    /**
+     * Cosa e' gia' stato chiesto alla rete, per non richiederlo a ogni
+     * ricomposizione della tab.
+     *
+     * Prima `init` lanciava tutti i caricamenti insieme, comprese le due
+     * sezioni meta, anche per chi apriva il Deck Lab solo per guardare i propri
+     * mazzi: decine di richieste all'API Limitless prima ancora che si toccasse
+     * una tab. Ora ogni sezione chiede i suoi dati quando viene mostrata.
+     */
+    private var archetypesRequested = false
+    private var tournamentsRequested = false
+
+    /** Da chiamare quando la tab Meta Deck compare. */
+    fun ensureArchetypesLoaded() {
+        if (archetypesRequested) return
+        archetypesRequested = true
         loadArchetypes()
+    }
+
+    /** Da chiamare quando la tab Win Tournament compare. */
+    fun ensureTournamentsLoaded() {
+        if (tournamentsRequested) return
+        tournamentsRequested = true
         loadTournamentResults()
     }
 
-    fun loadTournamentResults(format: String = selectedFormat, limit: Int = 10) {
+    fun loadTournamentResults(
+        format: String = selectedFormat,
+        kind: TournamentKind = selectedKind,
+        limit: Int = 10
+    ) {
         isLoadingTournaments = true
         tournamentsError = null
 
         viewModelScope.launch {
-            repository.getTournamentResults(format = format, limit = limit)
+            repository.getTournamentResults(format = format, limit = limit, kind = kind)
                 .onSuccess { results ->
                     tournamentResults = results
                     isLoadingTournaments = false
+                    rateLimitedForSeconds = null
                     lastUpdated = LimitlessTcgRepository.lastCacheTimestamp(format)
                         ?: System.currentTimeMillis()
                 }
                 .onFailure { e ->
-                    tournamentsError = e.localizedMessage ?: "Errore nel caricamento dei tornei"
                     isLoadingTournaments = false
-                }
-        }
-    }
-
-    fun loadMetaDecks(format: String = selectedFormat, limit: Int = 50) {
-        selectedFormat = format
-        isLoading = true
-        errorMessage = null
-
-        viewModelScope.launch {
-            repository.getMetaDecks(format = format, limit = limit)
-                .onSuccess { decks ->
-                    metaDecks = decks
-                    isLoading = false
-                    lastUpdated = LimitlessTcgRepository.lastCacheTimestamp(format)
-                        ?: System.currentTimeMillis()
-                }
-                .onFailure { e ->
-                    errorMessage = e.localizedMessage ?: "Errore nel caricamento dei meta deck"
-                    isLoading = false
+                    if (e.isRateLimit()) {
+                        rateLimitedForSeconds = repository.rateLimitRetryAfterSeconds()
+                        tournamentsError = null
+                    } else {
+                        tournamentsError = e.localizedMessage ?: "Errore nel caricamento dei tornei"
+                    }
                 }
         }
     }
@@ -126,24 +144,37 @@ class MetaDeckViewModel : ViewModel() {
                 .onSuccess { list ->
                     archetypes = list
                     isLoadingArchetypes = false
+                    rateLimitedForSeconds = null
                     lastUpdated = LimitlessTcgRepository.lastCacheTimestamp(format)
                         ?: System.currentTimeMillis()
                 }
                 .onFailure { e ->
-                    archetypeError = e.localizedMessage ?: "Errore nel caricamento"
                     isLoadingArchetypes = false
+                    if (e.isRateLimit()) {
+                        rateLimitedForSeconds = repository.rateLimitRetryAfterSeconds()
+                        archetypeError = null
+                    } else {
+                        archetypeError = e.localizedMessage ?: "Errore nel caricamento"
+                    }
                 }
         }
     }
 
     fun selectFormat(format: String) {
-        if (format != selectedFormat) {
-            selectedFormat = format
-            loadMetaDecks(format = format)
-            loadArchetypes(format = format)
-            loadTournamentResults(format = format)
-            lastUpdated = LimitlessTcgRepository.lastCacheTimestamp(format)
-        }
+        if (format == selectedFormat) return
+
+        selectedFormat = format
+        if (archetypesRequested) loadArchetypes(format = format)
+        if (tournamentsRequested) loadTournamentResults(format = format)
+        lastUpdated = LimitlessTcgRepository.lastCacheTimestamp(format)
+    }
+
+    fun selectKind(kind: TournamentKind) {
+        if (kind == selectedKind) return
+
+        selectedKind = kind
+        tournamentsRequested = true
+        loadTournamentResults(kind = kind)
     }
 
     fun selectDeck(deck: MetaDeck?) {
@@ -151,7 +182,7 @@ class MetaDeckViewModel : ViewModel() {
     }
 
     /**
-     * Forza un refresh dei meta deck ignorando la cache.
+     * Forza un refresh ignorando la cache.
      * Ritorna `false` se siamo ancora dentro il cooldown (ed in quel caso
      * non fa niente), `true` se il refresh è stato avviato.
      */
@@ -160,15 +191,31 @@ class MetaDeckViewModel : ViewModel() {
         if (now - lastManualRefreshAt < refreshCooldownMs) {
             return false
         }
+
+        // Un refresh a finestra chiusa non aggiorna niente e non accorcia
+        // l'attesa: si dice all'utente quanto manca invece di fingere.
+        val retryAfter = repository.rateLimitRetryAfterSeconds()
+        if (retryAfter > 0) {
+            rateLimitedForSeconds = retryAfter
+            return false
+        }
+
         lastManualRefreshAt = now
         repository.clearCache()
-        loadMetaDecks()
-        loadArchetypes()
-        loadTournamentResults()
+        if (archetypesRequested) loadArchetypes()
+        if (tournamentsRequested) loadTournamentResults()
         return true
     }
 
-    fun clearError() {
-        errorMessage = null
-    }
+    /** Secondi da aspettare da mostrare all'utente, aggiornato al momento. */
+    fun currentRateLimitWait(): Long = repository.rateLimitRetryAfterSeconds()
 }
+
+/**
+ * Vero quando il fallimento e' la finestra di rate limit chiusa, non un guasto.
+ *
+ * Si guarda anche la causa perche' Retrofit incarta le IOException sollevate
+ * dagli interceptor prima di restituirle.
+ */
+private fun Throwable.isRateLimit(): Boolean =
+    this is LimitlessRateLimitException || cause is LimitlessRateLimitException

@@ -10,6 +10,12 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.italian.ItalianCardFacets
+import com.emabuia.pokevault.data.italian.ItalianCardSearchFilter
+import com.emabuia.pokevault.data.italian.ItalianExpansionFacet
+import com.emabuia.pokevault.data.italian.ItalianHpBucket
+import com.emabuia.pokevault.data.italian.ItalianPriceBucket
+import com.emabuia.pokevault.data.italian.ItalianSearchFacets
 import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.emabuia.pokevault.data.remote.CardMarket
 import com.emabuia.pokevault.data.remote.CardMarketPrices
@@ -36,7 +42,16 @@ import java.time.format.DateTimeParseException
 import java.util.Locale
 
 private const val OTHER_SERIES_KEY = "Other"
-private val FLEX_CARD_NUMBER_REGEX = Regex("""^\s*0*\d+\s*/\s*0*\d+\s*$""")
+// La parte dopo la barra puo' essere vuota: digitando "001/217" si passa per
+// "001/", e trattarlo come un nome farebbe lampeggiare "nessun risultato" a
+// meta' della battitura.
+private val FLEX_CARD_NUMBER_REGEX = Regex("""^\s*0*\d+\s*/\s*0*\d*\s*$""")
+
+/** Solo cifre: "67", "067". Vale come numero di carta, non come nome. */
+private val BARE_CARD_NUMBER_REGEX = Regex("""^\s*\d{1,4}\s*$""")
+
+/** Una ricerca a numero: il numero stampato e, se indicato, il totale del set. */
+internal data class CardNumberQuery(val number: String, val printedTotal: Int?)
 
 data class SeriesSetsGroup(
     val seriesKey: String,
@@ -49,22 +64,31 @@ data class SetsUiState(
     val seriesGroups: List<SeriesSetsGroup> = emptyList(),
     val searchQuery: String = "",
     val cardSearchQuery: String = "",
-    val isExactCardSearch: Boolean = false,
-    val cardRarityFilter: Set<String> = emptySet(),
-    val cardTypeFilter: Set<String> = emptySet(),
-    val cardSupertypeFilter: Set<String> = emptySet(),
-    val cardSubtypeFilter: Set<String> = emptySet(),
-    val availableCardRarities: List<String> = emptyList(),
-    val availableCardTypes: List<String> = emptyList(),
-    val availableCardSupertypes: List<String> = emptyList(),
-    val availableCardSubtypes: List<String> = emptyList(),
+    /** True quando si sta cercando per numero: la vista non deve riordinare. */
+    val isCardNumberSearch: Boolean = false,
+    /** Il totale digitato non corrisponde a nessuna espansione che conosciamo. */
+    val unrecognizedPrintedTotal: Int? = null,
+    /** Le dimensioni che la ricerca applica record per record, prima del taglio. */
+    val cardFilter: ItalianCardSearchFilter = ItalianCardSearchFilter(),
+    /** Le serie selezionate: in ricerca diventano le espansioni che contengono. */
+    val cardSeriesFilter: Set<String> = emptySet(),
+    /** Fasce di prezzo: stanno a parte perche' il prezzo non e' nel catalogo. */
+    val cardPriceFilter: Set<ItalianPriceBucket> = emptySet(),
+    /** Il vocabolario dei filtri, dal catalogo: c'e' anche prima di scrivere. */
+    val searchFacets: ItalianSearchFacets = ItalianSearchFacets(),
     val searchedCards: List<TcgCard> = emptyList(),
     val isSearchingCards: Boolean = false,
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
     val isAddingCard: String? = null,
     val successMessage: String? = null
-)
+) {
+    /** Quante voci di filtro sono accese, su tutte le dimensioni. */
+    val activeCardFilterCount: Int
+        get() = cardFilter.activeCount + cardSeriesFilter.size + cardPriceFilter.size
+
+    val hasActiveCardFilters: Boolean get() = activeCardFilterCount > 0
+}
 
 // Usa AndroidViewModel per accedere al Context
 class SetsViewModel(application: Application) : AndroidViewModel(application) {
@@ -75,12 +99,27 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     private var setSearchJob: Job? = null
     private var lastUnfilteredSearchCards: List<TcgCard> = emptyList()
 
+    /** Il vocabolario di tutto il catalogo: si usa solo finche' non c'e' una ricerca. */
+    private var catalogFacets: ItalianSearchFacets? = null
+
     var uiState by mutableStateOf(SetsUiState())
         private set
 
     private var lastRevalidationAtMs: Long = 0L
 
     private companion object {
+        /**
+         * Quante corrispondenze si pescano per una ricerca.
+         *
+         * Piu' larga di quante se ne mostrano (60) perche' e' l'insieme su cui si
+         * costruiscono le voci del pannello e su cui mordono i filtri: se fosse
+         * gia' tagliata, filtrare per rarita' lascerebbe le briciole.
+         */
+        const val CARD_SEARCH_FETCH_LIMIT = 300
+
+        /** Quante carte finiscono davvero in lista. */
+        const val CARD_SEARCH_RESULT_LIMIT = 60
+
         /** Finestra minima fra due rivalidazioni di rete del catalogo set. */
         const val REVALIDATION_MIN_INTERVAL_MS = 15L * 60 * 1000
 
@@ -217,26 +256,74 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Carica il vocabolario di partenza, quello di tutto il catalogo.
+     *
+     * Serve solo a poter scegliere i filtri prima di aver scritto qualcosa:
+     * appena c'e' una ricerca il pannello si ricostruisce su quei risultati
+     * (vedi [facetsOf]). Si chiama entrando nella ricerca, non all'avvio: chi
+     * apre il Pokedex per sfogliare le espansioni non deve pagare una scansione
+     * del catalogo che non gli serve.
+     */
+    fun loadSearchFacets() {
+        if (catalogFacets != null) return
+        viewModelScope.launch {
+            val context = getApplication<Application>().applicationContext
+            repository.getItalianSearchFacets(context)
+                .onSuccess { facets ->
+                    catalogFacets = facets
+                    // Stesso limite del gate di ricerca: con una lettera sola non si
+                    // cerca ancora niente, quindi il pannello deve mostrare il
+                    // vocabolario del catalogo, non restare vuoto.
+                    if (uiState.cardSearchQuery.trim().length < 2) {
+                        uiState = uiState.copy(searchFacets = facets)
+                    }
+                }
+        }
+    }
+
+    /**
+     * Ricerca carte sul catalogo italiano completo.
+     *
+     * Ci vuole un nome (o un numero): i filtri restringono quello che si e'
+     * cercato, non lo sostituiscono. Accendere "Pokémon" da solo non vuol dire
+     * "dammi i quindicimila Pokémon del catalogo" -- vuol dire "fra le carte che
+     * ho cercato, tienimi i Pokémon". Sceglierli prima di scrivere resta
+     * possibile: restano accesi e mordono appena parte la ricerca.
+     *
+     * Non c'e' piu' una modalita' "match esatto" da accendere a mano: il nome
+     * identico vince comunque, perche' e' il punteggio piu' alto della scala di
+     * ranking.
+     *
+     * Una query fatta di cifre ("001/217", "67") non e' un nome e non va cercata
+     * fra i nomi: prende la strada di [searchItalianScannerCandidates], che sa
+     * confrontare il numero stampato e il totale dell'espansione.
+     */
     fun searchCardsByName(query: String) {
         uiState = uiState.copy(cardSearchQuery = query)
+        runCardSearch()
+    }
+
+    /** Rilancia la ricerca con la query corrente: la usano i filtri quando cambiano. */
+    private fun runCardSearch() {
         searchJob?.cancel()
-        if (query.length < 2) {
+
+        val query = uiState.cardSearchQuery
+        if (query.trim().length < 2) {
+            // Senza nome non c'e' niente da restringere. Il pannello torna al
+            // vocabolario del catalogo cosi' i filtri restano scegliibili in
+            // anticipo, ma nessun risultato compare finche' non si scrive.
             lastUnfilteredSearchCards = emptyList()
             uiState = uiState.copy(
                 searchedCards = emptyList(),
                 isSearchingCards = false,
-                availableCardRarities = emptyList(),
-                availableCardTypes = emptyList(),
-                availableCardSupertypes = emptyList(),
-                availableCardSubtypes = emptyList(),
-                cardRarityFilter = emptySet(),
-                cardTypeFilter = emptySet(),
-                cardSupertypeFilter = emptySet(),
-                cardSubtypeFilter = emptySet()
+                isCardNumberSearch = false,
+                unrecognizedPrintedTotal = null,
+                searchFacets = catalogFacets ?: ItalianSearchFacets()
             )
             return
         }
-        val exactMode = uiState.isExactCardSearch
+
         searchJob = viewModelScope.launch {
             delay(250)
             uiState = uiState.copy(isSearchingCards = true)
@@ -247,110 +334,221 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             // English PokeWallet ones. Besides being the reported cause of "search
             // doesn't find cards well", that burned PokeWallet request budget on every
             // keystroke -- budget that should go only to prices (see MIGRATION_PLAN.md M4.5).
-            val italianCards = repository.searchItalianCardsByName(
-                query = query,
-                context = context,
-                exactMode = exactMode,
-                limit = 60
-            ).getOrDefault(emptyList())
+            //
+            // Si pesca largo (300) e si restringe qui: e' l'insieme su cui si
+            // costruiscono le voci del pannello, quindi deve essere quello che
+            // la ricerca trova davvero, non gia' tagliato dai filtri.
+            val numberQuery = parseCardNumberQuery(query)
+            val found = if (numberQuery != null) {
+                // Numero e totale li confronta il repository, che e' l'unico ad
+                // avere tutti i totali noti di ogni espansione. Qui non si
+                // riordina: rimescolare per somiglianza di nome delle cifre
+                // rovinerebbe l'ordine buono.
+                repository.searchItalianCardsByNumber(
+                    number = numberQuery.number,
+                    printedTotal = numberQuery.printedTotal,
+                    context = context,
+                    limit = CARD_SEARCH_FETCH_LIMIT
+                ).getOrDefault(emptyList())
+            } else {
+                val byName = repository.searchItalianCardsByName(
+                    query = query,
+                    context = context,
+                    limit = CARD_SEARCH_FETCH_LIMIT
+                ).getOrDefault(emptyList())
+                // Ordinare per somiglianza normalizza il nome a ogni confronto:
+                // su trecento carte e' lavoro che sul thread della UI si vedrebbe.
+                withContext(Dispatchers.Default) { rankCardSearchResults(query, byName) }
+            }
 
-            val filteredCards = if (exactMode) applyExactCardFilter(query, italianCards) else italianCards
-            val rankedCards = rankCardSearchResults(query, filteredCards)
-            val finalCards = enrichItalianCardsWithSnapshotPrices(rankedCards, context)
-            lastUnfilteredSearchCards = finalCards
+            val matched = enrichItalianCardsWithSnapshotPrices(found, context)
+            lastUnfilteredSearchCards = matched
 
-            // New search results -> filter chips reset to what's actually available
-            // in this result set (real values from D1, see MIGRATION_PLAN.md M4.6),
-            // rather than carrying over a filter that may no longer apply.
+            // Anche filtrare e ricostruire il pannello sono passate su trecento
+            // elementi: fuori dal main, resta sul main la sola assegnazione.
+            val filtered = withContext(Dispatchers.Default) {
+                applyCardFilters(matched).take(CARD_SEARCH_RESULT_LIMIT) to facetsOf(matched)
+            }
+
             uiState = uiState.copy(
-                searchedCards = finalCards,
-                isSearchingCards = false,
-                availableCardRarities = finalCards.mapNotNull { it.rarity?.trim()?.takeIf(String::isNotBlank) }.distinct().sorted(),
-                availableCardTypes = finalCards.flatMap { it.types.orEmpty() }.map { it.trim() }.filter { it.isNotBlank() }.distinct().sorted(),
-                availableCardSupertypes = finalCards.map { it.supertype.trim() }.filter { it.isNotBlank() }.distinct().sorted(),
-                availableCardSubtypes = finalCards.flatMap { it.subtypes.orEmpty() }.map { it.trim() }.filter { it.isNotBlank() }.distinct().sorted(),
-                cardRarityFilter = emptySet(),
-                cardTypeFilter = emptySet(),
-                cardSupertypeFilter = emptySet(),
-                cardSubtypeFilter = emptySet()
+                searchedCards = filtered.first,
+                searchFacets = filtered.second,
+                isCardNumberSearch = numberQuery != null,
+                // Se il totale digitato non compare in nessun risultato vuol dire
+                // che non lo conosciamo: la lista che segue sono tutte le carte
+                // con quel numero, e va detto invece di farla passare per la
+                // risposta esatta.
+                unrecognizedPrintedTotal = numberQuery?.printedTotal
+                    ?.takeIf { typed -> matched.none { it.set?.printedTotal == typed } },
+                isSearchingCards = false
             )
         }
     }
 
-    fun setExactCardSearch(enabled: Boolean) {
-        if (uiState.isExactCardSearch == enabled) return
-        uiState = uiState.copy(isExactCardSearch = enabled)
+    /**
+     * Riapplica i filtri senza rifare la ricerca.
+     *
+     * Toccare un chip non cambia cosa si sta cercando, solo cosa se ne tiene:
+     * rilanciare la scansione del catalogo per questo sarebbe lavoro sprecato, e
+     * si vedrebbe come un lampeggio della lista a ogni tocco. Il pannello non si
+     * ricostruisce: le voci restano quelle dei risultati della ricerca, altrimenti
+     * accendere un filtro farebbe sparire gli altri e non si tornerebbe indietro.
+     */
+    private fun reapplyCardFilters() {
+        if (uiState.cardSearchQuery.trim().length < 2) return
+        uiState = uiState.copy(
+            searchedCards = applyCardFilters(lastUnfilteredSearchCards).take(CARD_SEARCH_RESULT_LIMIT)
+        )
+    }
 
-        val currentQuery = uiState.cardSearchQuery
-        if (currentQuery.length >= 2) {
-            searchCardsByName(currentQuery)
+    private fun applyCardFilters(cards: List<TcgCard>): List<TcgCard> {
+        val filter = uiState.cardFilter
+        val series = uiState.cardSeriesFilter
+        val priceBuckets = uiState.cardPriceFilter
+        if (filter.isEmpty && series.isEmpty() && priceBuckets.isEmpty()) return cards
+
+        return cards.filter { card ->
+            cardMatchesFilter(card, filter) &&
+                (series.isEmpty() || cardSeriesOf(card) in series) &&
+                (priceBuckets.isEmpty() || cardPriceBucketOf(card) in priceBuckets)
         }
+    }
+
+    /**
+     * Le voci del pannello, ricavate dai risultati della ricerca.
+     *
+     * E' il punto della faccenda: cercando "Charizard" il pannello offre le
+     * rarita' e le espansioni dei Charizard, non quelle dell'intero catalogo.
+     * Si costruisce sempre sull'insieme *non* filtrato, cosi' accendere un chip
+     * non fa sparire gli altri lasciando l'utente in un vicolo cieco.
+     */
+    private fun facetsOf(cards: List<TcgCard>): ItalianSearchFacets {
+        if (cards.isEmpty()) return ItalianSearchFacets()
+
+        val counts = mutableMapOf<String, Int>()
+        fun bump(dimension: String, value: String) {
+            if (value.isBlank()) return
+            counts["$dimension:$value"] = (counts["$dimension:$value"] ?: 0) + 1
+        }
+
+        val expansionCounts = mutableMapOf<String, Int>()
+        val expansionLabels = mutableMapOf<String, String>()
+        val expansionSeries = mutableMapOf<String, String>()
+
+        cards.forEach { card ->
+            bump(ItalianCardFacets.DIMENSION_SUPERTYPE, card.supertype.trim())
+            card.types.orEmpty().forEach { bump(ItalianCardFacets.DIMENSION_TYPE, it.trim()) }
+            card.rarity?.trim()?.let { bump(ItalianCardFacets.DIMENSION_RARITY, it) }
+            bump(ItalianCardFacets.DIMENSION_VARIANT, ItalianCardFacets.variantOfName(card.name))
+            cardHpBucketOf(card)?.let { bump(ItalianCardFacets.DIMENSION_HP, it.key) }
+
+            val expansionId = cardExpansionIdOf(card)
+            if (expansionId.isNotBlank()) {
+                expansionCounts[expansionId] = (expansionCounts[expansionId] ?: 0) + 1
+                expansionLabels.putIfAbsent(expansionId, card.set?.name?.takeIf { it.isNotBlank() } ?: expansionId.uppercase(Locale.ROOT))
+                expansionSeries.putIfAbsent(expansionId, cardSeriesOf(card))
+            }
+        }
+
+        fun distinctFor(dimension: String): List<String> =
+            counts.keys.asSequence()
+                .filter { it.startsWith("$dimension:") }
+                .map { it.removePrefix("$dimension:") }
+                .sortedByDescending { counts["$dimension:$it"] ?: 0 }
+                .toList()
+
+        return ItalianSearchFacets(
+            supertypes = distinctFor(ItalianCardFacets.DIMENSION_SUPERTYPE),
+            types = distinctFor(ItalianCardFacets.DIMENSION_TYPE).sorted(),
+            rarities = distinctFor(ItalianCardFacets.DIMENSION_RARITY),
+            variants = distinctFor(ItalianCardFacets.DIMENSION_VARIANT),
+            // Le fasce restano nell'ordine dell'enum, non per frequenza: sono una
+            // scala, e una scala fuori ordine non si legge.
+            hpBuckets = ItalianHpBucket.entries.filter { (counts["${ItalianCardFacets.DIMENSION_HP}:${it.key}"] ?: 0) > 0 },
+            expansions = expansionCounts.entries
+                .map { (id, count) ->
+                    ItalianExpansionFacet(
+                        id = id,
+                        label = expansionLabels[id] ?: id.uppercase(Locale.ROOT),
+                        series = expansionSeries[id].orEmpty(),
+                        cardCount = count
+                    )
+                }
+                .sortedWith(compareByDescending<ItalianExpansionFacet> { it.cardCount }.thenBy { it.label }),
+            priceBuckets = ItalianPriceBucket.entries.filter { bucket ->
+                cards.any { cardPriceBucketOf(it) == bucket }
+            }
+        )
     }
 
     fun toggleCardRarityFilter(rarity: String) {
-        val current = uiState.cardRarityFilter
-        uiState = uiState.copy(cardRarityFilter = if (rarity in current) current - rarity else current + rarity)
-        applyCardResultFilters()
+        val current = uiState.cardFilter
+        uiState = uiState.copy(cardFilter = current.copy(rarities = current.rarities.toggle(rarity)))
+        reapplyCardFilters()
     }
 
     fun toggleCardTypeFilter(type: String) {
-        val current = uiState.cardTypeFilter
-        uiState = uiState.copy(cardTypeFilter = if (type in current) current - type else current + type)
-        applyCardResultFilters()
+        val current = uiState.cardFilter
+        uiState = uiState.copy(cardFilter = current.copy(types = current.types.toggle(type)))
+        reapplyCardFilters()
     }
 
     fun toggleCardSupertypeFilter(supertype: String) {
-        val current = uiState.cardSupertypeFilter
-        uiState = uiState.copy(cardSupertypeFilter = if (supertype in current) current - supertype else current + supertype)
-        applyCardResultFilters()
+        val current = uiState.cardFilter
+        uiState = uiState.copy(cardFilter = current.copy(supertypes = current.supertypes.toggle(supertype)))
+        reapplyCardFilters()
     }
 
-    fun toggleCardSubtypeFilter(subtype: String) {
-        val current = uiState.cardSubtypeFilter
-        uiState = uiState.copy(cardSubtypeFilter = if (subtype in current) current - subtype else current + subtype)
-        applyCardResultFilters()
+    fun toggleCardVariantFilter(variant: String) {
+        val current = uiState.cardFilter
+        uiState = uiState.copy(cardFilter = current.copy(variants = current.variants.toggle(variant)))
+        reapplyCardFilters()
     }
+
+    fun toggleCardHpFilter(bucket: ItalianHpBucket) {
+        val current = uiState.cardFilter
+        uiState = uiState.copy(cardFilter = current.copy(hpBuckets = current.hpBuckets.toggle(bucket)))
+        reapplyCardFilters()
+    }
+
+    fun toggleCardExpansionFilter(expansionId: String) {
+        val current = uiState.cardFilter
+        uiState = uiState.copy(cardFilter = current.copy(expansionIds = current.expansionIds.toggle(expansionId)))
+        reapplyCardFilters()
+    }
+
+    fun toggleCardSeriesFilter(series: String) {
+        uiState = uiState.copy(cardSeriesFilter = uiState.cardSeriesFilter.toggle(series))
+        reapplyCardFilters()
+    }
+
+    fun toggleCardPriceFilter(bucket: ItalianPriceBucket) {
+        uiState = uiState.copy(cardPriceFilter = uiState.cardPriceFilter.toggle(bucket))
+        reapplyCardFilters()
+    }
+
+    private fun <T> Set<T>.toggle(value: T): Set<T> =
+        if (value in this) this - value else this + value
 
     fun clearCardResultFilters() {
         uiState = uiState.copy(
-            cardRarityFilter = emptySet(),
-            cardTypeFilter = emptySet(),
-            cardSupertypeFilter = emptySet(),
-            cardSubtypeFilter = emptySet()
+            cardFilter = ItalianCardSearchFilter(),
+            cardSeriesFilter = emptySet(),
+            cardPriceFilter = emptySet()
         )
-        applyCardResultFilters()
+        reapplyCardFilters()
     }
 
-    private fun applyCardResultFilters() {
-        val rarityFilter = uiState.cardRarityFilter
-        val typeFilter = uiState.cardTypeFilter
-        val supertypeFilter = uiState.cardSupertypeFilter
-        val subtypeFilter = uiState.cardSubtypeFilter
-        val filtered = lastUnfilteredSearchCards.filter { card ->
-            (rarityFilter.isEmpty() || card.rarity?.trim() in rarityFilter) &&
-                (typeFilter.isEmpty() || card.types.orEmpty().any { it.trim() in typeFilter }) &&
-                (supertypeFilter.isEmpty() || card.supertype.trim() in supertypeFilter) &&
-                (subtypeFilter.isEmpty() || card.subtypes.orEmpty().any { it.trim() in subtypeFilter })
-        }
-        uiState = uiState.copy(searchedCards = filtered)
-    }
-
+    /**
+     * Svuota il campo del nome.
+     *
+     * I filtri restano accesi: la X sta dentro il campo di testo, e azzerare da
+     * li' anche una selezione fatta nel pannello sarebbe una sorpresa. Per
+     * quelli c'e' "Azzera" nel pannello.
+     */
     fun clearCardSearch() {
-        searchJob?.cancel()
-        lastUnfilteredSearchCards = emptyList()
-        uiState = uiState.copy(
-            cardSearchQuery = "",
-            searchedCards = emptyList(),
-            isSearchingCards = false,
-            availableCardRarities = emptyList(),
-            availableCardTypes = emptyList(),
-            availableCardSupertypes = emptyList(),
-            availableCardSubtypes = emptyList(),
-            cardRarityFilter = emptySet(),
-            cardTypeFilter = emptySet(),
-            cardSupertypeFilter = emptySet(),
-            cardSubtypeFilter = emptySet()
-        )
+        uiState = uiState.copy(cardSearchQuery = "")
+        runCardSearch()
     }
 
     fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {
@@ -528,62 +726,8 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         return LocalDate.MIN
     }
 
-    private fun applyExactCardFilter(query: String, cards: List<TcgCard>): List<TcgCard> {
-        if (cards.isEmpty()) return cards
-
-        val fullNumber = FLEX_CARD_NUMBER_REGEX.matchEntire(query)
-        if (fullNumber != null) {
-            val parts = query.split("/")
-            if (parts.size == 2) {
-                val number = parts[0].trim().trimStart('0').ifEmpty { "0" }
-                val total = parts[1].trim().trimStart('0').ifEmpty { "0" }
-                val totalInt = total.toIntOrNull()
-                val exactSetIds = if (totalInt != null) {
-                    uiState.allSets.filter { it.printedTotal == totalInt }.map { it.id }.toSet()
-                } else {
-                    emptySet()
-                }
-                val totalVariants = linkedSetOf(total, total.padStart(3, '0'))
-
-                val strictByCardNumberAndTotal = cards
-                    .filter { card ->
-                        extractCardNumberForSearch(card.number) == number &&
-                            extractPrintedTotalForSearch(card.number) in totalVariants
-                    }
-                val numberOnly = cards.filter { card -> extractCardNumberForSearch(card.number) == number }
-                if (strictByCardNumberAndTotal.isNotEmpty()) {
-                    val exactSetScoped = strictByCardNumberAndTotal.filter { card ->
-                        card.set?.id.orEmpty() in exactSetIds
-                    }
-                    return if (exactSetScoped.isNotEmpty()) exactSetScoped else strictByCardNumberAndTotal
-                }
-                return numberOnly
-            }
-        }
-
-        val normalizedQuery = normalizeSearchName(query)
-        if (normalizedQuery.isBlank()) return cards
-
-        val exact = cards.filter { normalizeSearchName(it.name) == normalizedQuery }
-        if (exact.isNotEmpty()) return exact
-
-        val prefix = cards.filter { normalizeSearchName(it.name).startsWith("$normalizedQuery ") }
-        if (prefix.isNotEmpty()) return prefix
-
-        val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
-        return cards.filter { card ->
-            val normalizedName = normalizeSearchName(card.name)
-            queryTokens.isNotEmpty() && queryTokens.all { token ->
-                " $normalizedName ".contains(" $token ")
-            }
-        }
-    }
-
     private fun rankCardSearchResults(query: String, cards: List<TcgCard>): List<TcgCard> {
         if (cards.isEmpty()) return cards
-
-        val fullNumber = FLEX_CARD_NUMBER_REGEX.matchEntire(query)
-        if (fullNumber != null) return cards
 
         val normalizedQuery = normalizeSearchName(query)
         if (normalizedQuery.isBlank()) return cards
@@ -698,10 +842,80 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         return raw.substringBefore("/").trim().trimStart('0').ifEmpty { "0" }
     }
 
-    private fun extractPrintedTotalForSearch(raw: String): String {
-        val total = raw.substringAfter("/", "").trim()
-        if (total.isBlank()) return ""
-        return total.trimStart('0').ifEmpty { "0" }
-    }
 
 }
+
+// ── Regole di corrispondenza dei filtri ──
+//
+// Fuori dalla classe perche' sono pure: non toccano lo stato, e cosi' si
+// possono provare da sole. Sono il punto in cui una svista si vede solo in
+// esercizio ("perche' la mia Metallo/Lotta non esce filtrando Metallo?").
+
+/** True se la carta passa tutte le dimensioni selezionate nel pannello. */
+internal fun cardMatchesFilter(card: TcgCard, filter: ItalianCardSearchFilter): Boolean {
+    if (filter.isEmpty) return true
+
+    if (filter.supertypes.isNotEmpty() && card.supertype.trim() !in filter.supertypes) return false
+    if (filter.rarities.isNotEmpty() && card.rarity?.trim() !in filter.rarities) return false
+    if (filter.variants.isNotEmpty() && ItalianCardFacets.variantOfName(card.name) !in filter.variants) return false
+    if (filter.expansionIds.isNotEmpty() && cardExpansionIdOf(card) !in filter.expansionIds) return false
+
+    // Una carta a doppio tipo passa se almeno uno dei due e' selezionato:
+    // chi filtra "Metallo" si aspetta di vedere anche le Metallo/Lotta.
+    if (filter.types.isNotEmpty() && card.types.orEmpty().none { it.trim() in filter.types }) return false
+
+    if (filter.hpBuckets.isNotEmpty()) {
+        // Nessun ps = nessuna fascia: una macchina non passa un filtro sui ps.
+        val bucket = cardHpBucketOf(card) ?: return false
+        if (bucket !in filter.hpBuckets) return false
+    }
+
+    return true
+}
+
+/** Il codice dell'espansione ITA, dal set id ("sv08__ita" -> "sv08"). */
+internal fun cardExpansionIdOf(card: TcgCard): String =
+    card.set?.id.orEmpty().substringBefore("__").lowercase(Locale.ROOT)
+
+internal fun cardSeriesOf(card: TcgCard): String = card.set?.series.orEmpty()
+
+internal fun cardHpBucketOf(card: TcgCard): ItalianHpBucket? =
+    card.hp?.trim()?.toIntOrNull()?.takeIf { it > 0 }?.let(ItalianHpBucket::forHp)
+
+/** Fascia di prezzo della carta, o null se lo snapshot non la copre. */
+internal fun cardPriceBucketOf(card: TcgCard): ItalianPriceBucket? {
+    val price = card.cardmarket?.prices.minimumEurPriceOrZero()
+    if (price <= 0.0) return null
+    return ItalianPriceBucket.forPrice(price)
+}
+
+/**
+ * Una ricerca fatta di cifre: "001/217", "67/87", o il solo "067".
+ *
+ * Va riconosciuta prima di cercare, perche' il numero non sta fra i nomi e fra
+ * i nomi non si trova: e' la ragione per cui digitare un ID non restituiva
+ * niente. Il totale dopo la barra e' opzionale ed e' quello che dice di quale
+ * espansione si parla, visto che la carta numero 1 esiste in tutte.
+ */
+internal fun parseCardNumberQuery(query: String): CardNumberQuery? {
+    val clean = query.trim()
+    if (clean.isBlank()) return null
+
+    if (FLEX_CARD_NUMBER_REGEX.matchEntire(clean) != null) {
+        val parts = clean.split("/")
+        if (parts.size != 2) return null
+        return CardNumberQuery(
+            number = parts[0].trim().trimStart('0').ifEmpty { "0" },
+            printedTotal = parts[1].trim().trimStart('0').toIntOrNull()
+        )
+    }
+
+    // Solo cifre, senza barra: vale come numero carta. Nessuna carta si chiama
+    // "067", quindi non si ruba niente alla ricerca per nome.
+    if (BARE_CARD_NUMBER_REGEX.matchEntire(clean) != null) {
+        return CardNumberQuery(number = clean.trimStart('0').ifEmpty { "0" }, printedTotal = null)
+    }
+
+    return null
+}
+

@@ -26,6 +26,24 @@ object CardFieldParser {
     private const val MAX_NAME_TOKENS = 4
 
     // ═══════════════════════════════════════════
+    // PARSING DI UN FRAME DELLO SCANNER
+    // ═══════════════════════════════════════════
+
+    /**
+     * Estrae i campi da un frame della camera.
+     *
+     * L'ordine e' quello che conta: si parte dal parsing per zone (sa dove sta
+     * ogni cosa), si colma con quello full-text, e per ultimo l'ID della
+     * striscia in fondo sovrascrive numero e totale. La striscia vince perche'
+     * e' l'unica lettura fatta a risoluzione sufficiente per quel campo.
+     */
+    fun parseFrame(frame: ScannedFrame): CardOCRResult {
+        val zoned = parseZonedText(frame.blocks)
+        val full = parseFullText(frame.fullText)
+        return withIdStrip(mergeResults(full, zoned), frame.idStripText)
+    }
+
+    // ═══════════════════════════════════════════
     // PARSING FULL-FRAME (testo intero OCR)
     // ═══════════════════════════════════════════
 
@@ -91,14 +109,15 @@ object CardFieldParser {
 
         // Classifica blocchi per zona verticale
         val topBlocks = textBlocks.filter { it.normalizedY < 0.15f }
-        val middleBlocks = textBlocks.filter { it.normalizedY in 0.15f..0.80f }
         val bottomBlocks = textBlocks.filter { it.normalizedY > 0.80f }
 
         val topText = topBlocks.joinToString(" ") { it.text }
         val bottomText = bottomBlocks.joinToString(" ") { it.text }
 
-        // Nome: dalla zona top, e il testo piu grande/primo
-        val name = extractCardNameFromTop(topText)
+        // Nome: primo blocco utile della zona alta, da sinistra verso destra.
+        // Sulla carta il nome sta a sinistra e gli HP a destra: leggere i blocchi
+        // in ordine orizzontale evita di incollare i due campi in un'unica stringa.
+        val name = extractCardNameFromTopBlocks(topBlocks) ?: extractCardNameFromTop(topText)
 
         // HP: dalla zona top
         val hp = extractHP(topText)
@@ -154,24 +173,27 @@ object CardFieldParser {
     // ESTRAZIONE NUMERO CARTA
     // ═══════════════════════════════════════════
 
-    /** Pattern per numero carta: "025/198", "25 / 198", "025/198 C", ecc. */
-    private val CARD_NUMBER_PATTERN = Regex("""(\d{1,3})\s*/\s*(\d{1,3})""")
-
     /**
      * Estrae il numero della carta (es. "25" da "025/198").
      * Questo e il dato OCR PIU AFFIDABILE su una carta Pokemon.
      */
-    fun extractCardNumber(text: String): String? {
-        val match = CARD_NUMBER_PATTERN.find(text) ?: return null
-        val num = match.groupValues[1].trimStart('0')
-        return if (num.isNotBlank()) num else "0"
-    }
+    fun extractCardNumber(text: String): String? = CardIdParser.parseFromCardText(text)?.number
 
     /** Estrae il totale del set (es. "198" da "025/198"), senza zero iniziali */
-    fun extractSetTotal(text: String): String? {
-        val match = CARD_NUMBER_PATTERN.find(text) ?: return null
-        val total = match.groupValues[2].trimStart('0')
-        return if (total.isNotBlank()) total else "0"
+    fun extractSetTotal(text: String): String? = CardIdParser.parseFromCardText(text)?.total
+
+    /**
+     * Sovrascrive numero e totale con la lettura dedicata della striscia in
+     * basso, che vince sempre quando c'e': il resto del testo carta contiene
+     * danni e costi che assomigliano a un ID, la striscia no.
+     */
+    fun withIdStrip(result: CardOCRResult, idStripText: String): CardOCRResult {
+        val id = CardIdParser.parse(idStripText) ?: return result
+        return result.copy(
+            cardNumber = id.number,
+            setTotal = id.total ?: result.setTotal,
+            confidence = maxOf(result.confidence, id.confidence)
+        )
     }
 
     private val SET_CODE_PATTERN = Regex("""\b([A-Za-z]{2,5}\d{0,2}|ME\d{2}|SV\d{1,2}|SWSH\d{1,2})\b""")
@@ -310,6 +332,24 @@ object CardFieldParser {
         val rawName = candidates.firstOrNull() ?: return null
 
         return cleanCardName(rawName)
+    }
+
+    /**
+     * Estrae il nome dai blocchi della zona alta, ordinati da sinistra.
+     *
+     * Il primo blocco che produce un nome plausibile vince: e' quello piu' a
+     * sinistra, cioe' il nome. I blocchi successivi sono HP, tipo e simboli,
+     * che [cleanCardName] scarterebbe comunque ma solo dopo averli mescolati
+     * al nome vero se li leggessimo come un'unica stringa.
+     */
+    private fun extractCardNameFromTopBlocks(topBlocks: List<OCRTextBlock>): String? {
+        return topBlocks
+            .sortedBy { it.normalizedLeft }
+            .asSequence()
+            .flatMap { block -> block.text.lines().asSequence() }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .firstNotNullOfOrNull { line -> cleanCardName(line) }
     }
 
     /**

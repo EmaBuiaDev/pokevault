@@ -1943,7 +1943,7 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
     // /v1 route consulted it, so the compliance kill-switch had no effect.
     const { results } = await db
       .prepare(
-        `SELECT e.id, e.name, e.card_count, e.sort_order, e.logo_key, e.base_set_code, e.release_date, e.series
+        `SELECT e.id, e.name, e.card_count, e.official_count, e.sort_order, e.logo_key, e.base_set_code, e.release_date, e.series
          FROM expansions e
          WHERE e.published = 1
            AND NOT EXISTS (
@@ -1952,7 +1952,7 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
            )
          ORDER BY (e.release_date IS NULL), e.release_date DESC, e.sort_order, e.id`
       )
-      .all<{ id: string; name: string | null; card_count: number; sort_order: number; logo_key: string | null; base_set_code: string | null; release_date: string | null; series: string | null }>();
+      .all<{ id: string; name: string | null; card_count: number; official_count: number | null; sort_order: number; logo_key: string | null; base_set_code: string | null; release_date: string | null; series: string | null }>();
     // Remapped to camelCase to match ItalianExpansionSummary on the Android side
     // (same reasoning as mapCardRow: raw D1 column names must never leak into the
     // client contract, so the two can't silently drift apart).
@@ -1960,6 +1960,11 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
       id: r.id,
       name: r.name,
       cardCount: r.card_count,
+      // Il conteggio delle sole carte base: e' il numero stampato sulle carte
+      // dopo la barra ("066/217"), mentre cardCount conta anche le segrete
+      // (295 per la stessa espansione). Null dove non esiste -- i promo -- e
+      // il client deve trattarlo come "non lo so" (schema/008).
+      officialCount: r.official_count,
       sortOrder: r.sort_order,
       logoKey: r.logo_key,
       series: r.series,

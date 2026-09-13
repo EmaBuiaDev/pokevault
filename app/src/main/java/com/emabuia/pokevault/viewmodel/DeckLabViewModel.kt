@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
+import com.emabuia.pokevault.data.model.BasicEnergyResolver
 import com.emabuia.pokevault.data.model.CardClassifier
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.DeckAnalysis
@@ -58,6 +59,16 @@ class DeckLabViewModel : ViewModel() {
         private set
 
     var isImportReviewMode by mutableStateOf(false)
+        private set
+
+    /**
+     * Le carte aggiunte in collezione che il catalogo italiano non conosce.
+     *
+     * Entrano senza immagine e con i soli dati della decklist. Prima succedeva
+     * in silenzio, e l'utente se le ritrovava fra le proprie carte come
+     * rettangoli vuoti senza sapere da dove venissero.
+     */
+    var importPlaceholderNames by mutableStateOf<List<String>>(emptyList())
         private set
 
     // Card search in TCG sets (for "Cerca nei set")
@@ -328,10 +339,11 @@ class DeckLabViewModel : ViewModel() {
         coverImageUrl = ""
         coverImageUrls = emptyList()
         isImportReviewMode = false
+        importPlaceholderNames = emptyList()
         currentAnalysis = DeckAnalysis()
         validationError = null
     }
-    
+
     fun duplicateDeck(deck: Deck) {
         viewModelScope.launch {
             val duplicated = deck.copy(id = "", name = "${deck.name} (Copia)")
@@ -512,6 +524,25 @@ class DeckLabViewModel : ViewModel() {
     private fun findOwnedCards(name: String, set: String?, number: String?): OwnedMatch {
         val nameLower = name.lowercase().trim()
 
+        // Le energie base si cercano per tipo, non per stampa: "Basic Psychic
+        // Energy SVE 5" e l'"Energia Psico" gia' in collezione sono la stessa
+        // carta, e pretendere lo stesso set e lo stesso numero significava non
+        // trovarla mai e aggiungerne una copia nuova a ogni import.
+        if (BasicEnergyResolver.isBasicEnergy(name)) {
+            val ownedEnergies = ownedCards.filter { card ->
+                BasicEnergyResolver.isSameBasicEnergy(card.name, name)
+            }
+            if (ownedEnergies.isNotEmpty()) {
+                return OwnedMatch(
+                    // Prima quelle con un'immagine: se in collezione ci sono
+                    // gia' dei segnaposto di import precedenti, non e' il caso
+                    // di sceglierli proprio adesso.
+                    cards = ownedEnergies.sortedByDescending { it.imageUrl.isNotBlank() },
+                    usedFallbackSet = false
+                )
+            }
+        }
+
         // 1. Match esatto: nome + set + numero
         if (set != null && number != null) {
             val exact = ownedCards.filter { card ->
@@ -675,12 +706,15 @@ class DeckLabViewModel : ViewModel() {
             // locale persistente, quindi possiamo farle in sequenza per
             // mantenere un ordine stabile nel deck.
             val newIds = mutableListOf<String>()
+            val placeholders = mutableListOf<String>()
             for ((card, pokemonCard) in built) {
+                if (pokemonCard.imageUrl.isBlank()) placeholders += pokemonCard.name
                 val result = repository.addCard(pokemonCard)
                 result.onSuccess { docId ->
                     repeat(card.qty) { newIds.add(docId) }
                 }
             }
+            importPlaceholderNames = placeholders.distinct()
 
             // Se alcune carte entrano a 0, prova una hydration immediata del prezzo
             // per riallineare anche il totalValue della collezione.
@@ -707,7 +741,14 @@ class DeckLabViewModel : ViewModel() {
      * secondo tentativo.
      */
     private suspend fun lookupAndCreateCard(card: MetaDeckCard, context: Context): PokemonCard {
+        // Tre tentativi prima di arrendersi a una carta senza immagine.
+        // Prima ce n'era uno solo, e bastava un codice di set che il catalogo
+        // italiano non conosce — SVE per le energie, o un'espansione appena
+        // uscita — perche' la carta entrasse in collezione come un rettangolo
+        // vuoto col nome sopra.
         val tcgCard = pokeTcgRepository.findExactItalianCard(card.set, card.number, context)
+            ?: resolveBasicEnergyCard(card, context)
+            ?: resolveByNameOnly(card, context)
 
         return if (tcgCard != null) {
             val price = resolveBestPrice(
@@ -755,6 +796,70 @@ class DeckLabViewModel : ViewModel() {
                 variant = "Normal"
             )
         }
+    }
+
+    /**
+     * Un'energia base qualsiasi del tipo giusto.
+     *
+     * Il set delle energie di PTCGL (SVE) non esiste nel catalogo italiano: le
+     * energie base italiane escono dentro le espansioni normali. Cercarle per
+     * set e numero non poteva funzionare, e infatti ogni energia di ogni import
+     * finiva senza immagine.
+     */
+    private suspend fun resolveBasicEnergyCard(card: MetaDeckCard, context: Context): TcgCard? {
+        val energyName = BasicEnergyResolver.italianEnergyName(card.name) ?: return null
+
+        return pokeTcgRepository.searchItalianCardsByName(energyName, context, limit = 40)
+            .getOrNull()
+            ?.firstOrNull { candidate ->
+                candidate.images.small.isNotBlank() &&
+                    BasicEnergyResolver.isSameBasicEnergy(candidate.name, energyName)
+            }
+    }
+
+    /**
+     * La carta cercata per nome, ignorando il set.
+     *
+     * E' un ripiego dichiarato: l'illustrazione puo' essere di un'altra stampa.
+     * Ma fra una carta giusta con l'arte di un'altra espansione e un rettangolo
+     * grigio col nome scritto sopra, la prima resta piu' utile — e resta una
+     * carta vera, con i suoi dati, non un segnaposto che sporca la collezione.
+     */
+    private suspend fun resolveByNameOnly(card: MetaDeckCard, context: Context): TcgCard? {
+        val name = card.name.trim().takeIf { it.isNotBlank() } ?: return null
+        val wantedName = normalizeCardNameForMatch(name)
+
+        val candidates = pokeTcgRepository.searchItalianCardsByName(name, context, limit = 40)
+            .getOrNull()
+            ?.filter { candidate ->
+                // Il nome deve coincidere, non somigliare. La ricerca per nome
+                // e' volutamente generosa — cercando "Toucannon" restituisce
+                // anche "Toucannon ex" — e importare una carta simile al posto
+                // di quella chiesta e' peggio di non importarla: il mazzo
+                // sembrerebbe completo e non lo sarebbe.
+                candidate.images.small.isNotBlank() &&
+                    normalizeCardNameForMatch(candidate.name) == wantedName
+            }
+            ?.takeIf { it.isNotEmpty() }
+            ?: return null
+
+        val wantedNumber = card.number?.trim()?.substringBefore('/')?.trimStart('0')
+
+        return candidates.firstOrNull { candidate ->
+            // A parita' di nome si preferisce lo stesso numero di carta: fra le
+            // ristampe e' l'indizio piu' probabile che sia proprio quella.
+            wantedNumber != null &&
+                candidate.number.trim().trimStart('0').equals(wantedNumber, ignoreCase = true)
+        } ?: candidates.first()
+    }
+
+    /** Minuscole, senza accenti e senza punteggiatura: per confrontare due nomi. */
+    private fun normalizeCardNameForMatch(raw: String): String {
+        val decomposed = java.text.Normalizer.normalize(raw.trim().lowercase(), java.text.Normalizer.Form.NFD)
+        return decomposed
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
     }
 
     // ── Card search in TCG sets ────────────────────────────────────────────
