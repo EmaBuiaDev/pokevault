@@ -5,6 +5,7 @@ import com.emabuia.pokevault.data.italian.ItalianCardFacets
 import com.emabuia.pokevault.data.italian.ItalianCardRecord
 import com.emabuia.pokevault.data.italian.ItalianExpansionFacet
 import com.emabuia.pokevault.data.italian.ItalianHpBucket
+import com.emabuia.pokevault.data.italian.ItalianPrintedTotals
 import com.emabuia.pokevault.data.italian.ItalianSearchFacets
 import com.emabuia.pokevault.data.italian.ItalianCatalogRemoteRepository
 import com.emabuia.pokevault.data.italian.ItalianExpansionManifest
@@ -723,6 +724,9 @@ class CatalogRepository {
         // cardCount del manifest conta anche le segrete, quindi non combacia mai.
         if (memorySets == null) runCatching { getSets(context) }
         val printedTotals = italianPrintedTotalsByExpansion()
+        // Il conteggio ufficiale e' il numero stampato sulle carte: e' lui che una
+        // ricerca per ID digita, e che uno scanner legge in basso a sinistra.
+        val officialCounts = italianOfficialCountsById()
 
         return runCatching {
             withContext(Dispatchers.Default) {
@@ -761,7 +765,8 @@ class CatalogRepository {
                         val printedTotal = resolveItalianPrintedTotal(
                             expansionId = expansionId,
                             printedTotals = printedTotals,
-                            manifests = expansionManifests
+                            manifests = expansionManifests,
+                            officialCounts = officialCounts
                         )
                         if (targetTotal != null && printedTotal != null) {
                             score += when {
@@ -796,7 +801,8 @@ class CatalogRepository {
                     val printedTotal = resolveItalianPrintedTotal(
                         expansionId = expansionId,
                         printedTotals = printedTotals,
-                        manifests = expansionManifests
+                        manifests = expansionManifests,
+                        officialCounts = officialCounts
                     )
                     toItalianTcgCard(
                         record = record,
@@ -831,18 +837,42 @@ class CatalogRepository {
     /**
      * Totale stampato di un'espansione ITA, dalla fonte piu' attendibile
      * disponibile: override manuale (esiste proprio dove il dato ereditato e'
-     * sbagliato), set mergiato, conteggio del manifest. L'ultimo e' un
-     * ripiego: include le segrete, quindi sovrastima.
+     * sbagliato), conteggio ufficiale dal manifest (schema/008: e' il numero
+     * davvero stampato sulle carte), set mergiato, conteggio del manifest.
+     * L'ultimo e' un ripiego: include le segrete, quindi sovrastima.
      */
     private fun resolveItalianPrintedTotal(
         expansionId: String,
         printedTotals: Map<String, Int>,
-        manifests: Map<String, ItalianExpansionManifest>
+        manifests: Map<String, ItalianExpansionManifest>,
+        officialCounts: Map<String, Int> = emptyMap()
     ): Int? {
         return ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId]
+            ?: officialCounts[expansionId]
             ?: printedTotals[expansionId]
             ?: manifests[expansionId]?.cardCount?.takeIf { it > 0 }
     }
+
+    /**
+     * Tutti i totali noti per un'espansione, senza sceglierne uno.
+     *
+     * Per *mostrare* un totale ne serve uno solo, il piu' attendibile, ed e'
+     * quello che fa [resolveItalianPrintedTotal]. Per *riconoscere* il totale
+     * che una persona ha digitato servono tutti: il preferito puo' essere
+     * quello gonfiato dalle segrete, e allora l'espansione giusta non si
+     * troverebbe mai (vedi [ItalianPrintedTotals]).
+     */
+    private fun italianPrintedTotalCandidates(
+        expansionId: String,
+        printedTotals: Map<String, Int>,
+        manifests: Map<String, ItalianExpansionManifest>,
+        officialCounts: Map<String, Int> = emptyMap()
+    ): Set<Int> = setOfNotNull(
+        ITALIAN_PRINTED_TOTAL_BY_EXPANSION[expansionId],
+        officialCounts[expansionId],
+        printedTotals[expansionId],
+        manifests[expansionId]?.cardCount?.takeIf { it > 0 }
+    )
 
     /**
      * Cerca le carte ITA per numero stampato ("001/217" -> numero 1, totale 217).
@@ -873,6 +903,9 @@ class CatalogRepository {
         val expansionManifests = catalog.expansions.associateBy { it.espansioneId.trim().lowercase(Locale.ROOT) }
         if (memorySets == null) runCatching { getSets(context) }
         val printedTotals = italianPrintedTotalsByExpansion()
+        // Il conteggio ufficiale e' il numero stampato sulle carte: e' lui che una
+        // ricerca per ID digita, e che uno scanner legge in basso a sinistra.
+        val officialCounts = italianOfficialCountsById()
 
         return runCatching {
             withContext(Dispatchers.Default) {
@@ -905,29 +938,47 @@ class CatalogRepository {
 
                 if (matchingRecords.isEmpty()) return@withContext emptyList()
 
-                matchingRecords
-                    .map { record ->
-                        val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
-                        val total = resolveItalianPrintedTotal(
+                // Il totale confrontato con tutti quelli noti, non col solo
+                // preferito: tenerne uno per priorita' faceva mancare l'espansione
+                // giusta ogni volta che il preferito era il conteggio gonfiato
+                // dalle segrete, ed e' quello che restituiva la carta sbagliata.
+                val scored = matchingRecords.map { record ->
+                    val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+                    record to ItalianPrintedTotals.matchScore(
+                        knownTotals = italianPrintedTotalCandidates(
                             expansionId = expansionId,
                             printedTotals = printedTotals,
-                            manifests = expansionManifests
-                        )
-                        val score = when {
-                            printedTotal == null || total == null -> 0
-                            total == printedTotal -> 90
-                            abs(total - printedTotal) <= 2 -> 25
-                            else -> -45
-                        }
-                        Triple(record, score, total ?: 0)
-                    }
+                            manifests = expansionManifests,
+                            officialCounts = officialCounts
+                        ),
+                        typedTotal = printedTotal
+                    )
+                }
+
+                ItalianPrintedTotals.keepBestMatches(scored)
                     .sortedWith(
-                        compareByDescending<Triple<ItalianCardRecord, Int, Int>> { it.second }
-                            .thenBy { it.first.espansioneId }
+                        compareBy<ItalianCardRecord> { it.espansioneId }
                     )
                     .take(limit.coerceIn(1, 300))
-                    .map { (record, _, total) ->
+                    .map { record ->
                         val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
+                        val candidates = italianPrintedTotalCandidates(
+                            expansionId = expansionId,
+                            printedTotals = printedTotals,
+                            manifests = expansionManifests,
+                            officialCounts = officialCounts
+                        )
+                        // Fra i totali noti si mostra quello che l'utente ha
+                        // riconosciuto, se c'e': averlo letto su una carta vera lo
+                        // rende piu' credibile del conteggio che include le segrete.
+                        val total = candidates.firstOrNull { it == printedTotal }
+                            ?: resolveItalianPrintedTotal(
+                                expansionId = expansionId,
+                                printedTotals = printedTotals,
+                                manifests = expansionManifests,
+                                officialCounts = officialCounts
+                            )
+                            ?: 0
                         val setInfo = TcgSet(
                             id = buildItalianSetId(expansionId),
                             name = italianExpansionDisplayName(expansionId),
@@ -2079,6 +2130,27 @@ class CatalogRepository {
             val id = summary.id.trim().lowercase(Locale.ROOT).takeIf { it.isNotBlank() }
             val name = summary.name?.trim()?.takeIf { it.isNotBlank() }
             if (id != null && name != null) id to name else null
+        }.toMap()
+    }
+
+    /**
+     * Mappa `id espansione minuscolo -> conteggio delle carte base` (es. "me2pt5"
+     * -> 217), dal manifest D1 (schema/008).
+     *
+     * E' il numero stampato sulle carte dopo la barra, ed e' l'unica fonte che
+     * lo conosce davvero: il cardCount conta anche le segrete (295 per la stessa
+     * espansione) e il set mergiato eredita il totale stampato dal set inglese
+     * solo quando l'aggancio riesce. Vuota se il manifest non e' raggiungibile.
+     */
+    suspend fun italianOfficialCountsById(): Map<String, Int> {
+        val summaries = italianCatalogRepository
+            .getExpansionsSummary(baseUrl = PokeVaultApiClient.imageBaseUrl)
+            .getOrNull()
+            .orEmpty()
+        return summaries.mapNotNull { summary ->
+            val id = summary.id.trim().lowercase(Locale.ROOT).takeIf { it.isNotBlank() }
+            val count = summary.officialCount?.takeIf { it > 0 }
+            if (id != null && count != null) id to count else null
         }.toMap()
     }
 

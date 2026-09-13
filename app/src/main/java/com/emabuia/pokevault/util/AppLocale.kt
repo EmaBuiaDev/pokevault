@@ -410,6 +410,10 @@ object AppLocale {
     val searchSetPlaceholder: String get() = if (isItalian) "Cerca un'espansione..." else "Search an expansion..."
     // Filtri della ricerca carte: le voci vengono dal catalogo, le etichette no.
     val searchFiltersHint: String get() = if (isItalian) "Restringono i risultati della ricerca" else "They narrow down the search results"
+    fun unrecognizedTotalNotice(total: Int, number: String) = if (isItalian)
+        "Il totale /$total non corrisponde a nessuna espansione che conosciamo: qui sotto tutte le carte numero $number."
+    else
+        "The /$total total matches no expansion we know: below are all cards numbered $number."
     val noResultsWithFilters: String get() = if (isItalian) "Nessun risultato con i filtri attivi" else "No results with the active filters"
     val clearFilters: String get() = if (isItalian) "Azzera i filtri" else "Clear the filters"
     val noFiltersForSearch: String get() = if (isItalian) "Questa ricerca non ha filtri da offrire" else "This search has no filters to offer"

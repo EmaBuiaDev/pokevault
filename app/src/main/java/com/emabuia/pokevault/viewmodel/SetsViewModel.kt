@@ -64,6 +64,10 @@ data class SetsUiState(
     val seriesGroups: List<SeriesSetsGroup> = emptyList(),
     val searchQuery: String = "",
     val cardSearchQuery: String = "",
+    /** True quando si sta cercando per numero: la vista non deve riordinare. */
+    val isCardNumberSearch: Boolean = false,
+    /** Il totale digitato non corrisponde a nessuna espansione che conosciamo. */
+    val unrecognizedPrintedTotal: Int? = null,
     /** Le dimensioni che la ricerca applica record per record, prima del taglio. */
     val cardFilter: ItalianCardSearchFilter = ItalianCardSearchFilter(),
     /** Le serie selezionate: in ricerca diventano le espansioni che contengono. */
@@ -313,6 +317,8 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             uiState = uiState.copy(
                 searchedCards = emptyList(),
                 isSearchingCards = false,
+                isCardNumberSearch = false,
+                unrecognizedPrintedTotal = null,
                 searchFacets = catalogFacets ?: ItalianSearchFacets()
             )
             return
@@ -334,18 +340,16 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             // la ricerca trova davvero, non gia' tagliato dai filtri.
             val numberQuery = parseCardNumberQuery(query)
             val found = if (numberQuery != null) {
-                // Per numero il ranking lo fa gia' il repository (numero stampato +
-                // totale dell'espansione), quindi qui non si riordina per nome:
-                // rimescolare per somiglianza di testo rovinerebbe l'ordine buono.
-                narrowToPrintedTotal(
-                    cards = repository.searchItalianCardsByNumber(
-                        number = numberQuery.number,
-                        printedTotal = numberQuery.printedTotal,
-                        context = context,
-                        limit = CARD_SEARCH_FETCH_LIMIT
-                    ).getOrDefault(emptyList()),
-                    printedTotal = numberQuery.printedTotal
-                )
+                // Numero e totale li confronta il repository, che e' l'unico ad
+                // avere tutti i totali noti di ogni espansione. Qui non si
+                // riordina: rimescolare per somiglianza di nome delle cifre
+                // rovinerebbe l'ordine buono.
+                repository.searchItalianCardsByNumber(
+                    number = numberQuery.number,
+                    printedTotal = numberQuery.printedTotal,
+                    context = context,
+                    limit = CARD_SEARCH_FETCH_LIMIT
+                ).getOrDefault(emptyList())
             } else {
                 val byName = repository.searchItalianCardsByName(
                     query = query,
@@ -369,6 +373,13 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             uiState = uiState.copy(
                 searchedCards = filtered.first,
                 searchFacets = filtered.second,
+                isCardNumberSearch = numberQuery != null,
+                // Se il totale digitato non compare in nessun risultato vuol dire
+                // che non lo conosciamo: la lista che segue sono tutte le carte
+                // con quel numero, e va detto invece di farla passare per la
+                // risposta esatta.
+                unrecognizedPrintedTotal = numberQuery?.printedTotal
+                    ?.takeIf { typed -> matched.none { it.set?.printedTotal == typed } },
                 isSearchingCards = false
             )
         }
@@ -908,16 +919,3 @@ internal fun parseCardNumberQuery(query: String): CardNumberQuery? {
     return null
 }
 
-/**
- * Se il totale indicato combacia con qualche espansione, tiene solo quelle.
- *
- * Il repository ordina mettendole in cima ma non le isola, perche' per lo
- * scanner un totale letto male non deve svuotare lo schermo. Qui il totale
- * l'ha scritto una persona: se corrisponde a qualcosa, e' quello che vuole
- * vedere -- e non le altre cento carte numero 1 del catalogo.
- */
-internal fun narrowToPrintedTotal(cards: List<TcgCard>, printedTotal: Int?): List<TcgCard> {
-    if (printedTotal == null) return cards
-    val exact = cards.filter { it.set?.printedTotal == printedTotal }
-    return if (exact.isNotEmpty()) exact else cards
-}

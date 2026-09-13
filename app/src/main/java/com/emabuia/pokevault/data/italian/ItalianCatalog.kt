@@ -70,6 +70,16 @@ data class ItalianExpansionSummary(
     val id: String = "",
     val name: String? = null,
     val cardCount: Int = 0,
+    /**
+     * Quante carte ha la parte base dell'espansione: il numero stampato sulle
+     * carte dopo la barra ("066/217").
+     *
+     * Non e' [cardCount], che conta anche segrete e fuori serie -- quelle si
+     * numerano superandolo ("219/217") -- ed e' maggiore su 84 espansioni su
+     * 105. Null dove un totale stampato non esiste (i promo): va trattato come
+     * "non lo so", mai come "non e' questa espansione".
+     */
+    val officialCount: Int? = null,
     val sortOrder: Int = 0,
     val logoKey: String? = null,
     val baseSetCode: String? = null,

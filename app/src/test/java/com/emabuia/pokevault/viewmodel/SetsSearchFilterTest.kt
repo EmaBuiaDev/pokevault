@@ -132,28 +132,9 @@ class SetsSearchFilterTest {
     }
 
     @Test
-    fun `col totale indicato restano solo le espansioni che combaciano`() {
-        val giusta = card(setId = "sv08__ita").copy(set = TcgCardSet(id = "sv08__ita", printedTotal = 217))
-        val altra = card(setId = "sv09__ita").copy(set = TcgCardSet(id = "sv09__ita", printedTotal = 191))
-        assertEquals(listOf(giusta), narrowToPrintedTotal(listOf(giusta, altra), 217))
-    }
-
-    @Test
-    fun `se nessun totale combacia si tengono tutte, invece di svuotare lo schermo`() {
-        val cards = listOf(card().copy(set = TcgCardSet(id = "sv08__ita", printedTotal = 217)))
-        assertEquals(cards, narrowToPrintedTotal(cards, 999))
-    }
-
-    @Test
-    fun `un id a meta-battitura vale come solo numero`() {
+    fun `un id scritto a meta vale come solo numero`() {
         val parsed = parseCardNumberQuery("001/")
         assertEquals("1", parsed?.number)
         assertNull(parsed?.printedTotal)
-    }
-
-    @Test
-    fun `senza totale non si restringe niente`() {
-        val cards = listOf(card(), card(setId = "sv09__ita"))
-        assertEquals(cards, narrowToPrintedTotal(cards, null))
     }
 }

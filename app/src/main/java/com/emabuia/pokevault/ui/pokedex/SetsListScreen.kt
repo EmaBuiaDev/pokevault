@@ -402,6 +402,8 @@ fun SetsListScreen(
                 isLoading = state.isSearchingCards,
                 query = state.cardSearchQuery,
                 hasActiveFilters = state.hasActiveCardFilters,
+                preserveOrder = state.isCardNumberSearch,
+                unrecognizedPrintedTotal = state.unrecognizedPrintedTotal,
                 onClearFilters = viewModel::clearCardResultFilters,
                 viewMode = cardViewMode,
                 setReleaseDateById = setReleaseDateById,
@@ -980,6 +982,8 @@ fun CardSearchResults(
     query: String,
     setReleaseDateById: Map<String, String>,
     hasActiveFilters: Boolean = false,
+    preserveOrder: Boolean = false,
+    unrecognizedPrintedTotal: Int? = null,
     onClearFilters: () -> Unit = {},
     viewMode: CardViewMode = CardViewMode.GRID,
     onCardClick: (TcgCard) -> Unit = {},
@@ -1024,8 +1028,14 @@ fun CardSearchResults(
         }
     } else {
         val grouped = cards.groupBy { it.set?.id?.takeIf { id -> id.isNotBlank() } ?: "unknown" }
-        val orderedGroups = grouped.entries
-            .sortedWith(
+        // Cercando per numero l'ordine che arriva e' gia' quello giusto: la prima
+        // espansione e' quella che il totale digitato ha riconosciuto. Riordinare
+        // per data di uscita, come si fa per le ricerche a nome, metterebbe in
+        // cima l'espansione piu' recente -- cioe' un'altra carta.
+        val orderedGroups = if (preserveOrder) {
+            grouped.entries.toList()
+        } else {
+            grouped.entries.sortedWith(
                 compareByDescending<Map.Entry<String, List<TcgCard>>> { entry ->
                     parseReleaseDateToEpochUi(
                         setReleaseDateById[entry.key].orEmpty()
@@ -1034,6 +1044,8 @@ fun CardSearchResults(
                     entry.value.firstOrNull()?.set?.name?.lowercase(Locale.ROOT) ?: ""
                 }
             )
+        }
+
         val columns = if (viewMode == CardViewMode.GRID) 3 else 1
 
         LazyVerticalGrid(
@@ -1043,7 +1055,24 @@ fun CardSearchResults(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item(span = { GridItemSpan(columns) }) {
-                Text(AppLocale.resultsCountInExpansions(cards.size, grouped.size), color = AppColors.textMuted, fontSize = 13.sp)
+                Column {
+                    Text(AppLocale.resultsCountInExpansions(cards.size, grouped.size), color = AppColors.textMuted, fontSize = 13.sp)
+                    // Un totale che non conosciamo non puo' scegliere l'espansione:
+                    // la lista qui sotto e' tutto quello che porta quel numero, e
+                    // farla passare per la risposta esatta e' quello che faceva
+                    // sembrare la ricerca per ID rotta.
+                    if (unrecognizedPrintedTotal != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = AppLocale.unrecognizedTotalNotice(
+                                total = unrecognizedPrintedTotal,
+                                number = cards.firstOrNull()?.number.orEmpty()
+                            ),
+                            color = AppColors.yellow,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
             }
             orderedGroups.forEach { (setId, setCards) ->
                 val setName = setCards.firstOrNull()?.set?.name ?: AppLocale.unknown
