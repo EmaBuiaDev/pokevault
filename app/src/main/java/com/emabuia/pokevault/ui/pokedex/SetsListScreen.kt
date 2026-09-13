@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.ui.pokedex
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -46,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
+import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.RarityUtils
@@ -249,20 +251,18 @@ fun SetsListScreen(
 
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
             // Toggle
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(AppColors.card),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                TabItem(AppLocale.extensions, !isSearchingCards) {
-                    isSearchingCards = false; viewModel.clearCardSearch()
+            SlidingTabs(
+                labels = listOf(AppLocale.extensions, AppLocale.searchCards),
+                selectedIndex = if (isSearchingCards) 1 else 0,
+                onSelect = { index ->
+                    if (index == 0) {
+                        isSearchingCards = false
+                        viewModel.clearCardSearch()
+                    } else {
+                        isSearchingCards = true
+                    }
                 }
-                TabItem(AppLocale.searchCards, isSearchingCards) {
-                    isSearchingCards = true
-                }
-            }
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -627,19 +627,83 @@ private fun FilterSection(title: String, content: @Composable FlowRowScope.() ->
     }
 }
 
+/** Altezza del toggle: fissa perche' l'indicatore che scivola dev'essere alto quanto una voce. */
+private val TabsHeight = 44.dp
+
+/**
+ * Toggle Espansioni / Carte.
+ *
+ * Prima l'evidenziazione era lo sfondo della voce selezionata, che spariva da
+ * una parte e compariva dall'altra. Qui e' un rettangolo solo, dietro le voci,
+ * che scivola: il salto diventa un movimento, e si vede da dove a dove.
+ */
+@Composable
+private fun SlidingTabs(
+    labels: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit
+) {
+    val shape = RoundedCornerShape(12.dp)
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(TabsHeight)
+            .clip(shape)
+            .background(AppColors.card)
+    ) {
+        val tabWidth = maxWidth / labels.size
+        val indicatorOffset by animateDpAsState(
+            targetValue = tabWidth * selectedIndex,
+            animationSpec = AppMotion.landing(),
+            label = "pokedexTabIndicator"
+        )
+
+        Box(
+            modifier = Modifier
+                .offset(x = indicatorOffset)
+                .width(tabWidth)
+                .height(TabsHeight)
+                .clip(shape)
+                .background(AppColors.blue.copy(alpha = 0.3f))
+        )
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            labels.forEachIndexed { index, label ->
+                TabItem(
+                    label = label,
+                    isSelected = index == selectedIndex,
+                    onClick = { onSelect(index) },
+                    modifier = Modifier.width(tabWidth)
+                )
+            }
+        }
+    }
+}
+
 // ── Tab item ──
 @Composable
-fun RowScope.TabItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
+private fun TabItem(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val color by animateColorAsState(
+        targetValue = if (isSelected) AppColors.textPrimary else AppColors.textMuted,
+        animationSpec = tween(AppMotion.state),
+        label = "pokedexTabLabel"
+    )
+
     Text(
         text = label,
-        color = if (isSelected) AppColors.textPrimary else AppColors.textMuted,
+        color = color,
         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
         fontSize = 14.sp, textAlign = TextAlign.Center,
-        modifier = Modifier
-            .weight(1f)
+        modifier = modifier
+            .height(TabsHeight)
             .clickable(onClick = onClick)
-            .background(if (isSelected) AppColors.blue.copy(alpha = 0.3f) else Color.Transparent)
-            .padding(vertical = 12.dp)
+            .wrapContentHeight(Alignment.CenterVertically)
     )
 }
 
@@ -654,9 +718,9 @@ fun SeriesFilterChip(
 ) {
     Row(
         modifier = Modifier
+            .pressScale(onClick = onClick)
             .clip(RoundedCornerShape(20.dp))
             .background(if (isSelected) AppColors.blue else AppColors.card)
-            .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -702,11 +766,11 @@ fun SetCard(set: TcgSet, onClick: () -> Unit) {
 
     Box(
         modifier = Modifier
+            .pressScale(onClick = onClick)
             .fillMaxWidth()
             .height(170.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(AppColors.card)
-            .clickable(onClick = onClick)
     ) {
         Column(
             modifier = Modifier

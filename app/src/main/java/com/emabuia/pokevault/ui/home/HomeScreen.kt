@@ -2,19 +2,15 @@ package com.emabuia.pokevault.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
@@ -22,7 +18,6 @@ import com.emabuia.pokevault.ui.components.OfflineBanner
 import com.emabuia.pokevault.ui.home.components.*
 import com.emabuia.pokevault.ui.navigation.Routes
 import com.emabuia.pokevault.ui.theme.AppColors
-import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.HomeViewModel
 
 @Composable
@@ -35,6 +30,12 @@ fun HomeScreen(
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
     val selectedHomeSpriteId by premiumManager.selectedHomeSpriteId.collectAsStateWithLifecycle()
 
+    // La cascata parte al primo frame utile e il flag resta acceso nel
+    // ViewModel: tornando sulla Home da un'altra tab la griglia e' gia' li'.
+    LaunchedEffect(Unit) { viewModel.markEntered() }
+
+    val scrollState = rememberScrollState()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -44,6 +45,10 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // La colonna e' cresciuta di una card (la wishlist, che prima
+                // stava sul FAB) e sotto c'e' la bottom bar: senza scroll su
+                // uno schermo corto l'ultima card resterebbe tagliata fuori.
+                .verticalScroll(scrollState)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -55,6 +60,20 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
+                    // Parallax: l'header sfuma e si stacca in su un po' piu' in
+                    // fretta del contenuto. Tutto dentro la lambda di
+                    // graphicsLayer, che gira in fase di disegno: leggere qui
+                    // lo scroll non fa ricomporre niente a ogni frame.
+                    //
+                    // L'header resta dentro la colonna scrollabile invece di
+                    // stare sopra come nel prototipo: sovrapposto e trasparente
+                    // continuerebbe a coprire il contenuto sotto, e il
+                    // trascinamento sulla sua fascia non scrollerebbe piu'.
+                    .graphicsLayer {
+                        val offset = scrollState.value.toFloat()
+                        alpha = (1f - offset / 110.dp.toPx()).coerceAtLeast(0f)
+                        translationY = -(offset * 0.35f).coerceAtMost(20.dp.toPx())
+                    }
             )
 
             // Offline banner
@@ -64,6 +83,7 @@ fun HomeScreen(
 
             // Griglia menu
             MenuGrid(
+                cascadeVisible = viewModel.hasEnteredOnce,
                 onItemClick = { menuRoute ->
                     val route = when (menuRoute) {
                         "my_cards" -> Routes.COLLECTION
@@ -72,6 +92,7 @@ fun HomeScreen(
                         "pokedex" -> Routes.POKEDEX
                         "competitive" -> Routes.COMPETITIVE
                         "collector_lab" -> Routes.ALBUM_LIST
+                        "wishlist" -> Routes.WISHLIST_LIST
                         else -> Routes.HOME
                     }
                     onNavigate(route)
@@ -84,44 +105,9 @@ fun HomeScreen(
                 onCardClick = { cardId -> onNavigate(Routes.cardDetail(cardId)) }
             )
 
+            // Spazio per il FAB dello scanner, che ora vive in AppNavigation e
+            // galleggia sopra questa colonna.
             Spacer(modifier = Modifier.height(80.dp))
-        }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-        ) {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                FloatingActionButton(
-                    onClick = { onNavigate(Routes.WISHLIST_LIST) },
-                    containerColor = AppColors.purple,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.size(50.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Favorite,
-                        contentDescription = AppLocale.wishlistTitle,
-                        tint = AppColors.textPrimary
-                    )
-                }
-
-                FloatingActionButton(
-                    onClick = { onNavigate(Routes.SCANNER) },
-                    containerColor = AppColors.blue,
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Icon(
-                        Icons.Default.CameraAlt,
-                        contentDescription = AppLocale.scanCard,
-                        tint = AppColors.textPrimary
-                    )
-                }
-            }
         }
     }
 }

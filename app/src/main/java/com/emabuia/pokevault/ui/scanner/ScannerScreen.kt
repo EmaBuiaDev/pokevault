@@ -24,6 +24,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -56,6 +58,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -92,7 +96,9 @@ import com.emabuia.pokevault.util.Constants
 import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.viewmodel.ScanState
 import com.emabuia.pokevault.viewmodel.ScannerViewModel
+import kotlinx.coroutines.delay
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -205,6 +211,23 @@ fun ScannerScreen(
         return
     }
 
+    // Il tempo mostrato non e' sempre quello della pipeline: quando arriva un
+    // risultato ci si ferma mezzo secondo su RECOGNIZED, cosi' il
+    // riconoscimento si vede invece di essere scavalcato dalla card.
+    val motion = AppMotion.current
+    val scannerHaptic = LocalHapticFeedback.current
+    var displayScanState by remember { mutableStateOf(state.scanState) }
+
+    LaunchedEffect(state.scanState) {
+        val target = state.scanState
+        if (target == ScanState.RESULT && displayScanState != ScanState.RESULT) {
+            displayScanState = ScanState.RECOGNIZED
+            scannerHaptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            if (motion.enabled) delay(motion.scanCheck.toLong())
+        }
+        displayScanState = target
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -219,8 +242,7 @@ fun ScannerScreen(
 
         // Overlay zona di scansione (card-shaped)
         ScanZoneOverlay(
-            isDetecting = state.isSearching,
-            hasResult = state.pendingCard != null || state.candidateCards.isNotEmpty() || state.lastAddedCard != null,
+            scanState = displayScanState,
             detectedName = state.detectedName
         )
 
@@ -944,30 +966,54 @@ private fun PendingCardConfirmation(
 
 @Composable
 private fun ScanZoneOverlay(
-    isDetecting: Boolean,
-    hasResult: Boolean,
+    scanState: ScanState,
     detectedName: String
 ) {
-    // Colore degli angoli: verde a carta trovata, blu mentre cerca, oro appena
-    // qualcosa si legge, bianco quando non c'e' ancora niente.
-    val targetColor = when {
-        hasResult -> AppColors.green
-        isDetecting -> AppColors.blue
-        detectedName.isNotBlank() -> AppColors.gold
-        else -> Color.White.copy(alpha = 0.75f)
+    val motion = AppMotion.current
+
+    // Colore degli angoli: verde a carta riconosciuta, blu mentre legge, oro
+    // appena qualcosa si legge, bianco quando non c'e' ancora niente.
+    val targetColor = when (scanState) {
+        ScanState.RECOGNIZED, ScanState.RESULT -> AppColors.green
+        ScanState.READING -> AppColors.blue
+        ScanState.FRAMING -> if (detectedName.isNotBlank()) AppColors.gold else Color.White.copy(alpha = 0.75f)
     }
     // Il cambio di stato si legge come una transizione, non come uno scatto.
-    val frameColor by animateColorAsState(targetValue = targetColor, label = "frame-color")
+    val frameColor by animateColorAsState(
+        targetValue = targetColor,
+        animationSpec = tween(motion.chevron),
+        label = "frame-color"
+    )
 
-    // Riga che scorre lungo la cornice mentre cerca: e' il solo elemento animato
-    // dello schermo, e dice "sto lavorando" senza rubare spazio ai contenuti.
+    // Il riquadro si allarga di un soffio al riconoscimento: e' il "preso" che
+    // un flash da solo non dice.
+    val zoneScale by animateFloatAsState(
+        targetValue = if (scanState == ScanState.RECOGNIZED) 1.03f else 1f,
+        animationSpec = AppMotion.landing(),
+        label = "zone-scale"
+    )
+
+    // Flash bianco: sale e riscende una volta sola, all'ingresso in RECOGNIZED.
+    val flashAlpha = remember { Animatable(0f) }
+    LaunchedEffect(scanState) {
+        if (scanState == ScanState.RECOGNIZED && motion.enabled) {
+            flashAlpha.animateTo(0.85f, tween(motion.scanFlash / 3))
+            flashAlpha.animateTo(0f, tween(motion.scanFlash * 2 / 3))
+        } else {
+            flashAlpha.snapTo(0f)
+        }
+    }
+
+    // Banda che spazza il riquadro. Va e torna invece di ripartire da capo: il
+    // ritorno secco a inizio corsa e' l'unico punto in cui l'animazione si
+    // vede come un ciclo invece che come un movimento.
     val sweep = rememberInfiniteTransition(label = "sweep")
     val sweepProgress by sweep.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
+            animation = tween(durationMillis = motion.scanSweep, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
         ),
         label = "sweep-progress"
     )
@@ -975,6 +1021,13 @@ private fun ScanZoneOverlay(
     // Canvas usa size.width/height che sono sempre le dimensioni reali renderizzate,
     // evitando il problema di BoxWithConstraints che riceve constraint non bounded
     // durante le recomposition causate da AnimatedVisibility (crop area "enorme").
+    //
+    // I token colore sono risolti sopra, fuori dal blocco di disegno: dentro
+    // DrawScope non sono leggibili (convenzione del repo).
+    val scrimColor = Color.Black.copy(alpha = 0.62f)
+    val flashColor = Color.White
+    val showSweep = scanState == ScanState.FRAMING && motion.enabled
+
     Canvas(modifier = Modifier.fillMaxSize()) {
         val zone = scanZoneRect(size.width, size.height)
         val cornerRadiusPx = 14.dp.toPx()
@@ -990,28 +1043,181 @@ private fun ScanZoneOverlay(
         }
 
         clipPath(cutoutPath, clipOp = ClipOp.Difference) {
-            drawRect(Color.Black.copy(alpha = 0.62f))
+            drawRect(scrimColor)
         }
 
-        // Solo una traccia sottile del perimetro: a delimitare ci pensano gli
-        // angoli, e un bordo pieno sopra la carta distrae piu' di quanto aiuti.
-        drawRoundRect(
-            color = frameColor.copy(alpha = 0.22f),
-            topLeft = zone.topLeft,
-            size = zone.size,
-            cornerRadius = CornerRadius(cornerRadiusPx),
-            style = Stroke(width = 1.dp.toPx())
+        scale(scale = zoneScale, pivot = zone.center) {
+            // Solo una traccia sottile del perimetro: a delimitare ci pensano gli
+            // angoli, e un bordo pieno sopra la carta distrae piu' di quanto aiuti.
+            drawRoundRect(
+                color = frameColor.copy(alpha = 0.22f),
+                topLeft = zone.topLeft,
+                size = zone.size,
+                cornerRadius = CornerRadius(cornerRadiusPx),
+                style = Stroke(width = 1.dp.toPx())
+            )
+
+            drawFrameCorners(
+                zone = zone,
+                color = frameColor,
+                cornerRadiusPx = cornerRadiusPx,
+                strokeWidth = 3.5.dp.toPx()
+            )
+
+            if (showSweep) {
+                drawSweepLine(zone = zone, color = frameColor, progress = sweepProgress)
+            }
+
+            if (flashAlpha.value > 0f) {
+                drawRoundRect(
+                    color = flashColor.copy(alpha = flashAlpha.value),
+                    topLeft = zone.topLeft,
+                    size = zone.size,
+                    cornerRadius = CornerRadius(cornerRadiusPx)
+                )
+            }
+        }
+    }
+
+    // Anelli che si espandono al centro del riquadro: sono il "sto guardando"
+    // che tiene viva la schermata prima che ci sia qualcosa da leggere.
+    if (scanState == ScanState.FRAMING && motion.enabled) {
+        FramingRings()
+    }
+
+    // Barre placeholder durante la lettura: al posto della banda che spazza,
+    // simulano il testo che sta uscendo dall'OCR.
+    if (scanState == ScanState.READING) {
+        ReadingPlaceholderBars()
+    }
+
+    // Spunta verde al riconoscimento.
+    ScanRecognizedCheck(visible = scanState == ScanState.RECOGNIZED)
+}
+
+/**
+ * Due anelli che si allargano e svaniscono, sfasati di mezzo ciclo.
+ *
+ * Sfasati e non simultanei: due cerchi che partono insieme sembrano un unico
+ * cerchio spesso, mentre alternati danno il ritmo di qualcosa che pulsa.
+ */
+@Composable
+private fun FramingRings() {
+    val motion = AppMotion.current
+    val transition = rememberInfiniteTransition(label = "framing-rings")
+    // Token risolto qui, fuori dal DrawScope: dentro non e' leggibile.
+    val ringColor = AppColors.blue
+
+    repeat(2) { index ->
+        val progress by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = motion.scanRing,
+                    delayMillis = index * (motion.scanRing / 2),
+                    easing = LinearEasing
+                ),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "framing-ring-$index"
         )
 
-        drawFrameCorners(
-            zone = zone,
-            color = frameColor,
-            cornerRadiusPx = cornerRadiusPx,
-            strokeWidth = 3.5.dp.toPx()
-        )
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val zone = scanZoneRect(size.width, size.height)
+            val ringScale = 0.7f + progress * 1.2f
+            val alpha = (0.9f * (1f - progress)).coerceAtLeast(0f)
 
-        if (isDetecting) {
-            drawSweepLine(zone = zone, color = frameColor, progress = sweepProgress)
+            drawCircle(
+                color = ringColor.copy(alpha = alpha),
+                radius = zone.width * 0.25f * ringScale,
+                center = zone.center,
+                style = Stroke(width = 2.dp.toPx())
+            )
+        }
+    }
+}
+
+/**
+ * Tre barre che pulsano sfasate, dentro il riquadro, mentre l'OCR lavora.
+ *
+ * Dicono "sto leggendo delle righe di testo" invece che "sto girando", che e'
+ * quello che uno spinner direbbe: la forma anticipa il risultato.
+ */
+@Composable
+private fun ReadingPlaceholderBars() {
+    val motion = AppMotion.current
+    val transition = rememberInfiniteTransition(label = "reading-bars")
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 60.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)
+    ) {
+        listOf(1f, 0.75f, 0.55f).forEachIndexed { index, widthFraction ->
+            val alpha by transition.animateFloat(
+                initialValue = 0.35f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(
+                        durationMillis = motion.scanPulse,
+                        delayMillis = index * 200,
+                        easing = LinearEasing
+                    ),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "reading-bar-$index"
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(widthFraction)
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color.White.copy(alpha = alpha * 0.55f))
+            )
+        }
+    }
+}
+
+/** Spunta verde che fa "pop" quando la carta e' riconosciuta. */
+@Composable
+private fun ScanRecognizedCheck(visible: Boolean) {
+    val motion = AppMotion.current
+    val scale = remember { Animatable(0.4f) }
+
+    LaunchedEffect(visible) {
+        if (!visible) {
+            scale.snapTo(0.4f)
+            return@LaunchedEffect
+        }
+        // Oltre il bersaglio e poi indietro: il rimbalzo e' cio' che distingue
+        // un "trovata!" da un'icona che compare.
+        scale.animateTo(1.12f, tween(motion.scanCheck * 3 / 5, easing = AppMotion.standardEasing))
+        scale.animateTo(1f, tween(motion.scanCheck * 2 / 5, easing = AppMotion.standardEasing))
+    }
+
+    if (!visible) return
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                }
+                .size(60.dp)
+                .clip(CircleShape)
+                .background(AppColors.green),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = AppColors.onAccent,
+                modifier = Modifier.size(34.dp)
+            )
         }
     }
 }

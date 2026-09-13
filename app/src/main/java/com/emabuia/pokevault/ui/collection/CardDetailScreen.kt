@@ -3,6 +3,8 @@ package com.emabuia.pokevault.ui.collection
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,10 +20,13 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -37,6 +42,7 @@ import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.RepositoryProvider
+import com.emabuia.pokevault.ui.navigation.sharedCardImage
 import com.emabuia.pokevault.ui.pokedex.PriceSparkline
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
@@ -140,6 +146,10 @@ fun CardDetailScreen(
 
     var expandedGrading by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // rememberSaveable e non remember: dopo una rotazione la carta deve
+    // restare girata come l'utente l'ha lasciata.
+    var isFlipped by rememberSaveable { mutableStateOf(false) }
 
     fun loadData() {
         scope.launch {
@@ -325,35 +335,64 @@ fun CardDetailScreen(
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Flip 3D: la carta si gira sul suo asse verticale e dietro ha
+                // i dati, come una carta vera che si rivolta in mano.
+                val flipDegrees by animateFloatAsState(
+                    targetValue = if (isFlipped) 180f else 0f,
+                    animationSpec = tween(AppMotion.flip, easing = AppMotion.standardEasing),
+                    label = "cardFlip"
+                )
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
                         .aspectRatio(0.71f)
+                        .graphicsLayer {
+                            rotationY = flipDegrees
+                            // Senza una distanza di camera esplicita la
+                            // prospettiva e' quasi ortogonale e la rotazione
+                            // sembra uno schiacciamento invece che un giro.
+                            cameraDistance = 14f * density
+                        }
                         .clip(RoundedCornerShape(16.dp))
                         .background(AppColors.card)
+                        .clickable { isFlipped = !isFlipped }
                 ) {
-                    if (currentCard.imageUrl.isNotBlank()) {
-                        SubcomposeAsyncImage(
-                            model = ImageUrlUtils.safeImageUrl(currentCard.imageUrl),
-                            contentDescription = currentCard.name,
-                            contentScale = ContentScale.FillBounds,
-                            modifier = Modifier.fillMaxSize(),
-                            error = { CollectionDetailImageFallback(currentCard) }
-                        )
+                    if (flipDegrees < 90f) {
+                        if (currentCard.imageUrl.isNotBlank()) {
+                            SubcomposeAsyncImage(
+                                model = ImageUrlUtils.safeImageUrl(currentCard.imageUrl),
+                                contentDescription = currentCard.name,
+                                contentScale = ContentScale.FillBounds,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .sharedCardImage(cardId),
+                                error = { CollectionDetailImageFallback(currentCard) }
+                            )
+                        } else {
+                            CollectionDetailImageFallback(currentCard)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(10.dp)
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(AppColors.blue),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("x$totalQty", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
                     } else {
-                        CollectionDetailImageFallback(currentCard)
-                    }
-                    
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(10.dp)
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(AppColors.blue),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("x$totalQty", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        // Controrotazione: il retro e' disegnato dentro un
+                        // layer gia' girato di 180°, senza questa il testo
+                        // uscirebbe specchiato.
+                        CardBackFace(
+                            card = currentCard,
+                            totalQuantity = totalQty,
+                            modifier = Modifier.graphicsLayer { rotationY = 180f }
+                        )
                     }
                 }
 
@@ -738,6 +777,87 @@ fun VariantRow(
                 }
             }
         }
+    }
+}
+
+/**
+ * Retro della carta nel flip.
+ *
+ * Non ripete il dettaglio completo che sta piu' giu' nella pagina: mostra le
+ * cinque righe che uno guarda mentre ha la carta in mano, piu' il prezzo. Il
+ * resto (varianti, grading, mercati) resta dove sta.
+ */
+@Composable
+private fun CardBackFace(
+    card: PokemonCard,
+    totalQuantity: Int,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(listOf(AppColors.card, AppColors.surface))
+            )
+            .padding(18.dp)
+    ) {
+        Text(
+            text = card.name,
+            color = AppColors.textPrimary,
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        CardBackRow(AppLocale.displaySetName(card.set).ifBlank { "-" }, AppLocale.set)
+        CardBackRow(card.cardNumber.ifBlank { "-" }, AppLocale.cardNumberLabel)
+        CardBackRow(card.rarity.ifBlank { "-" }, AppLocale.rarity)
+        CardBackRow(card.condition.ifBlank { "-" }, AppLocale.condition)
+        CardBackRow("x$totalQuantity", AppLocale.quantity)
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(AppColors.green.copy(alpha = 0.12f))
+                .padding(12.dp)
+        ) {
+            Text(
+                text = AppLocale.estimatedValue,
+                color = AppColors.textSecondary,
+                fontSize = 12.sp
+            )
+            Text(
+                text = "€${"%.2f".format(card.estimatedValue)}",
+                color = AppColors.green,
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun CardBackRow(value: String, label: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(text = label, color = AppColors.textSecondary, fontSize = 12.sp)
+        Text(
+            text = value,
+            color = AppColors.textPrimary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 12.dp)
+        )
     }
 }
 

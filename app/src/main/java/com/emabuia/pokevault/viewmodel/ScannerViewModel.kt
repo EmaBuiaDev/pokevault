@@ -28,6 +28,32 @@ import java.util.Locale
 /** Condizione di partenza: la grande maggioranza delle carte scansionate e' questa. */
 private const val DEFAULT_CONDITION = "Near Mint"
 
+/**
+ * I quattro tempi dello scanner, dal punto di vista di chi guarda.
+ *
+ * Non e' uno stato in piu' da tenere allineato: si ricava da [ScannerUiState]
+ * (vedi [ScannerUiState.scanState]), che resta l'unica verita'. Serve a far
+ * decidere all'interfaccia *una* cosa sola invece di combinare tre booleani in
+ * ogni punto in cui deve cambiare aspetto.
+ *
+ * [RECOGNIZED] e' l'unico che la pipeline non produce da sola: e' il mezzo
+ * secondo di conferma fra la lettura e il risultato, e lo inserisce la
+ * schermata quando vede arrivare [RESULT].
+ */
+enum class ScanState {
+    /** Nessun fermo immagine: si sta ancora cercando la carta nel riquadro. */
+    FRAMING,
+
+    /** OCR in corso sul testo letto. */
+    READING,
+
+    /** Carta riconosciuta: mezzo secondo di conferma prima del risultato. */
+    RECOGNIZED,
+
+    /** C'e' una carta da confermare, da scegliere, o appena aggiunta. */
+    RESULT
+}
+
 data class ScannerUiState(
     val isSearching: Boolean = false,
     /** Carta trovata in attesa di conferma dall'utente */
@@ -48,7 +74,21 @@ data class ScannerUiState(
     val detectedName: String = "",
     /** ID letto in basso a sinistra, nella forma "67/87" */
     val detectedNumber: String = ""
-)
+) {
+    /**
+     * Il tempo in cui si trova lo scanner adesso.
+     *
+     * Derivato e non memorizzato: un campo in piu' vorrebbe dire aggiornarlo in
+     * ognuno dei punti in cui la pipeline scrive nello stato, e prima o poi
+     * uno resterebbe indietro.
+     */
+    val scanState: ScanState
+        get() = when {
+            pendingCard != null || candidateCards.isNotEmpty() || lastAddedCard != null -> ScanState.RESULT
+            isSearching -> ScanState.READING
+            else -> ScanState.FRAMING
+        }
+}
 
 /**
  * Orchestratore dello scanner: riceve i frame, decide quando i dati sono

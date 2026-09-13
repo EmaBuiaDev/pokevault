@@ -28,6 +28,20 @@ class HomeViewModel : ViewModel() {
     var isLoading by mutableStateOf(true)
         private set
 
+    /**
+     * Se la cascata d'ingresso della griglia e' gia' stata giocata.
+     *
+     * Sta nel ViewModel e non in un `remember` della schermata perche' deve
+     * sopravvivere al ritorno sulla Home da un'altra tab: rigiocare
+     * l'animazione a ogni rientro la trasforma da benvenuto in attesa.
+     */
+    var hasEnteredOnce by mutableStateOf(false)
+        private set
+
+    fun markEntered() {
+        hasEnteredOnce = true
+    }
+
     init {
         loadCards()
         loadStats()

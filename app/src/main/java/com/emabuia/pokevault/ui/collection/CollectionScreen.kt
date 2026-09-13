@@ -2,6 +2,8 @@ package com.emabuia.pokevault.ui.collection
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -31,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -51,10 +54,14 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.collectionGroupKey
+import com.emabuia.pokevault.ui.components.CollectionSkeleton
+import com.emabuia.pokevault.ui.components.holoFoil
+import com.emabuia.pokevault.ui.navigation.sharedCardImage
 import com.emabuia.pokevault.ui.home.components.SearchBar
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ImageUrlUtils
+import com.emabuia.pokevault.util.RarityUtils
 import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import com.emabuia.pokevault.viewmodel.CollectionViewModel
 import com.emabuia.pokevault.viewmodel.SortOrder
@@ -399,119 +406,167 @@ fun CollectionScreen(
                 }
 
                 // ── Contenuto ──
-                if (state.isLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = AppColors.blue)
-                    }
-                } else {
-                    if (groupedCards.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(AppLocale.emptyCollectionTitle, color = AppColors.textMuted)
-                        }
+                // Crossfade e non un semplice if: la lista deve prendere il
+                // posto dello scheletro sfumando, non comparire di scatto.
+                Crossfade(
+                    targetState = state.isLoading,
+                    animationSpec = tween(AppMotion.crossfade),
+                    label = "collectionLoading"
+                ) { isLoadingContent ->
+                    if (isLoadingContent) {
+                        CollectionSkeleton()
                     } else {
-                        // Totali e righe della griglia precalcolati qui, non dentro il
-                        // builder della LazyColumn: prima venivano risommati su tutte le
-                        // carte di tutte le espansioni a ogni ricomposizione del
-                        // contenuto, e chunked() riallocava una lista di liste per ogni
-                        // sezione espansa.
-                        val expansionSections = remember(groupedByExpansion, expansionSortOrder, state.gridColumns) {
-                            groupedByExpansion
-                                .toList()
-                                .map { (name, groups) ->
-                                    ExpansionSection(
-                                        name = name,
-                                        groups = groups,
-                                        totalQuantity = groups.sumOf { (_, cards) -> cards.sumOf { it.quantity } },
-                                        totalValue = groups.sumOf { (_, cards) ->
-                                            cards.sumOf { card -> card.estimatedValue * card.quantity }
-                                        },
-                                        gridRows = groups.chunked(state.gridColumns)
-                                    )
-                                }
-                                .sortedWith(
-                                    when (expansionSortOrder) {
-                                        ExpansionSortOrder.BY_NAME_ASC ->
-                                            compareBy { it.name.lowercase() }
-                                        ExpansionSortOrder.BY_TOTAL_CARDS_DESC ->
-                                            compareByDescending<ExpansionSection> { it.totalQuantity }
-                                                .thenBy { it.name.lowercase() }
-                                        ExpansionSortOrder.BY_TOTAL_CARDS_ASC ->
-                                            compareBy<ExpansionSection> { it.totalQuantity }
-                                                .thenBy { it.name.lowercase() }
+                        if (groupedCards.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(AppLocale.emptyCollectionTitle, color = AppColors.textMuted)
+                            }
+                        } else {
+                            // Totali e righe della griglia precalcolati qui, non dentro il
+                            // builder della LazyColumn: prima venivano risommati su tutte le
+                            // carte di tutte le espansioni a ogni ricomposizione del
+                            // contenuto, e chunked() riallocava una lista di liste per ogni
+                            // sezione espansa.
+                            val expansionSections = remember(groupedByExpansion, expansionSortOrder, state.gridColumns) {
+                                groupedByExpansion
+                                    .toList()
+                                    .map { (name, groups) ->
+                                        ExpansionSection(
+                                            name = name,
+                                            groups = groups,
+                                            totalQuantity = groups.sumOf { (_, cards) -> cards.sumOf { it.quantity } },
+                                            totalValue = groups.sumOf { (_, cards) ->
+                                                cards.sumOf { card -> card.estimatedValue * card.quantity }
+                                            },
+                                            gridRows = groups.chunked(state.gridColumns)
+                                        )
                                     }
-                                )
-                        }
-
-                        // Flat LazyColumn: header + righe carte come item separati.
-                        // Compose renderizza solo gli elementi visibili → nessun lag su espansioni con molte carte.
-                        LazyColumn(
-                            contentPadding = PaddingValues(
-                                start = 16.dp,
-                                end = 16.dp,
-                                top = 0.dp,
-                                bottom = if (isSelectionMode) 80.dp else 20.dp
-                            )
-                        ) {
-                            expansionSections.forEachIndexed { sectionIndex, section ->
-                                val expansionName = section.name
-                                val cardsInExpansion = section.groups
-                                val totalQuantity = section.totalQuantity
-                                val totalExpansionValue = section.totalValue
-                                val isExpanded = expansionName in expandedExpansions
-                                val cardSpacing = if (state.gridColumns > 4) 6.dp else 10.dp
-
-                                // Spaziatura tra sezioni
-                                if (sectionIndex > 0) {
-                                    item(key = "gap_$expansionName") {
-                                        Spacer(modifier = Modifier.height(12.dp))
-                                    }
-                                }
-
-                                // Header sezione (sempre visibile)
-                                item(key = "hdr_$expansionName") {
-                                    ExpansionAccordionHeader(
-                                        expansionName = AppLocale.displaySetName(expansionName),
-                                        totalCards = totalQuantity,
-                                        totalValue = totalExpansionValue,
-                                        uniqueCards = cardsInExpansion.size,
-                                        isExpanded = isExpanded,
-                                        onToggle = {
-                                            expandedExpansions = if (isExpanded) {
-                                                expandedExpansions - expansionName
-                                            } else {
-                                                expandedExpansions + expansionName
-                                            }
+                                    .sortedWith(
+                                        when (expansionSortOrder) {
+                                            ExpansionSortOrder.BY_NAME_ASC ->
+                                                compareBy { it.name.lowercase() }
+                                            ExpansionSortOrder.BY_TOTAL_CARDS_DESC ->
+                                                compareByDescending<ExpansionSection> { it.totalQuantity }
+                                                    .thenBy { it.name.lowercase() }
+                                            ExpansionSortOrder.BY_TOTAL_CARDS_ASC ->
+                                                compareBy<ExpansionSection> { it.totalQuantity }
+                                                    .thenBy { it.name.lowercase() }
                                         }
                                     )
-                                }
+                            }
 
-                                // Carte: lazy item per riga/carta, solo quando espansa
-                                if (isExpanded) {
-                                    if (state.isGridView) {
-                                        val rows = section.gridRows
-                                        itemsIndexed(
-                                            items = rows,
-                                            // Chiave sull'indice di riga: la precedente usava il
-                                            // primo elemento della riga, quindi cambiava a ogni
-                                            // variazione del contenuto e due righe che iniziavano
-                                            // con lo stesso gruppo potevano collidere.
-                                            key = { rowIndex, _ -> "row_${expansionName}_$rowIndex" }
-                                        ) { _, row ->
-                                            Row(
-                                                horizontalArrangement = Arrangement.spacedBy(cardSpacing),
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .background(AppColors.card)
-                                                    .padding(horizontal = 10.dp, vertical = if (state.gridColumns > 4) 3.dp else 5.dp)
-                                            ) {
-                                                row.forEach { (groupKey, group) ->
-                                                    val representative = group.first()
-                                                    val totalQty = group.sumOf { it.quantity }
-                                                    CollectionCardGridItem(
+                            // Flat LazyColumn: header + righe carte come item separati.
+                            // Compose renderizza solo gli elementi visibili → nessun lag su espansioni con molte carte.
+                            LazyColumn(
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 0.dp,
+                                    bottom = if (isSelectionMode) 80.dp else 20.dp
+                                )
+                            ) {
+                                expansionSections.forEachIndexed { sectionIndex, section ->
+                                    val expansionName = section.name
+                                    val cardsInExpansion = section.groups
+                                    val totalQuantity = section.totalQuantity
+                                    val totalExpansionValue = section.totalValue
+                                    val isExpanded = expansionName in expandedExpansions
+                                    val cardSpacing = if (state.gridColumns > 4) 6.dp else 10.dp
+
+                                    // Spaziatura tra sezioni
+                                    if (sectionIndex > 0) {
+                                        item(key = "gap_$expansionName") {
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                        }
+                                    }
+
+                                    // Header sezione (sempre visibile)
+                                    item(key = "hdr_$expansionName") {
+                                        ExpansionAccordionHeader(
+                                            expansionName = AppLocale.displaySetName(expansionName),
+                                            totalCards = totalQuantity,
+                                            totalValue = totalExpansionValue,
+                                            uniqueCards = cardsInExpansion.size,
+                                            isExpanded = isExpanded,
+                                            onToggle = {
+                                                expandedExpansions = if (isExpanded) {
+                                                    expandedExpansions - expansionName
+                                                } else {
+                                                    expandedExpansions + expansionName
+                                                }
+                                            }
+                                        )
+                                    }
+
+                                    // Carte: lazy item per riga/carta, solo quando espansa
+                                    if (isExpanded) {
+                                        if (state.isGridView) {
+                                            val rows = section.gridRows
+                                            itemsIndexed(
+                                                items = rows,
+                                                // Chiave sull'indice di riga: la precedente usava il
+                                                // primo elemento della riga, quindi cambiava a ogni
+                                                // variazione del contenuto e due righe che iniziavano
+                                                // con lo stesso gruppo potevano collidere.
+                                                key = { rowIndex, _ -> "row_${expansionName}_$rowIndex" }
+                                            ) { _, row ->
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(cardSpacing),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(AppColors.card)
+                                                        .padding(horizontal = 10.dp, vertical = if (state.gridColumns > 4) 3.dp else 5.dp)
+                                                ) {
+                                                    row.forEach { (groupKey, group) ->
+                                                        val representative = group.first()
+                                                        val totalQty = group.sumOf { it.quantity }
+                                                        CollectionCardGridItem(
+                                                            card = representative.copy(quantity = totalQty),
+                                                            isSelected = groupKey in selectedGroupKeys,
+                                                            isSelectionMode = isSelectionMode,
+                                                            gridColumns = state.gridColumns,
+                                                            sharedKey = groupKey,
+                                                            onClick = {
+                                                                if (isSelectionMode) {
+                                                                    selectedGroupKeys = if (groupKey in selectedGroupKeys) {
+                                                                        selectedGroupKeys - groupKey
+                                                                    } else {
+                                                                        selectedGroupKeys + groupKey
+                                                                    }
+                                                                    if (selectedGroupKeys.isEmpty()) isSelectionMode = false
+                                                                } else {
+                                                                        onCardClick(groupKey)
+                                                                }
+                                                            },
+                                                            onLongClick = {
+                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                isSelectionMode = true
+                                                                selectedGroupKeys = selectedGroupKeys + groupKey
+                                                            },
+                                                            modifier = Modifier.weight(1f)
+                                                        )
+                                                    }
+                                                    repeat(state.gridColumns - row.size) {
+                                                        Spacer(modifier = Modifier.weight(1f))
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            items(
+                                                items = cardsInExpansion,
+                                                key = { pair -> "card_${expansionName}_${pair.first}" }
+                                            ) { (groupKey, group) ->
+                                                val representative = group.first()
+                                                val totalQty = group.sumOf { it.quantity }
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(AppColors.card)
+                                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                                ) {
+                                                    CollectionCardListItem(
                                                         card = representative.copy(quantity = totalQty),
                                                         isSelected = groupKey in selectedGroupKeys,
                                                         isSelectionMode = isSelectionMode,
-                                                        gridColumns = state.gridColumns,
                                                         onClick = {
                                                             if (isSelectionMode) {
                                                                 selectedGroupKeys = if (groupKey in selectedGroupKeys) {
@@ -529,67 +584,26 @@ fun CollectionScreen(
                                                             isSelectionMode = true
                                                             selectedGroupKeys = selectedGroupKeys + groupKey
                                                         },
-                                                        modifier = Modifier.weight(1f)
+                                                        // La riga mostra la quantita' aggregata del gruppo,
+                                                        // quindi il delete deve rimuovere il gruppo intero:
+                                                        // prima cancellava solo il documento del
+                                                        // rappresentante e le altre varianti restavano.
+                                                        onDelete = { viewModel.deleteMultipleGroups(setOf(groupKey)) }
                                                     )
                                                 }
-                                                repeat(state.gridColumns - row.size) {
-                                                    Spacer(modifier = Modifier.weight(1f))
-                                                }
                                             }
                                         }
-                                    } else {
-                                        items(
-                                            items = cardsInExpansion,
-                                            key = { pair -> "card_${expansionName}_${pair.first}" }
-                                        ) { (groupKey, group) ->
-                                            val representative = group.first()
-                                            val totalQty = group.sumOf { it.quantity }
-                                            Box(
+
+                                        // Chiusura visiva della sezione espansa
+                                        item(key = "btm_$expansionName") {
+                                            Spacer(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
+                                                    .height(10.dp)
+                                                    .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
                                                     .background(AppColors.card)
-                                                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                                            ) {
-                                                CollectionCardListItem(
-                                                    card = representative.copy(quantity = totalQty),
-                                                    isSelected = groupKey in selectedGroupKeys,
-                                                    isSelectionMode = isSelectionMode,
-                                                    onClick = {
-                                                        if (isSelectionMode) {
-                                                            selectedGroupKeys = if (groupKey in selectedGroupKeys) {
-                                                                selectedGroupKeys - groupKey
-                                                            } else {
-                                                                selectedGroupKeys + groupKey
-                                                            }
-                                                            if (selectedGroupKeys.isEmpty()) isSelectionMode = false
-                                                        } else {
-                                                                onCardClick(groupKey)
-                                                        }
-                                                    },
-                                                    onLongClick = {
-                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                        isSelectionMode = true
-                                                        selectedGroupKeys = selectedGroupKeys + groupKey
-                                                    },
-                                                    // La riga mostra la quantita' aggregata del gruppo,
-                                                    // quindi il delete deve rimuovere il gruppo intero:
-                                                    // prima cancellava solo il documento del
-                                                    // rappresentante e le altre varianti restavano.
-                                                    onDelete = { viewModel.deleteMultipleGroups(setOf(groupKey)) }
-                                                )
-                                            }
+                                            )
                                         }
-                                    }
-
-                                    // Chiusura visiva della sezione espansa
-                                    item(key = "btm_$expansionName") {
-                                        Spacer(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(10.dp)
-                                                .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-                                                .background(AppColors.card)
-                                        )
                                     }
                                 }
                             }
@@ -1094,6 +1108,11 @@ private fun ExpansionAccordionHeader(
         RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
     else
         RoundedCornerShape(12.dp)
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = tween(AppMotion.chevron),
+        label = "expansionChevron"
+    )
     Surface(
         color = AppColors.card,
         shape = shape,
@@ -1166,11 +1185,15 @@ private fun ExpansionAccordionHeader(
                     fontSize = 11.sp
                 )
             }
+            // Una freccia sola che ruota, non due icone che si scambiano: lo
+            // scambio secco non dice in che verso sta andando la sezione.
             Icon(
-                imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = null,
                 tint = AppColors.textMuted,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer { rotationZ = chevronRotation }
             )
         }
     }
@@ -1237,6 +1260,12 @@ fun CollectionCardGridItem(
     gridColumns: Int = 3,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
+    /**
+     * Chiave della transizione condivisa verso il dettaglio: la stessa che
+     * finisce nella rotta, cioe' la chiave di gruppo e non l'id della singola
+     * variante. Null quando l'elemento non porta al dettaglio.
+     */
+    sharedKey: String? = null,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -1256,7 +1285,10 @@ fun CollectionCardGridItem(
             model = ImageUrlUtils.safeProxiedImageUrl(card.imageUrl),
             contentDescription = card.name,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (sharedKey != null) Modifier.sharedCardImage(sharedKey) else Modifier)
+                .holoFoil(enabled = RarityUtils.hasFoilFinish(card.rarity)),
             error = painterResource(id = android.R.drawable.ic_menu_report_image) // Fallback invisibile o icona standard
         )
 

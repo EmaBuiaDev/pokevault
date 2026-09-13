@@ -250,9 +250,23 @@ object AppLocale {
     val graded: String get() = if (isItalian) "Graduate" else "Graded"
     val bySet: String get() = if (isItalian) "Per Set" else "By Set"
     val setCompletion: String get() = if (isItalian) "Completamento Set" else "Set Completion"
+    fun setCompletedTitle(setName: String) =
+        if (isItalian) "$setName completato" else "$setName completed"
+    val setCompletedSubtitle: String get() = if (isItalian)
+        "Hai tutte le carte di questa espansione"
+    else
+        "You own every card in this expansion"
     val byRarity: String get() = if (isItalian) "Per Rarità" else "By Rarity"
     val byType: String get() = if (isItalian) "Per Tipo" else "By Type"
     val statistics: String get() = if (isItalian) "Statistiche" else "Statistics"
+
+    // Bottom bar: etichette corte, devono stare su una riga sotto l'icona in
+    // uno spazio largo un quarto dello schermo.
+    val navHome: String get() = "Home"
+    val navCards: String get() = if (isItalian) "Carte" else "Cards"
+    val navPokedex: String get() = "Pokédex"
+    val navStats: String get() = "Stats"
+
     val back: String get() = if (isItalian) "Indietro" else "Back"
     val save: String get() = if (isItalian) "Salva" else "Save"
     val delete: String get() = if (isItalian) "Elimina" else "Delete"
@@ -269,6 +283,7 @@ object AppLocale {
     val uniqueOwned: String get() = if (isItalian) "Uniche possedute" else "Unique owned"
     val value: String get() = if (isItalian) "Valore" else "Value"
     val set: String get() = "Set"
+    val cardNumberLabel: String get() = if (isItalian) "Numero" else "Number"
     val rarity: String get() = if (isItalian) "Rarità" else "Rarity"
     val type: String get() = if (isItalian) "Tipo" else "Type"
     val condition: String get() = if (isItalian) "Condizione" else "Condition"
@@ -790,6 +805,7 @@ object AppLocale {
 
     // Wishlist
     val wishlistTitle: String get() = if (isItalian) "Wishlist" else "Wishlist"
+    val wishlistSubtitle: String get() = if (isItalian) "Le carte che ti mancano" else "The cards you are missing"
     val wishlistCreate: String get() = if (isItalian) "Crea Wishlist" else "Create Wishlist"
     val wishlistEdit: String get() = if (isItalian) "Modifica Wishlist" else "Edit Wishlist"
     val wishlistName: String get() = if (isItalian) "Nome lista" else "List name"

@@ -1,7 +1,6 @@
 package com.emabuia.pokevault.ui.home.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,6 +18,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emabuia.pokevault.ui.components.CascadeIn
+import com.emabuia.pokevault.ui.components.pressScale
+import com.emabuia.pokevault.ui.components.pressSlide
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 
@@ -29,10 +31,16 @@ data class MenuItemData(
     val routeKey: String
 )
 
+/**
+ * @param cascadeVisible false finche' la griglia deve restare nascosta, true per
+ *   farla entrare a cascata. Chi chiama lo mette a true una volta sola: il
+ *   benvenuto e' bello la prima volta e basta.
+ */
 @Composable
 fun MenuGrid(
     onItemClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cascadeVisible: Boolean = true
 ) {
     val menuItems = listOf(
         MenuItemData(
@@ -75,6 +83,15 @@ fun MenuGrid(
         routeKey = "collector_lab"
     )
 
+    // La wishlist prima stava sul FAB viola della Home. Con la bottom bar quel
+    // FAB non c'e' piu' e senza questa card resterebbe irraggiungibile.
+    val wishlistItem = MenuItemData(
+        title = AppLocale.wishlistTitle,
+        icon = Icons.Default.Favorite,
+        gradientColors = listOf(AppColors.purple, AppColors.purple.copy(alpha = 0.7f)),
+        routeKey = "wishlist"
+    )
+
     Column(
         modifier = modifier.padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -83,45 +100,65 @@ fun MenuGrid(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            MenuCard(
-                item = menuItems[0],
-                onClick = { onItemClick(menuItems[0].routeKey) },
-                modifier = Modifier.weight(1f)
-            )
-            MenuCard(
-                item = menuItems[1],
-                onClick = { onItemClick(menuItems[1].routeKey) },
-                modifier = Modifier.weight(1f)
-            )
+            CascadeIn(index = 0, visible = cascadeVisible, modifier = Modifier.weight(1f)) {
+                MenuCard(
+                    item = menuItems[0],
+                    onClick = { onItemClick(menuItems[0].routeKey) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            CascadeIn(index = 1, visible = cascadeVisible, modifier = Modifier.weight(1f)) {
+                MenuCard(
+                    item = menuItems[1],
+                    onClick = { onItemClick(menuItems[1].routeKey) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            MenuCard(
-                item = menuItems[2],
-                onClick = { onItemClick(menuItems[2].routeKey) },
-                modifier = Modifier.weight(1f)
-            )
-            MenuCard(
-                item = menuItems[3],
-                onClick = { onItemClick(menuItems[3].routeKey) },
-                modifier = Modifier.weight(1f)
+            CascadeIn(index = 2, visible = cascadeVisible, modifier = Modifier.weight(1f)) {
+                MenuCard(
+                    item = menuItems[2],
+                    onClick = { onItemClick(menuItems[2].routeKey) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            CascadeIn(index = 3, visible = cascadeVisible, modifier = Modifier.weight(1f)) {
+                MenuCard(
+                    item = menuItems[3],
+                    onClick = { onItemClick(menuItems[3].routeKey) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        CascadeIn(index = 4, visible = cascadeVisible) {
+            FeaturedCard(
+                item = competitiveItem,
+                subtitle = AppLocale.competitiveSubtitle,
+                onClick = { onItemClick(competitiveItem.routeKey) }
             )
         }
 
-        FeaturedCard(
-            item = competitiveItem,
-            subtitle = AppLocale.competitiveSubtitle,
-            onClick = { onItemClick(competitiveItem.routeKey) }
-        )
+        CascadeIn(index = 5, visible = cascadeVisible) {
+            FeaturedCard(
+                item = albumItem,
+                subtitle = AppLocale.albumSubtitle,
+                onClick = { onItemClick(albumItem.routeKey) }
+            )
+        }
 
-        FeaturedCard(
-            item = albumItem,
-            subtitle = AppLocale.albumSubtitle,
-            onClick = { onItemClick(albumItem.routeKey) }
-        )
+        CascadeIn(index = 6, visible = cascadeVisible) {
+            FeaturedCard(
+                item = wishlistItem,
+                subtitle = AppLocale.wishlistSubtitle,
+                onClick = { onItemClick(wishlistItem.routeKey) }
+            )
+        }
     }
 }
 
@@ -133,7 +170,11 @@ fun FeaturedCard(
     modifier: Modifier = Modifier
 ) {
     Box(
+        // Il feedback al tocco sta in cima alla catena: il graphicsLayer che
+        // muove la card deve avvolgere anche sfondo e gradiente, non solo il
+        // contenuto disegnato dopo.
         modifier = modifier
+            .pressSlide(onClick = onClick)
             .fillMaxWidth()
             .height(80.dp)
             .clip(RoundedCornerShape(16.dp))
@@ -142,7 +183,6 @@ fun FeaturedCard(
                     colors = item.gradientColors
                 )
             )
-            .clickable(onClick = onClick)
     ) {
         Icon(
             imageVector = Icons.Default.Style,
@@ -210,12 +250,12 @@ fun MenuCard(
 ) {
     Box(
         modifier = modifier
+            .pressScale(onClick = onClick)
             .height(100.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(
                 brush = Brush.linearGradient(item.gradientColors)
             )
-            .clickable(onClick = onClick)
             .padding(14.dp)
     ) {
         Column(

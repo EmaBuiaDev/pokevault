@@ -151,8 +151,12 @@ fun PokeVaultTheme(
     content: @Composable () -> Unit
 ) {
     val colors = if (darkTheme) DarkPokeVaultColors else LightPokeVaultColors
+    val motion = rememberAppMotion()
 
-    CompositionLocalProvider(LocalPokeVaultColors provides colors) {
+    CompositionLocalProvider(
+        LocalPokeVaultColors provides colors,
+        LocalPokeVaultMotion provides motion
+    ) {
         MaterialTheme(
             colorScheme = colors.toMaterialScheme(),
             typography = Typography,
