@@ -13,6 +13,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.data.remote.LimitlessLocalCache
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.ui.theme.ThemePreference
 import com.emabuia.pokevault.util.AppLocale
@@ -56,6 +57,10 @@ class PokeVaultApp : Application(), ImageLoaderFactory {
 
         // Initialize Room database and shared repositories
         RepositoryProvider.init(this)
+
+        // Cache su disco dei dati Limitless: senza, ogni riavvio ricomincia a
+        // spendere la finestra di 50 richieste ogni 5 minuti dell'API.
+        LimitlessLocalCache.init(this)
 
         // One-time cleanup: remove old SharedPreferences cache (migrated to Room)
         migrateFromSharedPreferences()

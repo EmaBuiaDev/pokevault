@@ -24,12 +24,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.MetaDeck
 import com.emabuia.pokevault.data.model.MetaDeckCard
+import com.emabuia.pokevault.data.model.TournamentKind
 import com.emabuia.pokevault.data.model.TournamentResult
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
@@ -37,19 +39,27 @@ import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
 import kotlinx.coroutines.delay
 
 /**
- * Banner informativo per le sezioni Meta / Win Tournament.
- * Spiega da dove arrivano i dati + mostra "aggiornato Xm fa".
- * Il parametro `tick` serve solo a forzare la ricomposizione periodica.
+ * Barra di controllo delle sezioni Meta / Win Tournament.
+ *
+ * Prima erano due blocchi distinti — un banner informativo con il suo titolo e
+ * il suo chevron, e sotto una riga con i chip di formato e il refresh — copiati
+ * uguali nelle due tab. Insieme occupavano un centinaio di dp prima di
+ * qualunque contenuto, su una schermata che ha gia' intestazione e tab sopra.
+ *
+ * Ora e' una riga sola: formato a sinistra, informazioni e aggiornamento a
+ * destra, e la spiegazione si apre solo quando la si chiede.
  */
 @Composable
-fun MetaInfoBanner(
-    title: String,
-    body: String,
+fun MetaToolbar(
+    infoBody: String,
+    selectedFormat: String,
+    onFormatChange: (String) -> Unit,
     lastUpdated: Long?,
     rateLimitMessage: String?,
+    onRefresh: () -> Unit,
     tick: Long = 0L
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var infoExpanded by remember { mutableStateOf(false) }
 
     val updatedLabel = remember(lastUpdated, tick) {
         if (lastUpdated == null) null
@@ -64,89 +74,220 @@ fun MetaInfoBanner(
         }
     }
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .clickable { expanded = !expanded },
-        color = AppColors.blue.copy(alpha = 0.08f),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            // Header sempre visibile
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FormatChip(
+                label = "Standard",
+                selected = selectedFormat == "standard",
+                onClick = { onFormatChange("standard") }
+            )
+            FormatChip(
+                label = "Expanded",
+                selected = selectedFormat == "expanded",
+                onClick = { onFormatChange("expanded") }
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            IconButton(
+                onClick = { infoExpanded = !infoExpanded },
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(if (infoExpanded) AppColors.blue.copy(alpha = 0.18f) else AppColors.card)
+            ) {
                 Icon(
                     Icons.Default.Info,
-                    contentDescription = null,
-                    tint = AppColors.blue,
+                    contentDescription = AppLocale.metaInfoAction,
+                    tint = if (infoExpanded) AppColors.blue else AppColors.textMuted,
                     modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = title,
-                    color = AppColors.textPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                Icon(
-                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (expanded) AppLocale.close else AppLocale.expandAll,
-                    tint = AppColors.textMuted,
-                    modifier = Modifier.size(18.dp)
                 )
             }
 
-            // Contenuto collassabile
-            AnimatedVisibility(visible = expanded, enter = expandVertically(), exit = shrinkVertically()) {
-                Column {
-                    Spacer(modifier = Modifier.height(6.dp))
+            IconButton(
+                onClick = onRefresh,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(AppColors.card)
+            ) {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = AppLocale.refresh,
+                    tint = AppColors.textMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        // Il messaggio di rate limit compare da solo: e' la risposta a un
+        // tocco appena dato, quindi non puo' restare chiuso dentro le info.
+        rateLimitMessage?.let { message ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.HourglassEmpty,
+                    contentDescription = null,
+                    tint = AppColors.yellow,
+                    modifier = Modifier.size(11.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = message, color = AppColors.yellow, fontSize = 10.sp)
+            }
+        }
+
+        AnimatedVisibility(
+            visible = infoExpanded,
+            enter = expandVertically(),
+            exit = shrinkVertically()
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                color = AppColors.blue.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                     Text(
-                        text = body,
+                        text = infoBody,
                         color = AppColors.textMuted,
                         fontSize = 11.sp,
                         lineHeight = 15.sp
                     )
-                    if (updatedLabel != null || rateLimitMessage != null) {
+                    updatedLabel?.let { label ->
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (updatedLabel != null) {
-                                Icon(
-                                    Icons.Default.Schedule,
-                                    contentDescription = null,
-                                    tint = AppColors.textMuted,
-                                    modifier = Modifier.size(11.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = updatedLabel,
-                                    color = AppColors.textMuted,
-                                    fontSize = 10.sp
-                                )
-                            }
-                            if (rateLimitMessage != null) {
-                                if (updatedLabel != null) {
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                }
-                                Icon(
-                                    Icons.Default.HourglassEmpty,
-                                    contentDescription = null,
-                                    tint = AppColors.yellow,
-                                    modifier = Modifier.size(11.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = rateLimitMessage,
-                                    color = AppColors.yellow,
-                                    fontSize = 10.sp
-                                )
-                            }
-                        } // end Row
-                    } // end if updatedLabel/rateLimitMessage
-                } // end inner Column (AnimatedVisibility)
-            } // end AnimatedVisibility
-        } // end outer Column
-    } // end Surface
+                            Icon(
+                                Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = AppColors.textMuted,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = label, color = AppColors.textMuted, fontSize = 10.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Lo stato "finestra di rate limit chiusa".
+ *
+ * Ha due forme perche' sono due situazioni diverse: con dei dati in cache e'
+ * una nota di servizio in cima alla lista, e la lista si guarda lo stesso;
+ * senza dati e' tutto quello che c'e' da mostrare, e allora deve dire
+ * chiaramente che non e' un guasto e quanto manca.
+ *
+ * In nessuno dei due casi c'e' un pulsante "riprova": riprovare durante la
+ * pausa e' esattamente la cosa che l'ha causata.
+ */
+@Composable
+fun MetaRateLimitNotice(
+    secondsRemaining: Long,
+    hasData: Boolean,
+    modifier: Modifier = Modifier
+) {
+    if (hasData) {
+        Surface(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 4.dp),
+            color = AppColors.yellow.copy(alpha = 0.12f),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.HourglassEmpty,
+                    contentDescription = null,
+                    tint = AppColors.yellow,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = AppLocale.metaRateLimitedStaleBody,
+                        color = AppColors.textSecondary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                    if (secondsRemaining > 0) {
+                        Text(
+                            text = AppLocale.metaRateLimitedWait(secondsRemaining),
+                            color = AppColors.yellow,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(40.dp)
+        ) {
+            Icon(
+                Icons.Default.HourglassEmpty,
+                contentDescription = null,
+                tint = AppColors.yellow,
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = AppLocale.metaRateLimitedTitle,
+                color = AppColors.textPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = AppLocale.metaRateLimitedBody,
+                color = AppColors.textMuted,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                textAlign = TextAlign.Center
+            )
+            if (secondsRemaining > 0) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Surface(
+                    color = AppColors.yellow.copy(alpha = 0.14f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = AppLocale.metaRateLimitedWait(secondsRemaining),
+                        color = AppColors.yellow,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -171,134 +312,6 @@ fun FormatChip(
 }
 
 @Composable
-fun MetaDeckItem(
-    deck: MetaDeck,
-    onClick: () -> Unit
-) {
-    val pokemonCount = deck.cards.filter { it.type == "pokemon" }.sumOf { it.qty }
-    val trainerCount = deck.cards.filter { it.type == "trainer" }.sumOf { it.qty }
-    val energyCount = deck.cards.filter { it.type == "energy" }.sumOf { it.qty }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = AppColors.card),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Header: Archetype + Placement
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = deck.archetype ?: AppLocale.unknownDeck,
-                        color = AppColors.textPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (deck.player != null) {
-                        Text(
-                            text = deck.player,
-                            color = AppColors.lavender,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                deck.placement?.let { place ->
-                    PlacementBadge(placement = place)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Tournament info
-            if (deck.tournament != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        Icons.Default.EmojiEvents,
-                        contentDescription = null,
-                        tint = AppColors.yellow,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = deck.tournament,
-                        color = AppColors.textMuted,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Stats row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Card distribution
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatMini(label = "Pok\u00e9mon", value = "$pokemonCount", color = AppColors.blue)
-                    StatMini(label = "Trainer", value = "$trainerCount", color = AppColors.purple)
-                    StatMini(label = "Energy", value = "$energyCount", color = AppColors.green)
-                }
-
-                // Winrate
-                deck.winrate?.let { wr ->
-                    Surface(
-                        color = when {
-                            wr >= 0.7 -> AppColors.green.copy(alpha = 0.15f)
-                            wr >= 0.5 -> AppColors.yellow.copy(alpha = 0.15f)
-                            else -> AppColors.red.copy(alpha = 0.15f)
-                        },
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = "${(wr * 100).toInt()}% WR",
-                            color = when {
-                                wr >= 0.7 -> AppColors.green
-                                wr >= 0.5 -> AppColors.yellow
-                                else -> AppColors.red
-                            },
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-            }
-
-            // Date
-            deck.date?.let { date ->
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = formatDate(date),
-                    color = AppColors.textMuted.copy(alpha = 0.6f),
-                    fontSize = 10.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
 fun PlacementBadge(placement: Int) {
     val (bgColor, textColor) = when (placement) {
         1 -> AppColors.yellow.copy(alpha = 0.2f) to AppColors.yellow
@@ -317,23 +330,6 @@ fun PlacementBadge(placement: Int) {
             fontSize = 13.sp,
             fontWeight = FontWeight.Black,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
-    }
-}
-
-@Composable
-fun StatMini(label: String, value: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            color = color,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = label,
-            color = AppColors.textMuted,
-            fontSize = 9.sp
         )
     }
 }
@@ -728,63 +724,50 @@ fun WinTournamentListView(
         }
     }
 
+    // I dati si chiedono quando la sezione compare, non alla creazione del
+    // ViewModel: chi apre il Deck Lab per i propri mazzi non deve pagare le
+    // richieste di una tab che non ha aperto.
+    LaunchedEffect(Unit) { viewModel.ensureTournamentsLoaded() }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // Banner informativo
-        MetaInfoBanner(
-            title = AppLocale.winTournamentInfoTitle,
-            body = AppLocale.winTournamentInfoBody,
+        MetaToolbar(
+            infoBody = AppLocale.winTournamentInfoBody,
+            selectedFormat = viewModel.selectedFormat,
+            onFormatChange = { viewModel.selectFormat(it) },
             lastUpdated = viewModel.lastUpdated,
             rateLimitMessage = rateLimitedMessage,
+            onRefresh = {
+                rateLimitedMessage = if (!viewModel.refresh()) {
+                    AppLocale.metaRefreshCooldown(viewModel.refreshCooldownSeconds)
+                } else {
+                    null
+                }
+            },
             tick = tick
         )
 
-        // Format selector + refresh
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FormatChip(
-                label = "Standard",
-                selected = viewModel.selectedFormat == "standard",
-                onClick = { viewModel.selectFormat("standard") }
-            )
-            FormatChip(
-                label = "Expanded",
-                selected = viewModel.selectedFormat == "expanded",
-                onClick = { viewModel.selectFormat("expanded") }
-            )
+        // Dal vivo / online: il filtro che la sezione non aveva. L'API
+        // restituiva insieme i Regional in presenza e le serate su PTCG Live
+        // senza mai dire quale fosse quale.
+        TournamentKindSelector(
+            selected = viewModel.selectedKind,
+            onSelect = { viewModel.selectKind(it) }
+        )
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            IconButton(
-                onClick = {
-                    val started = viewModel.refresh()
-                    if (!started) {
-                        rateLimitedMessage = AppLocale.metaRefreshCooldown(
-                            viewModel.refreshCooldownSeconds
-                        )
-                    } else {
-                        rateLimitedMessage = null
-                    }
-                },
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(AppColors.card)
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = AppLocale.refresh,
-                    tint = AppColors.textMuted,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+        // Con dei risultati in cache la pausa e' una nota sopra la lista; senza,
+        // e' l'intero contenuto (vedi il ramo nel when).
+        val rateLimitWait = remember(viewModel.rateLimitedForSeconds, tick) {
+            viewModel.currentRateLimitWait()
+        }
+        if (viewModel.rateLimitedForSeconds != null && viewModel.tournamentResults.isNotEmpty()) {
+            MetaRateLimitNotice(secondsRemaining = rateLimitWait, hasData = true)
         }
 
         when {
+            viewModel.rateLimitedForSeconds != null && viewModel.tournamentResults.isEmpty() -> {
+                MetaRateLimitNotice(secondsRemaining = rateLimitWait, hasData = false)
+            }
+
             viewModel.isLoadingTournaments -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -857,16 +840,30 @@ fun WinTournamentListView(
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
+                        // Il vuoto ha una causa diversa a seconda del filtro:
+                        // "nessun torneo" e "nessun torneo dal vivo in questo
+                        // periodo" mandano a fare due cose diverse.
                         Text(
-                            text = AppLocale.winTournamentNoResults,
+                            text = when (viewModel.selectedKind) {
+                                TournamentKind.LIVE -> AppLocale.winTournamentNoLiveResults
+                                TournamentKind.ONLINE -> AppLocale.winTournamentNoOnlineResults
+                                TournamentKind.ALL -> AppLocale.winTournamentNoResults
+                            },
                             color = AppColors.textPrimary,
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = AppLocale.tryChangeFormat,
+                            text = if (viewModel.selectedKind == TournamentKind.ALL) {
+                                AppLocale.tryChangeFormat
+                            } else {
+                                AppLocale.winTournamentNoLiveResultsBody
+                            },
                             color = AppColors.textMuted,
-                            fontSize = 12.sp
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -890,6 +887,112 @@ fun WinTournamentListView(
     }
 }
 
+/**
+ * Tre posizioni: tutti i tornei, solo quelli in presenza, solo quelli online.
+ *
+ * Il dato per distinguerli c'e' sempre stato nell'API (`isOnline` in
+ * `/tournaments/{id}/details`), ma non veniva mai chiesto: la sezione mostrava
+ * i due mondi mescolati, e chi cercava i risultati di un Regional trovava in
+ * cima una serata da cinque giocatori su PTCG Live.
+ */
+@Composable
+private fun TournamentKindSelector(
+    selected: TournamentKind,
+    onSelect: (TournamentKind) -> Unit
+) {
+    val options = listOf(
+        TournamentKind.ALL to AppLocale.winTournamentKindAll,
+        TournamentKind.LIVE to AppLocale.winTournamentKindLive,
+        TournamentKind.ONLINE to AppLocale.winTournamentKindOnline
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(AppColors.card)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        options.forEach { (kind, label) ->
+            val isSelected = kind == selected
+            val icon = when (kind) {
+                TournamentKind.ALL -> null
+                TournamentKind.LIVE -> Icons.Default.Place
+                TournamentKind.ONLINE -> Icons.Default.Wifi
+            }
+
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(if (isSelected) AppColors.blue else Color.Transparent)
+                    .clickable { onSelect(kind) }
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isSelected) AppColors.onAccent else AppColors.textMuted,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                Text(
+                    text = label,
+                    color = if (isSelected) AppColors.onAccent else AppColors.textMuted,
+                    fontSize = 12.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Etichetta dal vivo / online sulla card del torneo.
+ *
+ * Resta visibile anche sotto il filtro "Dal vivo": e' l'unico modo di sapere
+ * che il filtro ha funzionato davvero, invece di doverlo dare per buono.
+ */
+@Composable
+private fun TournamentKindBadge(isOnline: Boolean?) {
+    if (isOnline == null) return
+
+    val color = if (isOnline) AppColors.lavender else AppColors.green
+    val label = if (isOnline) AppLocale.winTournamentKindOnline else AppLocale.winTournamentKindLive
+    val icon = if (isOnline) Icons.Default.Wifi else Icons.Default.Place
+
+    Surface(
+        color = color.copy(alpha = 0.14f),
+        shape = RoundedCornerShape(7.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(10.dp)
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Text(
+                text = label,
+                color = color,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
 @Composable
 fun TournamentResultCard(
     result: TournamentResult,
@@ -908,16 +1011,24 @@ fun TournamentResultCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
             ) {
+                // Il colore dell'icona segue il tipo di evento: dal vivo verde,
+                // online lavanda, sconosciuto giallo come prima.
+                val accent = when (result.isOnline) {
+                    false -> AppColors.green
+                    true -> AppColors.lavender
+                    null -> AppColors.yellow
+                }
+
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(AppColors.yellow.copy(alpha = 0.12f), CircleShape),
+                        .background(accent.copy(alpha = 0.12f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Default.EmojiEvents,
                         contentDescription = null,
-                        tint = AppColors.yellow,
+                        tint = accent,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -933,11 +1044,24 @@ fun TournamentResultCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+
+                    result.organizerName?.let { organizer ->
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = organizer,
+                            color = AppColors.textMuted,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        TournamentKindBadge(isOnline = result.isOnline)
                         if (result.date != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(

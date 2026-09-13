@@ -377,6 +377,65 @@ object AppLocale {
     fun selectCover(cardName: String): String = if (isItalian) "Seleziona copertina $cardName" else "Select cover $cardName"
     val selectedCover: String get() = if (isItalian) "Copertina selezionata" else "Selected cover"
     val onlyDeckCardsCanBeCover: String get() = if (isItalian) "Solo le carte gia presenti nel deck possono diventare copertina." else "Only cards already in the deck can become a cover."
+
+    // ── Editor del deck: due passi ─────────────────────────────────────────
+    val deckStepCards: String get() = if (isItalian) "Carte" else "Cards"
+    val deckStepDetails: String get() = if (isItalian) "Dettagli" else "Details"
+    val deckNameLabel: String get() = if (isItalian) "Nome del deck" else "Deck name"
+    val deckCoverTitle: String get() = if (isItalian) "Copertina" else "Cover"
+    val deckCoverHint: String get() = if (isItalian)
+        "Fino a 2 carte del deck. Sono quelle che vedrai sulla card del deck nell'elenco."
+    else
+        "Up to 2 cards from the deck. They are what you see on the deck card in the list."
+    val deckCoverEmpty: String get() = if (isItalian)
+        "Nessuna copertina scelta"
+    else
+        "No cover chosen"
+    val deckCoverPreviewTitle: String get() = if (isItalian) "Anteprima" else "Preview"
+    fun deckCoverChosen(count: Int): String = if (isItalian)
+        if (count == 1) "1 carta su 2" else "$count carte su 2"
+    else
+        if (count == 1) "1 card of 2" else "$count cards of 2"
+    val deckNoCardsYet: String get() = if (isItalian)
+        "Aggiungi prima qualche carta: la copertina si sceglie fra quelle del deck."
+    else
+        "Add some cards first: the cover is picked from the ones in the deck."
+    val deckImportedTitle: String get() = if (isItalian) "Deck importato" else "Deck imported"
+    fun deckImportedBody(count: Int): String = if (isItalian)
+        "$count carte riconosciute. Controlla il nome, scegli la copertina e salva."
+    else
+        "$count cards matched. Check the name, pick a cover and save."
+    val deckGoToCards: String get() = if (isItalian) "Rivedi le carte" else "Review the cards"
+    val deckSearchOnline: String get() = if (isItalian) "Cerca nei set online" else "Search online sets"
+    val deckOnlineResults: String get() = if (isItalian) "Risultati online" else "Online results"
+    val deckInYourCollection: String get() = if (isItalian) "Nella tua collezione" else "In your collection"
+    val deckNoCardsInCategory: String get() = if (isItalian)
+        "Nessuna carta in questa categoria."
+    else
+        "No cards in this category."
+    val deckNoLocalResults: String get() = if (isItalian)
+        "Nessuna carta con questo nome nella tua collezione."
+    else
+        "No card with this name in your collection."
+    fun deckPendingSelection(count: Int): String = if (isItalian)
+        "Aggiungi $count"
+    else
+        "Add $count"
+    val deckAddButton: String get() = if (isItalian) "Aggiungi" else "Add"
+    val deckImportReviewTitle: String get() = if (isItalian) "Revisione import" else "Import review"
+    val deckImportReviewBody: String get() = if (isItalian)
+        "Vedi solo le carte appena importate"
+    else
+        "Showing only the cards just imported"
+    val deckShowWholeCollection: String get() = if (isItalian)
+        "Tutta la collezione"
+    else
+        "Whole collection"
+    val deckSaveChanges: String get() = if (isItalian) "Salva modifiche" else "Save changes"
+    val deckSaveNew: String get() = if (isItalian) "Salva deck" else "Save deck"
+    val deckEditTitle: String get() = if (isItalian) "Modifica deck" else "Edit deck"
+    val deckNewTitle: String get() = if (isItalian) "Nuovo deck" else "New deck"
+    val deckSearchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
     fun otherCardsCount(count: Int): String = if (isItalian) "+ $count altre carte" else "+ $count more cards"
 
     val cardNameRequiredLabel: String get() = if (isItalian) "Nome carta *" else "Card name *"
@@ -767,30 +826,61 @@ object AppLocale {
     val metaImportSample: String get() = if (isItalian) "Importa deck esempio" else "Import sample deck"
 
     // Meta info banner & refresh
-    val metaArchetypeInfoTitle: String get() =
-        if (isItalian) "Classifica degli archetipi" else "Archetype rankings"
     val metaArchetypeInfoBody: String get() = if (isItalian)
         "Aggregato dagli ultimi 15 tornei competitivi su LimitlessTCG (top 32 di ogni torneo). Gli archetipi sono ordinati per meta share: la % di copie del deck nel pool competitivo."
     else
         "Aggregated from the last 15 competitive tournaments on LimitlessTCG (top 32 per event). Archetypes are ranked by meta share: the % of copies in the competitive pool."
-    val metaWinnersInfoTitle: String get() =
-        if (isItalian) "Vincitori dei tornei" else "Tournament winners"
-    val metaWinnersInfoBody: String get() = if (isItalian)
-        "Top 8 piazzamenti degli ultimi 10 tornei competitivi su LimitlessTCG, ordinati per piazzamento e data del torneo."
-    else
-        "Top 8 finishes from the last 10 competitive tournaments on LimitlessTCG, sorted by placement and event date."
-    val winTournamentInfoTitle: String get() =
-        if (isItalian) "Ultimi 10 tornei competitivi" else "Last 10 competitive tournaments"
     val winTournamentInfoBody: String get() = if (isItalian)
-        "I top 3 piazzati (con decklist) degli ultimi tornei competitivi su LimitlessTCG, ordinati per data. Tocca un piazzamento per vedere la decklist completa e importarla."
+        "I top 3 piazzati (con decklist) degli ultimi tornei su LimitlessTCG, dal piu' recente. Sono esclusi gli eventi sotto gli 8 giocatori, che non sono risultati competitivi. Tocca un piazzamento per vedere la decklist completa e importarla."
     else
-        "Top 3 finishers (with decklists) from the latest competitive tournaments on LimitlessTCG, sorted by date. Tap a placement to view the full decklist and import it."
+        "Top 3 finishers (with decklists) from the latest tournaments on LimitlessTCG, most recent first. Events under 8 players are excluded, as they are not competitive results. Tap a placement to view the full decklist and import it."
     val winTournamentLoading: String get() =
         if (isItalian) "Caricamento tornei..." else "Loading tournaments..."
     val winTournamentNoResults: String get() =
         if (isItalian) "Nessun torneo trovato" else "No tournaments found"
     fun winTournamentPlayers(count: Int): String =
         if (isItalian) "$count giocatori" else "$count players"
+
+    // Win Tournament: dal vivo o online
+    val winTournamentKindAll: String get() = if (isItalian) "Tutti" else "All"
+    val winTournamentKindLive: String get() = if (isItalian) "Dal vivo" else "In person"
+    val winTournamentKindOnline: String get() = if (isItalian) "Online" else "Online"
+    val winTournamentNoLiveResults: String get() = if (isItalian)
+        "Nessun torneo dal vivo di recente"
+    else
+        "No in-person tournaments recently"
+    val winTournamentNoLiveResultsBody: String get() = if (isItalian)
+        "Nelle ultime settimane su LimitlessTCG non risultano eventi in presenza per questo formato. Prova con Tutti o cambia formato."
+    else
+        "No in-person events for this format on LimitlessTCG in the last few weeks. Try All, or change format."
+    val winTournamentNoOnlineResults: String get() = if (isItalian)
+        "Nessun torneo online di recente"
+    else
+        "No online tournaments recently"
+    val metaInfoAction: String get() = if (isItalian) "Da dove arrivano i dati" else "Where the data comes from"
+
+    // Rate limit dell'API Limitless (50 richieste ogni 5 minuti)
+    val metaRateLimitedTitle: String get() = if (isItalian)
+        "LimitlessTCG in pausa"
+    else
+        "LimitlessTCG paused"
+    val metaRateLimitedBody: String get() = if (isItalian)
+        "LimitlessTCG accetta 50 richieste ogni 5 minuti e per ora sono finite. Non c'e' niente da sistemare: basta aspettare."
+    else
+        "LimitlessTCG allows 50 requests every 5 minutes and they are used up for now. Nothing to fix: just wait."
+    val metaRateLimitedStaleBody: String get() = if (isItalian)
+        "Stai vedendo gli ultimi dati salvati. Si aggiorneranno da soli."
+    else
+        "You are seeing the last saved data. It will refresh on its own."
+    fun metaRateLimitedWait(seconds: Long): String {
+        val minutes = seconds / 60
+        val rest = seconds % 60
+        return when {
+            minutes <= 0L -> if (isItalian) "Riprova fra ${seconds}s" else "Retry in ${seconds}s"
+            rest == 0L -> if (isItalian) "Riprova fra ${minutes} min" else "Retry in ${minutes} min"
+            else -> if (isItalian) "Riprova fra ${minutes} min ${rest}s" else "Retry in ${minutes} min ${rest}s"
+        }
+    }
     val metaLastUpdatedNow: String get() = if (isItalian) "Aggiornato ora" else "Updated now"
     fun metaLastUpdatedMinutes(minutes: Long): String =
         if (isItalian) "Aggiornato $minutes min fa" else "Updated $minutes min ago"
@@ -798,8 +888,6 @@ object AppLocale {
         if (isItalian) "Aggiornato ${hours}h fa" else "Updated ${hours}h ago"
     fun metaRefreshCooldown(seconds: Long): String = if (isItalian)
         "Riprova tra ${seconds}s" else "Try again in ${seconds}s"
-    val metaRefreshRateLimited: String get() = if (isItalian)
-        "Attendi prima di aggiornare di nuovo" else "Wait before refreshing again"
 
     // Tournaments
     val tournamentListTitle: String get() = if (isItalian) "Tornei" else "Tournaments"

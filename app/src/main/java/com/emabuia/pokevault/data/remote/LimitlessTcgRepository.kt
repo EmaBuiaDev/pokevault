@@ -4,6 +4,7 @@ import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.model.MetaArchetype
 import com.emabuia.pokevault.data.model.MetaDeck
 import com.emabuia.pokevault.data.model.MetaDeckCard
+import com.emabuia.pokevault.data.model.TournamentKind
 import com.emabuia.pokevault.data.model.TournamentResult
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -11,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -22,9 +24,16 @@ object LimitlessRetrofitClient {
     private const val BASE_URL = "https://play.limitlesstcg.com/api/"
 
     private val okHttpClient = OkHttpClient.Builder()
+        // Primo della catena: deve poter fermare la richiesta prima che
+        // qualunque altro interceptor la tocchi. Vedi LimitlessRateLimiter.
+        .addInterceptor(LimitlessRateLimitInterceptor())
         .addInterceptor(HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
         })
+        // Una sola connessione per volta verso Limitless: con sei chiamate in
+        // parallelo il server vede una raffica, e la raffica e' esattamente
+        // cio' che fa scattare il 429.
+        .dispatcher(okhttp3.Dispatcher().apply { maxRequestsPerHost = 3 })
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
@@ -44,11 +53,6 @@ class LimitlessTcgRepository {
     private val api = LimitlessRetrofitClient.apiService
     private val gson = Gson()
 
-    private data class CachedResult(
-        val decks: List<MetaDeck>,
-        val timestamp: Long
-    )
-
     private data class CachedArchetypes(
         val archetypes: List<MetaArchetype>,
         val timestamp: Long
@@ -57,12 +61,43 @@ class LimitlessTcgRepository {
     companion object {
         private const val CACHE_DURATION = 30 * 60 * 1000L // 30 minuti
 
+        /**
+         * Sotto questa soglia un evento non e' un risultato competitivo.
+         *
+         * L'API restituisce ogni torneo gestito con Limitless, comprese le
+         * serate da quattro giocatori in un negozio: comparivano in cima alla
+         * sezione Win Tournament accanto ai Regional, e sono la ragione per cui
+         * la lista sembrava casuale.
+         */
+        private const val MIN_TOURNAMENT_PLAYERS = 8
+
+        /** Quanti tornei recenti scandire alla ricerca di quelli richiesti. */
+        private const val TOURNAMENT_CANDIDATE_WINDOW = 60
+
+        /** Quanti dettagli chiedere insieme, per non martellare l'API. */
+        private const val DETAILS_CONCURRENCY = 3
+
+        /**
+         * Quanti dettagli **nuovi** scaricare in un singolo caricamento.
+         *
+         * Con il filtro "Dal vivo" si potrebbe voler sapere il tipo di tutti e
+         * sessanta i candidati, ma sessanta richieste sono piu' della meta'
+         * della finestra di rate limit: si arriverebbe a 429 per una lista di
+         * dieci tornei. Il tetto vale solo per i dettagli che mancano — quelli
+         * gia' su disco non costano niente — per cui la finestra dei candidati
+         * si copre comunque nel giro di due o tre aperture, e da li' in poi il
+         * filtro e' immediato.
+         */
+        private const val MAX_NEW_DETAILS_PER_LOAD = 14
+
+        /** Quanti standings chiedere per aggregare gli archetipi. */
+        private const val ARCHETYPE_TOURNAMENTS = 12
+
         // Cache in memoria condivisa a livello di processo: sopravvive alla
         // navigazione tra le schermate, così tornando su DeckLab non rifacciamo
         // decine di richieste. Viene invalidata solo dopo CACHE_DURATION
         // oppure esplicitamente via [clearCache] o [refresh].
         // ConcurrentHashMap perché letto/scritto da più coroutine su Dispatchers.IO.
-        private val metaDecksCache = java.util.concurrent.ConcurrentHashMap<String, CachedResult>()
         private val archetypeCache = java.util.concurrent.ConcurrentHashMap<String, CachedArchetypes>()
 
         private data class CachedTournamentResults(
@@ -71,100 +106,49 @@ class LimitlessTcgRepository {
         )
         private val tournamentResultsCache = java.util.concurrent.ConcurrentHashMap<String, CachedTournamentResults>()
 
+        private data class CachedTournamentList(
+            val tournaments: List<LimitlessTournament>,
+            val timestamp: Long
+        )
+        private val tournamentListCache = java.util.concurrent.ConcurrentHashMap<String, CachedTournamentList>()
+
+        /** Dettagli per id, senza scadenza: vedi [LimitlessTcgRepository.tournamentDetails]. */
+        private val detailsCache = java.util.concurrent.ConcurrentHashMap<String, LimitlessTournamentDetails>()
+
+        /**
+         * Standings per id di torneo, condivisi fra archetipi e Win Tournament.
+         *
+         * Le due sezioni guardano la stessa finestra di tornei recenti e
+         * chiedevano gli stessi standings ciascuna per conto suo: aprire
+         * entrambe le tab costava il doppio delle richieste per gli stessi
+         * dati. Gli standings di un torneo concluso non cambiano, quindi una
+         * volta letti valgono per tutti e due.
+         *
+         * Restano in memoria e non su disco: con le decklist di trentadue
+         * giocatori sono la cosa piu' pesante che l'API restituisce, e non
+         * vale la pena riempirci le SharedPreferences.
+         */
+        private val standingsCache = java.util.concurrent.ConcurrentHashMap<String, List<LimitlessStanding>>()
+
         /**
          * Restituisce il timestamp più recente di una voce valida in cache
          * per il formato richiesto, o null se non c'è niente.
          */
         fun lastCacheTimestamp(format: String): Long? {
-            val candidates = listOfNotNull(
-                metaDecksCache.entries.firstOrNull { it.key.startsWith("${format}_") }?.value?.timestamp,
-                archetypeCache["archetypes_$format"]?.timestamp
-            )
-            return candidates.maxOrNull()
-        }
-    }
+            val inMemory = listOfNotNull(
+                archetypeCache["archetypes_$format"]?.timestamp,
+                tournamentResultsCache.entries
+                    .filter { it.key.startsWith("results_${format}_") }
+                    .maxOfOrNull { it.value.timestamp }
+            ).maxOrNull()
 
-    suspend fun getMetaDecks(
-        format: String = "standard",
-        limit: Int = 50
-    ): Result<List<MetaDeck>> {
-        // Controlla cache
-        val cacheKey = "${format}_$limit"
-        metaDecksCache[cacheKey]?.let { cached ->
-            if (System.currentTimeMillis() - cached.timestamp < CACHE_DURATION) {
-                return Result.success(cached.decks)
-            }
+            // Al primo avvio la memoria e' vuota ma il disco no: senza questo
+            // la UI direbbe "mai aggiornato" mostrando dati di dieci minuti fa.
+            val onDisk = LimitlessLocalCache.timestampOf(archetypesKey(format))
+            return listOfNotNull(inMemory, onDisk).maxOrNull()
         }
 
-        return try {
-            val apiFormat = when (format.lowercase()) {
-                "standard" -> "standard"
-                "expanded" -> "expanded"
-                else -> "standard"
-            }
-
-            // 1. Recupera tornei recenti
-            Timber.d("Fetching tournaments format=$apiFormat")
-            val tournaments = api.getTournaments(
-                game = "PTCG",
-                format = apiFormat,
-                limit = 10
-            )
-            Timber.d("Trovati ${tournaments.size} tornei")
-
-            if (tournaments.isEmpty()) {
-                return Result.success(emptyList())
-            }
-
-            // 2. Per ogni torneo, recupera i top player con decklist IN
-            //    PARALLELO. Prima era un for sequenziale che aspettava ogni
-            //    torneo uno alla volta: per 10 tornei questo significa
-            //    sommare tutte le latenze di rete. Con coroutineScope+async
-            //    le chiamate partono insieme e il tempo totale è ~il massimo
-            //    della singola chiamata.
-            val allMetaDecks = coroutineScope {
-                tournaments.map { tournament ->
-                    async(Dispatchers.IO) {
-                        try {
-                            Timber.d("Fetching standings per torneo: ${tournament.name} (${tournament.id})")
-                            val standings = api.getTournamentStandings(tournament.id)
-
-                            standings
-                                .filter { it.decklist != null }
-                                .sortedBy { it.placing }
-                                .take(8) // Top 8 per torneo
-                                .map { mapToMetaDeck(it, tournament) }
-                                .filter { it.cards.isNotEmpty() }
-                        } catch (e: Exception) {
-                            Timber.w(e, "Errore caricamento standings per torneo ${tournament.id}: ${e.message}")
-                            emptyList()
-                        }
-                    }
-                }.awaitAll().flatten()
-            }
-
-            Timber.d("Totale meta decks trovati: ${allMetaDecks.size}")
-
-            // Ordina per placement e data
-            val sorted = allMetaDecks
-                .sortedWith(compareBy<MetaDeck> { it.placement ?: Int.MAX_VALUE }
-                    .thenByDescending { it.date })
-                .take(limit)
-
-            // Salva in cache
-            metaDecksCache[cacheKey] = CachedResult(sorted, System.currentTimeMillis())
-
-            Result.success(sorted)
-        } catch (e: Exception) {
-            Timber.e(e, "Errore fetch meta decks: ${e.message}")
-
-            // Fallback su cache scaduta
-            metaDecksCache[cacheKey]?.let {
-                return Result.success(it.decks)
-            }
-
-            Result.failure(e)
-        }
+        private fun archetypesKey(format: String) = "archetypes_$format"
     }
 
     /**
@@ -174,12 +158,31 @@ class LimitlessTcgRepository {
      */
     suspend fun getMetaArchetypes(
         format: String = "standard"
-    ): Result<List<MetaArchetype>> {
-        val cacheKey = "archetypes_$format"
+    ): Result<List<MetaArchetype>> = withContext(Dispatchers.IO) {
+        loadMetaArchetypes(format)
+    }
+
+    /**
+     * Il corpo vero, sempre su [Dispatchers.IO].
+     *
+     * Non e' una suddivisione estetica: qui dentro si leggono e si scrivono le
+     * SharedPreferences della cache e si deserializzano decklist di trentadue
+     * giocatori per torneo. Sul thread principale — dove `viewModelScope`
+     * esegue di default — sarebbero scatti visibili durante lo scorrimento.
+     */
+    private suspend fun loadMetaArchetypes(format: String): Result<List<MetaArchetype>> {
+        val cacheKey = archetypesKey(format)
         archetypeCache[cacheKey]?.let { cached ->
             if (System.currentTimeMillis() - cached.timestamp < CACHE_DURATION) {
                 return Result.success(cached.archetypes)
             }
+        }
+
+        // Cache su disco: al primo avvio evita di rispendere l'intera finestra
+        // di rate limit per dati calcolati dieci minuti prima.
+        readArchetypesFromDisk(cacheKey, CACHE_DURATION)?.let { fresh ->
+            archetypeCache[cacheKey] = CachedArchetypes(fresh, LimitlessLocalCache.timestampOf(cacheKey) ?: 0L)
+            return Result.success(fresh)
         }
 
         return try {
@@ -189,7 +192,10 @@ class LimitlessTcgRepository {
                 else -> "standard"
             }
 
-            val tournaments = api.getTournaments(game = "PTCG", format = apiFormat, limit = 15)
+            // Stessa finestra di candidati della sezione Win Tournament: e' la
+            // stessa chiamata allo stesso endpoint, e farla due volte era
+            // spendere due richieste per ricevere due liste identiche.
+            val tournaments = getTournamentCandidates(apiFormat).take(ARCHETYPE_TOURNAMENTS)
             if (tournaments.isEmpty()) return Result.success(emptyList())
 
             // Raccogli tutti gli standings con deck info
@@ -206,7 +212,7 @@ class LimitlessTcgRepository {
                 tournaments.map { tournament ->
                     async(Dispatchers.IO) {
                         try {
-                            val standings = api.getTournamentStandings(tournament.id)
+                            val standings = standingsOf(tournament.id)
                             // Prendi top 32 (o tutti quelli con decklist)
                             val withDeck = standings
                                 .filter { it.deck?.name != null || it.decklist != null }
@@ -270,10 +276,12 @@ class LimitlessTcgRepository {
             }.sortedByDescending { it.metaShare }
 
             archetypeCache[cacheKey] = CachedArchetypes(archetypes, System.currentTimeMillis())
+            LimitlessLocalCache.write(cacheKey, archetypes)
             Result.success(archetypes)
         } catch (e: Exception) {
             Timber.e(e, "Errore fetch archetypes: ${e.message}")
             archetypeCache[cacheKey]?.let { return Result.success(it.archetypes) }
+            readArchetypesFromDisk(cacheKey, maxAgeMs = null)?.let { return Result.success(it) }
             Result.failure(e)
         }
     }
@@ -507,18 +515,42 @@ class LimitlessTcgRepository {
     }
 
     /**
-     * Recupera gli ultimi [limit] tornei competitivi con i top 3 piazzati per ciascuno.
-     * Usato nella sezione "Win Tournament" del Deck Lab.
+     * Recupera gli ultimi [limit] tornei competitivi con i top 3 piazzati per
+     * ciascuno, filtrati per [kind]. Usato nella sezione "Win Tournament".
+     *
+     * L'endpoint `/tournaments` non dice se un torneo si e' giocato di persona:
+     * quel campo (`isOnline`) sta solo in `/tournaments/{id}/details`, uno per
+     * torneo. Per questo i dettagli si risolvono a gruppi di
+     * [DETAILS_CONCURRENCY] e ci si ferma appena si sono trovati abbastanza
+     * tornei del tipo richiesto, invece di scaricare il dettaglio di tutti i
+     * candidati: per "Tutti" bastano le prime due ondate, ed e' l'unico modo di
+     * offrire il filtro senza moltiplicare per sei le richieste all'API.
      */
     suspend fun getTournamentResults(
         format: String = "standard",
-        limit: Int = 10
+        limit: Int = 10,
+        kind: TournamentKind = TournamentKind.ALL
+    ): Result<List<TournamentResult>> = withContext(Dispatchers.IO) {
+        loadTournamentResults(format, limit, kind)
+    }
+
+    /** Il corpo vero, sempre su [Dispatchers.IO]. Vedi [loadMetaArchetypes]. */
+    private suspend fun loadTournamentResults(
+        format: String,
+        limit: Int,
+        kind: TournamentKind
     ): Result<List<TournamentResult>> {
-        val cacheKey = "results_${format}_$limit"
+        val cacheKey = "results_${format}_${limit}_${kind.name}"
         tournamentResultsCache[cacheKey]?.let { cached ->
             if (System.currentTimeMillis() - cached.timestamp < CACHE_DURATION) {
                 return Result.success(cached.results)
             }
+        }
+
+        readResultsFromDisk(cacheKey, CACHE_DURATION)?.let { fresh ->
+            tournamentResultsCache[cacheKey] =
+                CachedTournamentResults(fresh, LimitlessLocalCache.timestampOf(cacheKey) ?: 0L)
+            return Result.success(fresh)
         }
 
         return try {
@@ -527,15 +559,65 @@ class LimitlessTcgRepository {
                 else -> "standard"
             }
 
-            val tournaments = api.getTournaments(game = "PTCG", format = apiFormat, limit = limit)
-            Timber.d("TournamentResults: trovati ${tournaments.size} tornei")
-            if (tournaments.isEmpty()) return Result.success(emptyList())
+            val candidates = getTournamentCandidates(apiFormat)
+                // Un "torneo" da quattro giocatori non e' un risultato
+                // competitivo, e' una serata fra amici: finiva in cima alla
+                // lista accanto ai Regional solo perche' era piu' recente.
+                .filter { it.players >= MIN_TOURNAMENT_PLAYERS }
+
+            Timber.d("TournamentResults: ${candidates.size} candidati per kind=$kind")
+            if (candidates.isEmpty()) return Result.success(emptyList())
+
+            // Il budget conta solo i dettagli che mancano: quelli gia' su disco
+            // sono gratis, e sono la ragione per cui il filtro "Dal vivo"
+            // diventa istantaneo dopo le prime aperture.
+            var newDetailsBudget = MAX_NEW_DETAILS_PER_LOAD
+            val matched = mutableListOf<Pair<LimitlessTournament, LimitlessTournamentDetails?>>()
+
+            for (chunk in candidates.chunked(DETAILS_CONCURRENCY)) {
+                val missing = chunk.filter { cachedDetails(it.id) == null }
+
+                if (missing.size > newDetailsBudget) {
+                    // Questo gruppo costa piu' di quanto resti da spendere.
+                    // Si prende solo cio' che e' gia' noto e si tira dritto,
+                    // invece di fermarsi: piu' avanti nella finestra possono
+                    // esserci gruppi interamente in cache, che non costano
+                    // niente e sarebbe assurdo saltare.
+                    matched += chunk
+                        .mapNotNull { tournament ->
+                            cachedDetails(tournament.id)?.let { tournament to it }
+                        }
+                        .filter { (_, details) -> kind.accepts(details) }
+                } else {
+                    newDetailsBudget -= missing.size
+
+                    val resolved = coroutineScope {
+                        chunk.map { tournament ->
+                            async(Dispatchers.IO) { tournament to tournamentDetails(tournament.id) }
+                        }.awaitAll()
+                    }
+                    matched += resolved.filter { (_, details) -> kind.accepts(details) }
+                }
+
+                if (matched.size >= limit) break
+            }
+
+            if (newDetailsBudget <= 0) {
+                Timber.d("Limitless: budget dettagli esaurito, ${matched.size} tornei trovati")
+            }
+
+            val selected = matched.take(limit)
+            if (selected.isEmpty()) {
+                val empty = emptyList<TournamentResult>()
+                tournamentResultsCache[cacheKey] = CachedTournamentResults(empty, System.currentTimeMillis())
+                return Result.success(empty)
+            }
 
             val results = coroutineScope {
-                tournaments.map { tournament ->
+                selected.map { (tournament, details) ->
                     async(Dispatchers.IO) {
                         try {
-                            val standings = api.getTournamentStandings(tournament.id)
+                            val standings = standingsOf(tournament.id)
 
                             // Prendi i top piazzati con decklist, filtrando placement 1-3
                             val withDecklist = standings
@@ -560,7 +642,10 @@ class LimitlessTcgRepository {
                                 tournamentName = tournament.name.ifEmpty { tournament.id },
                                 date = tournament.date.ifEmpty { null },
                                 players = tournament.players,
-                                top3 = mappedDecks
+                                top3 = mappedDecks,
+                                isOnline = details?.isOnline,
+                                organizerName = details?.organizer?.name?.ifBlank { null },
+                                organizerLogo = details?.organizer?.logo?.ifBlank { null }
                             )
                         } catch (e: Exception) {
                             Timber.w("Errore standings torneo ${tournament.id}: ${e.message}")
@@ -576,17 +661,155 @@ class LimitlessTcgRepository {
             val sorted = results.sortedByDescending { it.date }
 
             tournamentResultsCache[cacheKey] = CachedTournamentResults(sorted, System.currentTimeMillis())
+            LimitlessLocalCache.write(cacheKey, sorted)
             Result.success(sorted)
         } catch (e: Exception) {
             Timber.e(e, "Errore fetch tournament results: ${e.message}")
+
+            // Dati vecchi invece di una schermata di errore: se siamo in pausa
+            // per il rate limit, la lista di mezz'ora fa e' comunque piu' utile
+            // di un messaggio rosso, e il vero rimedio e' solo aspettare.
             tournamentResultsCache[cacheKey]?.let { return Result.success(it.results) }
+            readResultsFromDisk(cacheKey, maxAgeMs = null)?.let { return Result.success(it) }
             Result.failure(e)
         }
     }
 
+    /**
+     * La finestra di tornei recenti su cui lavorare, condivisa fra i tre
+     * filtri: cambiare da "Tutti" a "Dal vivo" non deve richiamare l'endpoint
+     * della lista, che restituirebbe le stesse identiche voci.
+     */
+    private suspend fun getTournamentCandidates(apiFormat: String): List<LimitlessTournament> {
+        val cacheKey = "candidates_$apiFormat"
+        tournamentListCache[cacheKey]?.let { cached ->
+            if (System.currentTimeMillis() - cached.timestamp < CACHE_DURATION) {
+                return cached.tournaments
+            }
+        }
+
+        readCandidatesFromDisk(cacheKey, CACHE_DURATION)?.let { fresh ->
+            tournamentListCache[cacheKey] =
+                CachedTournamentList(fresh, LimitlessLocalCache.timestampOf(cacheKey) ?: 0L)
+            return fresh
+        }
+
+        return try {
+            val tournaments = api.getTournaments(
+                game = "PTCG",
+                format = apiFormat,
+                limit = TOURNAMENT_CANDIDATE_WINDOW
+            )
+            tournamentListCache[cacheKey] = CachedTournamentList(tournaments, System.currentTimeMillis())
+            LimitlessLocalCache.write(cacheKey, tournaments)
+            tournaments
+        } catch (e: LimitlessRateLimitException) {
+            // La finestra dei candidati scaduta vale comunque piu' di niente:
+            // sono gli stessi tornei, solo senza gli ultimissimi.
+            readCandidatesFromDisk(cacheKey, maxAgeMs = null) ?: throw e
+        }
+    }
+
+    private fun readCandidatesFromDisk(cacheKey: String, maxAgeMs: Long?): List<LimitlessTournament>? =
+        LimitlessLocalCache.read<List<LimitlessTournament>>(
+            key = cacheKey,
+            type = object : TypeToken<List<LimitlessTournament>>() {}.type,
+            maxAgeMs = maxAgeMs
+        )?.takeIf { it.isNotEmpty() }
+
+    /**
+     * Il dettaglio di un torneo, memorizzato per sempre e anche su disco.
+     *
+     * Un torneo concluso non cambia piu': ne' la sede, ne' l'organizzatore, ne'
+     * il fatto che si sia giocato online. Tenere questa cache fuori dalla
+     * scadenza dei trenta minuti — e fuori dalla vita del processo — fa si' che
+     * un refresh manuale, o un riavvio dell'app, non ripaghino il costo di
+     * informazioni gia' note.
+     */
+    private suspend fun tournamentDetails(tournamentId: String): LimitlessTournamentDetails? {
+        cachedDetails(tournamentId)?.let { return it }
+
+        return try {
+            val details = api.getTournamentDetails(tournamentId)
+            detailsCache[tournamentId] = details
+            LimitlessLocalCache.putTournamentDetails(tournamentId, details)
+            details
+        } catch (e: LimitlessRateLimitException) {
+            // Non e' un errore del torneo: e' la finestra chiusa. Chi chiama
+            // deve fermarsi, non provare il prossimo id.
+            throw e
+        } catch (e: Exception) {
+            Timber.w("Errore dettagli torneo $tournamentId: ${e.message}")
+            null
+        }
+    }
+
+    /** Il dettaglio gia' noto, da memoria o da disco. Nessuna richiesta. */
+    private fun cachedDetails(tournamentId: String): LimitlessTournamentDetails? {
+        detailsCache[tournamentId]?.let { return it }
+        return LimitlessLocalCache.tournamentDetails(tournamentId)?.also {
+            detailsCache[tournamentId] = it
+        }
+    }
+
+    /**
+     * Gli standings di un torneo, una volta sola per sessione.
+     *
+     * Archetipi e Win Tournament guardano la stessa finestra di tornei: senza
+     * questa cache, aprire la seconda tab richiedeva di nuovo gli stessi
+     * standings gia' scaricati dalla prima.
+     */
+    private suspend fun standingsOf(tournamentId: String): List<LimitlessStanding> {
+        standingsCache[tournamentId]?.let { return it }
+
+        val standings = api.getTournamentStandings(tournamentId)
+        standingsCache[tournamentId] = standings
+        return standings
+    }
+
+    private fun readArchetypesFromDisk(cacheKey: String, maxAgeMs: Long?): List<MetaArchetype>? =
+        LimitlessLocalCache.read<List<MetaArchetype>>(
+            key = cacheKey,
+            type = object : TypeToken<List<MetaArchetype>>() {}.type,
+            maxAgeMs = maxAgeMs
+        )?.takeIf { it.isNotEmpty() }
+
+    private fun readResultsFromDisk(cacheKey: String, maxAgeMs: Long?): List<TournamentResult>? =
+        LimitlessLocalCache.read<List<TournamentResult>>(
+            key = cacheKey,
+            type = object : TypeToken<List<TournamentResult>>() {}.type,
+            maxAgeMs = maxAgeMs
+        )?.takeIf { it.isNotEmpty() }
+
     fun clearCache() {
-        metaDecksCache.clear()
         archetypeCache.clear()
         tournamentResultsCache.clear()
+        tournamentListCache.clear()
+        LimitlessLocalCache.clearComputed()
+        // detailsCache e standingsCache no: vedi [tournamentDetails] e
+        // [standingsOf]. Sono dati di eventi conclusi, che non invecchiano, e
+        // riscaricarli a ogni refresh manuale e' il modo piu' veloce di
+        // arrivare a 429 senza averci guadagnato niente.
     }
+
+    /**
+     * Fra quanti secondi l'API tornera' disponibile, o 0 se lo e' gia'.
+     *
+     * Serve alla UI per dire "riprova fra due minuti" invece di mostrare un
+     * errore di rete che suggerisce, sbagliando, di riprovare subito.
+     */
+    fun rateLimitRetryAfterSeconds(): Long = LimitlessRateLimiter.retryAfterSeconds()
+}
+
+/**
+ * Vero se il dettaglio del torneo corrisponde al filtro.
+ *
+ * Un dettaglio mancante (chiamata fallita) passa solo sotto "Tutti": meglio un
+ * torneo senza etichetta in una lista che non promette niente, che un torneo
+ * dal vivo elencato fra quelli online per una richiesta andata male.
+ */
+private fun TournamentKind.accepts(details: LimitlessTournamentDetails?): Boolean = when (this) {
+    TournamentKind.ALL -> true
+    TournamentKind.LIVE -> details?.isOnline == false
+    TournamentKind.ONLINE -> details?.isOnline == true
 }
