@@ -436,6 +436,22 @@ object AppLocale {
     val deckEditTitle: String get() = if (isItalian) "Modifica deck" else "Edit deck"
     val deckNewTitle: String get() = if (isItalian) "Nuovo deck" else "New deck"
     val deckSearchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
+    val deckDiscardTitle: String get() = if (isItalian) "Scartare il deck?" else "Discard the deck?"
+    val deckDiscardBody: String get() = if (isItalian)
+        "Le carte scelte e il nome andranno persi. Il deck non e' ancora stato salvato."
+    else
+        "The chosen cards and the name will be lost. The deck has not been saved yet."
+    val deckDiscardKeepEditing: String get() = if (isItalian) "Continua" else "Keep editing"
+    val deckDiscardConfirm: String get() = if (isItalian) "Scarta" else "Discard"
+    val deckCloseEditor: String get() = if (isItalian) "Chiudi editor" else "Close editor"
+    fun deckPlaceholderWarningTitle(count: Int): String = if (isItalian)
+        if (count == 1) "1 carta senza immagine" else "$count carte senza immagine"
+    else
+        if (count == 1) "1 card without image" else "$count cards without image"
+    val deckPlaceholderWarningBody: String get() = if (isItalian)
+        "Non sono nel catalogo italiano, di solito perche' l'espansione e' appena uscita. Sono state aggiunte lo stesso con i dati della decklist."
+    else
+        "They are not in the Italian catalogue, usually because the set is brand new. They were added anyway with the decklist data."
     fun otherCardsCount(count: Int): String = if (isItalian) "+ $count altre carte" else "+ $count more cards"
 
     val cardNameRequiredLabel: String get() = if (isItalian) "Nome carta *" else "Card name *"

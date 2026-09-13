@@ -63,6 +63,7 @@ private const val STEP_DETAILS = 1
 fun NewDeckBottomSheetContent(
     viewModel: DeckLabViewModel,
     isEditing: Boolean = false,
+    onRequestClose: () -> Unit = {},
     onSave: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
@@ -92,7 +93,8 @@ fun NewDeckBottomSheetContent(
     ) {
         DeckEditorHeader(
             isEditing = isEditing,
-            cardCount = viewModel.selectedCardsIds.size
+            cardCount = viewModel.selectedCardsIds.size,
+            onClose = onRequestClose
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -187,7 +189,7 @@ fun NewDeckBottomSheetContent(
 }
 
 @Composable
-private fun DeckEditorHeader(isEditing: Boolean, cardCount: Int) {
+private fun DeckEditorHeader(isEditing: Boolean, cardCount: Int, onClose: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -201,6 +203,19 @@ private fun DeckEditorHeader(isEditing: Boolean, cardCount: Int) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f)
         )
+
+        // Lo swipe verso il basso non chiude piu' quando c'e' del lavoro da
+        // perdere, quindi la via d'uscita deve essere visibile.
+        IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = AppLocale.deckCloseEditor,
+                tint = AppColors.textMuted,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
 
         // 60 e' il numero di carte di un mazzo legale: il contatore e' un
         // obiettivo, non una capienza, e cambia colore quando lo si raggiunge.
@@ -673,6 +688,10 @@ private fun DeckDetailsStep(
             )
         }
 
+        if (viewModel.importPlaceholderNames.isNotEmpty()) {
+            PlaceholderCardsWarning(names = viewModel.importPlaceholderNames)
+        }
+
         Column {
             Text(
                 text = AppLocale.deckNameLabel,
@@ -755,6 +774,57 @@ private fun ImportedRecap(cardCount: Int, onGoToCards: () -> Unit) {
                     color = AppColors.green,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Le carte entrate in collezione senza immagine.
+ *
+ * Prima succedeva in silenzio: si ritrovavano fra le proprie carte dei
+ * rettangoli vuoti con un nome sopra, senza un modo di risalire a quando erano
+ * arrivati. Elencarle qui non le sistema, ma almeno dice cosa e' successo e
+ * perche'.
+ */
+@Composable
+private fun PlaceholderCardsWarning(names: List<String>) {
+    Surface(
+        color = AppColors.yellow.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Icon(
+                Icons.Default.ImageNotSupported,
+                contentDescription = null,
+                tint = AppColors.yellow,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = AppLocale.deckPlaceholderWarningTitle(names.size),
+                    color = AppColors.textPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = AppLocale.deckPlaceholderWarningBody,
+                    color = AppColors.textSecondary,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = names.joinToString(" · "),
+                    color = AppColors.textMuted,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp
                 )
             }
         }
