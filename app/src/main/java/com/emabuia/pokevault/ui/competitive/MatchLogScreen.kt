@@ -48,6 +48,11 @@ fun MatchLogScreen(
     var showDeleteDialog by remember { mutableStateOf<Tournament?>(null) }
     var showPremiumDialog by remember { mutableStateOf(false) }
 
+    // Due domande diverse sullo stesso archivio: "cosa ho giocato" e "come sto
+    // andando". Prima c'era solo la prima, e la seconda si riduceva a due
+    // riquadri con record e percentuale in cima alla lista.
+    var showStats by remember { mutableStateOf(false) }
+
     Scaffold(
         containerColor = AppColors.background,
         topBar = {
@@ -68,18 +73,22 @@ fun MatchLogScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (premiumManager.canCreateTournament(viewModel.tournaments.size)) {
-                        onAddTournament(null)
-                    } else {
-                        showPremiumDialog = true
-                    }
-                },
-                containerColor = AppColors.orange,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = AppLocale.addTournament, tint = AppColors.textPrimary)
+            // Il FAB crea tornei: nella vista statistiche non avrebbe niente da
+            // fare, e coprirebbe l'ultima riga della tabella dei matchup.
+            if (!showStats) {
+                FloatingActionButton(
+                    onClick = {
+                        if (premiumManager.canCreateTournament(viewModel.tournaments.size)) {
+                            onAddTournament(null)
+                        } else {
+                            showPremiumDialog = true
+                        }
+                    },
+                    containerColor = AppColors.orange,
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = AppLocale.addTournament, tint = AppColors.textPrimary)
+                }
             }
         }
     ) { padding ->
@@ -88,25 +97,27 @@ fun MatchLogScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Global stats
-            if (viewModel.allMatches.isNotEmpty()) {
-                Row(
+            ModeSwitch(
+                options = listOf(
+                    AppLocale.matchLogTabTournaments,
+                    AppLocale.matchLogTabStats
+                ),
+                selectedIndex = if (showStats) 1 else 0,
+                onSelect = { showStats = it == 1 },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            if (showStats) {
+                LazyColumn(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    StatMini(
-                        label = AppLocale.matchRecordLabel,
-                        value = AppLocale.matchRecord(viewModel.globalWins, viewModel.globalLosses, viewModel.globalTies),
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatMini(
-                        label = AppLocale.matchWinRate,
-                        value = "${viewModel.globalWinRate.toInt()}%",
-                        modifier = Modifier.weight(0.5f)
-                    )
+                    matchStatsSection(summary = viewModel.summary)
                 }
+                return@Column
             }
 
             if (viewModel.isLoading) {
@@ -296,17 +307,6 @@ private fun TournamentCard(
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Default.Delete, AppLocale.delete, tint = AppColors.textMuted, modifier = Modifier.size(18.dp))
             }
-        }
-    }
-}
-
-@Composable
-private fun StatMini(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = AppColors.card)) {
-        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, color = AppColors.textMuted, fontSize = 11.sp)
-            Spacer(Modifier.height(4.dp))
-            Text(value, color = AppColors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
     }
 }

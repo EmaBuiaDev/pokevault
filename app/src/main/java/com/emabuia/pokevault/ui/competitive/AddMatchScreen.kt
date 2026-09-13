@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.emabuia.pokevault.ui.competitive
 
 import androidx.compose.foundation.background
@@ -19,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -121,6 +124,17 @@ fun AddMatchScreen(
                 placeholder = if (AppLocale.isItalian) "Es. Lugia VSTAR" else "E.g. Lugia VSTAR"
             )
 
+            // I mazzi gia' incontrati, da toccare invece che riscrivere.
+            // Questo campo alimenta la tabella dei matchup, e la tabella vale
+            // solo se lo stesso archetipo si chiama sempre allo stesso modo:
+            // "Charizard ex", "charizard" e "Zard" battuti in tre serate
+            // diverse diventerebbero tre avversari che non c'entrano niente.
+            OpponentDeckSuggestions(
+                suggestions = viewModel.knownOpponentDecks,
+                current = viewModel.matchOpponentDeck,
+                onPick = { viewModel.matchOpponentDeck = it }
+            )
+
             // ── Note ──
             SectionLabel(AppLocale.matchNotes)
             MatchTextField(
@@ -154,6 +168,69 @@ fun AddMatchScreen(
             }
 
             Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+/**
+ * I mazzi avversari gia' incontrati, come chip da toccare.
+ *
+ * Si filtrano su quello che si sta scrivendo, cosi' il campo funziona come un
+ * completamento: due lettere e l'archetipo giusto e' li'. Il chip gia' scelto
+ * resta evidenziato per confermare che il nome coincide con quello storico e
+ * non e' una variante nuova.
+ */
+@Composable
+private fun OpponentDeckSuggestions(
+    suggestions: List<String>,
+    current: String,
+    onPick: (String) -> Unit
+) {
+    val typed = current.trim()
+    val visible = remember(suggestions, typed) {
+        if (typed.isBlank()) {
+            suggestions.take(8)
+        } else {
+            val matching = suggestions.filter { it.contains(typed, ignoreCase = true) }
+            // Se quello scritto e' gia' uno storico va mostrato lo stesso,
+            // altrimenti il chip selezionato sparirebbe appena lo si tocca.
+            (matching + suggestions.filter { it.equals(typed, ignoreCase = true) })
+                .distinct()
+                .take(8)
+        }
+    }
+
+    if (visible.isEmpty()) return
+
+    Column {
+        Text(
+            text = AppLocale.matchOpponentDeckSuggestions,
+            color = AppColors.textMuted,
+            fontSize = 11.sp
+        )
+        Spacer(Modifier.height(6.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            visible.forEach { deck ->
+                val selected = deck.equals(typed, ignoreCase = true)
+                Surface(
+                    color = if (selected) AppColors.orange.copy(alpha = 0.18f) else AppColors.card,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.clickable { onPick(deck) }
+                ) {
+                    Text(
+                        text = deck,
+                        color = if (selected) AppColors.orange else AppColors.textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
         }
     }
 }

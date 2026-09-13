@@ -99,6 +99,31 @@ fun TournamentDetailScreen(
                         StatCard(AppLocale.matchWinRate, "${viewModel.winRate.toInt()}%", Modifier.weight(0.5f))
                     }
                 }
+
+                // L'andamento del torneo, turno per turno: la stessa striscia
+                // delle statistiche generali, cosi' "come sta andando" ha la
+                // stessa forma su una giornata e su tutta la stagione.
+                item {
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = AppColors.card)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                            Text(
+                                AppLocale.matchStatsFormTitle,
+                                color = AppColors.textSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            ResultStrip(
+                                results = viewModel.tournamentMatches
+                                    .sortedBy { it.round }
+                                    .map { it.result }
+                            )
+                        }
+                    }
+                }
             }
 
             // Section title

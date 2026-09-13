@@ -834,14 +834,21 @@ class FirestoreRepository {
         val col = try { matchLogsCollection } catch (e: Exception) {
             trySend(emptyList()); close(); return@callbackFlow
         }
-        val listener = col.orderBy("date", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) { close(error); return@addSnapshotListener }
-                val logs = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(MatchLog::class.java)?.copy(id = doc.id)
-                } ?: emptyList()
-                trySend(logs)
-            }
+        // Nessun orderBy sul server: un orderBy in Firestore *esclude* i
+        // documenti privi del campo ordinato, e questa query ordinava per
+        // "date", che nei match non esiste — saveMatchLog scrive "createdAt".
+        // Il risultato era che getMatchLogs() tornava sempre una lista vuota:
+        // le statistiche globali del Match Log e il record sulla card dell'hub
+        // restavano a zero anche con decine di partite registrate.
+        // L'ordinamento si fa qui: sono le partite di un utente solo, e cosi'
+        // nessun documento resta fuori, nemmeno quelli di schemi precedenti.
+        val listener = col.addSnapshotListener { snapshot, error ->
+            if (error != null) { close(error); return@addSnapshotListener }
+            val logs = snapshot?.documents?.mapNotNull { doc ->
+                doc.toObject(MatchLog::class.java)?.copy(id = doc.id)
+            }?.sortedByDescending { it.createdAt?.seconds ?: Long.MIN_VALUE } ?: emptyList()
+            trySend(logs)
+        }
         awaitClose { listener.remove() }
     }
 

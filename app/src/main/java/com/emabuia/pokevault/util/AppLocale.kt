@@ -876,6 +876,69 @@ object AppLocale {
     val metaInfoAction: String get() = if (isItalian) "Da dove arrivano i dati" else "Where the data comes from"
 
     // Rate limit dell'API Limitless (50 richieste ogni 5 minuti)
+    // ── Match Log: statistiche e matchup ───────────────────────────────────
+    val matchLogTabTournaments: String get() = if (isItalian) "Tornei" else "Tournaments"
+    val matchLogTabStats: String get() = if (isItalian) "Statistiche" else "Stats"
+    val matchStatsWinRateLabel: String get() = if (isItalian) "Vittorie" else "Win rate"
+    fun matchStatsPlayed(count: Int): String = if (isItalian)
+        if (count == 1) "1 partita giocata" else "$count partite giocate"
+    else
+        if (count == 1) "1 match played" else "$count matches played"
+    val matchStatsFormTitle: String get() = if (isItalian) "Ultime partite" else "Recent matches"
+    val matchStatsFormHint: String get() = if (isItalian)
+        "Dalla piu' recente"
+    else
+        "Most recent first"
+    val matchStatsMatchupsTitle: String get() = if (isItalian) "Matchup" else "Matchups"
+    val matchStatsMatchupsHint: String get() = if (isItalian)
+        "Come vai contro ogni archetipo che hai incontrato."
+    else
+        "How you do against every archetype you have faced."
+    val matchStatsBestMatchup: String get() = if (isItalian) "Il tuo migliore" else "Your best"
+    val matchStatsWorstMatchup: String get() = if (isItalian) "Il tuo peggiore" else "Your worst"
+    val matchStatsDecksTitle: String get() = if (isItalian) "I tuoi mazzi" else "Your decks"
+    val matchStatsDecksHint: String get() = if (isItalian)
+        "Il bilancio di ogni mazzo che hai portato a un torneo."
+    else
+        "The record of every deck you have taken to a tournament."
+    fun matchStatsDeckTournaments(count: Int): String = if (isItalian)
+        if (count == 1) "1 torneo" else "$count tornei"
+    else
+        if (count == 1) "1 tournament" else "$count tournaments"
+    val matchStatsEmptyTitle: String get() = if (isItalian)
+        "Ancora nessuna partita"
+    else
+        "No matches yet"
+    val matchStatsEmptyBody: String get() = if (isItalian)
+        "Registra le partite di un torneo: da li' nascono i matchup, il bilancio dei tuoi mazzi e l'andamento."
+    else
+        "Log the matches of a tournament: matchups, deck records and form all come from there."
+    val matchStatsNoMatchupsTitle: String get() = if (isItalian)
+        "Nessun mazzo avversario registrato"
+    else
+        "No opponent decks logged"
+    val matchStatsNoMatchupsBody: String get() = if (isItalian)
+        "Il matchup si costruisce dal campo \"mazzo avversario\": compilalo quando registri una partita e questa tabella si riempie da sola."
+    else
+        "Matchups are built from the \"opponent deck\" field: fill it in when logging a match and this table fills itself."
+    fun matchStatsMissingOpponentDeck(count: Int): String = if (isItalian)
+        if (count == 1) "1 partita senza mazzo avversario" else "$count partite senza mazzo avversario"
+    else
+        if (count == 1) "1 match without opponent deck" else "$count matches without opponent deck"
+    fun matchStatsFewGames(min: Int): String = if (isItalian)
+        "Serve almeno $min partite per un giudizio"
+    else
+        "At least $min matches needed for a verdict"
+    val matchStatsNoWinRate: String get() = if (isItalian) "solo pari" else "ties only"
+    val matchOpponentDeckSuggestions: String get() = if (isItalian)
+        "Gia' incontrati"
+    else
+        "Already faced"
+    val matchOpponentDeckFromMeta: String get() = if (isItalian)
+        "Dal meta"
+    else
+        "From the meta"
+
     val metaRateLimitedTitle: String get() = if (isItalian)
         "LimitlessTCG in pausa"
     else

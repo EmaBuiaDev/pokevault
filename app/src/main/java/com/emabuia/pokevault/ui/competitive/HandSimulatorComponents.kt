@@ -425,10 +425,14 @@ internal fun scoreColor(score: Int): Color = when (scoreColorIndex(score)) {
 internal fun ConsistencyRing(
     score: Int,
     modifier: Modifier = Modifier,
-    diameter: Dp = 132.dp
+    diameter: Dp = 132.dp,
+    /** Cosa misura l'anello. Il Match Log lo riusa per il tasso di vittorie. */
+    label: String = AppLocale.handSimulatorScoreLabel,
+    /** Il colore del riempimento; di default segue le soglie del punteggio. */
+    ringColor: Color? = null
 ) {
     val motion = AppMotion.current
-    val color = scoreColor(score)
+    val color = ringColor ?: scoreColor(score)
     val trackColor = AppColors.textMuted.copy(alpha = 0.22f)
 
     val sweep by animateFloatAsState(
@@ -477,7 +481,7 @@ internal fun ConsistencyRing(
                 fontSize = 40.sp
             )
             Text(
-                text = AppLocale.handSimulatorScoreLabel.uppercase(),
+                text = label.uppercase(),
                 color = AppColors.textSecondary,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold
