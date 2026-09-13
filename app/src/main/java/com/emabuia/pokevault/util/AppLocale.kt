@@ -455,9 +455,7 @@ object AppLocale {
 
     // Hand Simulator
     val handSimulatorTitle: String get() = if (isItalian) "Hand-Simulator" else "Hand-Simulator"
-    val handSimulatorDeckLabel: String get() = if (isItalian) "Deck selezionato" else "Selected deck"
     val handSimulatorSelectDeck: String get() = if (isItalian) "Seleziona un deck" else "Select a deck"
-    val handSimulatorRunCount: String get() = if (isItalian) "Numero simulazioni" else "Simulations"
     val handSimulatorRunButton: String get() = if (isItalian) "Avvia simulazione" else "Run simulation"
     val handSimulatorRunning: String get() = if (isItalian) "Simulazione in corso..." else "Simulating..."
     val handSimulatorAccuracyTitle: String get() = if (isItalian)
@@ -475,7 +473,6 @@ object AppLocale {
     val handSimulatorNoDecks: String get() = if (isItalian) "Nessun deck disponibile" else "No decks available"
     val handSimulatorNoDecksSubtitle: String get() = if (isItalian) "Crea o importa un deck nel Deck Lab" else "Create or import a deck in Deck Lab"
     val handSimulatorInvalidDeck: String get() = if (isItalian) "Deck non valido: servono almeno 7 carte" else "Invalid deck: at least 7 cards required"
-    val handSimulatorResults: String get() = if (isItalian) "Risultati" else "Results"
     val handSimulatorTotalRuns: String get() = if (isItalian) "Run" else "Runs"
     val handSimulatorStarterRate: String get() = if (isItalian) "Starter rate" else "Starter rate"
         val handSimulatorMulliganRate: String get() = if (isItalian) "Opening senza Starter" else "Opening without Starter"
@@ -485,15 +482,11 @@ object AppLocale {
     val handSimulatorOutT1: String get() = if (isItalian) "Out entro T1" else "Out by T1"
     val handSimulatorSetupT2: String get() = if (isItalian) "Setup entro T2" else "Setup by T2"
     val handSimulatorKeyByT2: String get() = if (isItalian) "Key cards entro T2" else "Key cards by T2"
-    val handSimulatorSampleHand: String get() = if (isItalian) "Mano di esempio" else "Sample hand"
-    val handSimulatorSelectDeckFirst: String get() = if (isItalian) "Seleziona prima un deck" else "Select a deck first"
-    val handSimulatorNoKeyCard: String get() = if (isItalian) "Nessuna key card" else "No key card"
     fun handSimulatorFreeLimitInfo(usedRuns: Int): String = if (isItalian)
         "Free: 1 run per deck (usati: $usedRuns/1), valido solo se hai 1 deck totale."
     else
         "Free: 1 run per deck (used: $usedRuns/1), only valid if you have exactly 1 deck."
     val handSimulatorPremiumUnlimited: String get() = if (isItalian) "Premium attivo: simulazioni illimitate." else "Premium active: unlimited simulations."
-    val handSimulatorInsightsTitle: String get() = if (isItalian) "Insight rule-based" else "Rule-based insights"
     val handSimulatorProblemsTitle: String get() = if (isItalian) "Mani problematiche rilevate" else "Detected problematic hands"
     val handSimulatorSaveProblem: String get() = if (isItalian) "Salva mano" else "Save hand"
     val handSimulatorSavedTitle: String get() = if (isItalian) "Vault locale" else "Local vault"
@@ -501,14 +494,9 @@ object AppLocale {
     val handSimulatorSavedToast: String get() = if (isItalian) "Mano salvata nel vault locale" else "Hand saved to local vault"
     val handSimulatorHowItWorksTitle: String get() = if (isItalian) "Come funziona" else "How it works"
     val handSimulatorHowItWorksBody: String get() = if (isItalian)
-        "1) Seleziona un deck e il numero di simulazioni.\n2) Scegli 0 o piu Key Card.\n3) Avvia la simulazione per ottenere metriche opening, T1 e T2.\n4) Salva le mani problematiche nel vault locale."
+        "Prova: peschi una mano vera dal deck e decidi se tenerla o rimescolare, come al tavolo. Puoi pescare il turno successivo per vedere se la mano si sblocca.\n\nAnalisi: il simulatore ripete la pescata migliaia di volte e riassume tutto in un punteggio di consistenza, con le metriche che lo compongono."
     else
-        "1) Select a deck and simulation count.\n2) Choose 0 or more key cards.\n3) Run simulation to get opening, T1 and T2 metrics.\n4) Save problematic hands to the local vault."
-    val handSimulatorHowItWorksExample: String get() = if (isItalian)
-        "Esempio: 1000 run con 2 Key Card (Iono + Rare Candy). Se 'Key cards entro T2' e 78%, significa che in media in 78 mani su 100 arrivi ad almeno una delle key card entro il secondo turno."
-    else
-        "Example: 1000 runs with 2 key cards (Iono + Rare Candy). If 'Key cards by T2' is 78%, it means that on average in 78 hands out of 100 you reach at least one key card by turn two."
-    val handSimulatorMetricInfoTitle: String get() = if (isItalian) "Spiegazione metriche" else "Metrics explanation"
+        "Practice: draw a real hand from the deck and decide whether to keep it or reshuffle, like at the table. You can draw the next turn to see if the hand unlocks.\n\nAnalysis: the simulator repeats the draw thousands of times and sums it up in a consistency score, with the metrics behind it."
     val handSimulatorMetricRuns: String get() = if (isItalian)
         "Run: numero di mani simulate."
     else
@@ -546,8 +534,6 @@ object AppLocale {
     else
         "Key cards by T2: % of runs where you find at least one selected key card by T2."
     val handSimulatorSelectKeyCards: String get() = if (isItalian) "Seleziona Key Cards" else "Select key cards"
-    val handSimulatorSelectedKeyCards: String get() = if (isItalian) "Key Cards selezionate" else "Selected key cards"
-    val handSimulatorNoKeyCardSelected: String get() = if (isItalian) "Nessuna key card selezionata" else "No key card selected"
 
     val handSimulatorInsightBrickTitle: String get() = if (isItalian) "Rischio brick elevato" else "High brick risk"
     fun handSimulatorInsightBrickMessage(value: Int): String = if (isItalian)
@@ -569,17 +555,178 @@ object AppLocale {
         "Setup entro T2 al $value%. Ottimizza linea starter, energia e supporter."
     else
         "Setup by T2 is $value%. Optimize starter line, energy density and supporter access."
-    val handSimulatorInsightGoodTitle: String get() = if (isItalian) "Consistenza solida" else "Solid consistency"
-    val handSimulatorInsightGoodMessage: String get() = if (isItalian)
-        "Le metriche principali sono sopra soglia: il deck mostra una buona affidabilita in early game."
-    else
-        "Core metrics are above threshold: the deck shows good early-game reliability."
 
     val handSimulatorTagNoEnergyT1: String get() = if (isItalian) "No Energia T1" else "No Energy T1"
     val handSimulatorTagNoOutT1: String get() = if (isItalian) "No Out T1" else "No Out T1"
     val handSimulatorTagSetupRiskT2: String get() = if (isItalian) "Setup Risk T2" else "Setup Risk T2"
     val handSimulatorTagMissKeyT2: String get() = if (isItalian) "Miss Key T2" else "Miss Key T2"
     val handSimulatorTagNoBasicDeck: String get() = if (isItalian) "Deck senza Basic" else "No Basic in deck"
+
+    // ── Hand Simulator: modalita' Prova ────────────────────────────────────
+    val handSimulatorModePractice: String get() = if (isItalian) "Prova" else "Practice"
+    val handSimulatorModeAnalysis: String get() = if (isItalian) "Analisi" else "Analysis"
+    val handSimulatorPracticeEmptyTitle: String get() = if (isItalian)
+        "Scegli un deck e pesca"
+    else
+        "Pick a deck and draw"
+    val handSimulatorPracticeEmptyBody: String get() = if (isItalian)
+        "Peschi mani vere dal deck, una alla volta, come al tavolo. Nessuna impostazione da compilare."
+    else
+        "Draw real hands from your deck, one at a time, like at the table. Nothing to configure."
+    val handSimulatorDealButton: String get() = if (isItalian) "Pesca una mano" else "Deal a hand"
+    val handSimulatorNewHand: String get() = if (isItalian) "Nuova mano" else "New hand"
+    val handSimulatorKeepButton: String get() = if (isItalian) "Tengo" else "Keep"
+    val handSimulatorMulliganButton: String get() = if (isItalian) "Mulligan" else "Mulligan"
+    val handSimulatorDecideHint: String get() = if (isItalian)
+        "Decidi come al tavolo: la tieni o la rimescoli?"
+    else
+        "Decide like at the table: keep it or reshuffle?"
+    fun handSimulatorDrawTurn(turn: Int): String = if (isItalian) "Pesca T$turn" else "Draw T$turn"
+    val handSimulatorDeckEmpty: String get() = if (isItalian) "Deck esaurito" else "Deck empty"
+    val handSimulatorOpeningLabel: String get() = if (isItalian) "Apertura" else "Opening"
+    fun handSimulatorTurnLabel(turn: Int): String = if (isItalian) "Turno $turn" else "Turn $turn"
+    fun handSimulatorTally(kept: Int, mulliganed: Int): String = if (isItalian)
+        "Tenute $kept · Mulligan $mulliganed"
+    else
+        "Kept $kept · Mulliganed $mulliganed"
+    fun handSimulatorKeepRate(rate: Int): String = if (isItalian)
+        "tieni il $rate% delle mani"
+    else
+        "you keep $rate% of hands"
+    fun handSimulatorMulligansTaken(count: Int): String = if (isItalian)
+        if (count == 1) "1 mulligan preso" else "$count mulligan presi"
+    else
+        if (count == 1) "1 mulligan taken" else "$count mulligans taken"
+    val handSimulatorTapCardHint: String get() = if (isItalian)
+        "Tocca una carta per ingrandirla"
+    else
+        "Tap a card to enlarge it"
+
+    // Verdetto sulla singola mano
+    val handVerdictGreat: String get() = if (isItalian) "Mano ottima" else "Great hand"
+    val handVerdictPlayable: String get() = if (isItalian) "Giocabile" else "Playable"
+    val handVerdictRisky: String get() = if (isItalian) "Rischiosa" else "Risky"
+    val handVerdictMulligan: String get() = if (isItalian) "Mulligan obbligato" else "Forced mulligan"
+    val handVerdictGreatWhy: String get() = if (isItalian)
+        "Parte, mette energia e ha con cosa continuare."
+    else
+        "It starts, attaches energy and has a way to keep going."
+    val handVerdictPlayableWhy: String get() = if (isItalian)
+        "Parte, ma dipende da cosa peschi."
+    else
+        "It starts, but it depends on what you draw."
+    val handVerdictRiskyWhy: String get() = if (isItalian)
+        "Legale ma povera: senza una pescata buona resti fermo."
+    else
+        "Legal but thin: without a good draw you stall."
+    val handVerdictMulliganWhy: String get() = if (isItalian)
+        "Nessun Pokémon Basic: per regolamento si rimescola."
+    else
+        "No Basic Pokémon: by the rules you reshuffle."
+
+    // Composizione della mano
+    fun handCountBasics(count: Int): String = if (isItalian) "$count Basic" else "$count Basic"
+    fun handCountEnergy(count: Int): String = if (isItalian)
+        if (count == 1) "1 energia" else "$count energie"
+    else
+        if (count == 1) "1 energy" else "$count energy"
+    fun handCountOuts(count: Int): String = if (isItalian)
+        if (count == 1) "1 out" else "$count out"
+    else
+        if (count == 1) "1 out" else "$count outs"
+    fun handCountSupporters(count: Int): String = if (isItalian)
+        if (count == 1) "1 supporter" else "$count supporter"
+    else
+        if (count == 1) "1 supporter" else "$count supporters"
+    val handMissingEnergy: String get() = if (isItalian) "niente energia" else "no energy"
+    val handMissingOut: String get() = if (isItalian) "niente pescata" else "no draw"
+    val handMissingKeyCard: String get() = if (isItalian) "niente key card" else "no key card"
+    val handHasKeyCard: String get() = if (isItalian) "key card in mano" else "key card in hand"
+
+    // ── Hand Simulator: modalita' Analisi ──────────────────────────────────
+    val handSimulatorScoreLabel: String get() = if (isItalian) "Consistenza" else "Consistency"
+    fun handSimulatorScoreVerdict(score: Int): String = when {
+        score >= 80 -> if (isItalian) "Il deck gira" else "The deck runs"
+        score >= 65 -> if (isItalian) "Nella norma" else "Average"
+        score >= 50 -> if (isItalian) "Da sistemare" else "Needs work"
+        else -> if (isItalian) "Fragile" else "Fragile"
+    }
+    val handSimulatorScoreExplain: String get() = if (isItalian)
+        "Media pesata di starter, setup T2, out T1 ed energia T1. Le key card entrano nel conto solo se le hai scelte."
+    else
+        "Weighted average of starter, T2 setup, T1 out and T1 energy. Key cards count only if you picked some."
+    val handSimulatorRunAgain: String get() = if (isItalian) "Rilancia" else "Run again"
+    fun handSimulatorRunsRecap(runs: Int): String = if (isItalian)
+        "su $runs mani simulate"
+    else
+        "over $runs simulated hands"
+    val handSimulatorAllMetrics: String get() = if (isItalian) "Tutte le metriche" else "All metrics"
+    val handSimulatorNotRunTitle: String get() = if (isItalian)
+        "Ancora nessuna analisi"
+    else
+        "No analysis yet"
+    val handSimulatorNotRunBody: String get() = if (isItalian)
+        "Migliaia di mani in un secondo, per vedere ogni quanto il deck parte davvero."
+    else
+        "Thousands of hands in a second, to see how often the deck actually starts."
+    fun handSimulatorTarget(target: Int): String = if (isItalian)
+        "obiettivo $target%"
+    else
+        "target $target%"
+    val handSimulatorBelowTarget: String get() = if (isItalian) "sotto soglia" else "below target"
+    val handSimulatorMetricStarterShort: String get() = if (isItalian) "Parte" else "Starts"
+    val handSimulatorMetricEnergyShort: String get() = if (isItalian) "Energia T1" else "Energy T1"
+    val handSimulatorMetricOutShort: String get() = if (isItalian) "Out T1" else "Out T1"
+    val handSimulatorMetricSetupShort: String get() = if (isItalian) "Setup T2" else "Setup T2"
+    val handSimulatorMetricKeyShort: String get() = if (isItalian) "Key card T2" else "Key card T2"
+    val handSimulatorMetricScore: String get() = if (isItalian)
+        "Consistenza: media pesata delle metriche qui sotto, da 0 a 100."
+    else
+        "Consistency: weighted average of the metrics below, from 0 to 100."
+
+    // ── Hand Simulator: impostazioni ───────────────────────────────────────
+    val handSimulatorSettingsTitle: String get() = if (isItalian) "Impostazioni" else "Settings"
+    val handSimulatorRunsLabel: String get() = if (isItalian) "Mani da simulare" else "Hands to simulate"
+    val handSimulatorKeyCardsHint: String get() = if (isItalian)
+        "Le carte che decidono il turno. Il simulatore misura ogni quanto ne vedi almeno una entro il T2."
+    else
+        "The cards that decide the turn. The simulator measures how often you see at least one by T2."
+    val handSimulatorSearchCard: String get() = if (isItalian) "Cerca nel deck" else "Search the deck"
+    val handSimulatorClearKeyCards: String get() = if (isItalian) "Pulisci" else "Clear"
+    val handSimulatorDone: String get() = if (isItalian) "Fatto" else "Done"
+    fun handSimulatorKeyCardCount(count: Int): String = if (isItalian)
+        if (count == 1) "1 key card" else "$count key card"
+    else
+        if (count == 1) "1 key card" else "$count key cards"
+    val handSimulatorNoSearchResults: String get() = if (isItalian)
+        "Nessuna carta con questo nome nel deck"
+    else
+        "No card with this name in the deck"
+
+    // ── Competitive hub: dati veri sulle card ──────────────────────────────
+    fun competitiveHubDeckCount(count: Int): String = if (isItalian)
+        if (count == 1) "1 deck" else "$count deck"
+    else
+        if (count == 1) "1 deck" else "$count decks"
+    val competitiveHubNoDecks: String get() = if (isItalian) "Nessun deck ancora" else "No decks yet"
+    fun competitiveHubRecord(wins: Int, losses: Int, ties: Int): String =
+        "$wins-$losses-$ties"
+    fun competitiveHubWinRate(rate: Int): String = if (isItalian)
+        "$rate% di vittorie"
+    else
+        "$rate% win rate"
+    val competitiveHubNoMatches: String get() = if (isItalian)
+        "Nessuna partita registrata"
+    else
+        "No matches logged"
+    val competitiveHubNeedsDeck: String get() = if (isItalian)
+        "Serve un deck per simulare"
+    else
+        "A deck is needed to simulate"
+    val competitiveHubReadyToDraw: String get() = if (isItalian)
+        "Pronto: pesca la prima mano"
+    else
+        "Ready: draw your first hand"
 
     // Deck Lab tabs
     val deckLabMyDecks: String get() = if (isItalian) "I Miei Deck" else "My Decks"

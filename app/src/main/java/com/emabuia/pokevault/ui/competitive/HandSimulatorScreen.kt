@@ -1,7 +1,12 @@
-@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class
+)
 
 package com.emabuia.pokevault.ui.competitive
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,63 +15,72 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
-import com.emabuia.pokevault.data.model.CardClassifier
-import com.emabuia.pokevault.data.model.Deck
-import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.simulator.HandEvaluation
 import com.emabuia.pokevault.data.simulator.HandSimulationEngine
 import com.emabuia.pokevault.data.simulator.HandSimulationSummary
 import com.emabuia.pokevault.data.simulator.HandSimulatorLocalStore
-import com.emabuia.pokevault.data.simulator.ProblemHandSample
+import com.emabuia.pokevault.data.simulator.HandTrait
+import com.emabuia.pokevault.data.simulator.HandVerdict
+import com.emabuia.pokevault.data.simulator.PracticeDealer
+import com.emabuia.pokevault.data.simulator.PracticeHand
+import com.emabuia.pokevault.data.simulator.PracticeTally
 import com.emabuia.pokevault.data.simulator.SavedProblemHand
 import com.emabuia.pokevault.data.simulator.SimulatorCard
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
@@ -76,18 +90,22 @@ import com.emabuia.pokevault.viewmodel.DeckLabViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
-import androidx.compose.ui.text.input.KeyboardType
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
-private data class HandInsight(
-    val title: String,
-    val message: String
-)
+/** Le sole quantita' di run proposte: un campo numerico libero non aiutava nessuno. */
+private val RUN_PRESETS = listOf(500, 1_000, 5_000, 10_000)
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+private const val MODE_PRACTICE = 0
+private const val MODE_ANALYSIS = 1
+
+/**
+ * Hand Simulator: due modi sullo stesso mazzo.
+ *
+ * Prima era un unico scroll che mescolava tutorial, configurazione, risultati,
+ * insight, mani problematiche e vault: tutto allo stesso livello, quindi senza
+ * un ordine in cui leggerlo. Ora la schermata chiede una cosa sola in cima —
+ * quale mazzo — e poi divide le due domande possibili: "questa mano la tengo?"
+ * (Prova) e "ogni quanto il mazzo parte?" (Analisi).
+ */
 @Composable
 fun HandSimulatorScreen(
     onBack: () -> Unit,
@@ -98,36 +116,65 @@ fun HandSimulatorScreen(
     val premiumManager = remember { PremiumManager.getInstance() }
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
     val localStore = remember { HandSimulatorLocalStore(context) }
+    val scope = rememberCoroutineScope()
 
+    var mode by remember { mutableIntStateOf(MODE_PRACTICE) }
     var selectedDeckId by remember { mutableStateOf<String?>(null) }
-    var deckDropdownExpanded by remember { mutableStateOf(false) }
-    var keyCardDropdownExpanded by remember { mutableStateOf(false) }
-    var runCountText by remember { mutableStateOf("1000") }
-    var selectedKeyCardNames by remember { mutableStateOf<List<String>>(emptyList()) }
-    var validationMessage by remember { mutableStateOf<String?>(null) }
-    var summary by remember { mutableStateOf<HandSimulationSummary?>(null) }
-    var insights by remember { mutableStateOf<List<HandInsight>>(emptyList()) }
-    var saveFeedback by remember { mutableStateOf<String?>(null) }
-    var showPremiumDialog by remember { mutableStateOf(false) }
-    var showMetricInfoDialog by remember { mutableStateOf(false) }
-    var savedReloadTick by remember { mutableStateOf(0) }
-    var savedHands by remember { mutableStateOf<List<SavedProblemHand>>(emptyList()) }
-    var isSimulating by remember { mutableStateOf(false) }
-    var accuracyWarnings by remember { mutableStateOf<List<String>>(emptyList()) }
+    var runCount by remember { mutableIntStateOf(RUN_PRESETS[1]) }
+    var selectedKeyCards by remember { mutableStateOf<List<String>>(emptyList()) }
 
-    val simulationScope = rememberCoroutineScope()
+    var practiceHand by remember { mutableStateOf<PracticeHand?>(null) }
+    var tally by remember { mutableStateOf(PracticeTally()) }
+    var dealKey by remember { mutableIntStateOf(0) }
+
+    var summary by remember { mutableStateOf<HandSimulationSummary?>(null) }
+    var accuracyWarnings by remember { mutableStateOf<List<String>>(emptyList()) }
+    var isSimulating by remember { mutableStateOf(false) }
+
+    var savedHands by remember { mutableStateOf<List<SavedProblemHand>>(emptyList()) }
+    var savedReloadTick by remember { mutableIntStateOf(0) }
+    var feedback by remember { mutableStateOf<String?>(null) }
+
+    var deckMenuOpen by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
+    var showPremiumDialog by remember { mutableStateOf(false) }
+    var zoomedCard by remember { mutableStateOf<SimulatorCard?>(null) }
 
     val decks = viewModel.decks
     val selectedDeck = decks.firstOrNull { it.id == selectedDeckId }
-    val keyCardOptions = remember(selectedDeck, viewModel.ownedCards) {
-        selectedDeck?.let { deck ->
-            val cardPool = buildDeckCardPool(deck, viewModel.ownedCards)
-            cardPool.map { it.name }.distinct().sorted()
-        } ?: emptyList()
+
+    val cardPool = remember(selectedDeck, viewModel.ownedCards) {
+        selectedDeck?.let { buildDeckCardPool(it, viewModel.ownedCards) } ?: emptyList()
+    }
+    val deckCardNames = remember(cardPool) {
+        cardPool.map { it.name }.distinct().sorted()
     }
 
     LaunchedEffect(selectedDeckId, savedReloadTick) {
         savedHands = localStore.getSavedHands(selectedDeckId)
+    }
+
+    // Un solo mazzo: sceglierlo a mano sarebbe un tocco imposto senza scelta.
+    LaunchedEffect(decks) {
+        if (selectedDeckId == null && decks.size == 1) {
+            selectedDeckId = decks.first().id
+        }
+    }
+
+    fun resetForDeck(deckId: String) {
+        selectedDeckId = deckId
+        selectedKeyCards = emptyList()
+        practiceHand = null
+        tally = PracticeTally()
+        summary = null
+        accuracyWarnings = emptyList()
+        feedback = null
+    }
+
+    fun dealFresh() {
+        practiceHand = PracticeDealer.deal(cardPool, selectedKeyCards)
+        dealKey += 1
     }
 
     Scaffold(
@@ -150,599 +197,246 @@ fun HandSimulatorScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(onClick = { showHelp = true }) {
+                        Icon(
+                            imageVector = Icons.Default.HelpOutline,
+                            contentDescription = AppLocale.handSimulatorHowItWorksTitle,
+                            tint = AppColors.textSecondary
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         }
     ) { padding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(padding)
         ) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AppColors.card),
-                    shape = RoundedCornerShape(16.dp)
+            // La barra di controllo resta fissa: il mazzo e la modalita' sono
+            // il contesto di tutto il resto, e scorrendo si perdevano di vista.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = AppLocale.handSimulatorHowItWorksTitle,
-                            color = AppColors.textPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                    Box(modifier = Modifier.weight(1f)) {
+                        DeckSelector(
+                            deckName = selectedDeck?.name,
+                            onClick = { deckMenuOpen = true }
                         )
-                        Text(
-                            text = AppLocale.handSimulatorHowItWorksBody,
-                            color = AppColors.textSecondary,
-                            fontSize = 12.sp
-                        )
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = AppColors.background),
-                            shape = RoundedCornerShape(12.dp)
+                        DropdownMenu(
+                            expanded = deckMenuOpen,
+                            onDismissRequest = { deckMenuOpen = false }
                         ) {
-                            Text(
-                                text = AppLocale.handSimulatorHowItWorksExample,
-                                color = AppColors.textSecondary,
-                                fontSize = 12.sp,
-                                modifier = Modifier.padding(10.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AppColors.card),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = AppLocale.handSimulatorDeckLabel,
-                            color = AppColors.textSecondary,
-                            fontSize = 12.sp
-                        )
-
-                        Box {
-                            OutlinedButton(
-                                onClick = { deckDropdownExpanded = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    text = selectedDeck?.name ?: AppLocale.handSimulatorSelectDeck,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-
-                            DropdownMenu(
-                                expanded = deckDropdownExpanded,
-                                onDismissRequest = { deckDropdownExpanded = false }
-                            ) {
-                                decks.forEach { deck ->
-                                    DropdownMenuItem(
-                                        text = { Text(deck.name) },
-                                        onClick = {
-                                            selectedDeckId = deck.id
-                                            deckDropdownExpanded = false
-                                            selectedKeyCardNames = emptyList()
-                                            summary = null
-                                            insights = emptyList()
-                                            saveFeedback = null
-                                            validationMessage = null
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = runCountText,
-                            onValueChange = { next ->
-                                runCountText = next.filter { it.isDigit() }.take(5)
-                            },
-                            label = { Text(AppLocale.handSimulatorRunCount) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-
-                        Box {
-                            OutlinedButton(
-                                onClick = { keyCardDropdownExpanded = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    text = AppLocale.handSimulatorSelectKeyCards,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-
-                            DropdownMenu(
-                                expanded = keyCardDropdownExpanded,
-                                onDismissRequest = { keyCardDropdownExpanded = false }
-                            ) {
+                            if (decks.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text(AppLocale.handSimulatorNoKeyCard) },
+                                    text = { Text(AppLocale.handSimulatorNoDecks) },
+                                    onClick = { deckMenuOpen = false }
+                                )
+                            }
+                            decks.forEach { deck ->
+                                DropdownMenuItem(
+                                    text = { Text(deck.name) },
                                     onClick = {
-                                        selectedKeyCardNames = emptyList()
-                                        keyCardDropdownExpanded = false
+                                        resetForDeck(deck.id)
+                                        deckMenuOpen = false
                                     }
                                 )
-                                keyCardOptions.forEach { cardName ->
-                                    val isSelected = selectedKeyCardNames.contains(cardName)
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = if (isSelected) "[x] $cardName" else "[ ] $cardName"
-                                            )
-                                        },
-                                        onClick = {
-                                            selectedKeyCardNames = if (isSelected) {
-                                                selectedKeyCardNames - cardName
-                                            } else {
-                                                selectedKeyCardNames + cardName
-                                            }
-                                        }
-                                    )
-                                }
                             }
                         }
+                    }
 
+                    IconButton(
+                        onClick = { showSettings = true },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AppColors.card)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = AppLocale.handSimulatorSettingsTitle,
+                            tint = AppColors.textSecondary
+                        )
+                    }
+                }
+
+                ModeSwitch(
+                    options = listOf(
+                        AppLocale.handSimulatorModePractice,
+                        AppLocale.handSimulatorModeAnalysis
+                    ),
+                    selectedIndex = mode,
+                    onSelect = { mode = it }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                feedback?.let { message ->
+                    item(key = "feedback") {
                         Text(
-                            text = AppLocale.handSimulatorSelectedKeyCards,
+                            text = message,
                             color = AppColors.textSecondary,
                             fontSize = 12.sp
                         )
+                    }
+                }
 
-                        if (selectedKeyCardNames.isEmpty()) {
-                            Text(
-                                text = AppLocale.handSimulatorNoKeyCardSelected,
-                                color = AppColors.textSecondary,
-                                fontSize = 12.sp
+                if (mode == MODE_PRACTICE) {
+                    practiceSection(
+                        hasDeck = selectedDeck != null,
+                        deckTooSmall = cardPool.size < PracticeDealer.OPENING_SIZE,
+                        hand = practiceHand,
+                        tally = tally,
+                        dealKey = dealKey,
+                        savedHands = savedHands,
+                        onDeal = { dealFresh() },
+                        onKeep = {
+                            tally = tally.copy(dealt = tally.dealt + 1, kept = tally.kept + 1)
+                            dealFresh()
+                        },
+                        onMulligan = {
+                            val current = practiceHand
+                            tally = tally.copy(
+                                dealt = tally.dealt + 1,
+                                mulliganed = tally.mulliganed + 1
                             )
-                        } else {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                selectedKeyCardNames.forEach { keyName ->
-                                    KeyCardChip(
-                                        label = keyName,
-                                        onRemove = {
-                                            selectedKeyCardNames = selectedKeyCardNames - keyName
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        Button(
-                            onClick = {
-                                val deck = selectedDeck
-                                if (deck == null) {
-                                    validationMessage = AppLocale.handSimulatorSelectDeckFirst
-                                    return@Button
-                                }
-
-                                if (!premiumManager.canRunHandSimulator(deck.id, decks.size)) {
-                                    showPremiumDialog = true
-                                    return@Button
-                                }
-
-                                val runCount = runCountText.toIntOrNull()?.coerceIn(1, 10000) ?: 1000
-                                val cardPool = buildDeckCardPool(deck, viewModel.ownedCards)
-                                if (cardPool.size < 7) {
-                                    validationMessage = AppLocale.handSimulatorInvalidDeck
-                                    return@Button
-                                }
-
-                                // Fino a 10.000 mescolate di una lista da 60 carte: fuori dal
-                                // main thread, altrimenti la UI resta bloccata per secondi.
-                                validationMessage = null
-                                saveFeedback = null
-                                accuracyWarnings = deckAccuracyWarnings(deck, viewModel.ownedCards)
-                                isSimulating = true
-
-                                simulationScope.launch {
-                                    val result = withContext(Dispatchers.Default) {
-                                        HandSimulationEngine.run(
-                                            cardPool = cardPool,
-                                            runs = runCount,
-                                            keyCardNames = selectedKeyCardNames
-                                        )
-                                    }
-
-                                    summary = result
-                                    insights = buildInsights(result)
-                                    isSimulating = false
-
-                                    if (!isPremium) {
-                                        premiumManager.consumeHandSimulatorRun(deck.id)
-                                    }
-                                }
-                            },
-                            enabled = !isSimulating,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
-                        ) {
-                            if (isSimulating) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = AppColors.textPrimary
-                                )
+                            practiceHand = if (current == null) {
+                                PracticeDealer.deal(cardPool, selectedKeyCards)
                             } else {
-                                Icon(
-                                    imageVector = Icons.Default.Shuffle,
-                                    contentDescription = null
-                                )
+                                PracticeDealer.mulligan(current, cardPool, selectedKeyCards)
                             }
-                            Text(
-                                text = if (isSimulating) {
-                                    AppLocale.handSimulatorRunning
-                                } else {
-                                    AppLocale.handSimulatorRunButton
-                                },
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(start = 8.dp)
-                            )
-                        }
-
-                        if (!isPremium) {
-                            val runsUsed = selectedDeck?.let { premiumManager.getHandSimulatorRuns(it.id) } ?: 0
-                            Text(
-                                text = AppLocale.handSimulatorFreeLimitInfo(runsUsed),
-                                color = AppColors.textSecondary,
-                                fontSize = 12.sp
-                            )
-                        } else {
-                            Text(
-                                text = AppLocale.handSimulatorPremiumUnlimited,
-                                color = AppColors.textSecondary,
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        if (decks.isEmpty()) {
-                            Text(
-                                text = AppLocale.handSimulatorNoDecks,
-                                color = AppColors.textPrimary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = AppLocale.handSimulatorNoDecksSubtitle,
-                                color = AppColors.textSecondary,
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        validationMessage?.let { message ->
-                            Text(
-                                text = message,
-                                color = AppColors.textSecondary,
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        saveFeedback?.let { feedback ->
-                            Text(
-                                text = feedback,
-                                color = AppColors.textSecondary,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (summary != null && accuracyWarnings.isNotEmpty()) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = AppColors.card),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = AppLocale.handSimulatorAccuracyTitle,
-                                color = AppColors.textPrimary,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp
-                            )
-                            accuracyWarnings.forEach { warning ->
-                                Text(text = warning, color = AppColors.textSecondary, fontSize = 12.sp)
+                            dealKey += 1
+                        },
+                        onDraw = {
+                            practiceHand?.let { current ->
+                                practiceHand = PracticeDealer.drawOne(current, selectedKeyCards)
                             }
-                        }
-                    }
-                }
-            }
-
-            summary?.let { result ->
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = AppColors.card),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = AppLocale.handSimulatorResults,
-                                    color = AppColors.textPrimary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
+                        },
+                        onSaveHand = {
+                            val deck = selectedDeck
+                            val hand = practiceHand
+                            if (deck != null && hand != null) {
+                                localStore.saveProblemHand(
+                                    deckId = deck.id,
+                                    deckName = deck.name,
+                                    cards = hand.opening.map { it.name },
+                                    tags = hand.evaluation.storeTags()
                                 )
-                                IconButton(onClick = { showMetricInfoDialog = true }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = AppLocale.handSimulatorMetricInfoTitle,
-                                        tint = AppColors.textSecondary
+                                savedReloadTick += 1
+                                feedback = AppLocale.handSimulatorSavedToast
+                            }
+                        },
+                        onDeleteSaved = { id ->
+                            localStore.deleteProblemHand(id)
+                            savedReloadTick += 1
+                        },
+                        onCardClick = { zoomedCard = it }
+                    )
+                } else {
+                    analysisSection(
+                        hasDeck = selectedDeck != null,
+                        summary = summary,
+                        accuracyWarnings = accuracyWarnings,
+                        isSimulating = isSimulating,
+                        runCount = runCount,
+                        freeLimitNote = when {
+                            isPremium -> AppLocale.handSimulatorPremiumUnlimited
+                            selectedDeck == null -> null
+                            else -> AppLocale.handSimulatorFreeLimitInfo(
+                                premiumManager.getHandSimulatorRuns(selectedDeck.id)
+                            )
+                        },
+                        onRun = {
+                            val deck = selectedDeck ?: return@analysisSection
+                            if (!premiumManager.canRunHandSimulator(deck.id, decks.size)) {
+                                showPremiumDialog = true
+                                return@analysisSection
+                            }
+                            if (cardPool.size < PracticeDealer.OPENING_SIZE) {
+                                feedback = AppLocale.handSimulatorInvalidDeck
+                                return@analysisSection
+                            }
+
+                            feedback = null
+                            accuracyWarnings = deckAccuracyWarnings(deck, viewModel.ownedCards)
+                            isSimulating = true
+
+                            // Fino a 10.000 mescolate di una lista da 60 carte:
+                            // fuori dal main thread, altrimenti la UI resta
+                            // bloccata per secondi.
+                            scope.launch {
+                                val result = withContext(Dispatchers.Default) {
+                                    HandSimulationEngine.run(
+                                        cardPool = cardPool,
+                                        runs = runCount,
+                                        keyCardNames = selectedKeyCards
                                     )
                                 }
+                                summary = result
+                                isSimulating = false
+                                if (!isPremium) {
+                                    premiumManager.consumeHandSimulatorRun(deck.id)
+                                }
                             }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                StatPill(
-                                    label = AppLocale.handSimulatorTotalRuns,
-                                    value = result.totalRuns.toString(),
-                                    modifier = Modifier.weight(1f)
-                                )
-                                StatPill(
-                                    label = AppLocale.handSimulatorStarterRate,
-                                    value = "${result.starterRate.roundPercent()}%",
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                StatPill(
-                                    label = AppLocale.handSimulatorMulliganRate,
-                                    value = "${result.mulliganRate.roundPercent()}%",
-                                    modifier = Modifier.weight(1f)
-                                )
-                                StatPill(
-                                    label = AppLocale.handSimulatorAvgBasics,
-                                    value = result.averageBasics.roundTo2Decimals(),
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                StatPill(
-                                    label = AppLocale.handSimulatorEnergyT1,
-                                    value = "${result.energyByT1Rate.roundPercent()}%",
-                                    modifier = Modifier.weight(1f)
-                                )
-                                StatPill(
-                                    label = AppLocale.handSimulatorOutT1,
-                                    value = "${result.outByT1Rate.roundPercent()}%",
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                StatPill(
-                                    label = AppLocale.handSimulatorSetupT2,
-                                    value = "${result.setupByT2Rate.roundPercent()}%",
-                                    modifier = Modifier.weight(1f)
-                                )
-                                StatPill(
-                                    label = AppLocale.handSimulatorAvgMulligans,
-                                    value = result.averageMulligans.roundTo2Decimals(),
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            result.keyCardByT2Rate?.let { keyRate ->
-                                StatPill(
-                                    label = AppLocale.handSimulatorKeyByT2,
-                                    value = "${keyRate.roundPercent()}%",
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-
-                            Text(
-                                text = AppLocale.handSimulatorSampleHand,
-                                color = AppColors.textSecondary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
+                        },
+                        onSaveProblemHand = { hand ->
+                            val deck = selectedDeck ?: return@analysisSection
+                            localStore.saveProblemHand(
+                                deckId = deck.id,
+                                deckName = deck.name,
+                                cards = hand.cards.map { it.name },
+                                tags = hand.tags
                             )
-
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                result.sampleHand.forEach { cardName ->
-                                    Card(
-                                        colors = CardDefaults.cardColors(containerColor = AppColors.background),
-                                        shape = RoundedCornerShape(10.dp)
-                                    ) {
-                                        Text(
-                                            text = cardName,
-                                            color = AppColors.textPrimary,
-                                            fontSize = 12.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                            savedReloadTick += 1
+                            feedback = AppLocale.handSimulatorSavedToast
+                        },
+                        onCardClick = { zoomedCard = it }
+                    )
                 }
 
-                if (insights.isNotEmpty()) {
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = AppColors.card),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Text(
-                                    text = AppLocale.handSimulatorInsightsTitle,
-                                    color = AppColors.textPrimary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                )
-
-                                insights.forEach { insight ->
-                                    Card(
-                                        colors = CardDefaults.cardColors(containerColor = AppColors.background),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp)) {
-                                            Text(
-                                                text = insight.title,
-                                                color = AppColors.textPrimary,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 13.sp
-                                            )
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(
-                                                text = insight.message,
-                                                color = AppColors.textSecondary,
-                                                fontSize = 12.sp
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                item(key = "bottom-space") {
+                    Spacer(modifier = Modifier.height(32.dp))
                 }
-
-                if (result.problemHands.isNotEmpty()) {
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = AppColors.card),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Text(
-                                    text = AppLocale.handSimulatorProblemsTitle,
-                                    color = AppColors.textPrimary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                )
-
-                                result.problemHands.take(5).forEach { hand ->
-                                    ProblemHandCard(
-                                        hand = hand,
-                                        onSave = {
-                                            val deck = selectedDeck ?: return@ProblemHandCard
-                                            localStore.saveProblemHand(
-                                                deckId = deck.id,
-                                                deckName = deck.name,
-                                                cards = hand.cards,
-                                                tags = hand.tags
-                                            )
-                                            savedReloadTick += 1
-                                            saveFeedback = AppLocale.handSimulatorSavedToast
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AppColors.card),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = AppLocale.handSimulatorSavedTitle,
-                            color = AppColors.textPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
-
-                        if (savedHands.isEmpty()) {
-                            Text(
-                                text = AppLocale.handSimulatorSavedEmpty,
-                                color = AppColors.textSecondary,
-                                fontSize = 12.sp
-                            )
-                        } else {
-                            savedHands.take(12).forEach { hand ->
-                                SavedProblemHandCard(
-                                    hand = hand,
-                                    onDelete = {
-                                        localStore.deleteProblemHand(hand.id)
-                                        savedReloadTick += 1
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(40.dp))
             }
         }
+    }
+
+    if (showSettings) {
+        SimulatorSettingsSheet(
+            runCount = runCount,
+            onRunCountChange = { runCount = it },
+            deckCardNames = deckCardNames,
+            selectedKeyCards = selectedKeyCards,
+            onToggleKeyCard = { name ->
+                selectedKeyCards = if (selectedKeyCards.contains(name)) {
+                    selectedKeyCards - name
+                } else {
+                    selectedKeyCards + name
+                }
+            },
+            onClearKeyCards = { selectedKeyCards = emptyList() },
+            onDismiss = { showSettings = false }
+        )
+    }
+
+    if (showHelp) {
+        HelpDialog(onDismiss = { showHelp = false })
     }
 
     if (showPremiumDialog) {
@@ -757,87 +451,240 @@ fun HandSimulatorScreen(
         )
     }
 
-    if (showMetricInfoDialog) {
-        MetricInfoDialog(
-            onDismiss = { showMetricInfoDialog = false }
-        )
+    zoomedCard?.let { card ->
+        CardZoomDialog(card = card, onDismiss = { zoomedCard = null })
     }
 }
 
 @Composable
-private fun StatPill(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
+private fun DeckSelector(
+    deckName: String?,
+    onClick: () -> Unit
 ) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = AppColors.background),
-        shape = RoundedCornerShape(12.dp)
+    Surface(
+        color = AppColors.card,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = deckName ?: AppLocale.handSimulatorSelectDeck,
+                color = if (deckName == null) AppColors.textSecondary else AppColors.textPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = AppColors.textSecondary
+            )
+        }
+    }
+}
+
+/**
+ * Impostazioni: run e key card, fuori dal flusso principale.
+ *
+ * Stavano in cima alla schermata e andavano superate ogni volta, anche da chi
+ * voleva solo pescare una mano. Sono scelte che si fanno una volta per mazzo,
+ * quindi vivono meglio dietro un'icona.
+ */
+@Composable
+private fun SimulatorSettingsSheet(
+    runCount: Int,
+    onRunCountChange: (Int) -> Unit,
+    deckCardNames: List<String>,
+    selectedKeyCards: List<String>,
+    onToggleKeyCard: (String) -> Unit,
+    onClearKeyCards: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var query by remember { mutableStateOf("") }
+
+    val filtered = remember(deckCardNames, query) {
+        if (query.isBlank()) deckCardNames
+        else deckCardNames.filter { it.contains(query.trim(), ignoreCase = true) }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppColors.surface
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(
-                text = label,
-                color = AppColors.textSecondary,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = value,
+                text = AppLocale.handSimulatorSettingsTitle,
                 color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
+                fontSize = 18.sp
             )
-        }
-    }
-}
 
-@Composable
-private fun ProblemHandCard(
-    hand: ProblemHandSample,
-    onSave: () -> Unit
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = AppColors.background),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                hand.tags.forEach { tag ->
-                    TagChip(label = translateProblemTag(tag))
+            Text(
+                text = AppLocale.handSimulatorRunsLabel,
+                color = AppColors.textSecondary,
+                fontSize = 12.sp
+            )
+
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RUN_PRESETS.forEach { preset ->
+                    val selected = preset == runCount
+                    Surface(
+                        color = if (selected) AppColors.blue else AppColors.card,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.clickable { onRunCountChange(preset) }
+                    ) {
+                        Text(
+                            text = formatRunPreset(preset),
+                            color = if (selected) AppColors.onAccent else AppColors.textSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                hand.cards.forEach { cardName ->
-                    TagChip(label = cardName)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = AppLocale.handSimulatorSelectKeyCards,
+                    color = AppColors.textPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                if (selectedKeyCards.isNotEmpty()) {
+                    TextButton(onClick = onClearKeyCards) {
+                        Text(
+                            text = AppLocale.handSimulatorClearKeyCards,
+                            color = AppColors.textSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = AppLocale.handSimulatorKeyCardsHint,
+                color = AppColors.textMuted,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
+
+            if (selectedKeyCards.isNotEmpty()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    selectedKeyCards.forEach { name ->
+                        Surface(
+                            color = AppColors.blue.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.clickable { onToggleKeyCard(name) }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
+                            ) {
+                                Text(
+                                    text = name,
+                                    color = AppColors.blue,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = null,
+                                    tint = AppColors.blue,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text(AppLocale.handSimulatorSearchCard) },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (filtered.isEmpty()) {
+                Text(
+                    text = AppLocale.handSimulatorNoSearchResults,
+                    color = AppColors.textSecondary,
+                    fontSize = 12.sp
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 260.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    items(filtered, key = { it }) { name ->
+                        val selected = selectedKeyCards.contains(name)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onToggleKeyCard(name) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = name,
+                                color = if (selected) AppColors.textPrimary else AppColors.textSecondary,
+                                fontSize = 13.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (selected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = AppColors.blue,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             Button(
-                onClick = onSave,
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.Save, contentDescription = null)
                 Text(
-                    text = AppLocale.handSimulatorSaveProblem,
-                    modifier = Modifier.padding(start = 6.dp)
+                    text = AppLocale.handSimulatorDone,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
@@ -845,130 +692,45 @@ private fun ProblemHandCard(
 }
 
 @Composable
-private fun SavedProblemHandCard(
-    hand: SavedProblemHand,
-    onDelete: () -> Unit
-) {
-    val df = remember { SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()) }
-    val dateLabel = remember(hand.createdAtMillis) { df.format(Date(hand.createdAtMillis)) }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = AppColors.background),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = hand.deckName,
-                        color = AppColors.textPrimary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = dateLabel,
-                        color = AppColors.textSecondary,
-                        fontSize = 11.sp
-                    )
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = AppLocale.delete,
-                        tint = AppColors.textSecondary
-                    )
-                }
-            }
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                hand.tags.forEach { tag ->
-                    TagChip(label = translateProblemTag(tag))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TagChip(label: String) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = AppColors.card),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Text(
-            text = label,
-            color = AppColors.textSecondary,
-            fontSize = 11.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp)
-        )
-    }
-}
-
-@Composable
-private fun KeyCardChip(
-    label: String,
-    onRemove: () -> Unit
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = AppColors.background),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
-        ) {
-            Text(
-                text = label,
-                color = AppColors.textSecondary,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            IconButton(onClick = onRemove) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = AppLocale.delete,
-                    tint = AppColors.textSecondary
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MetricInfoDialog(onDismiss: () -> Unit) {
+private fun HelpDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = AppColors.card,
         title = {
             Text(
-                text = AppLocale.handSimulatorMetricInfoTitle,
+                text = AppLocale.handSimulatorHowItWorksTitle,
                 color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(AppLocale.handSimulatorMetricRuns, color = AppColors.textSecondary, fontSize = 12.sp)
+            // Undici voci: su uno schermo corto il dialog non le contiene.
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = AppLocale.handSimulatorHowItWorksBody,
+                    color = AppColors.textSecondary,
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = AppLocale.handSimulatorMetricScore,
+                    color = AppColors.textSecondary,
+                    fontSize = 12.sp
+                )
+                // Tutte le metriche che la schermata mostra, anche quelle
+                // chiuse dentro "Tutte le metriche": una riga vista e non
+                // spiegata e' peggio di una riga non mostrata.
                 Text(AppLocale.handSimulatorMetricStarter, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricMulligan, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricAvgBasics, color = AppColors.textSecondary, fontSize = 12.sp)
                 Text(AppLocale.handSimulatorMetricEnergyT1, color = AppColors.textSecondary, fontSize = 12.sp)
                 Text(AppLocale.handSimulatorMetricOutT1, color = AppColors.textSecondary, fontSize = 12.sp)
                 Text(AppLocale.handSimulatorMetricSetupT2, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricAvgMulligans, color = AppColors.textSecondary, fontSize = 12.sp)
                 Text(AppLocale.handSimulatorMetricKeyByT2, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricRuns, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricMulligan, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricAvgBasics, color = AppColors.textSecondary, fontSize = 12.sp)
+                Text(AppLocale.handSimulatorMetricAvgMulligans, color = AppColors.textSecondary, fontSize = 12.sp)
             }
         },
         confirmButton = {
@@ -976,165 +738,64 @@ private fun MetricInfoDialog(onDismiss: () -> Unit) {
                 onClick = onDismiss,
                 colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
             ) {
-                Text(text = AppLocale.cancel)
+                Text(text = AppLocale.handSimulatorDone)
             }
         }
     )
 }
 
-/** Numero di carte di un mazzo legale: tutte le probabilita' assumono questo. */
-private const val LEGAL_DECK_SIZE = 60
-
-private fun buildDeckCardPool(deck: Deck, ownedCards: List<PokemonCard>): List<SimulatorCard> {
-    val cardMap = ownedCards.associateBy { it.id }
-    return deck.cards.mapNotNull { cardId ->
-        val card = cardMap[cardId] ?: return@mapNotNull null
-        SimulatorCard(
-            name = card.name,
-            isBasic = card.isBasicPokemon(),
-            isEnergy = card.classify() == "Energy",
-            isSupporter = card.isSupporterCard(),
-            isOutCard = card.isOutCard()
-        )
+/**
+ * La carta a schermo intero.
+ *
+ * Nel ventaglio una carta e' larga ottanta dp: basta a riconoscerla, non a
+ * leggerne il testo, ed e' proprio il testo che serve quando ci si chiede se
+ * quella mano si sblocca.
+ */
+@Composable
+private fun CardZoomDialog(
+    card: SimulatorCard,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onDismiss)
+        ) {
+            SimCardFace(
+                card = card,
+                cornerRadius = 14.dp,
+                modifier = Modifier
+                    .fillMaxWidth(0.86f)
+                    .aspectRatio(63f / 88f)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = card.name,
+                color = AppColors.textPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp
+            )
+        }
     }
 }
+
+private fun formatRunPreset(preset: Int): String =
+    if (preset >= 1000) "${preset / 1000}k" else preset.toString()
 
 /**
- * Vero quando lo stadio della carta non e' ricavabile dai dati.
+ * I tag con cui una mano finisce nel vault locale.
  *
- * Le carte importate dal percorso di fallback di DeckLabViewModel arrivano con
- * subtypes vuoto e hp segnaposto: isBasicPokemon() le conta tutte come Basic,
- * perche' non trova marcatori di evoluzione. Su un mazzo che ne contiene molte
- * il tasso di mulligan risulta piu' basso del reale. Non possiamo indovinare lo
- * stadio, ma possiamo dirlo all'utente invece di presentare numeri precisi.
+ * Sono gli stessi che produce la simulazione statistica, cosi' le mani salvate
+ * dalla Prova e quelle salvate dall'Analisi restano confrontabili nella stessa
+ * lista.
  */
-private fun PokemonCard.hasUnknownStage(): Boolean =
-    classify() == CardClassifier.POKEMON && hp > 0 && subtypes.isEmpty()
-
-private fun PokemonCard.isBasicPokemon(): Boolean {
-    // A Pokémon is Basic if:
-    // 1. It's classified as Pokémon and has HP > 0
-    // 2. Either explicitly has "Basic" subtype OR has no evolution markers
-    val isPokemon = classify() == "Pokémon"
-    if (!isPokemon || hp <= 0) return false
-    
-    val subtypesLower = subtypes.map { it.lowercase() }
-    
-    // Check if explicitly marked as Basic
-    if (subtypesLower.any { it.contains("basic") || it.contains("base") }) {
-        return true
-    }
-    
-    // Check if it's NOT an evolution type - if no evolution markers, it's implicitly Basic
-    val evolutionMarkers = listOf("stage 1", "stage 2", "stage1", "stage2", "v-max", "vmax", "vstar", "v-star", "lv.x")
-    val hasEvolutionMarker = subtypesLower.any { subtype ->
-        evolutionMarkers.any { marker -> subtype.contains(marker) }
-    }
-    
-    return !hasEvolutionMarker
-}
-
-/**
- * Avvisi sulla qualita' dei dati del mazzo, da mostrare accanto ai risultati.
- *
- * Prima buildDeckCardPool rifiutava solo i mazzi con meno di 7 carte: un mazzo
- * da 45 veniva simulato come mazzo da 45, e ogni probabilita' (starter, mulligan,
- * energia al T1) risultava sbagliata rispetto alla matematica reale su 60 carte,
- * senza che nulla lo segnalasse.
- */
-private fun deckAccuracyWarnings(deck: Deck, ownedCards: List<PokemonCard>): List<String> {
-    val warnings = mutableListOf<String>()
-
-    val poolSize = deck.cards.size
-    if (poolSize != LEGAL_DECK_SIZE) {
-        warnings += AppLocale.handSimulatorDeckSizeWarning(poolSize, LEGAL_DECK_SIZE)
-    }
-
-    val cardMap = ownedCards.associateBy { it.id }
-    val unknownStage = deck.cards
-        .mapNotNull { cardMap[it] }
-        .count { it.hasUnknownStage() }
-    if (unknownStage > 0) {
-        warnings += AppLocale.handSimulatorUnknownStageWarning(unknownStage)
-    }
-
-    return warnings
-}
-
-private fun PokemonCard.isSupporterCard(): Boolean {
-    if (classify() != "Trainer") return false
-    return subtypes.any {
-        val normalized = it.lowercase()
-        normalized.contains("supporter") || normalized.contains("aiuto")
-    }
-}
-
-private fun PokemonCard.isOutCard(): Boolean {
-    val nameKey = name.lowercase().trim()
-    val outKeywords = listOf(
-        "ultra ball", "nest ball", "buddy-buddy poffin", "poffin", "earthen vessel",
-        "research", "professor", "iono", "pokégear", "pokegear", "colress",
-        "artazon", "forest seal stone", "rotom", "lumineon", "squawk"
-    )
-    val keywordMatch = outKeywords.any { key -> nameKey.contains(key) }
-    return keywordMatch || isSupporterCard()
-}
-
-private fun buildInsights(summary: HandSimulationSummary): List<HandInsight> {
-    val insights = mutableListOf<HandInsight>()
-
-    if (summary.mulliganRate >= 12.0) {
-        insights += HandInsight(
-            title = AppLocale.handSimulatorInsightBrickTitle,
-            message = AppLocale.handSimulatorInsightBrickMessage(summary.mulliganRate.roundPercent())
-        )
-    }
-
-    if (summary.energyByT1Rate < 72.0) {
-        insights += HandInsight(
-            title = AppLocale.handSimulatorInsightEnergyTitle,
-            message = AppLocale.handSimulatorInsightEnergyMessage(summary.energyByT1Rate.roundPercent())
-        )
-    }
-
-    if (summary.outByT1Rate < 65.0) {
-        insights += HandInsight(
-            title = AppLocale.handSimulatorInsightOutTitle,
-            message = AppLocale.handSimulatorInsightOutMessage(summary.outByT1Rate.roundPercent())
-        )
-    }
-
-    if (summary.setupByT2Rate < 60.0) {
-        insights += HandInsight(
-            title = AppLocale.handSimulatorInsightSetupTitle,
-            message = AppLocale.handSimulatorInsightSetupMessage(summary.setupByT2Rate.roundPercent())
-        )
-    }
-
-    if (insights.isEmpty()) {
-        insights += HandInsight(
-            title = AppLocale.handSimulatorInsightGoodTitle,
-            message = AppLocale.handSimulatorInsightGoodMessage
-        )
-    }
-
-    return insights
-}
-
-private fun translateProblemTag(tag: String): String {
-    return when (tag) {
-        "NO_ENERGY_T1" -> AppLocale.handSimulatorTagNoEnergyT1
-        "NO_OUT_T1" -> AppLocale.handSimulatorTagNoOutT1
-        "SETUP_RISK_T2" -> AppLocale.handSimulatorTagSetupRiskT2
-        "MISS_KEYCARD_T2" -> AppLocale.handSimulatorTagMissKeyT2
-        "NO_BASIC_IN_DECK" -> AppLocale.handSimulatorTagNoBasicDeck
-        else -> tag
-    }
-}
-
-private fun Double.roundPercent(): Int = roundToInt()
-
-private fun Double.roundTo2Decimals(): String {
-    val rounded = (this * 100.0).roundToInt() / 100.0
-    return rounded.toString()
+private fun HandEvaluation.storeTags(): List<String> {
+    val tags = mutableListOf<String>()
+    if (energies == 0) tags += "NO_ENERGY_T1"
+    if (outs == 0) tags += "NO_OUT_T1"
+    if (weaknesses.contains(HandTrait.MISS_KEY_CARD)) tags += "MISS_KEYCARD_T2"
+    if (verdict == HandVerdict.RISKY || verdict == HandVerdict.MULLIGAN) tags += "SETUP_RISK_T2"
+    return tags
 }
