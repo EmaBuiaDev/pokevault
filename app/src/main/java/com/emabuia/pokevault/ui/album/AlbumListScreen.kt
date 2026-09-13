@@ -1,11 +1,15 @@
 package com.emabuia.pokevault.ui.album
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,25 +18,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import com.emabuia.pokevault.data.billing.PremiumManager
-import com.emabuia.pokevault.data.model.Album
 import com.emabuia.pokevault.data.model.GoalAlbum
+import com.emabuia.pokevault.ui.components.CascadeIn
+import com.emabuia.pokevault.ui.components.SkeletonBlock
+import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
-import com.emabuia.pokevault.util.ImageUrlUtils
+import com.emabuia.pokevault.util.ChaseRow
+import com.emabuia.pokevault.util.CollectorLab
+import com.emabuia.pokevault.util.CollectorSummary
 import com.emabuia.pokevault.viewmodel.AlbumViewModel
 import com.emabuia.pokevault.viewmodel.GoalAlbumViewModel
 
+/**
+ * L'ingresso del Collector Lab.
+ *
+ * Prima erano due riquadri in cima a una pagina per il resto vuota: aprire la
+ * sezione non diceva niente di quello che c'era dentro. Ora il riassunto e la
+ * vetrina stanno qui, e le due liste restano a un tocco.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlbumListScreen(
@@ -48,17 +59,52 @@ fun AlbumListScreen(
     goalViewModel: GoalAlbumViewModel = viewModel()
 ) {
     var showChasePremiumDialog by remember { mutableStateOf(false) }
+    var showAlbumPremiumDialog by remember { mutableStateOf(false) }
+    val premiumManager = remember { com.emabuia.pokevault.data.billing.PremiumManager.getInstance() }
+
+    val albumRows = viewModel.albumRows
+    val chaseRows = remember(goalViewModel.goalAlbums, goalViewModel.ownedCards) {
+        goalViewModel.chaseRows { it.criteriaSummary() }
+    }
+    val summary = remember(albumRows, chaseRows) { CollectorLab.summary(albumRows, chaseRows) }
+    val spotlight = remember(chaseRows) { CollectorLab.spotlightChase(chaseRows) }
+    val recentAlbums = remember(albumRows) {
+        CollectorLab.sortAlbums(albumRows, com.emabuia.pokevault.util.AlbumSort.RECENT).take(6)
+    }
+    val isLoading = viewModel.isLoading || goalViewModel.isLoading
+    val isEmpty = albumRows.isEmpty() && chaseRows.isEmpty()
+
+    // La cascata si gioca una volta sola, al primo arrivo dei dati: rigiocarla a
+    // ogni ricomposizione la trasformerebbe in un inciampo.
+    var revealed by remember { mutableStateOf(false) }
+    LaunchedEffect(isLoading) { if (!isLoading) revealed = true }
+
+    fun createAlbum() {
+        if (premiumManager.canCreateAlbum(albumRows.size)) onCreateAlbum(null)
+        else showAlbumPremiumDialog = true
+    }
+
+    fun createChase() {
+        if (goalViewModel.canCreate()) onCreateChase() else showChasePremiumDialog = true
+    }
 
     Scaffold(
         containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        AppLocale.albumTitle,
-                        color = AppColors.textPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column {
+                        Text(
+                            AppLocale.albumTitle,
+                            color = AppColors.textPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            AppLocale.collectorLabSubtitle,
+                            color = AppColors.textMuted,
+                            fontSize = 11.sp
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -75,31 +121,127 @@ fun AlbumListScreen(
             )
         }
     ) { padding ->
-        Column(
+        if (isLoading && isEmpty) {
+            CollectorLabSkeleton(modifier = Modifier.padding(padding))
+            return@Scaffold
+        }
+
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(top = 4.dp, bottom = 28.dp)
         ) {
-            CollectorLabCardsRow(
-                albumCount = viewModel.albums.size,
-                chaseCount = goalViewModel.goalAlbums.size,
-                onAlbumClick = {
-                    onOpenAlbumList()
-                },
-                onChaseClick = {
-                    if (goalViewModel.goalAlbums.isEmpty()) {
-                        if (goalViewModel.canCreate()) {
-                            onCreateChase()
-                        } else {
-                            showChasePremiumDialog = true
-                        }
-                    } else {
-                        onOpenChaseList()
+            item(key = "summary") {
+                CascadeIn(index = 0, visible = revealed) {
+                    CollectorSummaryCard(summary = summary)
+                }
+            }
+
+            item(key = "entries") {
+                CascadeIn(index = 1, visible = revealed) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        CollectorEntryCard(
+                            title = AppLocale.collectorAlbumTitle,
+                            subtitle = if (albumRows.isEmpty()) AppLocale.collectorAlbumSubtitle
+                            else AppLocale.collectorAlbumCount(albumRows.size),
+                            icon = Icons.Default.PhotoLibrary,
+                            accent = AppColors.orange,
+                            previewUrls = recentAlbums.flatMap { it.previewUrls }.take(3),
+                            footer = if (albumRows.isEmpty()) null
+                            else AppLocale.albumSlots(summary.cardsInAlbums, albumRows.sumOf { it.size }),
+                            onClick = { if (albumRows.isEmpty()) createAlbum() else onOpenAlbumList() },
+                            modifier = Modifier.weight(1f)
+                        )
+                        CollectorEntryCard(
+                            title = AppLocale.collectorChaseTitle,
+                            subtitle = if (chaseRows.isEmpty()) AppLocale.collectorChaseSubtitle
+                            else AppLocale.collectorChaseCount(chaseRows.size),
+                            icon = Icons.Default.TrackChanges,
+                            accent = AppColors.red,
+                            previewUrls = emptyList(),
+                            footer = if (chaseRows.isEmpty()) null
+                            else AppLocale.collectorChasesDone(summary.chasesCompleted, chaseRows.size),
+                            ringPercent = if (chaseRows.isEmpty()) null else summary.averageChasePercent,
+                            onClick = { if (chaseRows.isEmpty()) createChase() else onOpenChaseList() },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
-            )
+            }
+
+            if (spotlight != null) {
+                item(key = "spotlight") {
+                    CascadeIn(index = 2, visible = revealed) {
+                        ChaseSpotlightCard(
+                            row = spotlight,
+                            onClick = { onChaseClick(spotlight.id) }
+                        )
+                    }
+                }
+            }
+
+            if (recentAlbums.isNotEmpty()) {
+                item(key = "recent-header") {
+                    CascadeIn(index = 3, visible = revealed) {
+                        SectionHeader(
+                            title = AppLocale.collectorRecentAlbums,
+                            actionLabel = AppLocale.collectorSeeAll,
+                            onAction = onOpenAlbumList
+                        )
+                    }
+                }
+                item(key = "recent-row") {
+                    CascadeIn(index = 4, visible = revealed) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding = PaddingValues(vertical = 2.dp)
+                        ) {
+                            items(recentAlbums, key = { it.id }) { row ->
+                                RecentAlbumCard(row = row, onClick = { onAlbumClick(row.id) })
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (isEmpty) {
+                item(key = "empty") {
+                    CollectorLabEmptyState(
+                        onCreateAlbum = { createAlbum() },
+                        onCreateChase = { createChase() }
+                    )
+                }
+            } else {
+                item(key = "quick-actions") {
+                    CascadeIn(index = 5, visible = revealed) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            QuickActionButton(
+                                label = AppLocale.albumCreateCta,
+                                icon = Icons.Default.PhotoAlbum,
+                                accent = AppColors.orange,
+                                onClick = { createAlbum() },
+                                modifier = Modifier.weight(1f)
+                            )
+                            QuickActionButton(
+                                label = AppLocale.chaseCreateCta,
+                                icon = Icons.Default.TrackChanges,
+                                accent = AppColors.red,
+                                onClick = { createChase() },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -114,168 +256,403 @@ fun AlbumListScreen(
             }
         )
     }
+
+    if (showAlbumPremiumDialog) {
+        PremiumRequiredDialog(
+            title = AppLocale.premiumAlbumLimitTitle,
+            message = AppLocale.premiumAlbumLimitMessage,
+            onDismiss = { showAlbumPremiumDialog = false },
+            onUpgrade = {
+                showAlbumPremiumDialog = false
+                onPremiumRequired()
+            }
+        )
+    }
 }
 
-@Composable
-private fun CollectorLabCardsRow(
-    albumCount: Int,
-    chaseCount: Int,
-    onAlbumClick: () -> Unit,
-    onChaseClick: () -> Unit
-) {
-    val albumSubtitle = if (albumCount == 0) {
-        AppLocale.collectorAlbumSubtitle
-    } else {
-        AppLocale.collectorAlbumCount(albumCount)
-    }
-    val chaseSubtitle = if (chaseCount == 0) {
-        AppLocale.collectorChaseSubtitle
-    } else {
-        AppLocale.collectorChaseCount(chaseCount)
-    }
+// ── Riassunto ─────────────────────────────────────────────────────────────────
 
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxWidth()
+@Composable
+private fun CollectorSummaryCard(summary: CollectorSummary) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        AppColors.orange.copy(alpha = 0.18f),
+                        AppColors.surface
+                    )
+                )
+            )
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        CollectorLabCard(
-            title = AppLocale.collectorAlbumTitle,
-            subtitle = albumSubtitle,
-            icon = Icons.Default.PhotoLibrary,
-            accent = AppColors.orange,
-            onClick = onAlbumClick,
-            modifier = Modifier.weight(1f)
-        )
-        CollectorLabCard(
-            title = AppLocale.collectorChaseTitle,
-            subtitle = chaseSubtitle,
-            icon = Icons.Default.TrackChanges,
-            accent = AppColors.red,
-            onClick = onChaseClick,
-            modifier = Modifier.weight(1f)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    AppLocale.albumsSummary(summary.albums, summary.cardsInAlbums),
+                    color = AppColors.textPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    if (summary.missingCards > 0) {
+                        AppLocale.collectorMissingCards(summary.missingCards)
+                    } else {
+                        AppLocale.collectorChasesDone(summary.chasesCompleted, summary.chases)
+                    },
+                    color = AppColors.textMuted,
+                    fontSize = 12.sp
+                )
+            }
+            if (summary.chases > 0) {
+                ProgressRing(
+                    percent = summary.averageChasePercent,
+                    size = 56.dp,
+                    stroke = 5.dp,
+                    accent = AppColors.red,
+                    labelSize = 12
+                )
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatTile(
+                label = AppLocale.collectorStatCards,
+                value = "${summary.cardsInAlbums}",
+                icon = Icons.Default.Style,
+                accent = AppColors.blue,
+                modifier = Modifier.weight(1f)
+            )
+            StatTile(
+                label = AppLocale.collectorStatValue,
+                value = formatEurCompact(summary.albumValue),
+                icon = Icons.Default.Savings,
+                accent = AppColors.green,
+                modifier = Modifier.weight(1f)
+            )
+            StatTile(
+                label = AppLocale.collectorStatChaseAvg,
+                value = "${summary.averageChasePercent.toInt()}%",
+                icon = Icons.Default.TrackChanges,
+                accent = AppColors.red,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 
+// ── Le due porte: Album e Chase ───────────────────────────────────────────────
+
 @Composable
-private fun CollectorLabCard(
+private fun CollectorEntryCard(
     title: String,
     subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     accent: Color,
+    previewUrls: List<String>,
+    footer: String?,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    ringPercent: Float? = null
 ) {
-    Card(
+    Column(
         modifier = modifier
-            .height(108.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = AppColors.surface)
+            .height(158.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(AppColors.surface)
+            .pressScale(onClick = onClick)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
         ) {
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(11.dp))
                     .background(accent.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
             }
-            Column {
-                Text(title, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Text(subtitle, color = AppColors.textMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            when {
+                ringPercent != null -> ProgressRing(
+                    percent = ringPercent,
+                    size = 38.dp,
+                    stroke = 3.dp,
+                    accent = accent,
+                    labelSize = 9
+                )
+                previewUrls.isNotEmpty() -> CoverCollage(
+                    urls = previewUrls,
+                    gradient = TypeColors.gradientFor("classic"),
+                    slotSize = 34.dp
+                )
+            }
+        }
+
+        Column {
+            Text(
+                title,
+                color = AppColors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+            Text(
+                subtitle,
+                color = AppColors.textMuted,
+                fontSize = 11.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (footer != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    footer,
+                    color = accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
 }
 
-// ── New Chase Card (CTA) ──────────────────────────────────────────────────────
-
-// ── Chase Card ────────────────────────────────────────────────────────────────
+// ── Vetrina: il chase piu' vicino al traguardo ────────────────────────────────
 
 @Composable
-internal fun ChaseCard(
-    goalAlbum: GoalAlbum,
-    ownedCount: Int,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val pct = if (goalAlbum.targetCardApiIds.isEmpty()) 0f
-    else (ownedCount.toFloat() / goalAlbum.targetCardApiIds.size * 100f).coerceIn(0f, 100f)
-
-    Card(
+private fun ChaseSpotlightCard(row: ChaseRow, onClick: () -> Unit) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = AppColors.surface)
+            .clip(RoundedCornerShape(18.dp))
+            .background(AppColors.surface)
+            .pressScale(onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Mini progress ring
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(52.dp)) {
-                CircularProgressIndicator(
-                    progress = { 1f },
-                    modifier = Modifier.size(52.dp),
-                    color = AppColors.background,
-                    strokeWidth = 4.dp
-                )
-                CircularProgressIndicator(
-                    progress = { pct / 100f },
-                    modifier = Modifier.size(52.dp),
-                    color = AppColors.orange,
-                    strokeWidth = 4.dp
-                )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(AppColors.red.copy(alpha = 0.18f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
                 Text(
-                    "${pct.toInt()}%",
-                    color = AppColors.textPrimary,
-                    fontSize = 11.sp,
+                    AppLocale.collectorSpotlightTitle,
+                    color = AppColors.red,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = AppColors.textMuted,
+                modifier = Modifier.size(16.dp)
+            )
+        }
 
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ProgressRing(percent = row.percent, size = 54.dp, accent = AppColors.red)
             Spacer(modifier = Modifier.width(12.dp))
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    goalAlbum.name,
+                    row.name,
                     color = AppColors.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    AppLocale.chaseCardsProgress(ownedCount, goalAlbum.targetCardApiIds.size),
-                    color = AppColors.textMuted,
+                    AppLocale.chaseCardsProgress(row.owned, row.total),
+                    color = AppColors.textSecondary,
                     fontSize = 12.sp
                 )
                 Text(
-                    goalAlbum.criteriaType.displayName() + (if (goalAlbum.criteriaValue.isNotBlank()) " · ${goalAlbum.criteriaValue}" else ""),
+                    AppLocale.collectorMissingCards(row.missing),
                     color = AppColors.textMuted,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    fontSize = 11.sp
                 )
             }
+        }
 
-            IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Delete, contentDescription = AppLocale.delete, tint = AppColors.textMuted, modifier = Modifier.size(18.dp))
-            }
+        FillBar(percent = row.percent, modifier = Modifier.fillMaxWidth(), accent = AppColors.red)
+    }
+}
+
+// ── Album recenti ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun RecentAlbumCard(
+    row: com.emabuia.pokevault.util.AlbumRow,
+    onClick: () -> Unit
+) {
+    val gradient = getThemeColors(row.theme)
+    Column(
+        modifier = Modifier
+            .width(132.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.surface)
+            .pressScale(onClick = onClick)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        CoverCollage(
+            urls = row.previewUrls,
+            gradient = gradient,
+            slotSize = 56.dp
+        )
+        Text(
+            row.name,
+            color = AppColors.textPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            AppLocale.albumSlots(row.used, row.size),
+            color = AppColors.textMuted,
+            fontSize = 11.sp
+        )
+        FillBar(percent = row.fillPercent, modifier = Modifier.fillMaxWidth(), accent = gradient.first())
+    }
+}
+
+// ── Azioni rapide ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun QuickActionButton(
+    label: String,
+    icon: ImageVector,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(accent.copy(alpha = 0.14f))
+            .pressScale(onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            label,
+            color = accent,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+// ── Stati vuoto e caricamento ─────────────────────────────────────────────────
+
+@Composable
+private fun CollectorLabEmptyState(
+    onCreateAlbum: () -> Unit,
+    onCreateChase: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            Icons.Default.AutoAwesomeMotion,
+            contentDescription = null,
+            tint = AppColors.textMuted.copy(alpha = 0.5f),
+            modifier = Modifier.size(52.dp)
+        )
+        Text(
+            AppLocale.collectorEmptyTitle,
+            color = AppColors.textSecondary,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            AppLocale.collectorEmptySubtitle,
+            color = AppColors.textMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 16.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            QuickActionButton(
+                label = AppLocale.albumCreateCta,
+                icon = Icons.Default.PhotoAlbum,
+                accent = AppColors.orange,
+                onClick = onCreateAlbum,
+                modifier = Modifier.weight(1f)
+            )
+            QuickActionButton(
+                label = AppLocale.chaseCreateCta,
+                icon = Icons.Default.TrackChanges,
+                accent = AppColors.red,
+                onClick = onCreateChase,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
+
+@Composable
+private fun CollectorLabSkeleton(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        SkeletonBlock(
+            modifier = Modifier.fillMaxWidth().height(150.dp),
+            shape = RoundedCornerShape(20.dp),
+            index = 0
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SkeletonBlock(
+                modifier = Modifier.weight(1f).height(158.dp),
+                shape = RoundedCornerShape(18.dp),
+                index = 1
+            )
+            SkeletonBlock(
+                modifier = Modifier.weight(1f).height(158.dp),
+                shape = RoundedCornerShape(18.dp),
+                index = 2
+            )
+        }
+        SkeletonBlock(
+            modifier = Modifier.fillMaxWidth().height(120.dp),
+            shape = RoundedCornerShape(18.dp),
+            index = 3
+        )
+    }
+}
+
+// ── Helpers condivisi con le altre schermate della sezione ────────────────────
+
+/** "Set · Paldea Evolved": il criterio del chase in una riga. */
+internal fun GoalAlbum.criteriaSummary(): String =
+    criteriaType.displayName() + (if (criteriaValue.isNotBlank()) " · $criteriaValue" else "")
 
 internal fun com.emabuia.pokevault.data.model.GoalCriteriaType.displayName(): String = when (this) {
     com.emabuia.pokevault.data.model.GoalCriteriaType.SET -> AppLocale.criteriaSet
@@ -283,130 +660,6 @@ internal fun com.emabuia.pokevault.data.model.GoalCriteriaType.displayName(): St
     com.emabuia.pokevault.data.model.GoalCriteriaType.SUPERTYPE -> AppLocale.criteriaSupertype
     com.emabuia.pokevault.data.model.GoalCriteriaType.TYPE -> AppLocale.criteriaType
     com.emabuia.pokevault.data.model.GoalCriteriaType.CUSTOM -> AppLocale.criteriaCustom
-}
-
-@Composable
-fun AlbumCard(
-    album: Album,
-    cardsCount: Int,
-    coverUrl: String,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
-    onEdit: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val themeColors = getThemeColors(album.theme)
-
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = AppColors.card)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Cover image or placeholder
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        brush = Brush.linearGradient(themeColors)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (coverUrl.isNotBlank()) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(ImageUrlUtils.safeProxiedImageUrl(coverUrl))
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = album.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.PhotoAlbum,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = album.name,
-                    color = AppColors.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (album.description.isNotBlank()) {
-                    Text(
-                        text = album.description,
-                        color = AppColors.textSecondary,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = AppLocale.albumSlots(cardsCount, album.size),
-                        color = AppColors.textMuted,
-                        fontSize = 12.sp
-                    )
-                    if (album.pokemonType.isNotBlank()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = AppLocale.translateType(album.pokemonType),
-                            color = themeColors.first(),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            // Actions
-            Column {
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = AppLocale.editAlbum,
-                        tint = AppColors.textMuted,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = AppLocale.delete,
-                        tint = AppColors.textMuted,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-        }
-    }
 }
 
 /** Vedi [TypeColors]: i colori dei tipi stanno tutti in un punto solo. */

@@ -51,6 +51,7 @@ import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.ui.wishlist.CreateWishlistDialog
+import com.emabuia.pokevault.ui.wishlist.WishlistPickerDialog
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.util.RarityInfo
@@ -1502,99 +1503,4 @@ fun TcgCardListRow(
             if (isOwned) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
         }
     }
-}
-
-@Composable
-private fun WishlistPickerDialog(
-    wishlists: List<Wishlist>,
-    selectedWishlistIds: Set<String>,
-    canCreateNew: Boolean,
-    onDismiss: () -> Unit,
-    onCreateNewRequested: () -> Unit,
-    onConfirmSelection: (Set<String>) -> Unit
-) {
-    var selectedIds by remember(wishlists, selectedWishlistIds) {
-        mutableStateOf(selectedWishlistIds.filterTo(mutableSetOf()) { id ->
-            wishlists.any { wishlist -> wishlist.id == id }
-        })
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = AppColors.surface,
-        title = {
-            Text(
-                text = AppLocale.wishlistAddToList,
-                color = AppColors.textPrimary,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(AppLocale.wishlistChooseList, color = AppColors.textMuted, fontSize = 13.sp)
-
-                wishlists.forEach { wishlist ->
-                    val selected = wishlist.id in selectedIds
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (selected) AppColors.blue.copy(alpha = 0.22f) else AppColors.card)
-                            .border(
-                                1.dp,
-                                if (selected) AppColors.blue else AppColors.textMuted.copy(alpha = 0.2f),
-                                RoundedCornerShape(12.dp)
-                            )
-                            .clickable {
-                                selectedIds = selectedIds.toMutableSet().apply {
-                                    if (!add(wishlist.id)) remove(wishlist.id)
-                                }
-                            }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (selected) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
-                            contentDescription = null,
-                            tint = if (selected) AppColors.blue else AppColors.textMuted,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = wishlist.name,
-                            color = AppColors.textPrimary,
-                            fontSize = 13.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirmSelection(selectedIds) },
-                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
-            ) {
-                Text(AppLocale.addCard, color = AppColors.textPrimary)
-            }
-        },
-        dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TextButton(onClick = onCreateNewRequested) {
-                    Text(
-                        text = if (canCreateNew) {
-                            AppLocale.wishlistCreateNewList
-                        } else {
-                            "${AppLocale.wishlistCreateNewList} • Premium"
-                        },
-                        color = if (canCreateNew) AppColors.purple else AppColors.gold
-                    )
-                }
-                TextButton(onClick = onDismiss) {
-                    Text(AppLocale.cancel, color = AppColors.textMuted)
-                }
-            }
-        }
-    )
 }

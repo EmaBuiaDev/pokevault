@@ -1508,5 +1508,184 @@ object AppLocale {
         "Hai raggiunto il limite di 1 Chase gratuito.\n\nPassa a Premium per creare Chase illimitati!"
     else
         "You've reached the 1 free Chase limit.\n\nGo Premium to create unlimited Chases!"
+
+    // ══════════════════════════════════════
+    // COLLECTOR LAB
+    // ══════════════════════════════════════
+
+    // Hub
+    val collectorLabSubtitle: String get() = if (isItalian)
+        "Album, raccoglitori e set da chiudere"
+    else
+        "Albums, binders and sets to close"
+    val collectorStatAlbums: String get() = if (isItalian) "Album" else "Albums"
+    val collectorStatCards: String get() = if (isItalian) "Carte inserite" else "Cards placed"
+    val collectorStatValue: String get() = if (isItalian) "Valore" else "Value"
+    val collectorStatChaseAvg: String get() = if (isItalian) "Media chase" else "Chase average"
+    val collectorSpotlightTitle: String get() = if (isItalian) "Quasi fatto" else "Almost there"
+    val collectorRecentAlbums: String get() = if (isItalian) "Album recenti" else "Recent albums"
+    val collectorSeeAll: String get() = if (isItalian) "Vedi tutti" else "See all"
+    val collectorEmptyTitle: String get() = if (isItalian)
+        "Il laboratorio è vuoto"
+    else
+        "The lab is empty"
+    val collectorEmptySubtitle: String get() = if (isItalian)
+        "Un album raccoglie le carte che hai; un chase segna quelle che ti mancano."
+    else
+        "An album holds the cards you own; a chase tracks the ones you are missing."
+    fun collectorMissingCards(count: Int): String = if (isItalian) {
+        if (count == 1) "1 carta mancante" else "$count carte mancanti"
+    } else {
+        if (count == 1) "1 missing card" else "$count missing cards"
+    }
+    fun collectorChasesDone(done: Int, total: Int): String = if (isItalian)
+        "$done di $total completati"
+    else
+        "$done of $total completed"
+
+    // Lista album
+    val albumSortRecent: String get() = if (isItalian) "Recenti" else "Recent"
+    val albumSortName: String get() = if (isItalian) "Nome" else "Name"
+    val albumSortFill: String get() = if (isItalian) "Riempimento" else "Filled"
+    val albumSortValue: String get() = if (isItalian) "Valore" else "Value"
+    val albumSearchHint: String get() = if (isItalian) "Cerca un album" else "Search an album"
+    val albumNoResults: String get() = if (isItalian)
+        "Nessun album corrisponde alla ricerca"
+    else
+        "No album matches your search"
+    val albumCreateCta: String get() = if (isItalian) "Crea un album" else "Create an album"
+    fun albumsSummary(albums: Int, cards: Int): String = if (isItalian)
+        "$albums album · $cards carte"
+    else
+        "$albums albums · $cards cards"
+
+    // Dettaglio album
+    val albumViewGrid: String get() = if (isItalian) "Griglia" else "Grid"
+    val albumViewBinder: String get() = if (isItalian) "Raccoglitore" else "Binder"
+    fun albumBinderPage(current: Int, total: Int): String = if (isItalian)
+        "Pagina $current di $total"
+    else
+        "Page $current of $total"
+    val albumCardActions: String get() = if (isItalian) "Azioni carta" else "Card actions"
+    val albumOpenCard: String get() = if (isItalian) "Apri dettaglio" else "Open details"
+    val albumSetCover: String get() = if (isItalian) "Imposta come copertina" else "Set as cover"
+    val albumCoverUpdated: String get() = if (isItalian) "Copertina aggiornata" else "Cover updated"
+    val albumMoveFirst: String get() = if (isItalian) "Porta all'inizio" else "Move to start"
+    val albumMoveBack: String get() = if (isItalian) "Sposta indietro" else "Move back"
+    val albumMoveForward: String get() = if (isItalian) "Sposta avanti" else "Move forward"
+    val albumRemoveCard: String get() = if (isItalian) "Rimuovi dall'album" else "Remove from album"
+    val albumValueLabel: String get() = if (isItalian) "Valore album" else "Album value"
+    val albumExpansionsLabel: String get() = if (isItalian) "Espansioni" else "Expansions"
+    val albumFilledLabel: String get() = if (isItalian) "Riempimento" else "Filled"
+    fun albumSlotsLeft(count: Int): String = if (isItalian) {
+        if (count == 1) "1 slot libero" else "$count slot liberi"
+    } else {
+        if (count == 1) "1 free slot" else "$count free slots"
+    }
+    fun albumAddSelected(count: Int): String = if (isItalian)
+        "Aggiungi $count carte"
+    else
+        "Add $count cards"
+    fun albumCardsAdded(count: Int): String = if (isItalian) {
+        if (count == 1) "1 carta aggiunta all'album" else "$count carte aggiunte all'album"
+    } else {
+        if (count == 1) "1 card added to the album" else "$count cards added to the album"
+    }
+    val undo: String get() = if (isItalian) "Annulla" else "Undo"
+
+    // Lista chase
+    val chaseSortClosest: String get() = if (isItalian) "Quasi fatti" else "Almost there"
+    val chaseSortName: String get() = if (isItalian) "Nome" else "Name"
+    val chaseSortRecent: String get() = if (isItalian) "Recenti" else "Recent"
+    val chaseSearchHint: String get() = if (isItalian) "Cerca un chase" else "Search a chase"
+    val chaseNoResults: String get() = if (isItalian)
+        "Nessun chase corrisponde alla ricerca"
+    else
+        "No chase matches your search"
+    val chaseCreateCta: String get() = if (isItalian) "Crea un chase" else "Create a chase"
+    val chaseCompleteBadge: String get() = if (isItalian) "Completo" else "Complete"
+    fun chaseMissingCount(count: Int): String = if (isItalian) {
+        if (count == 1) "1 mancante" else "$count mancanti"
+    } else {
+        if (count == 1) "1 missing" else "$count missing"
+    }
+
+    // Dettaglio chase
+    fun chaseTabAll(count: Int): String = if (isItalian) "Tutte ($count)" else "All ($count)"
+    fun chaseTabOwned(count: Int): String = if (isItalian) "Possedute ($count)" else "Owned ($count)"
+    fun chaseTabMissing(count: Int): String = if (isItalian) "Mancanti ($count)" else "Missing ($count)"
+    fun chaseTabDuplicates(count: Int): String = if (isItalian) "Doppie ($count)" else "Duplicates ($count)"
+    val chaseEmptyAll: String get() = if (isItalian) "Nessuna carta disponibile" else "No cards available"
+    val chaseEmptyOwned: String get() = if (isItalian)
+        "Non possiedi ancora nessuna carta di questo chase"
+    else
+        "You do not own any card of this chase yet"
+    val chaseEmptyMissing: String get() = if (isItalian)
+        "🎉 Hai completato questo chase!"
+    else
+        "🎉 You completed this chase!"
+    val chaseEmptyDuplicates: String get() = if (isItalian) "Nessun duplicato" else "No duplicates"
+    val chaseCardAdded: String get() = if (isItalian)
+        "Carta aggiunta alla collezione"
+    else
+        "Card added to collection"
+    val chaseCardAddError: String get() = if (isItalian)
+        "Errore durante l'aggiunta"
+    else
+        "Error while adding card"
+    val chaseLoadError: String get() = if (isItalian)
+        "Impossibile caricare le carte di questo chase"
+    else
+        "Could not load the cards of this chase"
+    val chaseSearchCards: String get() = if (isItalian) "Cerca fra le carte" else "Search the cards"
+    val chaseCardsNoResults: String get() = if (isItalian)
+        "Nessuna carta trovata"
+    else
+        "No card found"
+    val chaseSortCardsLabel: String get() = if (isItalian) "Ordina carte" else "Sort cards"
+    val chaseSortNumber: String get() = if (isItalian) "Numero" else "Number"
+    val chaseSortCardName: String get() = if (isItalian) "Nome" else "Name"
+    val chaseSortPriceDesc: String get() = if (isItalian) "Prezzo ↓" else "Price ↓"
+    val chaseSortPriceAsc: String get() = if (isItalian) "Prezzo ↑" else "Price ↑"
+    val chaseDensityToggle: String get() = if (isItalian) "Cambia densità" else "Change density"
+    val chaseCompletionCost: String get() = if (isItalian) "Costo per completare" else "Cost to complete"
+    fun chaseCompletionCostNote(priced: Int, total: Int): String = if (isItalian)
+        "stima su $priced mancanti di $total con prezzo noto"
+    else
+        "estimate over $priced of $total missing cards with a known price"
+    val chaseNextCheapest: String get() = if (isItalian)
+        "La mancante più economica"
+    else
+        "Cheapest missing card"
+    val chaseBiggestHurdle: String get() = if (isItalian)
+        "La mancante più cara"
+    else
+        "Priciest missing card"
+    val chaseCompletedTitle: String get() = if (isItalian)
+        "Chase completato"
+    else
+        "Chase completed"
+    val chaseCompletedSubtitle: String get() = if (isItalian)
+        "Hai tutte le carte di questo obiettivo."
+    else
+        "You own every card of this goal."
+    val chaseOwnedBadge: String get() = if (isItalian) "In collezione" else "In collection"
+    val chaseAddMissingToWishlist: String get() = if (isItalian)
+        "Mancanti nella wishlist"
+    else
+        "Missing to wishlist"
+    fun chaseWishlistAdded(count: Int): String = if (isItalian) {
+        if (count == 1) "1 carta aggiunta alla wishlist" else "$count carte aggiunte alla wishlist"
+    } else {
+        if (count == 1) "1 card added to the wishlist" else "$count cards added to the wishlist"
+    }
+    val chaseWishlistError: String get() = if (isItalian)
+        "Impossibile aggiornare la wishlist"
+    else
+        "Could not update the wishlist"
+    val chaseWishlistNoList: String get() = if (isItalian)
+        "Crea prima una wishlist dal menu Wishlist"
+    else
+        "Create a wishlist first from the Wishlist menu"
 }
 

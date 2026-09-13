@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.viewmodel
 
 import android.content.Context
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,6 +17,7 @@ import com.emabuia.pokevault.data.remote.ItalianCardAttribute
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
+import com.emabuia.pokevault.util.ChaseRow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -131,13 +133,36 @@ class GoalAlbumViewModel : ViewModel() {
      */
     fun getOwnedTargetCount(album: GoalAlbum): Int {
         if (album.targetCardApiIds.isEmpty()) return 0
-        val ownedIds = ownedCards
+        return album.targetCardApiIds.count { it in ownedApiIds }
+    }
+
+    /**
+     * Gli api id posseduti, indicizzati una volta sola.
+     *
+     * Prima l'insieme veniva ricostruito dentro [getOwnedTargetCount], quindi
+     * una volta per ogni chase della lista: con dieci chase e mille carte in
+     * collezione erano diecimila trim() per frame di scroll.
+     */
+    private val ownedApiIds: Set<String> by derivedStateOf {
+        ownedCards
             .asSequence()
             .filter { it.quantity >= 1 }
             .map { it.apiCardId.trim() }
             .toHashSet()
-        return album.targetCardApiIds.count { it in ownedIds }
     }
+
+    /** Le righe della lista chase: l'avanzamento e' gia' calcolato qui. */
+    fun chaseRows(criteriaLabel: (GoalAlbum) -> String): List<ChaseRow> =
+        goalAlbums.map { album ->
+            ChaseRow(
+                id = album.id,
+                name = album.name,
+                criteriaLabel = criteriaLabel(album),
+                owned = getOwnedTargetCount(album),
+                total = album.targetCardApiIds.size,
+                createdAtSeconds = album.createdAt?.seconds ?: 0L
+            )
+        }
 
     /**
      * Calcola il progresso on-the-fly confrontando targetCardApiIds con

@@ -754,6 +754,43 @@ class FirestoreRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    /** Inserimento multiplo: una scrittura sola per tutte le carte scelte. */
+    suspend fun addCardsToAlbum(albumId: String, cardIds: List<String>): Result<Unit> {
+        if (cardIds.isEmpty()) return Result.success(Unit)
+        return try {
+            albumsCollection.document(albumId)
+                .update("cardIds", FieldValue.arrayUnion(*cardIds.toTypedArray()))
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Riscrive l'ordine delle carte.
+     *
+     * arrayUnion/arrayRemove non bastano per riordinare o per rimettere una
+     * carta al posto da cui era stata togliata: l'ordine e' quello dell'array,
+     * quindi va scritto per intero.
+     */
+    suspend fun setAlbumCardIds(albumId: String, cardIds: List<String>): Result<Unit> {
+        return try {
+            albumsCollection.document(albumId)
+                .update("cardIds", cardIds)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** La copertina scelta a mano: prima il campo esisteva ma nessuno lo scriveva. */
+    suspend fun updateAlbumCover(albumId: String, coverImageUrl: String): Result<Unit> {
+        return try {
+            albumsCollection.document(albumId)
+                .update("coverImageUrl", coverImageUrl)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
     // --- WISHLIST METHODS ---
 
     fun getWishlists(): Flow<List<Wishlist>> = callbackFlow {
@@ -800,6 +837,22 @@ class FirestoreRepository {
         return try {
             wishlistsCollection.document(wishlistId)
                 .update("cardIds", FieldValue.arrayUnion(cardId))
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Piu' carte in una lista con una scrittura sola.
+     *
+     * Serve al Chase, che manda in wishlist tutte le mancanti in un colpo: una
+     * chiamata per carta su un set da duecento sarebbero duecento scritture.
+     */
+    suspend fun addCardsToWishlist(wishlistId: String, cardIds: List<String>): Result<Unit> {
+        if (cardIds.isEmpty()) return Result.success(Unit)
+        return try {
+            wishlistsCollection.document(wishlistId)
+                .update("cardIds", FieldValue.arrayUnion(*cardIds.toTypedArray()))
                 .await()
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }

@@ -156,6 +156,38 @@ class WishlistViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Aggiunge lo stesso blocco di carte a piu' liste.
+     *
+     * Una scrittura per lista, non per carta: e' quello che serve al Chase per
+     * spedire in wishlist tutte le mancanti di un set.
+     */
+    fun addCardsToWishlists(
+        wishlistIds: Set<String>,
+        cardIds: List<String>,
+        onResult: (Boolean) -> Unit = {}
+    ) {
+        if (wishlistIds.isEmpty() || cardIds.isEmpty()) {
+            onResult(false)
+            return
+        }
+        viewModelScope.launch {
+            val failed = supervisorScope {
+                wishlistIds
+                    .map { id -> async { repository.addCardsToWishlist(id, cardIds).isFailure } }
+                    .awaitAll()
+                    .any { it }
+            }
+            if (failed) {
+                errorMessage = AppLocale.chaseWishlistError
+                onResult(false)
+            } else {
+                successMessage = AppLocale.chaseWishlistAdded(cardIds.size)
+                onResult(true)
+            }
+        }
+    }
+
     fun updateCardWishlists(cardId: String, targetWishlistIds: Set<String>, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             val currentWishlistIds = getWishlistIdsForCard(cardId)
