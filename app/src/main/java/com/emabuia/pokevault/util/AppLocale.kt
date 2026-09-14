@@ -1163,6 +1163,93 @@ object AppLocale {
     val wishlistUpdateFailed: String get() = if (isItalian) "Impossibile aggiornare la wishlist" else "Could not update wishlist"
     fun wishlistCardsCount(count: Int) = if (isItalian) "$count carte" else "$count cards"
 
+    // Wishlist — priorita', budget e occasioni
+    val wishlistPriority: String get() = if (isItalian) "Priorità" else "Priority"
+    val wishlistPriorityHigh: String get() = if (isItalian) "Alta" else "High"
+    val wishlistPriorityMedium: String get() = if (isItalian) "Media" else "Medium"
+    val wishlistPriorityLow: String get() = if (isItalian) "Bassa" else "Low"
+    val wishlistTargetPrice: String get() = if (isItalian) "Prezzo obiettivo" else "Target price"
+    val wishlistTargetPriceHint: String get() = if (isItalian)
+        "Sotto questa cifra la carta viene segnalata come occasione. Vuoto = nessun tetto."
+    else
+        "Below this price the card is flagged as a deal. Empty = no cap."
+    val wishlistNote: String get() = if (isItalian) "Nota" else "Note"
+    val wishlistNotePlaceholder: String get() = if (isItalian)
+        "Es. solo Near Mint, versione reverse"
+    else
+        "E.g. Near Mint only, reverse version"
+    val wishlistCardSettings: String get() = if (isItalian) "Dettagli del desiderio" else "Wish details"
+    val wishlistCardUpdated: String get() = if (isItalian) "Carta aggiornata" else "Card updated"
+    val wishlistDealBadge: String get() = if (isItalian) "Occasione" else "Deal"
+    val wishlistOwnedBadge: String get() = if (isItalian) "Già presa" else "Owned"
+    val wishlistNoPrice: String get() = if (isItalian) "Prezzo n/d" else "No price"
+    fun wishlistTargetLabel(price: String) = if (isItalian) "Obiettivo $price" else "Target $price"
+    fun wishlistOverTarget(amount: String) = if (isItalian) "$amount sopra l'obiettivo" else "$amount over target"
+
+    val wishlistBudget: String get() = if (isItalian) "Budget" else "Budget"
+    val wishlistBudgetOptional: String get() = if (isItalian) "Budget (opzionale)" else "Budget (optional)"
+    val wishlistBudgetPlaceholder: String get() = if (isItalian) "Es. 50" else "E.g. 50"
+    val wishlistBudgetTitle: String get() = if (isItalian) "Budget della lista" else "List budget"
+    val wishlistBudgetMessage: String get() = if (isItalian)
+        "Quanto sei disposto a spendere per chiudere questa lista. Lascia vuoto per non metterci un tetto."
+    else
+        "How much you are willing to spend to close this list. Leave empty for no cap."
+    val wishlistBudgetUpdated: String get() = if (isItalian) "Budget aggiornato" else "Budget updated"
+    fun wishlistBudgetLeft(amount: String) = if (isItalian) "Restano $amount" else "$amount left"
+    fun wishlistOverBudget(amount: String) = if (isItalian) "Fuori budget di $amount" else "$amount over budget"
+
+    val wishlistMarkPurchased: String get() = if (isItalian) "L'ho presa" else "Got it"
+    val wishlistCardPurchased: String get() = if (isItalian)
+        "Carta spostata in collezione"
+    else
+        "Card moved to your collection"
+    val wishlistPurchaseFailed: String get() = if (isItalian)
+        "Impossibile aggiungere la carta alla collezione"
+    else
+        "Could not add the card to your collection"
+
+    // Wishlist — riassunti
+    val wishlistEstimatedCost: String get() = if (isItalian) "Costo stimato" else "Estimated cost"
+    val wishlistNextPick: String get() = if (isItalian) "La prossima da prendere" else "Next one to get"
+    fun wishlistOwnedCount(count: Int) = if (isItalian) "$count già prese" else "$count owned"
+    fun wishlistMissingCount(count: Int) = if (isItalian) "$count mancanti" else "$count missing"
+    fun wishlistDealsCount(count: Int) = if (isItalian) "$count occasioni" else "$count deals"
+    fun wishlistHighPriorityCount(count: Int) = if (isItalian) "$count in alta" else "$count high priority"
+    fun wishlistListsCount(count: Int) = if (isItalian) "$count liste" else "$count lists"
+    fun wishlistPricedNote(priced: Int, total: Int) = if (isItalian)
+        "Stima su $priced delle $total mancanti con prezzo noto"
+    else
+        "Estimated on $priced of $total missing cards with a known price"
+
+    // Wishlist — ricerca, ordinamenti, filtri
+    val wishlistSearchLists: String get() = if (isItalian) "Cerca lista" else "Search list"
+    val wishlistSearchCards: String get() = if (isItalian) "Cerca nella lista" else "Search in list"
+    val wishlistNoResults: String get() = if (isItalian) "Nessuna carta trovata" else "No cards found"
+    val wishlistNoListResults: String get() = if (isItalian) "Nessuna lista trovata" else "No lists found"
+    val wishlistSortRecent: String get() = if (isItalian) "Recenti" else "Recent"
+    val wishlistSortName: String get() = if (isItalian) "Nome" else "Name"
+    val wishlistSortSize: String get() = if (isItalian) "Carte" else "Cards"
+    val wishlistSortProgress: String get() = if (isItalian) "Avanzamento" else "Progress"
+    val wishlistSortPriority: String get() = if (isItalian) "Priorità" else "Priority"
+    val wishlistSortPriceDesc: String get() = if (isItalian) "Prezzo ↓" else "Price ↓"
+    val wishlistSortPriceAsc: String get() = if (isItalian) "Prezzo ↑" else "Price ↑"
+    val wishlistSortNumber: String get() = if (isItalian) "Numero" else "Number"
+    val wishlistFilterAll: String get() = if (isItalian) "Tutte" else "All"
+    val wishlistFilterHigh: String get() = if (isItalian) "Alta priorità" else "High priority"
+    val wishlistFilterDeals: String get() = if (isItalian) "Occasioni" else "Deals"
+    val wishlistFilterMissing: String get() = if (isItalian) "Mancanti" else "Missing"
+    val wishlistFilterOwned: String get() = if (isItalian) "Già prese" else "Owned"
+
+    // Wishlist — condivisione
+    val wishlistAddCards: String get() = if (isItalian) "Aggiungi carte" else "Add cards"
+    val wishlistShare: String get() = if (isItalian) "Condividi lista" else "Share list"
+    val wishlistShareChooser: String get() = if (isItalian) "Condividi wishlist" else "Share wishlist"
+    val wishlistShareTotal: String get() = if (isItalian) "Totale stimato" else "Estimated total"
+    val wishlistShareEmpty: String get() = if (isItalian)
+        "Non c'è ancora niente da condividere"
+    else
+        "Nothing to share yet"
+
     // Auth
     val welcomeTrainer: String get() = if (isItalian) "Benvenuto, Allenatore!" else "Welcome, Trainer!"
     val legendaryCollection: String get() = if (isItalian) "La tua collezione leggendaria" else "Your legendary collection"

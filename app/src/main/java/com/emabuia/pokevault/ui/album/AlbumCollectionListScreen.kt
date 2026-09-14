@@ -23,8 +23,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.ui.components.CollectorSearchField
 import com.emabuia.pokevault.ui.components.EmptyStateView
+import com.emabuia.pokevault.ui.components.FillBar
 import com.emabuia.pokevault.ui.components.SkeletonBlock
+import com.emabuia.pokevault.ui.components.SortChipRow
+import com.emabuia.pokevault.ui.components.formatEurCompact
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.AppColors

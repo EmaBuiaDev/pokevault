@@ -26,7 +26,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.model.GoalAlbum
 import com.emabuia.pokevault.ui.components.CascadeIn
+import com.emabuia.pokevault.ui.components.FillBar
 import com.emabuia.pokevault.ui.components.SkeletonBlock
+import com.emabuia.pokevault.ui.components.StatTile
+import com.emabuia.pokevault.ui.components.formatEurCompact
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*

@@ -540,7 +540,8 @@ fun AppNavigation(
                     val wishlistId = backStackEntry.arguments?.getString("wishlistId") ?: ""
                     WishlistDetailScreen(
                         wishlistId = wishlistId,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onAddCards = { navController.navigate(Routes.pokedexSearch()) }
                     )
                 }
 

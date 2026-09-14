@@ -370,10 +370,11 @@ fun SetDetailScreen(
                     showWishlistPremiumDialog = true
                 }
             },
-            onConfirmSelection = { selectedIds ->
+            showPriority = true,
+            onConfirmSelection = { selectedIds, priority ->
                 if (card != null) {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    wishlistViewModel.updateCardWishlists(card.id, selectedIds)
+                    wishlistViewModel.updateCardWishlists(card.id, selectedIds, priority)
                 }
                 pickerCard = null
             }
@@ -383,10 +384,10 @@ fun SetDetailScreen(
     if (createDialogCard != null) {
         CreateWishlistDialog(
             onDismiss = { createDialogCard = null },
-            onConfirm = { name, iconKey ->
+            onConfirm = { name, iconKey, budget ->
                 val card = createDialogCard
                 if (card != null) {
-                    wishlistViewModel.createWishlistAndAddCard(name, iconKey, card.id, isPremium) { success ->
+                    wishlistViewModel.createWishlistAndAddCard(name, iconKey, card.id, isPremium, budget) { success ->
                         if (success) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             createDialogCard = null

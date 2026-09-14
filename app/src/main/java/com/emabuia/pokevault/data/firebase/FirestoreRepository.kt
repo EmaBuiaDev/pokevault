@@ -8,8 +8,10 @@ import com.emabuia.pokevault.data.model.MatchLog
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.Tournament
 import com.emabuia.pokevault.data.model.Wishlist
+import com.emabuia.pokevault.data.model.WishlistItem
 import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -810,10 +812,16 @@ class FirestoreRepository {
 
     suspend fun saveWishlist(wishlist: Wishlist): Result<String> {
         return try {
+            // items e budget vanno riscritti insieme al resto: qui si usa set(),
+            // non update(), quindi un campo lasciato fuori dalla mappa sparisce
+            // dal documento. Rinominare una lista cancellava priorita' e note di
+            // tutte le sue carte.
             val data = hashMapOf(
                 "name" to wishlist.name,
                 "iconKey" to wishlist.iconKey,
                 "cardIds" to wishlist.cardIds,
+                "items" to wishlist.items.mapValues { (_, item) -> itemToMap(item) },
+                "budget" to wishlist.budget,
                 "createdAt" to (wishlist.createdAt ?: com.google.firebase.Timestamp.now())
             )
             val docRef = if (wishlist.id.isEmpty()) {
@@ -826,6 +834,43 @@ class FirestoreRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    /**
+     * I metadati di una carta (priorita', nota, tetto di prezzo).
+     *
+     * Il percorso si costruisce con [FieldPath.of] e non con la stringa
+     * "items.$cardId": gli id di carta contengono punti e trattini, e in un
+     * percorso testuale il punto separa i livelli — "sv3pt5.25" finirebbe in un
+     * campo annidato che non esiste.
+     */
+    suspend fun updateWishlistItem(
+        wishlistId: String,
+        cardId: String,
+        item: WishlistItem
+    ): Result<Unit> {
+        return try {
+            wishlistsCollection.document(wishlistId)
+                .update(FieldPath.of("items", cardId), itemToMap(item))
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun updateWishlistBudget(wishlistId: String, budget: Double): Result<Unit> {
+        return try {
+            wishlistsCollection.document(wishlistId)
+                .update("budget", budget)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    private fun itemToMap(item: WishlistItem): Map<String, Any> = mapOf(
+        "priority" to item.priority,
+        "note" to item.note,
+        "targetPrice" to item.targetPrice,
+        "addedAt" to (item.addedAt ?: com.google.firebase.Timestamp.now())
+    )
+
     suspend fun deleteWishlist(wishlistId: String): Result<Unit> {
         return try {
             wishlistsCollection.document(wishlistId).delete().await()
@@ -833,11 +878,26 @@ class FirestoreRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun addCardToWishlist(wishlistId: String, cardId: String): Result<Unit> {
+    /**
+     * [item] arriva valorizzato quando la carta entra con una priorita' scelta
+     * dall'utente; con null resta senza metadati e vale il default, come tutte
+     * le carte aggiunte prima che i metadati esistessero.
+     */
+    suspend fun addCardToWishlist(
+        wishlistId: String,
+        cardId: String,
+        item: WishlistItem? = null
+    ): Result<Unit> {
         return try {
-            wishlistsCollection.document(wishlistId)
-                .update("cardIds", FieldValue.arrayUnion(cardId))
-                .await()
+            val doc = wishlistsCollection.document(wishlistId)
+            if (item == null) {
+                doc.update("cardIds", FieldValue.arrayUnion(cardId)).await()
+            } else {
+                doc.update(
+                    FieldPath.of("cardIds"), FieldValue.arrayUnion(cardId),
+                    FieldPath.of("items", cardId), itemToMap(item)
+                ).await()
+            }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -860,8 +920,14 @@ class FirestoreRepository {
 
     suspend fun removeCardFromWishlist(wishlistId: String, cardId: String): Result<Unit> {
         return try {
+            // Via anche i metadati: lasciarli renderebbe il documento una
+            // discarica di priorita' e note di carte non piu' in lista, che
+            // tornerebbero fuori riaggiungendo la stessa carta.
             wishlistsCollection.document(wishlistId)
-                .update("cardIds", FieldValue.arrayRemove(cardId))
+                .update(
+                    FieldPath.of("cardIds"), FieldValue.arrayRemove(cardId),
+                    FieldPath.of("items", cardId), FieldValue.delete()
+                )
                 .await()
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
@@ -875,7 +941,10 @@ class FirestoreRepository {
                 .await()
 
             for (doc in snapshot.documents) {
-                doc.reference.update("cardIds", FieldValue.arrayRemove(cardId)).await()
+                doc.reference.update(
+                    FieldPath.of("cardIds"), FieldValue.arrayRemove(cardId),
+                    FieldPath.of("items", cardId), FieldValue.delete()
+                ).await()
             }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }

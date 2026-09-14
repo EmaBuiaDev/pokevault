@@ -32,8 +32,11 @@ import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.model.GoalCriteriaType
 import com.emabuia.pokevault.data.remote.ItalianCardAttribute
 import com.emabuia.pokevault.data.remote.TcgCard
+import com.emabuia.pokevault.ui.components.CollectorSearchField
 import com.emabuia.pokevault.ui.components.ErrorStateView
 import com.emabuia.pokevault.ui.components.SkeletonBlock
+import com.emabuia.pokevault.ui.components.formatEur
+import com.emabuia.pokevault.ui.components.formatEurCompact
 import com.emabuia.pokevault.ui.components.holoFoil
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.*
@@ -432,7 +435,9 @@ fun GoalAlbumDetailScreen(
                 wishlistTargets = null
                 scope.launch { snackbarHostState.showSnackbar(AppLocale.chaseWishlistNoList) }
             },
-            onConfirmSelection = { selectedIds ->
+            // La priorita' non si chiede quando le carte sono un blocco intero:
+            // deciderla per tutte le mancanti di un set non vorrebbe dire niente.
+            onConfirmSelection = { selectedIds, _ ->
                 wishlistTargets = null
                 if (selectedIds.isNotEmpty()) {
                     wishlistViewModel.addCardsToWishlists(selectedIds, cardIds) { success ->
