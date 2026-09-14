@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,16 +23,44 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.ui.components.SkeletonBlock
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import kotlinx.coroutines.delay
+
+/**
+ * Quanto si aspetta prima di ammettere che si sta caricando.
+ *
+ * La cache locale di Firestore risponde quasi sempre entro pochi frame: uno
+ * scheletro che parte subito trasforma quell'istante in un lampo di "sto
+ * caricando" sotto i menu, che e' il difetto che stiamo togliendo, non la sua
+ * cura. Sotto questa soglia la sezione tiene solo lo spazio, in silenzio;
+ * oltre, lo scheletro entra e l'attesa e' vera.
+ */
+private const val SkeletonGraceMs = 300L
+
+/** Carta della riga piu' il nome sotto: lo spazio che la sezione tiene mentre tace. */
+private val CollectionRowHeight = 186.dp
 
 @Composable
 fun CollectionSection(
     cards: List<PokemonCard>,
+    isLoading: Boolean = false,
     onCardClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // Il ramo dello scheletro si accende solo se l'attesa supera la soglia.
+    // Riparte da capo a ogni cambio di [isLoading], cosi' un secondo
+    // caricamento (ricerca, rientro) ha la stessa cortesia del primo.
+    val showSkeleton by produceState(initialValue = false, isLoading) {
+        value = false
+        if (isLoading) {
+            delay(SkeletonGraceMs)
+            value = true
+        }
+    }
+
     Column(modifier = modifier.padding(top = 24.dp)) {
         Row(
             modifier = Modifier
@@ -44,17 +74,38 @@ fun CollectionSection(
                 style = MaterialTheme.typography.headlineMedium
             )
 
-            Text(
-                text = AppLocale.cardsCount(cards.size),
-                color = AppColors.textMuted,
-                fontSize = 14.sp
-            )
+            when {
+                // Finche' Firestore non ha risposto il conteggio non esiste:
+                // "0 carte" sarebbe una risposta sbagliata, non un'attesa.
+                isLoading && showSkeleton -> SkeletonBlock(
+                    modifier = Modifier.width(56.dp).height(14.dp),
+                    shape = RoundedCornerShape(7.dp)
+                )
+
+                isLoading -> Spacer(modifier = Modifier.width(56.dp).height(14.dp))
+
+                else -> Text(
+                    text = AppLocale.cardsCount(cards.size),
+                    color = AppColors.textMuted,
+                    fontSize = 14.sp
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (cards.isEmpty()) {
-            Box(
+        when {
+            // Una lista vuota mentre il caricamento e' ancora in corso non
+            // vuol dire "collezione vuota": vuol dire "non lo so ancora".
+            // Senza questo ramo l'invito ad aggiungere la prima carta
+            // lampeggiava a ogni avvio, anche su collezioni piene.
+            isLoading && showSkeleton -> CollectionRowSkeleton()
+
+            // Attesa breve: la Home si apre gia' fatta, la riga si limita a
+            // tenere il proprio posto e a riempirlo quando i dati arrivano.
+            isLoading -> Spacer(modifier = Modifier.height(CollectionRowHeight))
+
+            cards.isEmpty() -> Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(40.dp),
@@ -66,8 +117,8 @@ fun CollectionSection(
                     textAlign = TextAlign.Center
                 )
             }
-        } else {
-            LazyRow(
+
+            else -> LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -77,6 +128,33 @@ fun CollectionSection(
                         onClick = { onCardClick(card.id) }
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Attesa della riga collezione: tre carte fantasma della stessa misura di
+ * quelle vere, cosi' l'arrivo dei dati e' una sostituzione e non un salto.
+ */
+@Composable
+private fun CollectionRowSkeleton() {
+    Row(
+        modifier = Modifier.padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        repeat(3) { index ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                SkeletonBlock(
+                    modifier = Modifier.width(120.dp).height(168.dp),
+                    index = index
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                SkeletonBlock(
+                    modifier = Modifier.width(80.dp).height(12.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    index = index
+                )
             }
         }
     }

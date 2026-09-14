@@ -112,6 +112,7 @@ fun HomeScreen(
             // Sezione Collezione con dati reali
             CollectionSection(
                 cards = viewModel.getFilteredCards(),
+                isLoading = viewModel.isLoading,
                 onCardClick = { cardId -> onNavigate(Routes.cardDetail(cardId)) }
             )
 
