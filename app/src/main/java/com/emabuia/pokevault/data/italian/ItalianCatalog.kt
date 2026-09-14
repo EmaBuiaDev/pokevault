@@ -21,7 +21,13 @@ data class ItalianCardRecord(
     val ps: String? = null,
     val attacchi: List<ItalianAttackRecord> = emptyList(),
     val regolaSpeciale: String? = null,
-    val rarity: String? = null
+    val rarity: String? = null,
+    /**
+     * Stadio evolutivo canonico ("Basic", "Stage1", "Stage2", "VMAX"...),
+     * nostro in D1 dallo schema/009. E' il campo che dice se un Pokemon si
+     * puo' calare in campo dalla mano: null su Trainer ed Energie.
+     */
+    val stage: String? = null
 ) {
     fun imageReference(): ItalianImageReference? = ItalianCatalogNormalizer.toImageReference(cardId)
 

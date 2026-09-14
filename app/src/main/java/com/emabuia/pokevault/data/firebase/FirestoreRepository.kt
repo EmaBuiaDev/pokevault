@@ -382,6 +382,23 @@ class FirestoreRepository {
         }
     }
 
+    /**
+     * Scrive lo stadio evolutivo su una carta gia' in collezione.
+     *
+     * Un solo campo, `subtypes`, come updateCardSetName: niente updateCard, che
+     * riscrive il documento intero e ricalcola i contatori dell'utente da una
+     * lettura di cache (vedi il commento li' sopra). Qui non cambia ne'
+     * quantita' ne' valore, solo un metadato che mancava.
+     */
+    suspend fun updateCardSubtypes(cardId: String, subtypes: List<String>): Result<Unit> {
+        return try {
+            cardsCollection.document(cardId).update("subtypes", subtypes).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteCard(cardId: String): Result<Unit> {
         return try {
             // Leggiamo quantità e valore dalla cache locale (istantaneo) per

@@ -155,6 +155,13 @@ fun HandSimulatorScreen(
         savedHands = localStore.getSavedHands(selectedDeckId)
     }
 
+    // Le carte importate prima che il catalogo avesse lo stadio sono in
+    // collezione senza: qui si riparano, perche' e' questa la schermata in cui
+    // un Pokemon contato come Base al posto di una Fase 1 cambia i numeri.
+    LaunchedEffect(Unit) {
+        viewModel.ensureCardStagesFromCatalog(context)
+    }
+
     // Un solo mazzo: sceglierlo a mano sarebbe un tocco imposto senza scelta.
     LaunchedEffect(decks) {
         if (selectedDeckId == null && decks.size == 1) {

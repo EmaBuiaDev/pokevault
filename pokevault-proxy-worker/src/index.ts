@@ -815,12 +815,13 @@ type D1CardRow = {
   regola_speciale: string | null;
   attacchi_json: string;
   rarity: string | null;
+  stage: string | null;
 };
 
 // Shared row -> payload mapping, used by both /ita/catalog.json (buildCatalogJsonFromD1)
 // and /v1/expansions/{id}/cards, so the two endpoints can never drift apart on field
 // names -- both must match ItalianCardRecord on the Android side (cardId, espansioneId,
-// nome, tipo, ps, attacchi, regolaSpeciale, rarity).
+// nome, tipo, ps, attacchi, regolaSpeciale, rarity, stage).
 function mapCardRow(r: D1CardRow) {
   return {
     cardId: r.card_id,
@@ -831,6 +832,9 @@ function mapCardRow(r: D1CardRow) {
     attacchi: JSON.parse(r.attacchi_json || '[]'),
     regolaSpeciale: r.regola_speciale,
     rarity: r.rarity,
+    // Lo stadio evolutivo (schema/009): e' il campo con cui l'app distingue un
+    // Pokemon che si puo' calare in campo dalla mano da uno che va evoluto.
+    stage: r.stage,
   };
 }
 
@@ -838,7 +842,7 @@ async function buildCatalogJsonFromD1(db: D1Database): Promise<string | null> {
   try {
     const { results } = await db
       .prepare(
-        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity
+        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage
          FROM cards c JOIN expansions e ON e.id = c.expansion_id
          WHERE e.published = 1`
       )
@@ -1996,7 +2000,7 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
     // /v1/expansions listing.
     const { results } = await db
       .prepare(
-        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity
+        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage
          FROM cards c JOIN expansions e ON e.id = c.expansion_id
          WHERE c.expansion_id = ?1 AND e.published = 1
            AND NOT EXISTS (

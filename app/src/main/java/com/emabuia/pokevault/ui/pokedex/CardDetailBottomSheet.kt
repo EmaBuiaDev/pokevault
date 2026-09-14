@@ -438,7 +438,10 @@ fun CardDetailBottomSheet(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (card.supertype.isNotBlank()) DetailInfoRow("Supertipo", card.supertype)
-                        if (card.subtypes != null) DetailInfoRow("Sottotipo", card.subtypes.joinToString(", "))
+                        if (card.subtypes != null) DetailInfoRow(
+                            "Sottotipo",
+                            card.subtypes.joinToString(", ") { AppLocale.translateSubtype(it) }
+                        )
                         if (card.hp != null) DetailInfoRow("HP", card.hp)
                         if (card.types != null) DetailInfoRow("Tipo", card.types.joinToString(", "))
                         if (card.rarity != null) DetailInfoRow("Rarità", card.rarity)

@@ -5,6 +5,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
@@ -25,7 +26,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class DeckLabViewModel : ViewModel() {
     private val repository = FirestoreRepository()
@@ -34,6 +37,13 @@ class DeckLabViewModel : ViewModel() {
 
     companion object {
         private val legacyClassificationBackfillStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+        private val cardStageBackfillStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /** Prefisso di apiCardId per le carte che vengono dal catalogo italiano. */
+        private const val ITALIAN_CARD_ID_PREFIX = "ita:"
+
+        /** Quanto aspettare la prima emissione del listener carte prima di lasciar perdere. */
+        private const val STAGE_BACKFILL_WAIT_MS = 15_000L
     }
 
     var decks by mutableStateOf<List<Deck>>(emptyList())
@@ -124,6 +134,61 @@ class DeckLabViewModel : ViewModel() {
         if (!legacyClassificationBackfillStarted.compareAndSet(false, true)) return
         viewModelScope.launch {
             repository.backfillLegacyCardClassificationMetadata()
+        }
+    }
+
+    /**
+     * Riempie lo stadio mancante sulle carte gia' in collezione.
+     *
+     * Le carte importate prima che il catalogo avesse la colonna `stage`
+     * (schema/009) sono in Firestore con `subtypes` vuoto: l'Hand-Simulator le
+     * conta tutte come Base, quindi una Fase 1 in mano risulta giocabile e il
+     * tasso di mulligan esce ottimista. Reimportare il mazzo non e' una
+     * risposta accettabile per l'utente, e il dato serve una volta sola:
+     * leggiamo lo stadio dal catalogo (gia' in cache, nessuna chiamata in piu')
+     * e lo scriviamo sui documenti che ne sono privi.
+     *
+     * Scrive un campo solo, e solo dove manca: non tocca ne' quantita' ne'
+     * valore, e una carta che lo stadio ce l'ha gia' non viene riscritta.
+     */
+    fun ensureCardStagesFromCatalog(context: Context) {
+        if (!cardStageBackfillStarted.compareAndSet(false, true)) return
+        val appContext = context.applicationContext
+        viewModelScope.launch {
+            // Le carte arrivano da un listener Firestore: alla prima
+            // composizione la lista e' ancora vuota. Il timeout evita che una
+            // collezione davvero vuota lasci qui una coroutine in attesa per
+            // tutta la vita del ViewModel.
+            val cards = withTimeoutOrNull(STAGE_BACKFILL_WAIT_MS) {
+                snapshotFlow { ownedCards }.first { it.isNotEmpty() }
+            } ?: run {
+                cardStageBackfillStarted.set(false)
+                return@launch
+            }
+
+            val targets = cards.filter {
+                it.subtypes.isEmpty() &&
+                    it.apiCardId.startsWith(ITALIAN_CARD_ID_PREFIX) &&
+                    CardClassifier.classify(it) == CardClassifier.POKEMON
+            }
+            if (targets.isEmpty()) return@launch
+
+            val stages = pokeTcgRepository.italianStagesByCardId(
+                context = appContext,
+                cardIds = targets.mapTo(mutableSetOf()) { it.apiCardId }
+            )
+            if (stages.isEmpty()) {
+                // Il catalogo non ha (ancora) lo stadio di queste carte, o non era
+                // raggiungibile: non e' un tentativo consumato, si riprova alla
+                // prossima apertura della schermata.
+                cardStageBackfillStarted.set(false)
+                return@launch
+            }
+
+            targets.forEach { card ->
+                val stage = stages[card.apiCardId] ?: return@forEach
+                repository.updateCardSubtypes(card.id, listOf(stage))
+            }
         }
     }
 

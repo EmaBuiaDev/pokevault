@@ -21,6 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import sharp from 'sharp';
+import { canonicalStage } from './lib/tcgdex-stage.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workerRoot = path.resolve(__dirname, '..');
@@ -226,19 +227,26 @@ async function main() {
       danno: a.damage != null ? String(a.damage) : '',
       descrizione: a.effect ?? '',
     }));
+    // Lo stadio arriva dal payload italiano gia' scaricato ("Livello 1"),
+    // canonicalStage() lo riporta alla grafia inglese con cui lo scrivono i
+    // backfill: una sola grafia per stadio in tutta la colonna.
     return `(${sqlString(cardId)}, ${sqlString(setId)}, ${sqlString(e.ref.localId)}, ${sqlString(e.detail.name)}, ` +
       `${sqlString((e.detail.types ?? []).join(', ') || null)}, ${sqlString(e.detail.hp ?? null)}, NULL, ` +
-      `${sqlString(JSON.stringify(attacchi))}, ${sqlString(e.hasImage ? 'ok' : 'missing')}, ${e.hasImage ? 1 : 0})`;
+      `${sqlString(JSON.stringify(attacchi))}, ${sqlString(canonicalStage(e.detail.stage))}, ` +
+      `${sqlString(e.hasImage ? 'ok' : 'missing')}, ${e.hasImage ? 1 : 0})`;
   });
   for (let i = 0; i < cardRows.length; i += 50) {
     lines.push(
-      'INSERT INTO cards (card_id, expansion_id, card_number, nome, tipo, ps, regola_speciale, attacchi_json, image_status, image_webp) VALUES\n' +
+      'INSERT INTO cards (card_id, expansion_id, card_number, nome, tipo, ps, regola_speciale, attacchi_json, stage, image_status, image_webp) VALUES\n' +
       cardRows.slice(i, i + 50).join(',\n') +
       // image_status sale e non scende: un rilancio con una rete ballerina non
       // deve declassare a 'missing' una carta la cui immagine e' gia' su R2 da
       // una run precedente. A ripulire i falsi 'ok' ci pensa comunque il
       // fallback 404 del Worker, che mostra il placeholder.
       '\nON CONFLICT(card_id) DO UPDATE SET nome=excluded.nome, tipo=excluded.tipo, ps=excluded.ps, attacchi_json=excluded.attacchi_json, ' +
+      // Lo stadio non si azzera da solo: se una run senza stage (o TCGdex che
+      // smette di esporlo) tornasse NULL, COALESCE tiene quello gia' scritto.
+      'stage=COALESCE(excluded.stage, cards.stage), ' +
       "image_status=CASE WHEN excluded.image_status='ok' THEN 'ok' ELSE cards.image_status END, " +
       'image_webp=MAX(excluded.image_webp, cards.image_webp);'
     );

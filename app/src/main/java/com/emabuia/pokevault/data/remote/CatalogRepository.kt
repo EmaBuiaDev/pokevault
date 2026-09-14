@@ -1195,6 +1195,33 @@ class CatalogRepository {
         return toItalianTcgCard(record = record, setInfo = setInfo)
     }
 
+    /**
+     * Stadio evolutivo delle carte italiane richieste, per apiCardId.
+     *
+     * Una sola passata sul catalogo invece di una findExactItalianCard per
+     * carta: quella scorre tutti i ~15.000 record calcolando una
+     * imageReference() a regex per ognuno, e moltiplicarla per le carte di un
+     * mazzo intero si sente. Le chiavi sono gli stessi "ita:set:numero" che
+     * buildItalianCardId scrive in apiCardId quando la carta entra in
+     * collezione, quindi il chiamante puo' passare direttamente quelli.
+     *
+     * Mappa vuota se il catalogo non e' disponibile: lo stadio mancante e' un
+     * dato in meno, mai un errore da mostrare.
+     */
+    suspend fun italianStagesByCardId(context: Context, cardIds: Set<String>): Map<String, String> {
+        if (cardIds.isEmpty()) return emptyMap()
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false).getOrNull()
+            ?: return emptyMap()
+
+        val stages = HashMap<String, String>()
+        for (record in catalog.cards) {
+            val stage = record.stage?.trim()?.takeIf { it.isNotBlank() } ?: continue
+            val cardId = buildItalianCardId(record)
+            if (cardId in cardIds) stages[cardId] = stage
+        }
+        return stages
+    }
+
     suspend fun findExactCardInCatalog(
         name: String?,
         setCode: String?,
@@ -2652,7 +2679,14 @@ class CatalogRepository {
             id = buildItalianCardId(record),
             name = record.nome.ifBlank { baseCard?.name.orEmpty() },
             supertype = baseCard?.supertype?.takeIf { it.isNotBlank() } ?: deriveItalianSupertype(record),
-            subtypes = baseCard?.subtypes ?: emptyList(),
+            // Lo stadio del nostro D1 (schema/009) viene PRIMA dei sottotipi della
+            // carta inglese di appoggio: quest'ultima manca quasi sempre, ed e' il
+            // motivo per cui ogni carta importata dal catalogo italiano arrivava
+            // senza stadio -- quindi contata come Base dall'Hand-Simulator, anche
+            // quando era una Fase 1.
+            subtypes = record.stage?.trim()?.takeIf { it.isNotBlank() }?.let { listOf(it) }
+                ?: baseCard?.subtypes
+                ?: emptyList(),
             hp = record.ps?.takeIf { it.isNotBlank() } ?: baseCard?.hp,
             // Le poche carte a doppio tipo arrivano da D1 come "Tipo1, Tipo2" in un unico
             // campo (vedi types.join(', ') in ingest/backfill-tipo-tcgdex.mjs): va risplittato

@@ -139,6 +139,13 @@ object AppLocale {
         "stadium" to "Stadio",
         "basic" to "Base",
         "stage 1" to "Livello 1",
+        // La grafia senza spazio e' quella con cui lo stadio arriva dal nostro
+        // catalogo (schema/009, canonicalStage): stessa carta, stessa etichetta.
+        "stage1" to "Livello 1",
+        "stage2" to "Livello 2",
+        "mega" to "MEGA",
+        "break" to "BREAK",
+        "level-up" to "Livello X",
         "stage 2" to "Livello 2",
         "vmax" to "VMAX",
         "vstar" to "VSTAR",

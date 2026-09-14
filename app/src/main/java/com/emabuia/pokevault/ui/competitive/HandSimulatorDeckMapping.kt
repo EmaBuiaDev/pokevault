@@ -37,36 +37,78 @@ internal fun buildDeckCardPool(deck: Deck, ownedCards: List<PokemonCard>): List<
 /**
  * Vero quando lo stadio della carta non e' ricavabile dai dati.
  *
- * Le carte importate dal percorso di fallback di DeckLabViewModel arrivano con
- * subtypes vuoto e hp segnaposto: isBasicPokemon() le conta tutte come Basic,
- * perche' non trova marcatori di evoluzione. Su un mazzo che ne contiene molte
- * il tasso di mulligan risulta piu' basso del reale. Non possiamo indovinare lo
+ * Due strade ci portano qui: le carte importate dal percorso di fallback di
+ * DeckLabViewModel, che arrivano con subtypes vuoto, e quelle il cui sottotipo
+ * non nomina lo stadio ("ex", "V", "Ultra Beast"). In entrambi i casi
+ * isBasicPokemon() le conta come Base, e su un mazzo che ne contiene molte il
+ * tasso di mulligan risulta piu' basso del reale. Non possiamo indovinare lo
  * stadio, ma possiamo dirlo all'utente invece di presentare numeri precisi.
  */
 private fun PokemonCard.hasUnknownStage(): Boolean =
-    classify() == CardClassifier.POKEMON && hp > 0 && subtypes.isEmpty()
+    classify() == CardClassifier.POKEMON && hp > 0 && !hasKnownStage()
+
+private fun PokemonCard.hasKnownStage(): Boolean =
+    subtypes.map { it.normalizeStage() }.any { sub ->
+        sub.isNotEmpty() && (
+            EVOLUTION_STAGE_MARKERS.any { sub.contains(it) } ||
+                BASIC_STAGE_MARKERS.any { sub.contains(it) }
+            )
+    }
+
+/**
+ * Stadi che NON si possono calare in campo dalla mano.
+ *
+ * Le stringhe sono gia' normalizzate (minuscole, senza spazi ne' punteggiatura),
+ * cosi' "Stage 1", "Stage1" e "STAGE-1" cadono tutte sullo stesso marcatore. Le
+ * forme italiane ci sono perche' il campo `stage` di PokeWallet arriva nella
+ * lingua della carta: senza "fase1"/"stadio1" una Fase 1 non trovava alcun
+ * marcatore di evoluzione e finiva contata come Base.
+ */
+private val EVOLUTION_STAGE_MARKERS = listOf(
+    "stage1", "stage2", "stage3",
+    "stadio1", "stadio2",
+    "fase1", "fase2",
+    // TCGdex, da cui arriva il nostro catalogo, traduce Stage con "Livello":
+    // il backfill lo riporta alla grafia inglese, ma questi due coprono le
+    // carte entrate in collezione prima che la colonna esistesse.
+    "livello1", "livello2",
+    "evolution", "evoluzione", "evolved", "evoluto",
+    "vmax", "vstar", "vunion",
+    "mega",
+    "break", "lvx", "levelup", "legend",
+    "restored", "risorto"
+)
+
+/** Marcatori espliciti di carta Base, nelle due lingue in cui arrivano i dati. */
+private val BASIC_STAGE_MARKERS = listOf("basic", "base")
+
+private fun String.normalizeStage(): String = lowercase().filter { it.isLetterOrDigit() }
 
 internal fun PokemonCard.isBasicPokemon(): Boolean {
-    // A Pokémon is Basic if:
-    // 1. It's classified as Pokémon and has HP > 0
-    // 2. Either explicitly has "Basic" subtype OR has no evolution markers
+    // Basic vuol dire una cosa sola: la carta si puo' mettere in campo dalla
+    // mano. E' il presupposto di tutto il simulatore -- mulligan, starter rate,
+    // riga "N Basic" sotto la mano -- quindi una Fase 1 contata come Base non e'
+    // un'imprecisione di etichetta: e' un numero sbagliato.
     val isPokemon = classify() == CardClassifier.POKEMON
     if (!isPokemon || hp <= 0) return false
 
-    val subtypesLower = subtypes.map { it.lowercase() }
+    val normalized = subtypes.map { it.normalizeStage() }.filter { it.isNotEmpty() }
 
-    // Check if explicitly marked as Basic
-    if (subtypesLower.any { it.contains("basic") || it.contains("base") }) {
+    // Gli stadi evolutivi vanno letti PRIMA di "base": su una carta con piu'
+    // sottotipi ("Stage 2", "ex") e' l'evoluzione a decidere.
+    if (normalized.any { sub -> EVOLUTION_STAGE_MARKERS.any { sub.contains(it) } }) {
+        return false
+    }
+
+    if (normalized.any { sub -> BASIC_STAGE_MARKERS.any { sub.contains(it) } }) {
         return true
     }
 
-    // Check if it's NOT an evolution type - if no evolution markers, it's implicitly Basic
-    val evolutionMarkers = listOf("stage 1", "stage 2", "stage1", "stage2", "v-max", "vmax", "vstar", "v-star", "lv.x")
-    val hasEvolutionMarker = subtypesLower.any { subtype ->
-        evolutionMarkers.any { marker -> subtype.contains(marker) }
-    }
-
-    return !hasEvolutionMarker
+    // Nessun marcatore riconosciuto: restano i sottotipi che non dicono lo
+    // stadio ("ex", "V", "Ultra Beast") e le carte senza sottotipi. Contarle
+    // come Base e' la scelta ottimista di sempre, ed e' quella che
+    // deckAccuracyWarnings segnala all'utente.
+    return true
 }
 
 internal fun PokemonCard.isSupporterCard(): Boolean {
