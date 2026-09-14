@@ -13,6 +13,7 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,13 +21,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -346,49 +347,48 @@ fun AppNavigation(
     val selectedTab = BottomTab.forRoute(currentRoute)
     val showBottomBar = selectedTab != null
 
-    Column(
+    // La schermata che entra copre quella che esce invece di dissolversi sopra
+    // di lei. Il fade dura un terzo della corsa: quel tanto che basta a
+    // smussare il bordo, non abbastanza per vedere in trasparenza la pagina di
+    // prima per tutta la transizione. Lo scivolamento resta intero, ed e' lui a
+    // dire che si sta andando avanti.
+    val coverFade = (motion.screenEnter / 3).coerceAtLeast(0)
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AppColors.background)
     ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                // Quando la barra c'e' e' lei a scansare la navigation bar di
-                // sistema: senza consumare qui gli insets in basso le schermate li
-                // applicherebbero di nuovo, e sopra la barra si aprirebbe un vuoto.
-                .then(
-                    if (showBottomBar) {
-                        Modifier.consumeWindowInsets(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
-                        )
-                    } else {
-                        Modifier
-                    }
-                )
-        ) {
             // Un solo SharedTransitionLayout attorno a tutto il grafo: le
             // schermate che partecipano alla transizione della carta lo trovano
             // via CompositionLocal, le altre lo ignorano.
-            SharedTransitionLayout {
+            SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
             CompositionLocalProvider(LocalSharedTransitionScope provides this) {
             NavHost(
                 navController = navController,
                 startDestination = startDestination,
+                modifier = Modifier.fillMaxSize(),
                 // Entrata e uscita non sono simmetriche di proposito: la schermata
                 // nuova arriva con un filo di scivolamento (un dodicesimo di larghezza,
-                // non una pagina intera), quella che esce si limita a spegnersi. Cosi'
-                // il movimento resta corto e non fa aspettare a ogni tocco.
+                // non una pagina intera), quella che esce scivola via dalla parte
+                // opposta della meta' di quello. Cosi' il movimento resta corto e non
+                // fa aspettare a ogni tocco.
                 enterTransition = {
-                    fadeIn(tween(motion.screenEnter)) +
+                    fadeIn(tween(coverFade)) +
                         slideInHorizontally(tween(motion.screenEnter, easing = easing)) { it / 12 }
                 },
-                exitTransition = { fadeOut(tween(motion.screenExit)) },
+                exitTransition = {
+                    fadeOut(tween(motion.screenExit)) +
+                        slideOutHorizontally(tween(motion.screenExit, easing = easing)) { -it / 24 }
+                },
                 popEnterTransition = {
-                    fadeIn(tween(motion.screenEnter)) +
+                    fadeIn(tween(coverFade)) +
                         slideInHorizontally(tween(motion.screenEnter, easing = easing)) { -it / 12 }
                 },
-                popExitTransition = { fadeOut(tween(motion.screenExit)) }
+                popExitTransition = {
+                    fadeOut(tween(motion.screenExit)) +
+                        slideOutHorizontally(tween(motion.screenExit, easing = easing)) { it / 24 }
+                }
             ) {
                 // ── Auth ──
                 composable(Routes.AUTH) {
@@ -413,20 +413,24 @@ fun AppNavigation(
 
                 // ── Home ──
                 composable(Routes.HOME) {
-                    HomeScreen(
-                        onNavigate = { route -> navController.navigate(route) },
-                        userName = authViewModel.uiState.userName
-                    )
+                    BottomBarSpacing {
+                        HomeScreen(
+                            onNavigate = { route -> navController.navigate(route) },
+                            userName = authViewModel.uiState.userName
+                        )
+                    }
                 }
 
                 // ── Collezione ──
                 composable(Routes.COLLECTION) {
                     CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
-                        CollectionScreen(
-                            onBack = { navController.popBackStack() },
-                            onAddCard = { navController.navigate(Routes.ADD_CARD) },
-                            onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
-                        )
+                        BottomBarSpacing {
+                            CollectionScreen(
+                                onBack = { navController.popBackStack() },
+                                onAddCard = { navController.navigate(Routes.ADD_CARD) },
+                                onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
+                            )
+                        }
                     }
                 }
 
@@ -472,14 +476,16 @@ fun AppNavigation(
                         }
                     )
                 ) { backStackEntry ->
-                    SetsListScreen(
-                        openCardSearch = backStackEntry.arguments?.getBoolean("search") == true,
-                        onBack = { navController.popBackStack() },
-                        onSetClick = { setId, macro ->
-                            // Naviga al dettaglio set
-                            navController.navigate(Routes.setDetail(setId, setId, macro))
-                        }
-                    )
+                    BottomBarSpacing {
+                        SetsListScreen(
+                            openCardSearch = backStackEntry.arguments?.getBoolean("search") == true,
+                            onBack = { navController.popBackStack() },
+                            onSetClick = { setId, macro ->
+                                // Naviga al dettaglio set
+                                navController.navigate(Routes.setDetail(setId, setId, macro))
+                            }
+                        )
+                    }
                 }
 
                 // ── Dettaglio Set ──
@@ -510,9 +516,11 @@ fun AppNavigation(
 
                 // ── Statistiche ──
                 composable(Routes.STATS) {
-                    StatsScreen(
-                        onBack = { navController.popBackStack() }
-                    )
+                    BottomBarSpacing {
+                        StatsScreen(
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
 
                 // ── Scanner ──
@@ -750,22 +758,50 @@ fun AppNavigation(
             }
             }
 
-            if (showBottomBar) {
-                ScannerFab(
-                    onClick = { navController.navigate(Routes.SCANNER) },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 20.dp, bottom = 16.dp)
-                )
-            }
-        }
+        if (showBottomBar) {
+            ScannerFab(
+                onClick = { navController.navigate(Routes.SCANNER) },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .padding(end = 20.dp, bottom = PokeVaultBottomBarHeight + 16.dp)
+            )
 
-        if (selectedTab != null) {
             PokeVaultBottomBar(
                 selected = selectedTab,
-                onSelect = { tab -> navController.navigateToBottomTab(tab) }
+                onSelect = { tab -> navController.navigateToBottomTab(tab) },
+                modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+    }
+}
+
+/**
+ * Lo spazio che la bottom bar toglie alla schermata che la mostra.
+ *
+ * La barra sta sopra il NavHost, non in colonna con lui: il contenitore delle
+ * schermate e' sempre alto quanto lo schermo, e uscire verso una sezione senza
+ * barra — Gradate, Competitivo, Collector Lab, Wishlist — non lo fa piu'
+ * crescere di colpo. Prima cresceva, e la schermata che stava uscendo veniva
+ * rimisurata a meta' transizione: sulla Home, che e' scrollabile, il contenuto
+ * si riassestava e la riga della collezione risaliva mentre la sezione nuova
+ * arrivava. Era proprio quel guizzo.
+ *
+ * Il prezzo e' che lo spazio se lo devono togliere le quattro schermate della
+ * barra. E' un prezzo giusto: per loro la barra c'e' sempre, quindi il padding
+ * e' una costante e non cambia mai sotto i loro piedi.
+ */
+@Composable
+private fun BottomBarSpacing(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            // Applicati e consumati qui: sotto la barra ci pensa lei a scansare
+            // la navigation bar di sistema, le schermate non devono rifarlo.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+            .padding(bottom = PokeVaultBottomBarHeight)
+    ) {
+        content()
     }
 }
 

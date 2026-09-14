@@ -88,6 +88,21 @@ enum class BottomTab(val route: String, val icon: ImageVector) {
     }
 }
 
+/** Riga delle quattro voci. */
+private val BottomBarRowHeight = 72.dp
+
+/** Filo di separazione sopra la riga. */
+private val BottomBarHairline = 1.dp
+
+/**
+ * Quanto la barra occupa sopra gli insets di sistema.
+ *
+ * La barra e' sovrapposta al NavHost e non impilata sopra di esso, quindi non e'
+ * piu' il layout a togliere questo spazio alle schermate: se lo tolgono loro,
+ * leggendo questa costante. Serve che sia pubblica per quello.
+ */
+val PokeVaultBottomBarHeight: androidx.compose.ui.unit.Dp = BottomBarHairline + BottomBarRowHeight
+
 /**
  * Barra di navigazione principale.
  *
@@ -130,7 +145,7 @@ fun PokeVaultBottomBar(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(1.dp)
+                    .height(BottomBarHairline)
                     .background(hairline)
             )
 
@@ -148,7 +163,7 @@ fun PokeVaultBottomBar(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(72.dp)
+                        .height(BottomBarRowHeight)
                 ) {
                     tabs.forEach { tab ->
                         BottomBarItem(

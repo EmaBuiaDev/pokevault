@@ -30,6 +30,9 @@ import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.GradedCardsViewModel
 
+/** Quanto si aspetta prima di ammettere che si sta caricando. */
+private const val SpinnerGraceMs = 300L
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GradedCardsScreen(
@@ -38,6 +41,18 @@ fun GradedCardsScreen(
     viewModel: GradedCardsViewModel = viewModel()
 ) {
     val state = viewModel.uiState
+
+    // Stessa cortesia della riga collezione in Home: sotto la soglia la
+    // schermata non dichiara niente. La cache di Firestore risponde quasi
+    // sempre entro pochi frame, e la rotella a schermo pieno trasformava quel
+    // lampo nel "si e' visto qualcos'altro prima della sezione".
+    val showSpinner by produceState(initialValue = false, state.isLoading) {
+        value = false
+        if (state.isLoading) {
+            kotlinx.coroutines.delay(SpinnerGraceMs)
+            value = true
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -57,7 +72,9 @@ fun GradedCardsScreen(
 
         if (state.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AppColors.blue)
+                if (showSpinner) {
+                    CircularProgressIndicator(color = AppColors.blue)
+                }
             }
         } else if (state.totalGraded == 0) {
             // Empty state
