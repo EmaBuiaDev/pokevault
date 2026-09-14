@@ -830,6 +830,8 @@ class FirestoreRepository {
             val data = hashMapOf(
                 "name" to wishlist.name,
                 "iconKey" to wishlist.iconKey,
+                "accentKey" to wishlist.accentKey,
+                "budgetEur" to wishlist.budgetEur,
                 "cardIds" to wishlist.cardIds,
                 "createdAt" to (wishlist.createdAt ?: com.google.firebase.Timestamp.now())
             )
@@ -879,6 +881,23 @@ class FirestoreRepository {
         return try {
             wishlistsCollection.document(wishlistId)
                 .update("cardIds", FieldValue.arrayRemove(cardId))
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Piu' carte fuori da una lista con una scrittura sola.
+     *
+     * Serve alla pulizia delle carte gia' comprate: una lista che si e' riempita
+     * per mesi puo' averne venti da togliere insieme, e venti scritture per un
+     * gesto solo sono venti occasioni di fallire a meta'.
+     */
+    suspend fun removeCardsFromWishlist(wishlistId: String, cardIds: List<String>): Result<Unit> {
+        if (cardIds.isEmpty()) return Result.success(Unit)
+        return try {
+            wishlistsCollection.document(wishlistId)
+                .update("cardIds", FieldValue.arrayRemove(*cardIds.toTypedArray()))
                 .await()
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }

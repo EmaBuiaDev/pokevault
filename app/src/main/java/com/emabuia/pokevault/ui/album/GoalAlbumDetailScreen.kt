@@ -32,8 +32,13 @@ import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.model.GoalCriteriaType
 import com.emabuia.pokevault.data.remote.ItalianCardAttribute
 import com.emabuia.pokevault.data.remote.TcgCard
+import com.emabuia.pokevault.ui.components.LabSearchField
+import com.emabuia.pokevault.ui.components.CompletionBanner
 import com.emabuia.pokevault.ui.components.ErrorStateView
+import com.emabuia.pokevault.ui.components.ProgressRing
 import com.emabuia.pokevault.ui.components.SkeletonBlock
+import com.emabuia.pokevault.ui.components.formatEur
+import com.emabuia.pokevault.ui.components.formatEurCompact
 import com.emabuia.pokevault.ui.components.holoFoil
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.*
@@ -278,7 +283,7 @@ fun GoalAlbumDetailScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                CollectorSearchField(
+                LabSearchField(
                     value = query,
                     onValueChange = { query = it },
                     hint = AppLocale.chaseSearchCards,

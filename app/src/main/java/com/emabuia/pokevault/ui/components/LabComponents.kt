@@ -1,4 +1,4 @@
-package com.emabuia.pokevault.ui.album
+package com.emabuia.pokevault.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -38,19 +38,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.emabuia.pokevault.ui.components.holoFoil
-import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.ui.theme.AppMotion
 import com.emabuia.pokevault.util.ImageUrlUtils
 import java.util.Locale
 
 /**
- * Pezzi comuni del Collector Lab.
+ * Pezzi comuni delle schermate che tengono il conto di una collezione.
  *
- * Album e Chase mostrano le stesse tre cose — quanto sei avanti, quanto vale,
- * che carte ci sono dentro — e prima ognuno le disegnava a modo suo: due anelli
- * di progresso diversi, tre modi di scrivere un prezzo, nessuna ricerca.
+ * Album, Chase e Wishlist mostrano le stesse tre cose — quanto sei avanti,
+ * quanto vale, che carte ci sono dentro — e prima ognuno le disegnava a modo
+ * suo: due anelli di progresso diversi, tre modi di scrivere un prezzo,
+ * nessuna ricerca.
+ *
+ * Stavano in `ui/album` perche' il Collector Lab e' stato il primo ad averne
+ * bisogno; ora che anche la Wishlist parla questa lingua vivono qui.
  */
 
 internal fun formatEur(value: Double): String =
@@ -240,11 +242,12 @@ internal fun CoverCollage(
 
 /** Campo di ricerca della sezione, uguale in tutte le liste. */
 @Composable
-internal fun CollectorSearchField(
+internal fun LabSearchField(
     value: String,
     onValueChange: (String) -> Unit,
     hint: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    accent: Color = AppColors.orange
 ) {
     OutlinedTextField(
         value = value,
@@ -257,12 +260,12 @@ internal fun CollectorSearchField(
         shape = RoundedCornerShape(14.dp),
         modifier = modifier.fillMaxWidth(),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = AppColors.orange,
+            focusedBorderColor = accent,
             unfocusedBorderColor = AppColors.textMuted.copy(alpha = 0.35f),
-            cursorColor = AppColors.orange,
+            cursorColor = accent,
             focusedTextColor = AppColors.textPrimary,
             unfocusedTextColor = AppColors.textPrimary,
-            focusedLeadingIconColor = AppColors.orange,
+            focusedLeadingIconColor = accent,
             unfocusedLeadingIconColor = AppColors.textMuted,
             focusedContainerColor = AppColors.card,
             unfocusedContainerColor = AppColors.card

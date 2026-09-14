@@ -21,8 +21,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.emabuia.pokevault.ui.components.LabSearchField
 import com.emabuia.pokevault.ui.components.EmptyStateView
+import com.emabuia.pokevault.ui.components.FillBar
+import com.emabuia.pokevault.ui.components.ProgressRing
 import com.emabuia.pokevault.ui.components.SkeletonBlock
+import com.emabuia.pokevault.ui.components.SortChipRow
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.AppColors
@@ -167,7 +171,7 @@ fun ChaseListScreen(
         ) {
             item(key = "controls") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CollectorSearchField(
+                    LabSearchField(
                         value = query,
                         onValueChange = { query = it },
                         hint = AppLocale.chaseSearchHint

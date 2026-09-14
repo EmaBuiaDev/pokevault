@@ -1154,9 +1154,9 @@ object AppLocale {
     val wishlistEdit: String get() = if (isItalian) "Modifica Wishlist" else "Edit Wishlist"
     val wishlistName: String get() = if (isItalian) "Nome lista" else "List name"
     val wishlistNamePlaceholder: String get() = if (isItalian) "Es. Chase cards Kanto" else "E.g. Kanto chase cards"
-    val wishlistChooseIcon: String get() = if (isItalian) "Scegli un'icona" else "Choose an icon"
+    val wishlistChooseIcon: String get() = if (isItalian) "A cosa serve questa lista" else "What this list is for"
+    val wishlistChooseColor: String get() = if (isItalian) "Colore" else "Colour"
     val wishlistAddToList: String get() = if (isItalian) "Aggiungi alla wishlist" else "Add to wishlist"
-    val wishlistChooseList: String get() = if (isItalian) "Scegli una lista" else "Choose a list"
     val wishlistCreateNewList: String get() = if (isItalian) "Nuova lista" else "New list"
     val wishlistEmpty: String get() = if (isItalian) "Nessuna wishlist" else "No wishlists yet"
     val wishlistEmptySubtitle: String get() = if (isItalian) "Crea la tua prima lista dei desideri" else "Create your first wishlist"
@@ -1169,6 +1169,116 @@ object AppLocale {
     val wishlistUpdated: String get() = if (isItalian) "Wishlist aggiornata" else "Wishlist updated"
     val wishlistUpdateFailed: String get() = if (isItalian) "Impossibile aggiornare la wishlist" else "Could not update wishlist"
     fun wishlistCardsCount(count: Int) = if (isItalian) "$count carte" else "$count cards"
+
+    // Wishlist — icone: dicono a cosa serve la lista, non che Pokémon piace
+    val wishlistIconPokeBall: String get() = if (isItalian) "Da prendere" else "To get"
+    val wishlistIconGreatBall: String get() = if (isItalian) "Priorità" else "Priority"
+    val wishlistIconUltraBall: String get() = if (isItalian) "Costose" else "Pricey"
+    val wishlistIconMasterBall: String get() = if (isItalian) "Carta della vita" else "Grail"
+    val wishlistIconBudget: String get() = if (isItalian) "Occasioni" else "Bargains"
+    val wishlistIconTrade: String get() = if (isItalian) "Da scambiare" else "To trade"
+    val wishlistIconGift: String get() = if (isItalian) "Regalo" else "Gift"
+    val wishlistIconGraded: String get() = if (isItalian) "Da gradare" else "To grade"
+    val wishlistIconDeck: String get() = if (isItalian) "Per il deck" else "For the deck"
+    val wishlistIconSet: String get() = if (isItalian) "Completa set" else "Set completion"
+
+    // Wishlist — budget
+    val wishlistBudget: String get() = if (isItalian) "Budget" else "Budget"
+    val wishlistBudgetOptional: String get() = if (isItalian) "Facoltativo" else "Optional"
+    val wishlistBudgetHint: String get() = if (isItalian)
+        "Il tetto che ti dai per questa lista"
+    else
+        "The cap you set for this list"
+    val wishlistOverBudget: String get() = if (isItalian) "Fuori budget" else "Over budget"
+    fun wishlistBudgetLeft(amount: String) = if (isItalian) "Restano $amount" else "$amount left"
+    fun wishlistBudgetOver(amount: String) = if (isItalian) "$amount oltre" else "$amount over"
+    fun wishlistAffordable(count: Int) = if (isItalian) {
+        if (count == 1) "1 carta dentro il budget" else "$count carte dentro il budget"
+    } else {
+        if (count == 1) "1 card within budget" else "$count cards within budget"
+    }
+
+    // Wishlist — riassunto e righe
+    val wishlistStatLists: String get() = if (isItalian) "Liste" else "Lists"
+    val wishlistStatCards: String get() = if (isItalian) "Carte" else "Cards"
+    val wishlistStatCost: String get() = if (isItalian) "Ti manca" else "Still to buy"
+    val wishlistStatTaken: String get() = if (isItalian) "Già prese" else "Already got"
+    val wishlistCompleteBadge: String get() = if (isItalian) "Tutte prese" else "All got"
+    val wishlistOwnedBadge: String get() = if (isItalian) "Presa" else "Got"
+    val wishlistSearchHint: String get() = if (isItalian) "Cerca una lista" else "Search a list"
+    val wishlistCardSearchHint: String get() = if (isItalian) "Cerca carta, set o rarità" else "Search card, set or rarity"
+    val wishlistNoResults: String get() = if (isItalian) "Nessuna lista trovata" else "No list found"
+    val wishlistNoCardResults: String get() = if (isItalian) "Nessuna carta con questi filtri" else "No card matches these filters"
+    fun wishlistTakenCount(owned: Int, total: Int) = if (isItalian) {
+        "$owned di $total già prese"
+    } else {
+        "$owned of $total already got"
+    }
+    fun wishlistMissingCount(count: Int) = if (isItalian) {
+        if (count == 1) "1 da comprare" else "$count da comprare"
+    } else {
+        if (count == 1) "1 to buy" else "$count to buy"
+    }
+    fun wishlistUnpricedNote(count: Int) = if (isItalian) {
+        if (count == 1) "1 senza prezzo" else "$count senza prezzo"
+    } else {
+        if (count == 1) "1 without a price" else "$count without a price"
+    }
+    val wishlistPartialTotal: String get() = if (isItalian)
+        "Totale parziale: alcune carte stanno ancora arrivando"
+    else
+        "Partial total: some cards are still loading"
+
+    // Wishlist — ordinamenti e filtri
+    val wishlistSortClosest: String get() = if (isItalian) "Quasi fatte" else "Almost done"
+    val wishlistSortRecent: String get() = if (isItalian) "Recenti" else "Recent"
+    val wishlistSortName: String get() = if (isItalian) "Nome" else "Name"
+    val wishlistSortCost: String get() = if (isItalian) "Costo" else "Cost"
+    val wishlistSortCards: String get() = if (isItalian) "Carte" else "Cards"
+    val wishlistCardSortNumber: String get() = if (isItalian) "Numero" else "Number"
+    val wishlistCardSortName: String get() = if (isItalian) "Nome" else "Name"
+    val wishlistCardSortPriceDesc: String get() = if (isItalian) "Più care" else "Priciest"
+    val wishlistCardSortPriceAsc: String get() = if (isItalian) "Più economiche" else "Cheapest"
+    val wishlistCardSortSet: String get() = if (isItalian) "Set" else "Set"
+    val wishlistFilterAll: String get() = if (isItalian) "Tutte" else "All"
+    val wishlistFilterMissing: String get() = if (isItalian) "Da comprare" else "To buy"
+    val wishlistFilterOwned: String get() = if (isItalian) "Già prese" else "Already got"
+
+    // Wishlist — carte già prese
+    val wishlistCheapest: String get() = if (isItalian) "La più economica" else "Cheapest"
+    val wishlistMostExpensive: String get() = if (isItalian) "La più cara" else "Priciest"
+    val wishlistCleanupTitle: String get() = if (isItalian) "Togliere le carte già prese?" else "Remove the cards you already got?"
+    fun wishlistCleanupMessage(count: Int) = if (isItalian) {
+        if (count == 1) {
+            "1 carta di questa lista è già nella tua collezione."
+        } else {
+            "$count carte di questa lista sono già nella tua collezione."
+        }
+    } else {
+        if (count == 1) {
+            "1 card in this list is already in your collection."
+        } else {
+            "$count cards in this list are already in your collection."
+        }
+    }
+    val wishlistCleanupAction: String get() = if (isItalian) "Togli dalla lista" else "Remove from list"
+    fun wishlistCleanupDone(count: Int) = if (isItalian) {
+        if (count == 1) "1 carta tolta dalla lista" else "$count carte tolte dalla lista"
+    } else {
+        if (count == 1) "1 card removed from the list" else "$count cards removed from the list"
+    }
+    val wishlistAllTakenTitle: String get() = if (isItalian) "Lista completata" else "List complete"
+    val wishlistAllTakenSubtitle: String get() = if (isItalian)
+        "Hai tutte le carte di questa lista"
+    else
+        "You own every card in this list"
+
+    // Wishlist — selezione delle liste
+    val wishlistAlreadyIn: String get() = if (isItalian) "Già dentro" else "Already in"
+    val wishlistPickerSubtitle: String get() = if (isItalian)
+        "Una carta può stare in più liste"
+    else
+        "A card can live in more than one list"
 
     // Auth
     val welcomeTrainer: String get() = if (isItalian) "Benvenuto, Allenatore!" else "Welcome, Trainer!"

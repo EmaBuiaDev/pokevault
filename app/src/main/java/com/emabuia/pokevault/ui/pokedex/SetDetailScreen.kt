@@ -50,7 +50,7 @@ import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
-import com.emabuia.pokevault.ui.wishlist.CreateWishlistDialog
+import com.emabuia.pokevault.ui.wishlist.WishlistEditorDialog
 import com.emabuia.pokevault.ui.wishlist.WishlistPickerDialog
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ImageUrlUtils
@@ -381,12 +381,12 @@ fun SetDetailScreen(
     }
 
     if (createDialogCard != null) {
-        CreateWishlistDialog(
+        WishlistEditorDialog(
             onDismiss = { createDialogCard = null },
-            onConfirm = { name, iconKey ->
+            onConfirm = { draft ->
                 val card = createDialogCard
                 if (card != null) {
-                    wishlistViewModel.createWishlistAndAddCard(name, iconKey, card.id, isPremium) { success ->
+                    wishlistViewModel.createWishlistAndAddCard(draft, card.id, isPremium) { success ->
                         if (success) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             createDialogCard = null

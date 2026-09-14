@@ -30,7 +30,11 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.Album
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.ui.components.LabSearchField
+import com.emabuia.pokevault.ui.components.FillBar
 import com.emabuia.pokevault.ui.components.NotFoundOrLoadingView
+import com.emabuia.pokevault.ui.components.StatTile
+import com.emabuia.pokevault.ui.components.formatEurCompact
 import com.emabuia.pokevault.ui.components.holoFoil
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.*
@@ -801,7 +805,7 @@ private fun AddCardsBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            CollectorSearchField(
+            LabSearchField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 hint = AppLocale.albumSearchPlaceholder
