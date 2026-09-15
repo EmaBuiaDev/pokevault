@@ -554,10 +554,16 @@ fun AppNavigation(
 
                 // ── Carte Gradate ──
                 composable(Routes.GRADED) {
-                    GradedCardsScreen(
-                        onBack = { navController.popBackStack() },
-                        onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
-                    )
+                    // Come la collezione: la slab toccata e l'immagine grande del
+                    // dettaglio sono lo stesso oggetto che cambia posto. La chiave
+                    // e' l'id del documento, che e' anche quello che finisce nella
+                    // rotta di dettaglio.
+                    CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
+                        GradedCardsScreen(
+                            onBack = { navController.popBackStack() },
+                            onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
+                        )
+                    }
                 }
 
                 // ── Competitive Hub ──

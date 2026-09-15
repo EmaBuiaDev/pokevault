@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -187,6 +188,74 @@ fun StatsSkeleton(
                     .height(28.dp),
                 index = 6 + index
             )
+        }
+    }
+}
+
+/**
+ * Scheletro della sezione Gradate: tre numeri, la barra della distribuzione, la
+ * ricerca coi suoi filtri e quattro slab.
+ *
+ * Le proporzioni sono quelle vere della griglia — l'etichetta dell'ente sopra,
+ * la carta, il piede — cosi' quando il contenuto arriva non c'e' nessun salto.
+ */
+@Composable
+fun GradedSkeleton(
+    modifier: Modifier = Modifier,
+    horizontalPadding: Dp = 16.dp
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontalPadding),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            repeat(3) { column ->
+                SkeletonBlock(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(84.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    index = column
+                )
+            }
+        }
+
+        SkeletonBlock(
+            modifier = Modifier.fillMaxWidth().height(10.dp),
+            shape = RoundedCornerShape(5.dp),
+            index = 3
+        )
+
+        SkeletonBlock(
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(14.dp),
+            index = 4
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(88, 70, 70, 58).forEachIndexed { index, width ->
+                SkeletonBlock(
+                    modifier = Modifier.width(width.dp).height(30.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    index = 5 + index
+                )
+            }
+        }
+
+        repeat(2) { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(2) { column ->
+                    SkeletonBlock(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(0.52f),
+                        shape = RoundedCornerShape(16.dp),
+                        index = 9 + row * 2 + column
+                    )
+                }
+            }
         }
     }
 }

@@ -1804,5 +1804,91 @@ object AppLocale {
         "Crea prima una wishlist dal menu Wishlist"
     else
         "Create a wishlist first from the Wishlist menu"
+
+    // ══════════════════════════════════════
+    // GRADATE
+    // ══════════════════════════════════════
+
+    /**
+     * Titolo su una riga sola.
+     *
+     * [gradedCardsTitle] ha un ritorno a capo perche' vive in una tessera del
+     * menu larga mezzo schermo; la TopAppBar della sezione lo cancellava con una
+     * `replace`, che e' un modo di dire che serviva un'altra stringa.
+     */
+    val gradedTitle: String get() = if (isItalian) "Carte gradate" else "Graded cards"
+
+    fun gradedSlabsCount(count: Int): String = if (isItalian) {
+        if (count == 1) "1 slab" else "$count slab"
+    } else {
+        if (count == 1) "1 slab" else "$count slabs"
+    }
+
+    val gradedStatSlabs: String get() = if (isItalian) "Slab" else "Slabs"
+    val gradedStatAverage: String get() = if (isItalian) "Voto medio" else "Avg grade"
+    val gradedStatValue: String get() = if (isItalian) "Valore" else "Value"
+
+    val gradedSearchHint: String get() = if (isItalian)
+        "Cerca fra le gradate"
+    else
+        "Search your slabs"
+
+    val gradedSpread: String get() = if (isItalian) "Distribuzione voti" else "Grade spread"
+
+    /** "Gem Mint 10" e' il nome che l'ente stampa: non si traduce. */
+    fun gradedGemCount(count: Int): String = "$count Gem Mint 10"
+
+    val gradedAllCompanies: String get() = if (isItalian) "Tutti gli enti" else "All graders"
+    val gradedNoCompany: String get() = if (isItalian) "Senza ente" else "No grader"
+    val gradedAllGrades: String get() = if (isItalian) "Tutti i voti" else "All grades"
+
+    // Le fasce di voto. I numeri sono uguali nelle due lingue: sono etichette
+    // stampate sui blocchi, non testo.
+    val gradedTierGem: String get() = "Gem Mint 10"
+    val gradedTierMint: String get() = "Mint 9 – 9.5"
+    val gradedTierNearMint: String get() = "8 – 8.5"
+    val gradedTierExcellent: String get() = "6 – 7.5"
+    val gradedTierPlayed: String get() = if (isItalian) "Sotto 6" else "Below 6"
+    val gradedTierUngraded: String get() = if (isItalian) "Senza voto" else "No grade"
+
+    val gradedSort: String get() = if (isItalian) "Ordina" else "Sort"
+    val gradedSortGrade: String get() = if (isItalian) "Voto più alto" else "Highest grade"
+    val gradedSortValue: String get() = if (isItalian) "Valore" else "Value"
+    val gradedSortName: String get() = if (isItalian) "Nome" else "Name"
+    val gradedSortRecent: String get() = if (isItalian) "Aggiunte di recente" else "Recently added"
+
+    val gradedEmptyTitle: String get() = if (isItalian)
+        "Nessuna carta gradata"
+    else
+        "No graded cards yet"
+    val gradedEmptySubtitle: String get() = if (isItalian)
+        "Apri una carta della collezione e segnala come gradata: ente, voto e valore finiscono qui."
+    else
+        "Open a card in your collection and mark it graded: grader, grade and value land here."
+
+    val gradedNoResults: String get() = if (isItalian)
+        "Nessuna slab con questi filtri"
+    else
+        "No slab matches these filters"
+
+    /** Quanto fidarsi del totale in cima: sopra lo zero e' una stima al ribasso. */
+    fun gradedUnpricedNote(count: Int): String = if (isItalian) {
+        if (count == 1) "1 slab senza valore stimato: il totale è al ribasso."
+        else "$count slab senza valore stimato: il totale è al ribasso."
+    } else {
+        if (count == 1) "1 slab has no estimated value: the total is a floor."
+        else "$count slabs have no estimated value: the total is a floor."
+    }
+
+    fun gradedUngradedNote(count: Int): String = if (isItalian) {
+        if (count == 1) "1 slab senza voto" else "$count slab senza voto"
+    } else {
+        if (count == 1) "1 slab without a grade" else "$count slabs without a grade"
+    }
+
+    val gradedLoadError: String get() = if (isItalian)
+        "Impossibile caricare le carte gradate"
+    else
+        "Could not load your graded cards"
 }
 
