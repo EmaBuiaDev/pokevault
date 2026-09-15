@@ -2525,7 +2525,17 @@ class CatalogRepository {
                 language = "ITA",
                 setName = setName
             )
-        val setImages = linkedBase?.images ?: SetImages(
+        // Il logo di un'espansione italiana esce SEMPRE dal nostro R2, mai da
+        // linkedBase: quelle immagini puntano alla rotta senza `source=ita`,
+        // cioe' al logo che PokeWallet ha per quel codice, nella lingua in cui
+        // quel prodotto e' uscito. Su XY10 e' il logo giapponese (めざめる超王),
+        // su XYA un mazzo giapponese -- ed e' quello che l'utente vedeva nel
+        // Pokedex il 15/09/2026. La preferenza ENG di langPriority() non basta:
+        // ripiega su JAP/CHN quando un set inglese con quel codice non esiste.
+        // Su R2 ci sono tutte e 107 le espansioni, in inglese
+        // (backfill-set-logos-tcgdex.mjs), quindi qui non serve piu' nessun
+        // ripiego: se una chiave mancasse, il 404 porta al MissingSetLogoFallback.
+        val setImages = SetImages(
             symbol = buildSetImageUrl(baseRawSetCode, italianOnly = true),
             logo = buildSetImageUrl(baseRawSetCode, italianOnly = true)
         )
