@@ -61,7 +61,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -736,34 +735,9 @@ private fun GradedEmptyState() {
 }
 
 // ── Etichette e colori delle fasce ────────────────────────────────────────
-
-/**
- * Il colore di una fascia.
- *
- * Oro solo per il 10, poi verde, blu, arancio e rosso: e' la stessa scala che
- * l'app usa per il completamento di un set, quindi si legge senza legenda.
- */
-@Composable
-private fun tierColor(tier: GradeTier): Color = when (tier) {
-    GradeTier.GEM -> AppColors.gold
-    GradeTier.MINT -> AppColors.green
-    GradeTier.NEAR_MINT -> AppColors.blue
-    GradeTier.EXCELLENT -> AppColors.orange
-    GradeTier.PLAYED -> AppColors.red
-    GradeTier.UNGRADED -> AppColors.textMuted
-}
-
-private fun tierLabel(tier: GradeTier): String = when (tier) {
-    GradeTier.GEM -> AppLocale.gradedTierGem
-    GradeTier.MINT -> AppLocale.gradedTierMint
-    GradeTier.NEAR_MINT -> AppLocale.gradedTierNearMint
-    GradeTier.EXCELLENT -> AppLocale.gradedTierExcellent
-    GradeTier.PLAYED -> AppLocale.gradedTierPlayed
-    GradeTier.UNGRADED -> AppLocale.gradedTierUngraded
-}
-
-private fun companyLabel(key: String): String =
-    if (key == GradedLab.UNKNOWN_COMPANY) AppLocale.gradedNoCompany else key
+//
+// tierColor, tierLabel, companyLabel e onAccentColor stanno in GradeVisuals.kt:
+// se li usa anche il dettaglio di una carta non possono restare privati qui.
 
 private fun sortLabel(sort: GradedSort): String = when (sort) {
     GradedSort.GRADE_DESC -> AppLocale.gradedSortGrade
@@ -771,13 +745,3 @@ private fun sortLabel(sort: GradedSort): String = when (sort) {
     GradedSort.NAME -> AppLocale.gradedSortName
     GradedSort.RECENT -> AppLocale.gradedSortRecent
 }
-
-/**
- * Testo leggibile sopra un accento pieno.
- *
- * Deciso dalla luminanza e non scritto a mano: l'oro del tema scuro (0xFFFFD700)
- * vuole testo nero, quello del tema chiaro (0xFFB7950B) lo vuole bianco, e il
- * nero fisso di prima spariva su meta' degli accenti.
- */
-private fun onAccentColor(accent: Color): Color =
-    if (accent.luminance() > 0.45f) Color.Black else Color.White

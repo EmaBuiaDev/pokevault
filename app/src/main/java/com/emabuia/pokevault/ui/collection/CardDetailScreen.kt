@@ -3,7 +3,6 @@ package com.emabuia.pokevault.ui.collection
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.*
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -50,6 +49,26 @@ import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.emabuia.pokevault.ui.components.holoFoil
+import com.emabuia.pokevault.ui.components.pressScale
+import com.emabuia.pokevault.ui.graded.companyLabel
+import com.emabuia.pokevault.ui.graded.onAccentColor
+import com.emabuia.pokevault.ui.graded.tierColor
+import com.emabuia.pokevault.ui.graded.tierLabel
+import com.emabuia.pokevault.util.GradeTier
+import com.emabuia.pokevault.util.GradedLab
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Codice set da usare per la ricerca prezzi.
@@ -244,48 +263,116 @@ fun CardDetailScreen(
         isLoadingLivePrices = false
     }
 
-    fun confirmVariantChange(card: PokemonCard, newQty: Int, isGraded: Boolean? = null, grade: Float? = null, company: String? = null) {
-        // Prima queste due validazioni facevano un return silenzioso: l'utente
-        // premeva conferma e non succedeva nulla, senza alcuna spiegazione.
-        if (isGraded == true) {
-            if (grade == null) {
+    /**
+     * Cosa c'e' di non salvato, in questo momento.
+     *
+     * Prima ogni riga variante aveva la sua spunta di conferma, e la spunta
+     * compariva DENTRO la riga: il "+" e il "-" che si stavano premendo
+     * scivolavano di lato nel momento esatto in cui li si usava, e il secondo
+     * tocco finiva sul pulsante sbagliato. Adesso i due tasti stanno fermi
+     * sempre, e la conferma e' una barra sola in fondo alla pagina.
+     *
+     * La barra raccoglie anche il grading: due conferme diverse nella stessa
+     * schermata volevano dire premerne una, credere di aver salvato, e uscire
+     * lasciando indietro l'altra meta'.
+     */
+    val selectedCard = variants.getOrNull(selectedVariantIndex)
+
+    val pendingQuantities = variants.filter {
+        (editedQuantities[it.id] ?: it.quantity) != it.quantity
+    }
+
+    // Voto ed ente contano solo a interruttore acceso: accenderlo e rispegnerlo
+    // lascia scritto "PSA" nello stato temporaneo, e senza questa condizione la
+    // barra resterebbe li' a chiedere di salvare una modifica che sullo schermo
+    // non si vede piu'.
+    val isGradingChanged = selectedCard != null && (
+        tempIsGraded != selectedCard.isGraded ||
+            (tempIsGraded && (tempGrade != selectedCard.grade || tempCompany != selectedCard.gradingCompany))
+        )
+
+    val pendingCount = pendingQuantities.size + if (isGradingChanged) 1 else 0
+
+    val pendingRemoval = pendingQuantities.any { (editedQuantities[it.id] ?: it.quantity) <= 0 }
+
+    fun discardPendingChanges() {
+        editedQuantities = variants.associate { it.id to it.quantity }
+        selectedCard?.let {
+            tempIsGraded = it.isGraded
+            tempGrade = it.grade
+            tempGradeStr = it.grade?.toString() ?: ""
+            tempCompany = it.gradingCompany
+        }
+    }
+
+    /**
+     * Salva tutto quello che e' in sospeso, in un colpo solo.
+     *
+     * Le validazioni del grading stanno prima di qualsiasi scrittura: se manca
+     * il voto o l'ente non deve partire nemmeno l'aggiornamento della
+     * quantita', o l'utente vedrebbe meta' del salvataggio andare a buon fine e
+     * l'altra meta' no. Prima queste due validazioni facevano un return
+     * silenzioso: si premeva conferma e non succedeva niente, senza alcuna
+     * spiegazione.
+     */
+    fun commitPendingChanges() {
+        if (isGradingChanged && tempIsGraded) {
+            if (tempGrade == null) {
                 scope.launch { snackbarHostState.showSnackbar(AppLocale.gradingGradeRequired) }
                 return
             }
-            if (company.isNullOrBlank()) {
+            if (tempCompany.isBlank()) {
                 scope.launch { snackbarHostState.showSnackbar(AppLocale.gradingCompanyRequired) }
                 return
             }
         }
 
+        val gradedVariantId = selectedCard?.id
+
         scope.launch {
-            val updatedCard = card.copy(
-                quantity = newQty,
-                isGraded = isGraded ?: card.isGraded,
-                grade = grade ?: card.grade,
-                gradingCompany = company ?: card.gradingCompany
-            )
-            
-            // Prima ogni modifica chiamava loadData(), che rilegge l'INTERA
-            // collezione (getCards().first()) e ricalcola collectionGroupKey per
-            // ogni carta, solo per aggiornare una variante gia' in mano. Lo stato
-            // locale contiene tutto il necessario.
-            if (newQty <= 0) {
-                repository.deleteCard(card.id).onSuccess {
-                    val remaining = variants.filter { it.id != card.id }
-                    if (remaining.isEmpty()) {
-                        onBack()
-                    } else {
-                        variants = remaining
-                        editedQuantities = editedQuantities - card.id
-                        selectedVariantIndex = selectedVariantIndex.coerceAtMost(remaining.lastIndex)
+            // Niente loadData() alla fine: quella rilegge l'INTERA collezione
+            // (getCards().first()) e ricalcola collectionGroupKey per ogni
+            // carta, solo per aggiornare varianti che sono gia' in mano. Lo
+            // stato locale contiene tutto il necessario.
+            var remaining = variants
+            var quantities = editedQuantities
+
+            for (variant in variants) {
+                val newQty = quantities[variant.id] ?: variant.quantity
+                val carriesGrading = isGradingChanged && variant.id == gradedVariantId
+                if (newQty == variant.quantity && !carriesGrading) continue
+
+                if (newQty <= 0) {
+                    repository.deleteCard(variant.id).onSuccess {
+                        remaining = remaining.filter { it.id != variant.id }
+                        quantities = quantities - variant.id
+                    }
+                } else {
+                    val updated = variant.copy(
+                        quantity = newQty,
+                        isGraded = if (carriesGrading) tempIsGraded else variant.isGraded,
+                        // Come prima: togliendo la spunta il voto resta scritto
+                        // sul documento, non viene azzerato.
+                        grade = if (carriesGrading) tempGrade ?: variant.grade else variant.grade,
+                        gradingCompany = if (carriesGrading) {
+                            tempCompany.ifBlank { variant.gradingCompany }
+                        } else {
+                            variant.gradingCompany
+                        }
+                    )
+                    repository.updateCard(variant.id, updated).onSuccess {
+                        remaining = remaining.map { if (it.id == variant.id) updated else it }
+                        quantities = quantities + (variant.id to newQty)
                     }
                 }
+            }
+
+            if (remaining.isEmpty()) {
+                onBack()
             } else {
-                repository.updateCard(card.id, updatedCard).onSuccess {
-                    variants = variants.map { if (it.id == card.id) updatedCard else it }
-                    editedQuantities = editedQuantities + (card.id to newQty)
-                }
+                variants = remaining
+                editedQuantities = quantities
+                selectedVariantIndex = selectedVariantIndex.coerceAtMost(remaining.lastIndex)
             }
         }
     }
@@ -303,6 +390,20 @@ fun CardDetailScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            AnimatedVisibility(
+                visible = pendingCount > 0,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut()
+            ) {
+                PendingChangesBar(
+                    pendingCount = pendingCount,
+                    isRemoval = pendingRemoval,
+                    onDiscard = { discardPendingChanges() },
+                    onSave = { commitPendingChanges() }
+                )
+            }
+        },
         containerColor = AppColors.background
     ) { padding ->
         if (isLoading) {
@@ -317,16 +418,6 @@ fun CardDetailScreen(
             val currentCard = variants.getOrNull(selectedVariantIndex) ?: variants.first()
             val totalQty = variants.sumOf { editedQuantities[it.id] ?: it.quantity }
             
-            val isGradingChanged = tempIsGraded != currentCard.isGraded || 
-                                 tempGrade != currentCard.grade || 
-                                 tempCompany != currentCard.gradingCompany
-            
-            val canSaveGrading = if (tempIsGraded) {
-                tempGrade != null && tempCompany.isNotBlank()
-            } else {
-                true 
-            }
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -335,76 +426,43 @@ fun CardDetailScreen(
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Flip 3D: la carta si gira sul suo asse verticale e dietro ha
-                // i dati, come una carta vera che si rivolta in mano.
-                val flipDegrees by animateFloatAsState(
-                    targetValue = if (isFlipped) 180f else 0f,
-                    animationSpec = tween(AppMotion.flip, easing = AppMotion.standardEasing),
-                    label = "cardFlip"
+                // Il palco della carta: e' lei il soggetto della pagina, e si
+                // gira col dito. Quando la carta e' gradata il palco diventa la
+                // slab, con l'etichetta dell'ente sopra.
+                CardStage(
+                    card = currentCard,
+                    sharedKey = cardId,
+                    totalQuantity = totalQty,
+                    isFlipped = isFlipped,
+                    onFlipChange = { isFlipped = it }
                 )
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .aspectRatio(0.71f)
-                        .graphicsLayer {
-                            rotationY = flipDegrees
-                            // Senza una distanza di camera esplicita la
-                            // prospettiva e' quasi ortogonale e la rotazione
-                            // sembra uno schiacciamento invece che un giro.
-                            cameraDistance = 14f * density
-                        }
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(AppColors.card)
-                        .clickable { isFlipped = !isFlipped }
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Le quattro cose che identificano la carta, in fila sotto
+                // l'immagine: prima erano sparse fra il retro e due sezioni
+                // diverse, e per leggere il numero bisognava girare la carta.
+                CardFactsRow(card = currentCard)
+
+                Spacer(modifier = Modifier.height(22.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (flipDegrees < 90f) {
-                        if (currentCard.imageUrl.isNotBlank()) {
-                            SubcomposeAsyncImage(
-                                model = ImageUrlUtils.safeImageUrl(currentCard.imageUrl),
-                                contentDescription = currentCard.name,
-                                contentScale = ContentScale.FillBounds,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .sharedCardImage(cardId),
-                                error = { CollectionDetailImageFallback(currentCard) }
-                            )
-                        } else {
-                            CollectionDetailImageFallback(currentCard)
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(10.dp)
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(AppColors.blue),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("x$totalQty", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                    } else {
-                        // Controrotazione: il retro e' disegnato dentro un
-                        // layer gia' girato di 180°, senza questa il testo
-                        // uscirebbe specchiato.
-                        CardBackFace(
-                            card = currentCard,
-                            totalQuantity = totalQty,
-                            modifier = Modifier.graphicsLayer { rotationY = 180f }
-                        )
-                    }
+                    Text(
+                        AppLocale.myVariantsLabel,
+                        color = AppColors.textPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "${AppLocale.detailTotalCopies}: $totalQty",
+                        color = AppColors.textMuted,
+                        fontSize = 12.sp
+                    )
                 }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    AppLocale.myVariantsLabel,
-                    color = AppColors.textPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                )
 
                 variants.forEachIndexed { index, variant ->
                     val editedQty = editedQuantities[variant.id] ?: variant.quantity
@@ -417,21 +475,23 @@ fun CardDetailScreen(
                             if (newQty >= 0) {
                                 editedQuantities = editedQuantities.toMutableMap().apply { put(variant.id, newQty) }
                             }
-                        },
-                        onConfirm = { confirmVariantChange(variant, editedQty) }
+                        }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                DetailSection(title = "Certificazione Grading") {
+                DetailSection(title = AppLocale.detailCertification) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(Icons.Default.Stars, contentDescription = null, tint = AppColors.gold, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
@@ -439,28 +499,19 @@ fun CardDetailScreen(
                                 Text(AppLocale.insertInGradedCards, color = AppColors.textMuted, fontSize = 11.sp)
                             }
                         }
-                        
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Switch(
-                                checked = tempIsGraded,
-                                onCheckedChange = { 
-                                    tempIsGraded = it
-                                    if (it && tempCompany.isBlank()) {
-                                        tempCompany = "PSA"
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(checkedThumbColor = AppColors.gold)
-                            )
-                            
-                            AnimatedVisibility(visible = isGradingChanged && canSaveGrading) {
-                                IconButton(
-                                    onClick = { confirmVariantChange(currentCard, currentCard.quantity, tempIsGraded, tempGrade, tempCompany) },
-                                    modifier = Modifier.padding(start = 8.dp).size(28.dp).background(AppColors.green, CircleShape)
-                                ) {
-                                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
+
+                        // La spunta di conferma non sta piu' qui: la raccoglie
+                        // la barra in fondo insieme alle quantita'.
+                        Switch(
+                            checked = tempIsGraded,
+                            onCheckedChange = {
+                                tempIsGraded = it
+                                if (it && tempCompany.isBlank()) {
+                                    tempCompany = "PSA"
                                 }
-                            }
-                        }
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = AppColors.gold)
+                        )
                     }
 
                     if (tempIsGraded) {
@@ -679,104 +730,694 @@ private fun mergePriceData(primary: PokeWalletPriceData?, fallback: PokeWalletPr
     )
 }
 
+/**
+ * Larghezza del gruppo −/quantita'/+.
+ *
+ * E' fissa, e questo e' il punto: la riga puo' cambiare stato quanto vuole —
+ * selezionata, modificata, in procinto di essere rimossa — ma i due tasti
+ * restano esattamente dove il dito li ha appena trovati. Prima la spunta di
+ * conferma compariva dentro la riga e li spostava di lato proprio mentre li si
+ * stava premendo.
+ */
+private val StepperWidth = 124.dp
+
+/** Larghezza della casella del numero: tiene tre cifre senza allargarsi. */
+private val StepperValueWidth = 40.dp
+
 @Composable
 fun VariantRow(
     variant: PokemonCard,
     editedQuantity: Int,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onQtyChange: (Int) -> Unit,
-    onConfirm: () -> Unit
+    onQtyChange: (Int) -> Unit
 ) {
     val isChanged = editedQuantity != variant.quantity
+    val willBeRemoved = editedQuantity <= 0
+
+    val accent = when {
+        willBeRemoved -> AppColors.red
+        isChanged -> AppColors.green
+        isSelected -> AppColors.blue
+        else -> AppColors.textMuted
+    }
+
+    val shape = RoundedCornerShape(14.dp)
+    val borderColor by animateColorAsState(
+        targetValue = if (isSelected || isChanged) accent else Color.Transparent,
+        animationSpec = tween(AppMotion.state),
+        label = "variantBorder"
+    )
+    val containerColor by animateColorAsState(
+        targetValue = if (isSelected) accent.copy(alpha = 0.14f) else AppColors.card,
+        animationSpec = tween(AppMotion.state),
+        label = "variantBackground"
+    )
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isSelected) AppColors.blue.copy(alpha = 0.2f) else AppColors.card)
-            .border(
-                width = 1.dp,
-                color = if (isSelected) AppColors.blue else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(12.dp),
+            .clip(shape)
+            .background(containerColor)
+            .border(width = 1.dp, color = borderColor, shape = shape)
+            .pressScale(onClick = onClick)
+            .padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Il pallino e' l'unico posto dove lo stato della riga si vede: occupa
+        // sempre gli stessi 8 dp, quindi cambiando colore non sposta niente.
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(if (isSelected || isChanged) accent else accent.copy(alpha = 0.25f))
+        )
+
+        Spacer(modifier = Modifier.width(10.dp))
+
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = variant.variant,
-                    color = if (isSelected) AppColors.blue else AppColors.textPrimary,
+                    color = if (isSelected) accent else AppColors.textPrimary,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (variant.isGraded) {
                     Spacer(modifier = Modifier.width(6.dp))
-                    Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(AppColors.gold).padding(horizontal = 4.dp, vertical = 1.dp)) {
-                        Text("⭐ ${variant.grade}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    val tint = tierColor(GradedLab.tierOf(variant.grade))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(tint)
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = companyLabel(GradedLab.companyKey(variant)) + " " + GradedLab.formatGrade(variant.grade),
+                            color = onAccentColor(tint),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
                     }
                 }
             }
             Text(
-                text = "${variant.condition} · ${variant.language}",
+                text = variant.condition + " · " + variant.language,
                 color = AppColors.textMuted,
-                fontSize = 12.sp
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
-        
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        QuantityStepper(
+            value = editedQuantity,
+            original = variant.quantity,
+            accent = accent,
+            onChange = onQtyChange
+        )
+    }
+}
+
+/**
+ * Meno, numero, piu'. E niente altro.
+ *
+ * Il numero sta in una casella di larghezza fissa e cambia scorrendo, come il
+ * rullo di un contatore: si vede *che* e' cambiato senza che nulla si sposti.
+ * Il meno diventa un cestino quando il tocco successivo porterebbe a zero, cosi'
+ * la rimozione si annuncia prima di succedere invece di essere una sorpresa.
+ */
+@Composable
+private fun QuantityStepper(
+    value: Int,
+    original: Int,
+    accent: Color,
+    onChange: (Int) -> Unit
+) {
+    val willRemove = value <= 1
+
+    Row(
+        modifier = Modifier
+            .width(StepperWidth)
+            .height(40.dp)
+            .clip(CircleShape)
+            .background(AppColors.surface),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            onClick = { if (value > 0) onChange(value - 1) },
+            enabled = value > 0,
+            modifier = Modifier.size(40.dp)
         ) {
-            IconButton(
-                onClick = { if (editedQuantity > 0) onQtyChange(editedQuantity - 1) },
-                modifier = Modifier.size(36.dp),
-                enabled = editedQuantity > 0
-            ) {
-                Icon(
-                    imageVector = if (editedQuantity <= 1) Icons.Default.Delete else Icons.Default.Remove,
-                    contentDescription = null,
-                    tint = if (editedQuantity <= 1) AppColors.red.copy(alpha = if(editedQuantity > 0) 1f else 0.3f) else AppColors.textPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-
-            Text(
-                text = "x$editedQuantity",
-                color = if (editedQuantity == 0) AppColors.red else AppColors.textPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                modifier = Modifier.widthIn(min = 24.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            Icon(
+                imageVector = if (willRemove) Icons.Default.Delete else Icons.Default.Remove,
+                contentDescription = AppLocale.quantity,
+                tint = when {
+                    value <= 0 -> AppColors.textMuted.copy(alpha = 0.35f)
+                    willRemove -> AppColors.red
+                    else -> AppColors.textPrimary
+                },
+                modifier = Modifier.size(18.dp)
             )
+        }
 
-            IconButton(onClick = { onQtyChange(editedQuantity + 1) }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Add, null, tint = AppColors.blue, modifier = Modifier.size(18.dp))
-            }
+        AnimatedContent(
+            targetState = value,
+            transitionSpec = {
+                if (targetState > initialState) {
+                    (slideInVertically { it } + fadeIn()) togetherWith
+                        (slideOutVertically { -it } + fadeOut())
+                } else {
+                    (slideInVertically { -it } + fadeIn()) togetherWith
+                        (slideOutVertically { it } + fadeOut())
+                }
+            },
+            modifier = Modifier.width(StepperValueWidth),
+            label = "quantity"
+        ) { qty ->
+            Text(
+                text = "x" + qty,
+                color = when {
+                    qty <= 0 -> AppColors.red
+                    qty != original -> accent
+                    else -> AppColors.textPrimary
+                },
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
 
-            AnimatedVisibility(
-                visible = isChanged,
-                enter = scaleIn() + fadeIn(),
-                exit = scaleOut() + fadeOut()
-            ) {
-                IconButton(
-                    onClick = onConfirm,
-                    modifier = Modifier
-                        .padding(start = 12.dp)
-                        .size(32.dp)
-                        .background(if (editedQuantity == 0) AppColors.red else AppColors.green, CircleShape)
-                ) {
-                    Icon(
-                        imageVector = if (editedQuantity == 0) Icons.Default.DeleteForever else Icons.Default.Check,
-                        contentDescription = AppLocale.confirm,
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
+        IconButton(
+            onClick = { onChange(value + 1) },
+            modifier = Modifier.size(40.dp)
+        ) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = AppLocale.quantity,
+                tint = AppColors.blue,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+/**
+ * La barra che raccoglie le modifiche non salvate.
+ *
+ * Entra dal basso solo quando c'e' qualcosa da salvare, dice quante cose sono e
+ * offre le due uscite: annulla, che rimette tutto com'era, e salva. Quando fra
+ * le modifiche c'e' una variante portata a zero diventa rossa e lo scrive: una
+ * rimozione non deve poter succedere per inerzia.
+ */
+@Composable
+private fun PendingChangesBar(
+    pendingCount: Int,
+    isRemoval: Boolean,
+    onDiscard: () -> Unit,
+    onSave: () -> Unit
+) {
+    val accent = if (isRemoval) AppColors.red else AppColors.green
+
+    Surface(color = AppColors.card, shadowElevation = 12.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = AppLocale.detailPendingChanges(pendingCount),
+                    color = AppColors.textPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (isRemoval) {
+                    Text(
+                        text = AppLocale.detailDeleteVariant,
+                        color = AppColors.red,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+
+            TextButton(onClick = onDiscard) {
+                Text(AppLocale.cancel, color = AppColors.textMuted, fontSize = 13.sp)
+            }
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            Button(
+                onClick = onSave,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = accent),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                Icon(
+                    imageVector = if (isRemoval) Icons.Default.DeleteForever else Icons.Default.Check,
+                    contentDescription = null,
+                    tint = onAccentColor(accent),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isRemoval) AppLocale.delete else AppLocale.save,
+                    color = onAccentColor(accent),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
+    }
+}
+
+/** Quanti gradi di rotazione vale un pixel di trascinamento. */
+private const val DegreesPerPixel = 0.6f
+
+/** Oltre meta' giro la carta cade sull'altra faccia invece di tornare indietro. */
+private const val FlipCommitDegrees = 90f
+
+/**
+ * Il palco della carta.
+ *
+ * Una carta gradata non e' la stessa carta con un bollino sopra: e' un blocco di
+ * plastica con l'etichetta dell'ente stampata in cima, ed e' quella l'immagine
+ * che si ha in testa aprendola. Per questo qui il palco cambia forma — cornice e
+ * etichetta della slab quando la variante e' gradata, solo la carta quando non
+ * lo e' — invece di appiccicare una stellina all'angolo.
+ *
+ * L'etichetta e' la stessa che disegna la griglia delle Gradate (vedi
+ * GradeVisuals): la slab toccata li' e questa sono lo stesso oggetto.
+ */
+@Composable
+private fun CardStage(
+    card: PokemonCard,
+    sharedKey: String,
+    totalQuantity: Int,
+    isFlipped: Boolean,
+    onFlipChange: (Boolean) -> Unit
+) {
+    if (card.isGraded) {
+        SlabFrame(card = card, modifier = Modifier.fillMaxWidth(0.88f)) {
+            FlipCard(
+                card = card,
+                sharedKey = sharedKey,
+                totalQuantity = totalQuantity,
+                isFlipped = isFlipped,
+                onFlipChange = onFlipChange,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    } else {
+        FlipCard(
+            card = card,
+            sharedKey = sharedKey,
+            totalQuantity = totalQuantity,
+            isFlipped = isFlipped,
+            onFlipChange = onFlipChange,
+            modifier = Modifier.fillMaxWidth(0.8f)
+        )
+    }
+}
+
+/**
+ * La carta che si gira in mano.
+ *
+ * Prima era un tocco e basta: la carta partiva e faceva il suo mezzo giro da
+ * sola. Adesso la rotazione segue il dito grado per grado, e quando si lascia la
+ * presa cade sulla faccia piu' vicina — se non si e' passata la meta' torna da
+ * dove veniva, come una carta vera che non si e' girata abbastanza. Il tocco
+ * secco continua a funzionare: e' la stessa cosa, fatta in fretta.
+ *
+ * Il trascinamento e' solo orizzontale di proposito. La pagina scorre in
+ * verticale e un gesto su due assi si mangerebbe lo scroll di chi parte col dito
+ * appoggiato sulla carta.
+ */
+@Composable
+private fun FlipCard(
+    card: PokemonCard,
+    sharedKey: String,
+    totalQuantity: Int,
+    isFlipped: Boolean,
+    onFlipChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val motion = AppMotion.current
+    val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+
+    // rememberSaveable per isFlipped sta in chi chiama; qui basta un Animatable
+    // che riparte dalla faccia giusta, perche' e' l'unico modo di avere una
+    // rotazione che il dito puo' interrompere a meta'. Con animateFloatAsState
+    // il valore sarebbe di sola lettura e il trascinamento non avrebbe dove
+    // scrivere.
+    val spin = remember { Animatable(if (isFlipped) 180f else 0f) }
+
+    // Le lambda di pointerInput vengono ricordate una volta sola: senza questi
+    // due lo stato letto dentro onDragEnd sarebbe quello della prima
+    // composizione, e la carta si girerebbe sempre dalla stessa parte.
+    val flipped by rememberUpdatedState(isFlipped)
+    val onFlip by rememberUpdatedState(onFlipChange)
+
+    var everFlipped by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(isFlipped) {
+        val target = if (isFlipped) 180f else 0f
+        if (spin.value != target) {
+            // La durata e' proporzionale a quanto manca. Col tocco secco manca
+            // mezzo giro intero e il tempo e' quello di sempre; se il dito ha
+            // gia' portato la carta a un passo dall'altra faccia, restarci
+            // dietro per altri tre quarti di secondo la farebbe sembrare
+            // incollata.
+            val remaining = (abs(target - spin.value) / 180f).coerceIn(0.35f, 1f)
+            spin.animateTo(
+                targetValue = target,
+                animationSpec = tween((motion.flip * remaining).toInt(), easing = AppMotion.standardEasing)
+            )
+        }
+    }
+
+    // La rotazione si legge dentro graphicsLayer e non qui fuori: letta in
+    // composizione rifarebbe l'intera schermata a ogni fotogramma del giro,
+    // immagine compresa. Cosi' cambia solo il disegno, e l'unica cosa che
+    // ricompone e' il cambio di faccia — una volta per mezzo giro.
+    val facingFront by remember {
+        derivedStateOf { cos(spin.value * Math.PI / 180.0) >= 0.0 }
+    }
+
+    Box(
+        modifier = modifier
+            .aspectRatio(0.71f)
+            .graphicsLayer {
+                rotationY = spin.value
+                // Senza una distanza di camera esplicita la prospettiva e'
+                // quasi ortogonale e la rotazione sembra uno schiacciamento
+                // invece che un giro.
+                cameraDistance = 14f * density
+            }
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.card)
+            .clickable {
+                everFlipped = true
+                onFlipChange(!isFlipped)
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        val landed = spin.value > FlipCommitDegrees
+                        if (landed != flipped) {
+                            everFlipped = true
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onFlip(landed)
+                        } else {
+                            scope.launch {
+                                spin.animateTo(
+                                    targetValue = if (landed) 180f else 0f,
+                                    animationSpec = tween(motion.flip / 2, easing = AppMotion.standardEasing)
+                                )
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch {
+                            spin.animateTo(
+                                targetValue = if (flipped) 180f else 0f,
+                                animationSpec = tween(motion.flip / 2, easing = AppMotion.standardEasing)
+                            )
+                        }
+                    }
+                ) { change, drag ->
+                    change.consume()
+                    scope.launch {
+                        // Il margine oltre le due facce e' quanto basta a far
+                        // sentire che la carta e' arrivata in fondo, senza
+                        // lasciarla girare all'infinito.
+                        spin.snapTo(
+                            (spin.value + drag * DegreesPerPixel)
+                                .coerceIn(-FlipCommitDegrees, 180f + FlipCommitDegrees)
+                        )
+                    }
+                }
+            }
+    ) {
+        if (facingFront) {
+            if (card.imageUrl.isNotBlank()) {
+                SubcomposeAsyncImage(
+                    model = ImageUrlUtils.safeImageUrl(card.imageUrl),
+                    contentDescription = card.name,
+                    contentScale = ContentScale.FillBounds,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .sharedCardImage(sharedKey),
+                    error = { CollectionDetailImageFallback(card) }
+                )
+            } else {
+                CollectionDetailImageFallback(card)
+            }
+
+            // Il riflesso si sposta con la rotazione: e' la luce della stanza
+            // che scorre sulla lamina mentre la carta gira. Sta sopra
+            // l'immagine e non la tocca quando la carta e' ferma di fronte.
+            if (motion.enabled) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .drawBehind {
+                            // Anche qui la rotazione si legge in fase di
+                            // disegno: il riflesso e' l'unica cosa che deve
+                            // rifarsi a ogni fotogramma.
+                            val glare = sin(spin.value * Math.PI / 180.0).toFloat()
+                            val center = size.width * (0.5f + glare * 0.7f)
+                            val band = size.width * 0.45f
+                            drawRect(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.White.copy(alpha = 0.22f * abs(glare)),
+                                        Color.Transparent
+                                    ),
+                                    start = Offset(center - band, 0f),
+                                    end = Offset(center + band, size.height)
+                                )
+                            )
+                        }
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(AppColors.blue),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("x$totalQuantity", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+
+            // L'invito sparisce appena la carta e' stata girata una volta: e'
+            // servito a dire che si puo' fare, e da li' in poi e' rumore sopra
+            // l'illustrazione.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !everFlipped,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(bottom = 10.dp)
+                        .clip(CircleShape)
+                        .background(AppColors.background.copy(alpha = 0.78f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Autorenew,
+                        contentDescription = null,
+                        tint = AppColors.textSecondary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = AppLocale.detailFlipHint,
+                        color = AppColors.textSecondary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        } else {
+            // Controrotazione: il retro e' disegnato dentro un layer gia' girato
+            // di 180 gradi, senza questa il testo uscirebbe specchiato.
+            CardBackFace(
+                card = card,
+                totalQuantity = totalQuantity,
+                modifier = Modifier.graphicsLayer { rotationY = 180f }
+            )
+        }
+    }
+}
+
+/**
+ * La cornice della slab.
+ *
+ * Stessa etichetta della griglia delle Gradate, in grande: ente a sinistra,
+ * fascia sotto, voto nel riquadro a destra. Il 10 si prende il gradiente e la
+ * lamina, come li'.
+ */
+@Composable
+private fun SlabFrame(
+    card: PokemonCard,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val tier = GradedLab.tierOf(card.grade)
+    val accent = tierColor(tier)
+    val isGem = tier == GradeTier.GEM
+    val shape = RoundedCornerShape(20.dp)
+
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(AppColors.card, AppColors.surface)))
+            .border(1.5.dp, accent.copy(alpha = if (isGem) 0.6f else 0.3f), shape)
+            .padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    if (isGem) {
+                        Brush.horizontalGradient(
+                            listOf(accent.copy(alpha = 0.42f), accent.copy(alpha = 0.14f))
+                        )
+                    } else {
+                        SolidColor(accent.copy(alpha = 0.16f))
+                    }
+                )
+                .holoFoil(enabled = isGem)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = companyLabel(GradedLab.companyKey(card)),
+                    color = accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = tierLabel(tier),
+                    color = AppColors.textMuted,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accent)
+                    .padding(horizontal = 10.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = GradedLab.formatGrade(card.grade),
+                    color = onAccentColor(accent),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        content()
+    }
+}
+
+/**
+ * Le targhette sotto la carta.
+ *
+ * Espansione, numero, rarita' e lingua erano sparsi fra il retro della carta e
+ * due sezioni piu' in basso: per leggere il numero di una carta bisognava
+ * girarla. Qui stanno in fila, in una riga sola che scorre di lato se non ci
+ * stanno, e il colore e' quello del tipo della carta.
+ */
+@Composable
+private fun CardFactsRow(card: PokemonCard) {
+    val accent = TypeColors.of(card.type)
+    val facts = buildList {
+        val setName = AppLocale.displaySetName(card.set)
+        if (setName.isNotBlank()) add(setName)
+        if (card.cardNumber.isNotBlank()) add("#" + card.cardNumber)
+        if (card.rarity.isNotBlank()) add(AppLocale.translateRarity(card.rarity))
+        if (card.language.isNotBlank()) add(card.language)
+    }
+
+    if (facts.isEmpty()) return
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (card.type.isNotBlank()) {
+            FactChip(
+                text = getTypeEmojiForCollection(card.type) + " " + AppLocale.translateType(card.type),
+                accent = accent,
+                filled = true
+            )
+        }
+        facts.forEach { fact ->
+            FactChip(text = fact, accent = accent, filled = false)
+        }
+    }
+}
+
+@Composable
+private fun FactChip(text: String, accent: Color, filled: Boolean) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (filled) accent.copy(alpha = 0.18f) else AppColors.card)
+            .border(
+                width = 1.dp,
+                color = if (filled) accent.copy(alpha = 0.45f) else AppColors.textMuted.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(8.dp)
+            )
+            .padding(horizontal = 9.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = text,
+            color = if (filled) accent else AppColors.textSecondary,
+            fontSize = 11.sp,
+            fontWeight = if (filled) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1
+        )
     }
 }
 
@@ -784,8 +1425,9 @@ fun VariantRow(
  * Retro della carta nel flip.
  *
  * Non ripete il dettaglio completo che sta piu' giu' nella pagina: mostra le
- * cinque righe che uno guarda mentre ha la carta in mano, piu' il prezzo. Il
- * resto (varianti, grading, mercati) resta dove sta.
+ * righe che uno guarda mentre ha la carta in mano, piu' il prezzo. Se la carta
+ * e' gradata le prime due righe sono ente e voto, che sono cio' che uno cerca
+ * sul retro di una slab. Il resto (varianti, mercati) resta dove sta.
  */
 @Composable
 private fun CardBackFace(
@@ -812,10 +1454,16 @@ private fun CardBackFace(
 
         Spacer(modifier = Modifier.height(14.dp))
 
+        if (card.isGraded) {
+            CardBackRow(companyLabel(GradedLab.companyKey(card)), AppLocale.gradingAgency)
+            CardBackRow(GradedLab.formatGrade(card.grade), AppLocale.detailGradeShort)
+        }
         CardBackRow(AppLocale.displaySetName(card.set).ifBlank { "-" }, AppLocale.set)
         CardBackRow(card.cardNumber.ifBlank { "-" }, AppLocale.cardNumberLabel)
         CardBackRow(card.rarity.ifBlank { "-" }, AppLocale.rarity)
-        CardBackRow(card.condition.ifBlank { "-" }, AppLocale.condition)
+        if (!card.isGraded) {
+            CardBackRow(card.condition.ifBlank { "-" }, AppLocale.condition)
+        }
         CardBackRow("x$totalQuantity", AppLocale.quantity)
 
         Spacer(modifier = Modifier.weight(1f))
@@ -833,7 +1481,7 @@ private fun CardBackFace(
                 fontSize = 12.sp
             )
             Text(
-                text = "€${"%.2f".format(card.estimatedValue)}",
+                text = "€" + "%.2f".format(card.estimatedValue),
                 color = AppColors.green,
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp
@@ -841,6 +1489,7 @@ private fun CardBackFace(
         }
     }
 }
+
 
 @Composable
 private fun CardBackRow(value: String, label: String) {

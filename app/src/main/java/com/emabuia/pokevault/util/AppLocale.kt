@@ -1890,5 +1890,23 @@ object AppLocale {
         "Impossibile caricare le carte gradate"
     else
         "Could not load your graded cards"
-}
 
+    // ══════════════════════════════════════
+    // DETTAGLIO CARTA
+    // ══════════════════════════════════════
+
+    val detailFlipHint: String get() = if (isItalian) "Trascina per girarla" else "Drag to flip"
+    val detailCertification: String get() = if (isItalian) "Certificazione" else "Certification"
+    val detailGradeShort: String get() = if (isItalian) "Voto" else "Grade"
+    val detailTotalCopies: String get() = if (isItalian) "Copie totali" else "Total copies"
+    val detailDeleteVariant: String get() = if (isItalian)
+        "Questa variante verrà rimossa"
+    else
+        "This variant will be removed"
+
+    fun detailPendingChanges(count: Int): String = if (isItalian) {
+        if (count == 1) "1 modifica da salvare" else "$count modifiche da salvare"
+    } else {
+        if (count == 1) "1 change to save" else "$count changes to save"
+    }
+}
