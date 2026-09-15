@@ -138,8 +138,12 @@ async function main() {
     // 'missing' pur essendo tutte e diciassette regolarmente pubblicate li'.
     // Arrendersi qui significa un placeholder in app finche' qualcuno non
     // lancia repair-missing-images.mjs a mano.
-    const officialUrl = `${OFFICIAL_BASE}/${setCodeForOfficial}/${setCodeForOfficial}_IT_${parseInt(ref.localId, 10)}.png`;
-    if (/^\d+$/.test(ref.localId) && await headOk(officialUrl)) {
+    // I promo numerano "SM01"/"SWSH026": li' parseInt da' NaN e il guard
+    // numerico saltava del tutto il ripiego ufficiale, che invece quelle carte
+    // le ha proprio sotto quella stringa (SMP_IT_SM01.png).
+    const officialNumber = /^\d+$/.test(ref.localId) ? String(parseInt(ref.localId, 10)) : ref.localId;
+    const officialUrl = `${OFFICIAL_BASE}/${setCodeForOfficial}/${setCodeForOfficial}_IT_${officialNumber}.png`;
+    if (await headOk(officialUrl)) {
       return { ref, detail, hasImage: true, imageSource: 'official', officialUrl };
     }
     return { ref, detail, hasImage: false, imageSource: null };

@@ -63,7 +63,8 @@ wrangler kv bulk delete <lista-chiavi> --namespace-id=<ID>
 
 | Script | Cosa fa |
 |---|---|
-| `ingest-tcgdex-set.mjs <setId> [--apply]` | Importa un set da TCGdex (MIT, gratuito) in D1+R2; dry-run di default |
+| `ingest-tcgdex-set.mjs <setId> [--apply]` | Importa un set **nuovo** da TCGdex (MIT, gratuito) in D1+R2; dry-run di default |
+| `topup-set-from-tcgdex.mjs <setId> [--apply]` | Completa un set **gia' in D1** con le sole carte che gli mancano su TCGdex. Da usare al posto di `ingest-tcgdex-set.mjs` su tutto quello che arriva dal catalogo storico: quei set hanno id senza padding e in `.png` (`MEP_IT_48.png`), l'ingest scrive paddato e in `.webp` (`MEP_IT_048.webp`), la `ON CONFLICT(card_id)` non fa match e il set si duplica invece di aggiornarsi. Lo script deduce padding, estensione e layout della chiave R2 dalle righe gia' presenti |
 | `discover-new-sets.mjs [--ingest]` | Confronta TCGdex vs D1, apre issue per i set genuinamente nuovi (usato dal cron) |
 | `import-catalog-to-d1.mjs` | Import one-shot del blob JSON storico in D1 (batch da 50 righe, oltre D1 rifiuta con `SQLITE_TOOBIG`) |
 | `recompress-webp.mjs` | Ricomprime le immagini PNG storiche in WebP, upload additivo accanto all'originale |
