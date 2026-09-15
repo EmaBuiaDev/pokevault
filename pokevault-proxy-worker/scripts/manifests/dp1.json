@@ -1,0 +1,42 @@
+[
+ {
+  "numero": "123",
+  "nome": "Energia Erba",
+  "fonte": "carta"
+ },
+ {
+  "numero": "124",
+  "nome": "Energia Fuoco",
+  "fonte": "carta"
+ },
+ {
+  "numero": "125",
+  "nome": "Energia Acqua",
+  "fonte": "carta"
+ },
+ {
+  "numero": "126",
+  "nome": "Energia Lampo",
+  "fonte": "carta"
+ },
+ {
+  "numero": "127",
+  "nome": "Energia Psico",
+  "fonte": "carta"
+ },
+ {
+  "numero": "128",
+  "nome": "Energia Lotta",
+  "fonte": "carta"
+ },
+ {
+  "numero": "129",
+  "nome": "Energia Oscurità",
+  "fonte": "carta"
+ },
+ {
+  "numero": "130",
+  "nome": "Energia Metallo",
+  "fonte": "carta"
+ }
+]
