@@ -22,8 +22,8 @@ android {
         applicationId = "com.emabuia.pokevault"
         minSdk = 26
         targetSdk = 36
-        versionCode = 31
-        versionName = "3.1.0"
+        versionCode = 34
+        versionName = "3.1.2"
 
         buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
         buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "${localProperties.getProperty("POKEWALLET_PROXY_ENABLED", "false")}")
@@ -52,6 +52,12 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            // Niente `ndk { debugSymbolLevel = ... }` per l'avviso di Play sui
+            // simboli di debug nativi: non c'e' niente da estrarre. Tutte le
+            // .so dell'APK arrivano da AAR di Google (OCR di ML Kit, JNI di
+            // CameraX, graphics.path) e sono gia' spogliate all'origine --
+            // hanno .dynsym ma non .symtab ne' .debug_info. Codice nativo
+            // nostro non ne esiste. Attivarlo produce solo una cartella vuota.
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -70,6 +76,20 @@ android {
             // falling back to a direct call if POKEWALLET_PROXY_URL is left unconfigured.
             buildConfigField("String", "POKEWALLET_API_KEY", "\"\"")
             buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "true")
+        }
+
+        // Serve solo a provare la release sul telefono, non si pubblica.
+        //
+        // Stesse regole R8, stesso shrinking e stessi BuildConfig della
+        // release, ma firmata con la chiave di debug. La ragione e' il login:
+        // Play rifirma l'app con la propria chiave, quindi in
+        // google-services.json sono registrati il certificato di debug e
+        // quello di Play, non quello di upload. Un APK firmato con la chiave
+        // di upload non supera Google Sign-In, e siccome l'app parte dalla
+        // schermata di accesso non si arriverebbe a provare nient'altro.
+        create("releaseSmoke") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -90,8 +110,21 @@ android {
         compose = true
         buildConfig = true
     }
-    // Escludi le architetture x86/x86_64 e non tentare strip su librerie terze parti
-    // che arrivano gia' non strip-pabili (evita warning ripetuti in fase assemble).
+    // Due scelte consapevoli, entrambe con un avviso di Play attaccato.
+    //
+    // 1. x86/x86_64 esclusi. Gli AAR di Google (ML Kit, CameraX, graphics-path)
+    //    spedirebbero anche quelle architetture, quindi l'esclusione e' nostra:
+    //    costa il supporto a Chromebook e tablet Intel. Deciso di tenerla.
+    //    Play lo ripete a ogni caricamento come "non supporti piu' N
+    //    dispositivi": e' atteso, ed e' cosi' dal versionCode 19.
+    //    Per recuperarli basta togliere la riga `excludes` qui sotto: con
+    //    l'AAB, chi e' su ARM scarica comunque solo il proprio split.
+    //
+    // 2. keepDebugSymbols. Non conserva nessun simbolo: quelle .so arrivano
+    //    gia' spogliate da Google (hanno .dynsym ma non .symtab). Serve solo a
+    //    evitare che AGP tenti lo strip e riempia la build di warning, visto
+    //    che l'NDK non e' installato. Per lo stesso motivo l'avviso di Play sui
+    //    simboli di debug nativi non e' soddisfabile: non c'e' niente da dargli.
     packaging {
         resources {
             // I jar di JUnit 5 arrivano transitivamente nell'APK di test e ognuno
