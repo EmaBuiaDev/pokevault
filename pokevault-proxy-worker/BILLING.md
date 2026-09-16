@@ -31,13 +31,19 @@ Risposta di `verify` e `entitlement`:
   "state": "active",
   "expiryTimeMs": 1789041101186,
   "autoRenewing": true,
-  "productId": "pokevault_premium_monthly"
+  "productId": "pokevault_premium_monthly",
+  "giftUntilMs": null
 }
 ```
 
 `entitled` è già la decisione finale: uno stato `canceled` resta valido fino
 alla scadenza, perché l'utente ha disdetto il rinnovo ma ha pagato fino a quella
 data.
+
+Da `/v1/billing/entitlement` è anche la **somma di due fonti**: l'abbonamento
+Play e il mese regalo riscattato con un codice (vedi `GIFT.md`). Un utente senza
+abbonamento ma con un regalo attivo riceve `entitled: true` e `state: "gift"`.
+Il client interroga un endpoint solo, così non deve conciliare due verità.
 
 ## Cosa devi configurare tu
 
@@ -115,3 +121,10 @@ cerchio serve, in `PremiumManager`:
 Questo passo è deliberatamente separato: senza i secret configurati (punto 2)
 gli endpoint rispondono 500/502, e cablare subito il client renderebbe il
 premium non funzionante finché la configurazione non è completa.
+
+> **Aggiornamento.** Il client ora chiama il Worker, ma **solo** per i codici
+> regalo (`/v1/gift/*`, vedi `GIFT.md`). Quelli hanno bisogno di
+> `FIREBASE_PROJECT_ID` — l'unico secret condiviso con questa pagina — e non del
+> service account Play. I tre punti qui sopra, che riguardano l'abbonamento,
+> restano da fare: l'entitlement Play è ancora verificato solo in locale da
+> `PremiumManager`.

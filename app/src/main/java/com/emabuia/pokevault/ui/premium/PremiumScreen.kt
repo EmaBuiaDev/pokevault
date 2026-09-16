@@ -33,10 +33,12 @@ import com.emabuia.pokevault.util.AppLocale
 
 @Composable
 fun PremiumScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToGiftCodes: () -> Unit = {}
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
+    val giftUntilMs by premiumManager.giftUntilMs.collectAsStateWithLifecycle()
     val purchaseState by premiumManager.purchaseState.collectAsStateWithLifecycle()
     val products by premiumManager.products.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -119,7 +121,13 @@ fun PremiumScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = AppLocale.premiumActiveSubtitle,
+                        // Un mese regalo e un abbonamento danno lo stesso
+                        // accesso ma non la stessa cosa: dire "attivo" e basta
+                        // a chi ha un regalo gli nasconde che ha una scadenza.
+                        text = if (giftUntilMs > System.currentTimeMillis())
+                            AppLocale.giftActiveUntil(formatGiftDate(giftUntilMs))
+                        else
+                            AppLocale.premiumActiveSubtitle,
                         fontSize = 14.sp,
                         color = AppColors.textSecondary,
                         textAlign = TextAlign.Center
@@ -202,9 +210,37 @@ fun PremiumScreen(
                     feature = AppLocale.premiumFeatureMetaPremium,
                     isFree = false
                 )
+                // Wishlist, album obiettivo e hand-simulator hanno un limite
+                // free come tutto il resto: la riga "premium" da sola faceva
+                // credere che nella versione gratuita non esistessero.
+                FeatureRow(
+                    icon = Icons.Default.FavoriteBorder,
+                    feature = AppLocale.premiumFeatureWishlistFree,
+                    isFree = true
+                )
                 FeatureRow(
                     icon = Icons.Default.Favorite,
                     feature = AppLocale.premiumFeatureWishlistPremium,
+                    isFree = false
+                )
+                FeatureRow(
+                    icon = Icons.Default.Flag,
+                    feature = AppLocale.premiumFeatureGoalAlbumFree,
+                    isFree = true
+                )
+                FeatureRow(
+                    icon = Icons.Default.EmojiFlags,
+                    feature = AppLocale.premiumFeatureGoalAlbumPremium,
+                    isFree = false
+                )
+                FeatureRow(
+                    icon = Icons.Default.BackHand,
+                    feature = AppLocale.premiumFeatureHandSimFree,
+                    isFree = true
+                )
+                FeatureRow(
+                    icon = Icons.Default.Casino,
+                    feature = AppLocale.premiumFeatureHandSimPremium,
                     isFree = false
                 )
                 FeatureRow(
@@ -216,6 +252,55 @@ fun PremiumScreen(
                     icon = Icons.Default.CatchingPokemon,
                     feature = AppLocale.premiumFeatureHomeSpritePremium,
                     isFree = false
+                )
+            }
+
+            // Chi arriva qui e non vuole pagare ha comunque una strada: un
+            // amico può regalargli un mese. Il collegamento sta dopo la lista,
+            // non prima, per non trasformare la schermata Premium in una
+            // caccia al codice.
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(AppColors.card)
+                    .border(
+                        1.dp,
+                        AppColors.gold.copy(alpha = 0.22f),
+                        RoundedCornerShape(16.dp)
+                    )
+                    .clickable(onClick = onNavigateToGiftCodes)
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.CardGiftcard,
+                    contentDescription = null,
+                    tint = AppColors.gold,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = AppLocale.giftSettingsLabel,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppColors.textPrimary
+                    )
+                    Text(
+                        text = AppLocale.giftSettingsSubtitle,
+                        fontSize = 12.sp,
+                        color = AppColors.textMuted
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = AppColors.textMuted,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
@@ -353,6 +438,10 @@ fun PremiumScreen(
         )
     }
 }
+
+private fun formatGiftDate(epochMs: Long): String =
+    java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
+        .format(java.util.Date(epochMs))
 
 @Composable
 private fun FeatureRow(

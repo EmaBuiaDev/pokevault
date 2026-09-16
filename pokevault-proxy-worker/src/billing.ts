@@ -351,6 +351,23 @@ export function isEntitled(state: string, expiryTimeMs: number | null): boolean 
   return false;
 }
 
+/**
+ * Scadenza del mese regalo attivo di un utente, o null se non ne ha uno.
+ *
+ * La riga la scrive src/gift.ts, ma la lettura sta qui e non li' per tenere le
+ * dipendenze in una sola direzione: gift.ts importa da billing.ts (la verifica
+ * dell'ID token), non viceversa. Chi calcola l'entitlement deve conoscere
+ * entrambe le fonti, ed e' questo modulo.
+ */
+export async function activeGiftUntilMs(db: D1Database, uid: string): Promise<number | null> {
+  const row = await db
+    .prepare('SELECT granted_until_ms FROM gift_redemptions WHERE uid = ?1')
+    .bind(uid)
+    .first<{ granted_until_ms: number }>();
+  const until = row?.granted_until_ms ?? null;
+  return until !== null && until > Date.now() ? until : null;
+}
+
 // ── Rotte ───────────────────────────────────────────────────────────────────
 
 function json(data: unknown, status = 200): Response {
@@ -411,9 +428,16 @@ export async function handleBillingRequest(
   }
 
   // GET /v1/billing/entitlement — stato corrente dell'utente autenticato.
+  //
+  // Il premium ha due fonti indipendenti: l'abbonamento Play e il mese regalo
+  // riscattato con un codice (vedi src/gift.ts). Il client interroga un solo
+  // endpoint e riceve gia' la somma: decidere qui evita che due sorgenti di
+  // verita' si contraddicano sul telefono.
   if (pathname === '/v1/billing/entitlement' && request.method === 'GET') {
     const uid = await verifyFirebaseIdToken(bearerToken(request), env);
     if (!uid) return json({ error: 'ID token Firebase assente o non valido' }, 401);
+
+    const giftUntilMs = await activeGiftUntilMs(db, uid);
 
     const row = await db
       .prepare(
@@ -428,14 +452,21 @@ export async function handleBillingRequest(
         auto_renewing: number;
       }>();
 
-    if (!row) return json({ entitled: false, state: 'none' });
+    if (!row) {
+      return json({
+        entitled: giftUntilMs !== null,
+        state: giftUntilMs !== null ? 'gift' : 'none',
+        giftUntilMs,
+      });
+    }
 
     return json({
-      entitled: isEntitled(row.state, row.expiry_time_ms),
+      entitled: isEntitled(row.state, row.expiry_time_ms) || giftUntilMs !== null,
       state: row.state,
       expiryTimeMs: row.expiry_time_ms,
       autoRenewing: row.auto_renewing === 1,
       productId: row.product_id,
+      giftUntilMs,
     });
   }
 

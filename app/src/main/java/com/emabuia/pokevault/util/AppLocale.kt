@@ -1320,7 +1320,6 @@ object AppLocale {
         "proprietà di Nintendo, The Pokémon Company e The Pokémon Company International. " +
         "Questa app non è affiliata, sponsorizzata o approvata da Nintendo, " +
         "The Pokémon Company o The Pokémon Company International.\n\n" +
-        "I dati e le immagini del catalogo italiano sono ospitati sulla nostra infrastruttura Cloudflare. " +
         "Prezzi di mercato e catalogo carte in altre lingue sono recuperati da Pokewallet.io (api.pokewallet.io) " +
         "tramite i nostri server, mai direttamente dal tuo dispositivo. Sono utilizzati esclusivamente a scopo " +
         "informativo e di gestione della collezione personale. Per segnalazioni relative al copyright: " +
@@ -1331,7 +1330,6 @@ object AppLocale {
         "of Nintendo, The Pokémon Company, and The Pokémon Company International. " +
         "This app is not affiliated with, sponsored by, or endorsed by Nintendo, " +
         "The Pokémon Company, or The Pokémon Company International.\n\n" +
-        "Italian catalog data and images are hosted on our own Cloudflare infrastructure. " +
         "Market prices and the card catalog in other languages are fetched from Pokewallet.io (api.pokewallet.io) " +
         "through our servers, never directly from your device. All of it is used solely for informational and " +
         "personal collection management purposes. For copyright takedown requests: " +
@@ -1347,16 +1345,19 @@ object AppLocale {
 
     val ratingPromptTitle: String get() = if (isItalian) "Un Poké-messaggio per te" else "A Poké message for you"
     val ratingPromptTagline: String get() = if (isItalian)
-        "Se PokeVault ti piace, una recensione ci dà energia per continuare."
+        "PokeVault lo porto avanti da solo, nel tempo libero."
     else
-        "If you're enjoying PokeVault, a review gives us energy to keep building."
+        "I build PokeVault on my own, in my spare time."
     val ratingPromptBody: String get() = if (isItalian)
-        "Nella recensione puoi scriverci anche idee e feedback: leggiamo tutto e " +
-        "ci aiuta a far evolvere il progetto con nuove funzionalità utili."
+        "Una recensione sul Play Store è il modo più veloce per farlo conoscere — " +
+        "e se ci scrivi cosa cambieresti, lo leggo davvero: metà di quello che " +
+        "trovi nell'app è nato da un messaggio di qualcuno."
     else
-        "In your review, you can also share ideas and feedback: we read everything and " +
-        "it helps this project evolve with useful new features."
-    val ratingPromptReviewCta: String get() = if (isItalian) "Vai alla recensione" else "Go to review"
+        "A Play Store review is the fastest way to help it get found — and if you " +
+        "write what you'd change, I actually read it: half of what's in the app " +
+        "started as somebody's message."
+    val ratingPromptReviewCta: String get() = if (isItalian) "Scrivi una recensione" else "Write a review"
+    val ratingPromptLaterCta: String get() = if (isItalian) "Più tardi" else "Maybe later"
 
     val privacyConsentTitle: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
     val privacyConsentSummary: String get() = if (isItalian)
@@ -1393,15 +1394,23 @@ object AppLocale {
         "Se questa app ti è utile, ti fa sorridere o ti semplifica un po' la giornata, ecco come puoi darmi una mano a portarla avanti:\n\n" +
         "👑 Passa alla versione Premium: Un piccolo abbonamento per te, un supporto vitale per me! Oltre a sbloccare tutte le funzionalità esclusive, mi darai una mano concreta a coprire i costi di gestione e mi permetterai di dedicare sempre più tempo per aggiungere nuove fantastiche novità.\n\n" +
         "⭐️ Lascia una recensione a 5 stelle: Non costa nulla, ma per un dev indipendente come me vale oro. Aiuta l'app a crescere e a farsi conoscere negli store!\n\n" +
+        "🎁 Regala un mese: Se sei Premium hai un codice AMICO nelle impostazioni. Regalarlo non ti costa nulla e fa provare l'app per bene a chi ci tieni.\n\n" +
         "📢 Parlane in giro: Consigliala ai tuoi amici, parenti o sui social. Il passaparola è la pubblicità più bella del mondo.\n\n" +
         "Qualsiasi cosa tu decida di fare, anche solo continuare a usare l'app nella sua versione base, grazie di cuore. È grazie a persone come te che questo progetto ha senso di esistere.\n\n" +
-        "Per qualsiasi informazione, proposta Buona navigazione!\n\n" +
+        "Per qualsiasi cosa — un'idea, una segnalazione, due chiacchiere — mi trovi su TikTok, qui sopra. Buona navigazione!\n\n" +
         "Emanuele 👨🏻‍💻"
     else
-        "👋 Hi! I'm Emanuele, the creator of this app.\n\n" +
-        "There is no big company behind it, just me. I designed and built it from scratch with passion, lots of spare-time hours and a lot of coffee. ☕\n\n" +
-        "If the app is useful for you, going Premium, leaving a 5-star review, or sharing it with friends helps a lot.\n\n" +
-        "Thank you for using it!\n\n" +
+        "👋 Hi! I'm Emanuele, the creator of this app.\n" +
+        "If you're reading this you went digging through the settings... and I'm glad you did!\n\n" +
+        "There is no big company behind this app, it's just me. I thought it up, designed it and coded it from scratch, with a lot of passion, countless spare-time hours and an embarrassing amount of coffee. ☕\n\n" +
+        "My goal is to keep making it better, but being an independent developer is a challenge. Servers cost money, bugs always find somewhere to hide, and new ideas take time.\n\n" +
+        "If the app is useful to you, here is how you can help me keep it going:\n\n" +
+        "👑 Go Premium: A small subscription for you, a lifeline for me. It unlocks every feature and it covers the running costs, so I can spend more time adding new things.\n\n" +
+        "⭐️ Leave a 5-star review: It costs nothing, and for an indie dev it's worth its weight in gold. It helps the app get found.\n\n" +
+        "🎁 Gift a month: If you're Premium you have a friend code in the settings. Giving it away costs you nothing and lets someone you care about try the app properly.\n\n" +
+        "📢 Spread the word: Tell your friends, your family, your timeline. Word of mouth is the best advertising there is.\n\n" +
+        "Whatever you decide to do — even just keeping on using the free version — thank you, sincerely. It's people like you that make this project worth doing.\n\n" +
+        "For anything at all — an idea, a bug, a chat — you'll find me on TikTok, right up there. Enjoy!\n\n" +
         "Emanuele 👨🏻‍💻"
     val privacyPolicyLabel: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
     val privacyPolicySubtitle: String get() = if (isItalian) "Come gestiamo i tuoi dati" else "How we handle your data"
@@ -1442,6 +1451,8 @@ object AppLocale {
     else
         "You have unlimited access to all features."
     val premiumFeaturesTitle: String get() = if (isItalian) "Confronto funzionalità" else "Feature comparison"
+    val premiumFreeColumn: String get() = if (isItalian) "Gratis" else "Free"
+    val premiumPremiumColumn: String get() = if (isItalian) "Premium" else "Premium"
     val premiumFeatureAlbumFree: String get() = if (isItalian) "1 Album gratuito" else "1 Free Album"
     val premiumFeatureAlbumPremium: String get() = if (isItalian) "Album illimitati" else "Unlimited Albums"
     val premiumFeatureDeckFree: String get() = if (isItalian) "1 Deck gratuito" else "1 Free Deck"
@@ -1469,22 +1480,145 @@ object AppLocale {
         "Subscription auto-renews. You can cancel anytime from Google Play Store. " +
         "Payment is charged to your Google Play account."
     val premiumSettingsLabel: String get() = if (isItalian) "PokeVault Premium" else "PokeVault Premium"
+
+    /**
+     * Sottotitolo Premium nelle impostazioni.
+     *
+     * Prima era una frase fissa che nominava tre funzioni su nove, rimasta
+     * indietro di parecchi rilasci: chi la leggeva credeva che Premium servisse
+     * solo a quelle. Ora conta quello che il gate blocca davvero, e l'elenco
+     * completo sta nella schermata Premium, che è il posto giusto per un
+     * confronto riga per riga.
+     */
     val premiumSettingsSubtitleFree: String get() = if (isItalian)
-        "Sblocca Wishlist illimitate, Export decklist e Home Sprite a scelta"
+        "Album, deck, wishlist e tornei senza limiti, più export ed extra"
     else
-        "Unlock unlimited wishlists, decklist export and custom Home Sprite"
+        "Unlimited albums, decks, wishlists and tournaments, plus export and extras"
     val premiumSettingsSubtitleActive: String get() = if (isItalian)
-        "Abbonamento attivo — Export, Home Sprite a scelta e Wishlist illimitate"
+        "Abbonamento attivo — grazie, davvero"
     else
-        "Active subscription — Export, custom Home Sprite and unlimited wishlists"
-    val premiumSettingsExtraTitle: String get() = if (isItalian) "Con Premium sblocchi:" else "With Premium you unlock:"
-    val premiumSettingsExtraExport: String get() = if (isItalian) "• Export decklist PTCG standard" else "• Standard PTCG decklist export"
-    val premiumSettingsExtraHomeSprite: String get() = if (isItalian) "• Home Sprite fisso a scelta" else "• Fixed Home Sprite selection"
-    val premiumSettingsExtraWishlist: String get() = if (isItalian) "• Wishlist illimitate" else "• Unlimited wishlists"
+        "Subscription active — thank you, really"
+    fun premiumSettingsSubtitleGift(expiry: String): String = if (isItalian)
+        "Mese regalo attivo fino al $expiry"
+    else
+        "Gift month active until $expiry"
+    val premiumFeatureWishlistFree: String get() = if (isItalian) "1 Wishlist gratuita" else "1 Free Wishlist"
     val premiumFeatureWishlistPremium: String get() = if (isItalian) "Wishlist illimitate" else "Unlimited wishlists"
+    val premiumFeatureGoalAlbumFree: String get() = if (isItalian) "1 Album obiettivo" else "1 Goal Album"
+    val premiumFeatureGoalAlbumPremium: String get() = if (isItalian) "Album obiettivo illimitati" else "Unlimited Goal Albums"
+    val premiumFeatureHandSimFree: String get() = if (isItalian)
+        "1 simulazione di mano per deck"
+    else
+        "1 hand simulation per deck"
+    val premiumFeatureHandSimPremium: String get() = if (isItalian)
+        "Hand-Simulator senza limiti"
+    else
+        "Unlimited Hand-Simulator"
     val premiumFeatureExportPremium: String get() = if (isItalian) "Export decklist PTCG standard" else "Standard PTCG decklist export"
     val premiumFeatureHomeSpritePremium: String get() = if (isItalian) "Home Sprite fisso a scelta" else "Fixed Home Sprite selection"
-    val premiumManage: String get() = if (isItalian) "Gestisci abbonamento" else "Manage subscription"
+
+    // ══════════════════════════════════════
+    // CODICI REGALO
+    // ══════════════════════════════════════
+
+    val giftSettingsLabel: String get() = if (isItalian) "Codici regalo" else "Gift codes"
+    val giftSettingsSubtitle: String get() = if (isItalian)
+        "Regala un mese Premium a un amico, o riscatta un codice"
+    else
+        "Gift a Premium month to a friend, or redeem a code"
+    val giftTitle: String get() = if (isItalian) "Codici regalo" else "Gift codes"
+    val giftHeadline: String get() = if (isItalian)
+        "Un mese Premium, offerto da te"
+    else
+        "One Premium month, on you"
+    val giftHeadlineBody: String get() = if (isItalian)
+        "Il tuo codice AMICO regala 30 giorni di Premium a chi non l'ha mai avuto. " +
+        "A te non costa nulla e non scade."
+    else
+        "Your friend code gives 30 days of Premium to someone who has never had it. " +
+        "It costs you nothing and it does not expire."
+
+    val giftMyCodeTitle: String get() = if (isItalian) "Il tuo codice AMICO" else "Your friend code"
+    fun giftInvitesUsed(used: Int, max: Int): String = if (isItalian)
+        "Usato da $used amici su $max"
+    else
+        "Redeemed by $used of $max friends"
+    val giftInvitesExhausted: String get() = if (isItalian)
+        "Hai regalato tutti i mesi disponibili. Grazie!"
+    else
+        "You have given away every available month. Thank you!"
+    val giftCopyCta: String get() = if (isItalian) "Copia" else "Copy"
+    val giftCopiedToast: String get() = if (isItalian) "Codice copiato" else "Code copied"
+    val giftShareCta: String get() = if (isItalian) "Condividi" else "Share"
+    fun giftShareMessage(code: String): String = if (isItalian)
+        "Ti regalo un mese di PokeVault Premium 🎁\n\n" +
+        "Scarica l'app, vai in Impostazioni → Codici regalo e inserisci:\n$code"
+    else
+        "Here is a free month of PokeVault Premium 🎁\n\n" +
+        "Download the app, open Settings → Gift codes and enter:\n$code"
+    val giftShareChooserTitle: String get() = if (isItalian) "Regala un mese Premium" else "Gift a Premium month"
+
+    val giftRedeemTitle: String get() = if (isItalian) "Hai ricevuto un codice?" else "Got a code?"
+    val giftRedeemHint: String get() = if (isItalian) "Es. AMICOK7P2QX4M" else "e.g. AMICOK7P2QX4M"
+    val giftRedeemCta: String get() = if (isItalian) "Riscatta" else "Redeem"
+    fun giftRedeemSuccess(days: Int): String = if (isItalian)
+        "Fatto! $days giorni di Premium sono tuoi 🎉"
+    else
+        "Done! $days days of Premium are yours 🎉"
+    fun giftActiveUntil(expiry: String): String = if (isItalian)
+        "Premium regalo attivo fino al $expiry"
+    else
+        "Gift Premium active until $expiry"
+
+    /**
+     * Regola del riscatto, detta prima e non dopo il rifiuto.
+     *
+     * È il vincolo che sorprende di più — un solo codice per account e per
+     * dispositivo, per sempre — e leggerlo solo come messaggio di errore
+     * sembrerebbe un bug.
+     */
+    val giftRedeemRule: String get() = if (isItalian)
+        "Un codice per account e per dispositivo, una volta sola."
+    else
+        "One code per account and per device, once only."
+
+    val giftErrorNotFound: String get() = if (isItalian)
+        "Questo codice non esiste. Controlla che sia scritto giusto."
+    else
+        "This code does not exist. Check the spelling."
+    val giftErrorDisabled: String get() = if (isItalian)
+        "Questo codice è stato disattivato."
+    else
+        "This code has been deactivated."
+    val giftErrorExpired: String get() = if (isItalian)
+        "Questo codice è scaduto."
+    else
+        "This code has expired."
+    val giftErrorExhausted: String get() = if (isItalian)
+        "Questo codice è già stato usato da tutti gli amici che poteva invitare."
+    else
+        "This code has already been used by everyone it could invite."
+    val giftErrorOwnCode: String get() = if (isItalian)
+        "Questo è il tuo codice: serve a regalare un mese a qualcun altro."
+    else
+        "That is your own code: it is for giving a month to someone else."
+    val giftErrorAlreadyRedeemed: String get() = if (isItalian)
+        "Hai già riscattato un codice regalo con questo account."
+    else
+        "You have already redeemed a gift code with this account."
+    val giftErrorDeviceUsed: String get() = if (isItalian)
+        "Da questo dispositivo è già stato riscattato un codice."
+    else
+        "A code has already been redeemed from this device."
+    val giftErrorRateLimited: String get() = if (isItalian)
+        "Troppi tentativi. Riprova più tardi."
+    else
+        "Too many attempts. Try again later."
+    val giftErrorUnavailable: String get() = if (isItalian)
+        "Non riesco a contattare il server. Controlla la connessione e riprova."
+    else
+        "Cannot reach the server. Check your connection and try again."
+    val giftErrorEmpty: String get() = if (isItalian) "Scrivi un codice." else "Enter a code."
 
     // Premium gates
     val premiumAlbumLimitTitle: String get() = if (isItalian)

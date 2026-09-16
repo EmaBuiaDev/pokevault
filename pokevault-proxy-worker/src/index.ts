@@ -8,6 +8,7 @@
  */
 
 import { handleBillingRequest } from './billing';
+import { handleGiftRequest } from './gift';
 
 interface Env {
   CACHE: KVNamespace;
@@ -29,6 +30,12 @@ interface Env {
   PLAY_PACKAGE_NAME?: string;
   FIREBASE_PROJECT_ID?: string;
   RTDN_SHARED_SECRET?: string;
+
+  // Codici regalo da 1 mese (vedi src/gift.ts e GIFT.md). Anche questi sono
+  // secret: GIFT_CODE_SECRET deriva i codici AMICO e anonimizza i device id,
+  // quindi cambiarlo cambia il codice di tutti.
+  GIFT_CODE_SECRET?: string;
+  GIFT_ADMIN_SECRET?: string;
 }
 
 interface CachedResponse {
@@ -2046,9 +2053,13 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestUrl = new URL(request.url);
 
-    // Le rotte di billing usano POST: vanno risolte PRIMA del filtro sui GET.
+    // Le rotte di billing e regalo usano POST: vanno risolte PRIMA del filtro
+    // sui GET, e non passano mai dalla cache.
     const billingResponse = await handleBillingRequest(request, requestUrl.pathname, env);
     if (billingResponse) return billingResponse;
+
+    const giftResponse = await handleGiftRequest(request, requestUrl.pathname, env);
+    if (giftResponse) return giftResponse;
 
     // Only cache GET requests
     if (request.method !== 'GET') {

@@ -83,6 +83,7 @@ import com.emabuia.pokevault.ui.competitive.HandSimulatorScreen
 import com.emabuia.pokevault.ui.competitive.MatchLogScreen
 import com.emabuia.pokevault.ui.competitive.TournamentDetailScreen
 import com.emabuia.pokevault.ui.deck.DeckLabScreen
+import com.emabuia.pokevault.ui.premium.GiftCodeScreen
 import com.emabuia.pokevault.ui.premium.PremiumScreen
 import com.emabuia.pokevault.ui.settings.SettingsScreen
 import com.emabuia.pokevault.ui.wishlist.WishlistDetailScreen
@@ -92,6 +93,22 @@ import androidx.compose.ui.platform.LocalContext
 import java.net.URLDecoder
 import java.net.URLEncoder
 import kotlinx.coroutines.delay
+
+// ── Richiesta di recensione ─────────────────────────────────────────────────
+// Chiavi e soglie in un posto solo: erano letterali sparsi nel composable, e
+// "review_prompt_shown" veniva scritto prima che l'utente rispondesse.
+private const val KEY_REVIEW_PROMPT_DONE = "review_prompt_shown"
+private const val KEY_REVIEW_PROMPT_SNOOZE_UNTIL = "review_prompt_snooze_until"
+private const val KEY_REVIEW_PROMPT_REFUSALS = "review_prompt_refusals"
+
+/** Schermate diverse aperte prima di chiedere: chi ha appena installato non ha ancora un'opinione. */
+private const val REVIEW_PROMPT_NAVIGATIONS = 10
+
+/** Dopo un "più tardi" si riprova fra una settimana. */
+private const val REVIEW_PROMPT_SNOOZE_MS = 7L * 24 * 60 * 60 * 1000
+
+/** Al secondo rifiuto non si chiede più. */
+private const val REVIEW_PROMPT_MAX_REFUSALS = 2
 
 object Routes {
     const val AUTH = "auth"
@@ -121,6 +138,7 @@ object Routes {
     const val GRADED = "graded"
     const val SETTINGS = "settings"
     const val PREMIUM = "premium"
+    const val GIFT_CODES = "gift_codes"
     const val WISHLIST_LIST = "wishlist_list"
     const val WISHLIST_DETAIL = "wishlist_detail/{wishlistId}"
     const val ALBUM_LIST = "album_list"
@@ -171,7 +189,14 @@ fun AppNavigation(
 
     LaunchedEffect(currentRoute, authViewModel.uiState.isLoggedIn) {
         if (!authViewModel.uiState.isLoggedIn) return@LaunchedEffect
-        if (engagementPrefs.getBoolean("review_prompt_shown", false)) return@LaunchedEffect
+        // "Chiuso per sempre" lo decide l'utente: si scrive solo quando va
+        // davvero in recensione o quando dice di no due volte.
+        if (engagementPrefs.getBoolean(KEY_REVIEW_PROMPT_DONE, false)) return@LaunchedEffect
+
+        // Un "più tardi" è un rinvio, non un rifiuto: la richiesta torna dopo
+        // qualche giorno, non alla schermata successiva.
+        val snoozedUntil = engagementPrefs.getLong(KEY_REVIEW_PROMPT_SNOOZE_UNTIL, 0L)
+        if (System.currentTimeMillis() < snoozedUntil) return@LaunchedEffect
 
         val route = currentRoute ?: return@LaunchedEffect
         if (route == lastTrackedRoute || route == Routes.AUTH) return@LaunchedEffect
@@ -179,10 +204,7 @@ fun AppNavigation(
         lastTrackedRoute = route
         navigationCount += 1
 
-        if (navigationCount >= 10) {
-            engagementPrefs.edit().putBoolean("review_prompt_shown", true).apply()
-            showReviewPrompt = true
-        }
+        if (navigationCount >= REVIEW_PROMPT_NAVIGATIONS) showReviewPrompt = true
     }
 
     if (showReviewPrompt) {
@@ -253,8 +275,34 @@ fun AppNavigation(
             label = "reviewPromptFlash"
         )
 
+        /**
+         * Rinvia la richiesta, contando i rifiuti.
+         *
+         * Prima esisteva solo l'uscita definitiva, scritta per giunta PRIMA che
+         * l'utente decidesse: chi chiudeva toccando fuori non rivedeva il banner
+         * mai più, e non aveva nemmeno un bottone per dire "non ora".
+         */
+        fun snoozeReviewPrompt() {
+            showReviewPrompt = false
+            navigationCount = 0
+            val refusals = engagementPrefs.getInt(KEY_REVIEW_PROMPT_REFUSALS, 0) + 1
+            engagementPrefs.edit().apply {
+                putInt(KEY_REVIEW_PROMPT_REFUSALS, refusals)
+                // Al secondo no si smette: insistere oltre è molestia, non
+                // marketing.
+                if (refusals >= REVIEW_PROMPT_MAX_REFUSALS) {
+                    putBoolean(KEY_REVIEW_PROMPT_DONE, true)
+                } else {
+                    putLong(
+                        KEY_REVIEW_PROMPT_SNOOZE_UNTIL,
+                        System.currentTimeMillis() + REVIEW_PROMPT_SNOOZE_MS
+                    )
+                }
+            }.apply()
+        }
+
         AlertDialog(
-            onDismissRequest = { showReviewPrompt = false },
+            onDismissRequest = { snoozeReviewPrompt() },
             title = { Text(AppLocale.ratingPromptTitle) },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -313,10 +361,16 @@ fun AppNavigation(
                     )
                 }
             },
+            dismissButton = {
+                TextButton(onClick = { snoozeReviewPrompt() }) {
+                    Text(AppLocale.ratingPromptLaterCta)
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showReviewPrompt = false
+                        engagementPrefs.edit().putBoolean(KEY_REVIEW_PROMPT_DONE, true).apply()
                         val packageName = context.packageName
                         val appStoreIntent = Intent(
                             Intent.ACTION_VIEW,
@@ -741,7 +795,16 @@ fun AppNavigation(
                 // ── Premium ──
                 composable(Routes.PREMIUM) {
                     PremiumScreen(
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onNavigateToGiftCodes = { navController.navigate(Routes.GIFT_CODES) }
+                    )
+                }
+
+                // ── Codici regalo ──
+                composable(Routes.GIFT_CODES) {
+                    GiftCodeScreen(
+                        onBack = { navController.popBackStack() },
+                        onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }
                     )
                 }
 
@@ -757,7 +820,8 @@ fun AppNavigation(
                             authViewModel.logout()
                             navController.navigate(Routes.AUTH) { popUpTo(0) { inclusive = true } }
                         },
-                        onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }
+                        onNavigateToPremium = { navController.navigate(Routes.PREMIUM) },
+                        onNavigateToGiftCodes = { navController.navigate(Routes.GIFT_CODES) }
                     )
                 }
             }

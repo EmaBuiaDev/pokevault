@@ -8,8 +8,11 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -29,11 +32,13 @@ class PremiumManager private constructor(private val context: Context) {
         private const val KEY_META_DECK_VIEWS = "meta_deck_views"
         private const val KEY_HOME_SPRITE_ID = "home_sprite_id"
         private const val KEY_HAND_SIM_RUN_PREFIX = "hand_sim_runs_"
+        private const val KEY_GIFT_UNTIL_MS = "gift_until_ms"
+        private const val KEY_GIFT_UID = "gift_uid"
 
         /**
          * Regola unica dei limiti free, in forma pura e testabile.
          *
-         * Le funzioni di gate leggevano _isPremium.value direttamente, quindi
+         * Le funzioni di gate leggevano lo stato premium dell'istanza, quindi
          * non erano verificabili senza un BillingClient e un Context: non
          * esisteva alcun test su PremiumManager.
          */
@@ -66,8 +71,64 @@ class PremiumManager private constructor(private val context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     // All'avvio, la fonte di verità è sempre BillingClient/server, non SharedPreferences
-    private val _isPremium = MutableStateFlow(false)
-    val isPremium: StateFlow<Boolean> = _isPremium.asStateFlow()
+    private val _billingPremium = MutableStateFlow(false)
+
+    /**
+     * Scadenza del mese regalo riscattato, in millisecondi epoch. 0 = nessuno.
+     *
+     * A differenza dell'abbonamento, questa la teniamo anche su disco: la
+     * concede il server una volta sola e non c'è un BillingClient da
+     * interrogare per riscoprirla, quindi senza rete l'utente perderebbe un
+     * mese che ha già ricevuto. Resta comunque il server a deciderla: qui c'è
+     * solo una copia con una scadenza dentro, che scade da sé.
+     */
+    private val _giftUntilMs = MutableStateFlow(storedGiftUntilMs())
+    val giftUntilMs: StateFlow<Long> = _giftUntilMs.asStateFlow()
+
+    /**
+     * Il premium ha due fonti: l'abbonamento Play e il mese regalo.
+     *
+     * Sono indipendenti — un regalo non è un acquisto e non va confermato a
+     * Google — quindi vale la somma, non l'ultima delle due che ha scritto.
+     * Prima era un singolo MutableStateFlow, e un riscatto sarebbe stato
+     * cancellato dalla prima queryExistingPurchases() che non trovava acquisti.
+     */
+    val isPremium: StateFlow<Boolean> =
+        combine(_billingPremium, _giftUntilMs) { fromBilling, giftUntil ->
+            fromBilling || giftUntil > System.currentTimeMillis()
+        }.stateIn(
+            scope,
+            SharingStarted.Eagerly,
+            // Il valore iniziale non può essere false a prescindere: stateIn
+            // emette la prima combinazione sul dispatcher Main, cioè al giro
+            // successivo del looper, e fino ad allora un utente con un regalo
+            // attivo si vedrebbe negare le funzioni premium.
+            storedGiftUntilMs() > System.currentTimeMillis()
+        )
+
+    init {
+        // Il regalo è di un account, non del telefono. Senza questo, bastava
+        // riscattare, uscire e rientrare con un altro utente per portarsi
+        // dietro il mese: esattamente il giro che i vincoli sul server
+        // esistono per impedire.
+        FirebaseAuth.getInstance().addAuthStateListener {
+            _giftUntilMs.value = storedGiftUntilMs()
+            refreshGiftEntitlement()
+        }
+    }
+
+    /**
+     * Copia locale del regalo, ma solo se è di chi ha fatto l'accesso adesso.
+     *
+     * Un uid diverso (o assente) vale come nessun regalo: la copia resta su
+     * disco e torna valida se quell'utente rientra, senza un secondo giro sul
+     * server.
+     */
+    private fun storedGiftUntilMs(): Long {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        if (uid.isBlank() || prefs.getString(KEY_GIFT_UID, null) != uid) return 0L
+        return prefs.getLong(KEY_GIFT_UNTIL_MS, 0L)
+    }
 
     private val _metaDeckViewsUsed = MutableStateFlow(prefs.getInt(KEY_META_DECK_VIEWS, 0))
     private val _selectedHomeSpriteId = MutableStateFlow(prefs.getInt(KEY_HOME_SPRITE_ID, 0))
@@ -77,7 +138,7 @@ class PremiumManager private constructor(private val context: Context) {
         get() = HOME_SPRITE_IDS
 
     val metaDeckViewsRemaining: Int
-        get() = if (_isPremium.value) Int.MAX_VALUE
+        get() = if (isPremium.value) Int.MAX_VALUE
                 else (FREE_META_DECK_VIEWS - _metaDeckViewsUsed.value).coerceAtLeast(0)
 
     private val _products = MutableStateFlow<List<ProductDetails>>(emptyList())
@@ -358,9 +419,45 @@ class PremiumManager private constructor(private val context: Context) {
         _purchaseState.value = PurchaseState.Error(message)
     }
 
-    private fun updatePremiumStatus(isPremium: Boolean) {
-        _isPremium.value = isPremium
-        syncToFirestore(isPremium)
+    private fun updatePremiumStatus(entitledByBilling: Boolean) {
+        _billingPremium.value = entitledByBilling
+        // Su Firestore va lo stato che l'utente vede davvero, regalo incluso:
+        // scriverci solo l'abbonamento direbbe "non premium" a chi il premium
+        // ce l'ha per un mese.
+        syncToFirestore(entitledByBilling || hasActiveGift())
+    }
+
+    /** true finché il mese regalo riscattato non è scaduto. */
+    fun hasActiveGift(): Boolean = _giftUntilMs.value > System.currentTimeMillis()
+
+    /**
+     * Registra il mese regalo appena concesso dal server.
+     *
+     * La scadenza arriva sempre da lì: calcolarla sul telefono la renderebbe
+     * spostabile con l'orologio di sistema.
+     */
+    fun applyGiftGrant(giftUntilMs: Long) {
+        _giftUntilMs.value = giftUntilMs
+        prefs.edit()
+            .putLong(KEY_GIFT_UNTIL_MS, giftUntilMs)
+            .putString(KEY_GIFT_UID, FirebaseAuth.getInstance().currentUser?.uid.orEmpty())
+            .apply()
+    }
+
+    /**
+     * Riallinea il regalo a quello che dice il server.
+     *
+     * Serve al caso opposto della copia locale: un regalo revocato, o un
+     * riscatto fatto su un altro dispositivo dello stesso account. Se il server
+     * non risponde la copia locale resta, perché un problema di rete non deve
+     * togliere un mese già ricevuto.
+     */
+    fun refreshGiftEntitlement() {
+        if (!GiftCodeRepository.isConfigured) return
+        scope.launch {
+            val status = GiftCodeRepository.fetchStatus() ?: return@launch
+            applyGiftGrant(status.giftUntilMs ?: 0L)
+        }
     }
 
     /**
@@ -392,40 +489,54 @@ class PremiumManager private constructor(private val context: Context) {
      * invisibili per tutta la vita del processo.
      */
     fun refreshEntitlement() {
+        expireGiftIfNeeded()
+        refreshGiftEntitlement()
         scope.launch { queryExistingPurchases() }
     }
 
+    /**
+     * Azzera un regalo scaduto.
+     *
+     * Necessario perché isPremium è un combine: il tempo che passa non fa
+     * emettere niente, quindi senza questa spinta un mese finito resterebbe
+     * "attivo" finché l'app non viene chiusa. Il posto giusto è qui, che è il
+     * punto già chiamato a ogni ritorno in primo piano.
+     */
+    private fun expireGiftIfNeeded() {
+        if (_giftUntilMs.value != 0L && !hasActiveGift()) applyGiftGrant(0L)
+    }
+
     fun canCreateDeck(currentDeckCount: Int): Boolean =
-        isWithinFreeLimit(_isPremium.value, currentDeckCount, FREE_DECK_LIMIT)
+        isWithinFreeLimit(isPremium.value, currentDeckCount, FREE_DECK_LIMIT)
 
     fun canCreateAlbum(currentAlbumCount: Int): Boolean =
-        isWithinFreeLimit(_isPremium.value, currentAlbumCount, FREE_ALBUM_LIMIT)
+        isWithinFreeLimit(isPremium.value, currentAlbumCount, FREE_ALBUM_LIMIT)
 
     fun canCreateGoalAlbum(currentGoalAlbumCount: Int): Boolean =
-        isWithinFreeLimit(_isPremium.value, currentGoalAlbumCount, FREE_GOAL_ALBUM_LIMIT)
+        isWithinFreeLimit(isPremium.value, currentGoalAlbumCount, FREE_GOAL_ALBUM_LIMIT)
 
     fun canCreateWishlist(currentWishlistCount: Int): Boolean =
-        isWithinFreeLimit(_isPremium.value, currentWishlistCount, FREE_WISHLIST_LIMIT)
+        isWithinFreeLimit(isPremium.value, currentWishlistCount, FREE_WISHLIST_LIMIT)
 
     fun canCreateTournament(currentTournamentCount: Int): Boolean =
-        isWithinFreeLimit(_isPremium.value, currentTournamentCount, FREE_TOURNAMENT_LIMIT)
+        isWithinFreeLimit(isPremium.value, currentTournamentCount, FREE_TOURNAMENT_LIMIT)
 
     fun canViewMetaDeck(): Boolean =
-        isWithinFreeLimit(_isPremium.value, _metaDeckViewsUsed.value, FREE_META_DECK_VIEWS)
+        isWithinFreeLimit(isPremium.value, _metaDeckViewsUsed.value, FREE_META_DECK_VIEWS)
 
     fun canExportDecklist(): Boolean {
-        return _isPremium.value
+        return isPremium.value
     }
 
     fun canRunHandSimulator(deckId: String, currentDeckCount: Int): Boolean {
-        if (_isPremium.value) return true
+        if (isPremium.value) return true
         if (deckId.isBlank()) return false
         if (currentDeckCount != FREE_DECK_LIMIT) return false
         return getHandSimulatorRuns(deckId) < 1
     }
 
     fun consumeHandSimulatorRun(deckId: String) {
-        if (_isPremium.value || deckId.isBlank()) return
+        if (isPremium.value || deckId.isBlank()) return
         val key = handSimulatorRunsKey(deckId)
         val currentRuns = prefs.getInt(key, 0)
         prefs.edit().putInt(key, currentRuns + 1).apply()
@@ -437,11 +548,11 @@ class PremiumManager private constructor(private val context: Context) {
     }
 
     fun canChooseHomeSprite(): Boolean {
-        return _isPremium.value
+        return isPremium.value
     }
 
     fun setSelectedHomeSpriteId(spriteId: Int) {
-        if (!_isPremium.value) return
+        if (!isPremium.value) return
 
         val validSpriteId = if (spriteId == 0 || HOME_SPRITE_IDS.contains(spriteId)) spriteId else return
         _selectedHomeSpriteId.value = validSpriteId
@@ -449,7 +560,7 @@ class PremiumManager private constructor(private val context: Context) {
     }
 
     fun consumeMetaDeckView() {
-        if (_isPremium.value) return
+        if (isPremium.value) return
         val newCount = _metaDeckViewsUsed.value + 1
         _metaDeckViewsUsed.value = newCount
         prefs.edit().putInt(KEY_META_DECK_VIEWS, newCount).apply()
