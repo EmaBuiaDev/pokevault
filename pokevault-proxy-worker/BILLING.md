@@ -104,6 +104,30 @@ quando il messaggio non è una notifica di abbonamento o il purchase token non �
 ancora associato a un utente: un non-2xx farebbe ritentare Pub/Sub all'infinito
 su un messaggio che non diventerà mai valido.
 
+## Il sintomo, visto davvero
+
+Osservato in test interno il 16 settembre 2026, sulla 3.1.3 (versionCode 35):
+
+> Comprato l'abbonamento, poi cambiato account PokeVault sullo stesso telefono:
+> **qualunque account risulta premium.**
+
+Non e' un bug introdotto da qualche parte, e' precisamente questo buco.
+L'abbonamento appartiene all'**account Google Play del dispositivo**, non
+all'account PokeVault: `queryPurchasesAsync` chiede al Play Store se quel
+portafoglio possiede l'abbonamento, e il Play Store non sa che esista un login
+PokeVault. `updatePremiumStatus(purchased.isNotEmpty())` accende quindi il
+premium per chiunque sia connesso in quel momento.
+
+Quanto pesa: per condividere il premium bisogna condividere il telefono, non si
+passa a distanza. Chi paga e poi si rifa' l'account tiene il premium. E' stato
+deciso di pubblicare la 3.1.3 cosi' — si comporta come la 3.1.2 gia' live, non
+peggiora nulla — e di affrontare il binding come lavoro a se'.
+
+Effetto collaterale da ricordare quando si testa: con un abbonamento attivo sul
+dispositivo, **il riscatto di un codice regalo non produce alcun effetto
+visibile**, perche' il premium risulta gia' acceso. Per provare i regali serve
+un account Play senza abbonamento, o annullare quello di test.
+
 ## Cosa manca ancora nell'app
 
 Il Worker è pronto; **il client Android non lo chiama ancora**. Per chiudere il
