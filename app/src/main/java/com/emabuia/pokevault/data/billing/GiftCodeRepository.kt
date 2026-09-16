@@ -6,6 +6,7 @@ import android.provider.Settings
 import com.emabuia.pokevault.BuildConfig
 import com.google.firebase.auth.FirebaseAuth
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -98,20 +99,33 @@ object GiftCodeRepository {
         data object Unavailable : RedeemResult()
     }
 
+    /**
+     * I due DTO qui sotto hanno una regola `-keep` dedicata in
+     * proguard-rules.pro, e ne hanno bisogno: **non toglierla**.
+     *
+     * [SerializedName] da sola non basta con R8 in full mode. Il problema non e'
+     * il rinominamento dei campi, e' che nessuno li *scrive* nel bytecode — li
+     * popola Gson per reflection — quindi R8 li considera costantemente null e
+     * pota tutti i rami che dipendono da loro. Senza quella regola l'unico esito
+     * possibile di [redeem] in release diventa [RedeemResult.Unavailable].
+     *
+     * Le annotazioni restano perche' fissano i nomi JSON: rinominare una
+     * proprieta' Kotlin non deve poter rompere il contratto col Worker.
+     */
     private data class GiftStatusPayload(
-        val code: String? = null,
-        val grantDays: Int? = null,
-        val invitesUsed: Int? = null,
-        val invitesMax: Int? = null,
-        val alreadyRedeemed: Boolean? = null,
-        val giftUntilMs: Long? = null
+        @SerializedName("code") val code: String? = null,
+        @SerializedName("grantDays") val grantDays: Int? = null,
+        @SerializedName("invitesUsed") val invitesUsed: Int? = null,
+        @SerializedName("invitesMax") val invitesMax: Int? = null,
+        @SerializedName("alreadyRedeemed") val alreadyRedeemed: Boolean? = null,
+        @SerializedName("giftUntilMs") val giftUntilMs: Long? = null
     )
 
     private data class RedeemPayload(
-        val entitled: Boolean? = null,
-        val reason: String? = null,
-        val grantDays: Int? = null,
-        val giftUntilMs: Long? = null
+        @SerializedName("entitled") val entitled: Boolean? = null,
+        @SerializedName("reason") val reason: String? = null,
+        @SerializedName("grantDays") val grantDays: Int? = null,
+        @SerializedName("giftUntilMs") val giftUntilMs: Long? = null
     )
 
     /** true quando il Worker e' configurato: senza URL la funzione resta nascosta. */

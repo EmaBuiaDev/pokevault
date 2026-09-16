@@ -3,10 +3,6 @@ package com.emabuia.pokevault.ui.navigation
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
@@ -16,19 +12,14 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -39,16 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -82,6 +64,7 @@ import com.emabuia.pokevault.ui.competitive.CompetitiveHubScreen
 import com.emabuia.pokevault.ui.competitive.HandSimulatorScreen
 import com.emabuia.pokevault.ui.competitive.MatchLogScreen
 import com.emabuia.pokevault.ui.competitive.TournamentDetailScreen
+import com.emabuia.pokevault.ui.components.ReviewPromptBanner
 import com.emabuia.pokevault.ui.deck.DeckLabScreen
 import com.emabuia.pokevault.ui.premium.GiftCodeScreen
 import com.emabuia.pokevault.ui.premium.PremiumScreen
@@ -92,7 +75,6 @@ import com.emabuia.pokevault.viewmodel.AuthViewModel
 import androidx.compose.ui.platform.LocalContext
 import java.net.URLDecoder
 import java.net.URLEncoder
-import kotlinx.coroutines.delay
 
 // ── Richiesta di recensione ─────────────────────────────────────────────────
 // Chiavi e soglie in un posto solo: erano letterali sparsi nel composable, e
@@ -207,191 +189,52 @@ fun AppNavigation(
         if (navigationCount >= REVIEW_PROMPT_NAVIGATIONS) showReviewPrompt = true
     }
 
-    if (showReviewPrompt) {
-        val transition = rememberInfiniteTransition(label = "reviewPromptAnimation")
-        val fullTagline = AppLocale.ratingPromptTagline
-        val fullBody = AppLocale.ratingPromptBody
-        var typedTagline by remember(fullTagline, showReviewPrompt) { mutableStateOf("") }
-        var typedBody by remember(fullBody, showReviewPrompt) { mutableStateOf("") }
+    /**
+     * Rinvia la richiesta, contando i rifiuti.
+     *
+     * Prima esisteva solo l'uscita definitiva, scritta per giunta PRIMA che
+     * l'utente decidesse: chi chiudeva il dialog toccando fuori non rivedeva il
+     * banner mai piu', e non aveva nemmeno un bottone per dire "non ora".
+     */
+    fun snoozeReviewPrompt() {
+        showReviewPrompt = false
+        navigationCount = 0
+        val refusals = engagementPrefs.getInt(KEY_REVIEW_PROMPT_REFUSALS, 0) + 1
+        engagementPrefs.edit().apply {
+            putInt(KEY_REVIEW_PROMPT_REFUSALS, refusals)
+            // Al secondo no si smette: insistere oltre e' molestia, non
+            // marketing.
+            if (refusals >= REVIEW_PROMPT_MAX_REFUSALS) {
+                putBoolean(KEY_REVIEW_PROMPT_DONE, true)
+            } else {
+                putLong(
+                    KEY_REVIEW_PROMPT_SNOOZE_UNTIL,
+                    System.currentTimeMillis() + REVIEW_PROMPT_SNOOZE_MS
+                )
+            }
+        }.apply()
+    }
 
-        LaunchedEffect(showReviewPrompt, fullTagline, fullBody) {
-            if (!showReviewPrompt) return@LaunchedEffect
-            typedTagline = ""
-            typedBody = ""
-            for (char in fullTagline) {
-                typedTagline += char
-                delay(14)
-            }
-            delay(90)
-            for (char in fullBody) {
-                typedBody += char
-                delay(9)
-            }
+    /** Porta alla scheda Play, con il fallback web se lo Store non c'e'. */
+    fun openStoreForReview() {
+        showReviewPrompt = false
+        engagementPrefs.edit().putBoolean(KEY_REVIEW_PROMPT_DONE, true).apply()
+
+        val packageName = context.packageName
+        val appStoreIntent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("market://details?id=$packageName")
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val webStoreIntent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        try {
+            context.startActivity(appStoreIntent)
+        } catch (_: ActivityNotFoundException) {
+            context.startActivity(webStoreIntent)
         }
-
-        val jumpScale by transition.animateFloat(
-            initialValue = 0.92f,
-            targetValue = 1.12f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 520),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "reviewPromptJumpScale"
-        )
-        val jumpY by transition.animateFloat(
-            initialValue = 3f,
-            targetValue = -10f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 520),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "reviewPromptJumpY"
-        )
-        val shakeX by transition.animateFloat(
-            initialValue = -3f,
-            targetValue = 3f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 120),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "reviewPromptShakeX"
-        )
-        val sparkAlpha by transition.animateFloat(
-            initialValue = 0.35f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 360),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "reviewPromptSparkAlpha"
-        )
-        val flashAlpha by transition.animateFloat(
-            initialValue = 0.08f,
-            targetValue = 0.24f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 240),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "reviewPromptFlash"
-        )
-
-        /**
-         * Rinvia la richiesta, contando i rifiuti.
-         *
-         * Prima esisteva solo l'uscita definitiva, scritta per giunta PRIMA che
-         * l'utente decidesse: chi chiudeva toccando fuori non rivedeva il banner
-         * mai più, e non aveva nemmeno un bottone per dire "non ora".
-         */
-        fun snoozeReviewPrompt() {
-            showReviewPrompt = false
-            navigationCount = 0
-            val refusals = engagementPrefs.getInt(KEY_REVIEW_PROMPT_REFUSALS, 0) + 1
-            engagementPrefs.edit().apply {
-                putInt(KEY_REVIEW_PROMPT_REFUSALS, refusals)
-                // Al secondo no si smette: insistere oltre è molestia, non
-                // marketing.
-                if (refusals >= REVIEW_PROMPT_MAX_REFUSALS) {
-                    putBoolean(KEY_REVIEW_PROMPT_DONE, true)
-                } else {
-                    putLong(
-                        KEY_REVIEW_PROMPT_SNOOZE_UNTIL,
-                        System.currentTimeMillis() + REVIEW_PROMPT_SNOOZE_MS
-                    )
-                }
-            }.apply()
-        }
-
-        AlertDialog(
-            onDismissRequest = { snoozeReviewPrompt() },
-            title = { Text(AppLocale.ratingPromptTitle) },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = typedTagline,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                color = Color(0xFFFFE082).copy(alpha = flashAlpha),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
-                        ) {
-                            Text(
-                                text = "⚡",
-                                fontSize = 20.sp,
-                                modifier = Modifier.graphicsLayer(alpha = sparkAlpha),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "Pika!",
-                                fontSize = 24.sp,
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .graphicsLayer(
-                                        scaleX = jumpScale,
-                                        scaleY = jumpScale,
-                                        translationY = jumpY,
-                                        translationX = shakeX
-                                    ),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "✨",
-                                fontSize = 20.sp,
-                                modifier = Modifier.graphicsLayer(alpha = 1f - sparkAlpha),
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = typedBody,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { snoozeReviewPrompt() }) {
-                    Text(AppLocale.ratingPromptLaterCta)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showReviewPrompt = false
-                        engagementPrefs.edit().putBoolean(KEY_REVIEW_PROMPT_DONE, true).apply()
-                        val packageName = context.packageName
-                        val appStoreIntent = Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("market://details?id=$packageName")
-                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        val webStoreIntent = Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
-                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                        try {
-                            context.startActivity(appStoreIntent)
-                        } catch (_: ActivityNotFoundException) {
-                            context.startActivity(webStoreIntent)
-                        }
-                    }
-                ) {
-                    Text(AppLocale.ratingPromptReviewCta)
-                }
-            }
-        )
     }
 
     // Letti una volta qui: le lambda di transizione di NavHost non sono
@@ -843,6 +686,23 @@ fun AppNavigation(
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+
+        // Ultimo figlio del Box, quindi disegnato sopra bottom bar e FAB: e'
+        // una cosa appoggiata sull'app, non un pezzo della schermata. Non e'
+        // modale, percio' dietro si continua a scorrere e a toccare.
+        ReviewPromptBanner(
+            visible = showReviewPrompt,
+            onReview = { openStoreForReview() },
+            onLater = { snoozeReviewPrompt() },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(
+                    // Sopra la bottom bar quando c'e': coprirla nasconderebbe
+                    // la navigazione proprio mentre chiediamo un favore.
+                    bottom = if (showBottomBar) PokeVaultBottomBarHeight + 12.dp else 16.dp
+                )
+        )
     }
 }
 

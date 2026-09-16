@@ -26,6 +26,22 @@
 -keep class com.emabuia.pokevault.data.remote.** { *; }
 -keep class com.emabuia.pokevault.data.italian.** { *; }
 
+# I DTO dei codici regalo stanno in data.billing, fuori dai package qui sopra.
+#
+# La sola @SerializedName NON basta, ed e' stato verificato sull'AAB: con R8 in
+# full mode il danno non e' il rinominamento, e' la propagazione dei valori.
+# Nessuno *scrive* questi campi nel bytecode -- li popola Gson per reflection,
+# che R8 non vede -- quindi R8 li considera costantemente null, riduce
+# `payload?.entitled == true` a `false` e da li' pota via tutto il ramo a valle.
+#
+# Nell'AAB prodotto senza questa regola: RedeemResult$Success risultava
+# R8$$REMOVED$$CLASS$$854, RedeemResult$Rejected spariva del tutto e l'unico
+# esito sopravvissuto era Unavailable. Tradotto: in release il riscatto di un
+# codice falliva sempre, con "non riesco a contattare il server", mentre in
+# debug -- dove R8 non gira -- funzionava tutto.
+-keep class com.emabuia.pokevault.data.billing.GiftCodeRepository$GiftStatusPayload { *; }
+-keep class com.emabuia.pokevault.data.billing.GiftCodeRepository$RedeemPayload { *; }
+
 # ── Attributi richiesti da Retrofit e Gson per i tipi generici ──
 -keepattributes Signature
 -keepattributes Exceptions
