@@ -162,7 +162,11 @@ async function main() {
       ? {
           number,
           total: officialCount === null ? null : String(officialCount),
-          rarity: null,
+          // Opzionale nel manifest: la rarita' si legge dal simbolo stampato
+          // in fondo alla carta e non tutte sono distinguibili con certezza,
+          // quindi si annota solo dove lo e' -- una assente resta NULL e non
+          // sovrascrive quello che c'e' gia' in D1 (vedi COALESCE sotto).
+          rarity: entry.rarita ?? null,
           nome: entry.nome,
           ps: null,
           imageUrl: `${imageBase}/${setCode.toUpperCase()}/${setCode.toUpperCase()}_IT_${number}.png`,
@@ -210,14 +214,14 @@ async function main() {
   const expansionSql = `INSERT INTO expansions (${expansionColumns}) VALUES (${expansionValues}) ON CONFLICT(id) DO UPDATE SET card_count = excluded.card_count, official_count = COALESCE(excluded.official_count, official_count), name = COALESCE(excluded.name, name), series = COALESCE(excluded.series, series), release_date = COALESCE(excluded.release_date, release_date), published = 1, coverage_pct = 1, dominant_set_code = excluded.dominant_set_code, base_set_code = excluded.base_set_code;`;
   const cardRows = cards.map((card) => {
     const cardId = `${setCode.toUpperCase()}_IT_${card.number}.png`;
-    return `(${sqlString(cardId)}, ${sqlString(expansionId)}, ${sqlString(card.number)}, ${sqlString(card.nome)}, NULL, ${sqlString(card.ps)}, NULL, '[]', 'ok', 0)`;
+    return `(${sqlString(cardId)}, ${sqlString(expansionId)}, ${sqlString(card.number)}, ${sqlString(card.nome)}, NULL, ${sqlString(card.ps)}, NULL, '[]', 'ok', 0, ${sqlString(card.rarity)})`;
   });
   // Batch da 50 righe come import-catalog-to-d1.mjs: oltre quella soglia D1
   // rifiuta la singola statement con SQLITE_TOOBIG.
   const cardStatements = [];
   for (let i = 0; i < cardRows.length; i += 50) {
     const chunk = cardRows.slice(i, i + 50);
-    cardStatements.push(`INSERT INTO cards (card_id, expansion_id, card_number, nome, tipo, ps, regola_speciale, attacchi_json, image_status, image_webp) VALUES\n${chunk.join(',\n')}\nON CONFLICT(card_id) DO UPDATE SET nome = excluded.nome, ps = excluded.ps, image_status = excluded.image_status;`);
+    cardStatements.push(`INSERT INTO cards (card_id, expansion_id, card_number, nome, tipo, ps, regola_speciale, attacchi_json, image_status, image_webp, rarity) VALUES\n${chunk.join(',\n')}\nON CONFLICT(card_id) DO UPDATE SET nome = excluded.nome, ps = excluded.ps, image_status = excluded.image_status, rarity = COALESCE(excluded.rarity, rarity);`);
   }
   const sqlFile = path.join(workerRoot, `ingest-${setCode}-official.sql`);
   await writeFile(sqlFile, `${expansionSql}\n\n${cardStatements.join('\n\n')}\n`, 'utf8');

@@ -762,11 +762,13 @@
  {
   "numero": "157",
   "nome": "Mewtwo-ex",
-  "fonte": "carta"
+  "fonte": "carta",
+  "rarita": "Futuristic rare"
  },
  {
   "numero": "158",
   "nome": "Mew-ex",
-  "fonte": "carta"
+  "fonte": "carta",
+  "rarita": "Futuristic rare"
  }
 ]

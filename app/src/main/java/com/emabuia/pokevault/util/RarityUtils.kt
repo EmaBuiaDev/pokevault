@@ -40,6 +40,24 @@ object RarityUtils {
             r.contains("ace spec") ->
                 RarityInfo("✦", Color(0xFFD300C5), "Ace Spec", 4)
 
+            // 14. FUTURISTIC RARE (stella singola iridescente)
+            // Debutta con l'espansione 30° Anniversario: le due full art
+            // opalescenti di YOSHIROTTEN (Mewtwo-ex 157 e Mew-ex 158), che
+            // sulla carta portano una stella colorata invece delle due oro
+            // della Special Illustration Rare.
+            // Nessun ramo piu' in basso intercetta "futuristic rare" -- non
+            // contiene "ex", ne' "rare holo", e il ramo Rara e' un `==` -- per
+            // cui senza questo caso finirebbe in "Altro" (12), che e' il
+            // cestino delle stringhe sconosciute: niente foil e nessuna
+            // distinzione dalle carte senza rarita'.
+            r.contains("futuristic rare") || r.contains("rara futuristica") ->
+                RarityInfo(
+                    "✵",
+                    Color(0xFFA855F7),
+                    if (isIt) "Futuristica" else "Futuristic",
+                    14
+                )
+
             // 7. SPECIAL ILLUSTRATION RARE (Due stelle oro)
             // Deve stare sopra Illustration Rare perché ne contiene il nome
             r.contains("special illustration rare") || r.contains("special art rare") ->

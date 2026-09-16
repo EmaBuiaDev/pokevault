@@ -63,6 +63,7 @@ object AppLocale {
         "double rare" to "Doppia Rara",
         "illustration rare" to "Illustrazione Rara",
         "special illustration rare" to "Illustrazione Rara Speciale",
+        "futuristic rare" to "Rara Futuristica",
         "hyper rare" to "Iper Rara",
         "shiny rare" to "Rara Shiny",
         "shiny ultra rare" to "Ultra Rara Shiny",

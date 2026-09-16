@@ -110,6 +110,7 @@ object CardOptions {
     private val SINGLE_VARIANT_RARITIES = setOf(
         "ace spec", "special illustration rare", "special art rare",
         "illustration rare", "rare art", "illustrazione rara",
+        "futuristic rare", "rara futuristica",
         "shiny ultra", "ultra rara shiny", "ultra rare", "ultra rara", "full art",
         "hyper rare", "iper rara", "gold",
         "shiny rare", "rara shiny",
