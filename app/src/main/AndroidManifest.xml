@@ -20,9 +20,23 @@
         android:theme="@style/Theme.PokeVault"
         tools:targetApi="35">
 
+        <!--
+            supportsPictureInPicture: lo scanner continua a mostrare
+            l'anteprima della fotocamera nella finestrella quando si esce
+            dall'app (vedi PictureInPictureWhenLeaving). Nessun'altra
+            schermata ci entra: i parametri li attiva solo lo scanner.
+
+            configChanges: entrare e uscire dal PiP e' un cambio di
+            dimensione e orientamento. Senza questa riga l'activity verrebbe
+            ricreata a ogni transizione, e la fotocamera si spegnerebbe e
+            riaccenderebbe proprio mentre la finestrella compare. Compose
+            riceve la nuova Configuration e si ricompone da solo.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:supportsPictureInPicture="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
             android:theme="@style/Theme.PokeVault.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
