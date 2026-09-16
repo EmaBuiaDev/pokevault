@@ -1083,6 +1083,23 @@ object AppLocale {
     else
         "Purchases are not available at the moment."
     val billingRetry: String get() = if (isItalian) "Riprova" else "Try again"
+
+    /**
+     * L'abbonamento del telefono e' gia' di un altro account PokeVault.
+     *
+     * Senza questo messaggio l'utente vedrebbe "non sei premium" pur avendo un
+     * abbonamento attivo sul Play Store, e non avrebbe modo di capire perche'.
+     */
+    val billingClaimedTitle: String get() = if (isItalian)
+        "Abbonamento su un altro account"
+    else
+        "Subscription on another account"
+    val billingClaimedBody: String get() = if (isItalian)
+        "L'abbonamento attivo su questo telefono è già collegato a un altro account PokeVault. " +
+        "Accedi con quell'account per usarlo, oppure scrivici e lo sblocchiamo."
+    else
+        "The subscription on this phone is already linked to another PokeVault account. " +
+        "Sign in with that account to use it, or contact us and we will unlink it."
     val themeLabel: String get() = if (isItalian) "Tema" else "Theme"
     fun themeSubtitle(mode: String): String = when (mode) {
         "light" -> if (isItalian) "Chiaro" else "Light"

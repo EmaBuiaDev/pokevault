@@ -413,10 +413,34 @@ export async function handleBillingRequest(
     const purchaseToken = body.purchaseToken?.trim();
     if (!purchaseToken) return json({ error: 'purchaseToken mancante' }, 400);
 
+    // Un acquisto appartiene a un account solo, e vince il primo che lo
+    // verifica. Senza questo controllo la verifica lato server non risolverebbe
+    // nulla: ogni account potrebbe rivendicare lo stesso abbonamento e
+    // ottenere la sua riga, che e' esattamente il "cambio account e sono tutti
+    // premium" che questa pagina esiste per chiudere.
+    const owner = await db
+      .prepare('SELECT uid FROM entitlements WHERE purchase_token = ?1')
+      .bind(purchaseToken)
+      .first<{ uid: string }>();
+    if (owner && owner.uid !== uid) {
+      return json({ entitled: false, reason: 'token_claimed_by_other_account' }, 409);
+    }
+
     const status = await fetchSubscriptionStatus(purchaseToken, env);
     if (!status) return json({ error: 'verifica presso Google non riuscita' }, 502);
 
-    await saveEntitlement(db, uid, purchaseToken, status);
+    try {
+      await saveEntitlement(db, uid, purchaseToken, status);
+    } catch (error) {
+      // Due account che verificano lo stesso token nello stesso istante
+      // passano entrambi il controllo di sopra: a fermarli e' l'indice unico
+      // di 011. E' il vincolo che ha funzionato, non un guasto.
+      const message = error instanceof Error ? error.message : String(error);
+      if (/UNIQUE|constraint/i.test(message)) {
+        return json({ entitled: false, reason: 'token_claimed_by_other_account' }, 409);
+      }
+      throw error;
+    }
 
     return json({
       entitled: isEntitled(status.state, status.expiryTimeMs),

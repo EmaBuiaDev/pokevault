@@ -126,16 +126,41 @@ class PremiumManager private constructor(private val context: Context) {
     val giftUntilMs: StateFlow<Long> = _giftUntilMs.asStateFlow()
 
     /**
-     * Il premium ha due fonti: l'abbonamento Play e il mese regalo.
+     * Cosa dice il server sull'abbonamento di questo account.
+     *
+     * `null` significa **non lo so**, non "no": il Worker non risponde, oppure
+     * non ha ancora nulla su questo account. In quel caso vale la verifica
+     * locale, perché un server irraggiungibile non deve togliere il premium a
+     * chi ha pagato.
+     *
+     * Quando invece risponde, è lui l'autorità: è così che un secondo account
+     * sullo stesso telefono smette di ereditare l'abbonamento altrui.
+     */
+    private val _serverEntitled = MutableStateFlow<Boolean?>(null)
+
+    /**
+     * L'abbonamento del telefono appartiene già a un altro account PokeVault.
+     *
+     * Serve solo alla UI: senza, l'utente vedrebbe "non sei premium" pur avendo
+     * un abbonamento attivo sul Play Store, e non avrebbe modo di capire perché.
+     */
+    private val _subscriptionClaimedByOtherAccount = MutableStateFlow(false)
+    val subscriptionClaimedByOtherAccount: StateFlow<Boolean> =
+        _subscriptionClaimedByOtherAccount.asStateFlow()
+
+    /**
+     * Il premium ha due fonti: l'abbonamento e il mese regalo.
      *
      * Sono indipendenti — un regalo non è un acquisto e non va confermato a
      * Google — quindi vale la somma, non l'ultima delle due che ha scritto.
      * Prima era un singolo MutableStateFlow, e un riscatto sarebbe stato
      * cancellato dalla prima queryExistingPurchases() che non trovava acquisti.
+     *
+     * Per l'abbonamento, il server vince sul telefono quando ha una risposta.
      */
     val isPremium: StateFlow<Boolean> =
-        combine(_billingPremium, _giftUntilMs) { fromBilling, giftUntil ->
-            fromBilling || giftUntil > System.currentTimeMillis()
+        combine(_billingPremium, _serverEntitled, _giftUntilMs) { fromBilling, fromServer, giftUntil ->
+            (fromServer ?: fromBilling) || giftUntil > System.currentTimeMillis()
         }.stateIn(
             scope,
             SharingStarted.Eagerly,
@@ -145,17 +170,6 @@ class PremiumManager private constructor(private val context: Context) {
             // attivo si vedrebbe negare le funzioni premium.
             storedGiftUntilMs() > System.currentTimeMillis()
         )
-
-    init {
-        // Il regalo è di un account, non del telefono. Senza questo, bastava
-        // riscattare, uscire e rientrare con un altro utente per portarsi
-        // dietro il mese: esattamente il giro che i vincoli sul server
-        // esistono per impedire.
-        FirebaseAuth.getInstance().addAuthStateListener {
-            _giftUntilMs.value = storedGiftUntilMs()
-            refreshGiftEntitlement()
-        }
-    }
 
     /**
      * Copia locale del regalo, ma solo se è di chi ha fatto l'accesso adesso.
@@ -218,6 +232,21 @@ class PremiumManager private constructor(private val context: Context) {
 
     init {
         connectAndQueryPurchases()
+
+        // Registrato qui e non piu' in alto: FirebaseAuth richiama subito il
+        // listener con l'utente corrente, e da li' si arriva a
+        // queryExistingPurchases(). Piu' in alto billingClient non esisteva
+        // ancora.
+        //
+        // Sia il regalo sia l'abbonamento appartengono a un account: tenersi le
+        // risposte dell'utente precedente e' esattamente il bug per cui questo
+        // binding esiste.
+        FirebaseAuth.getInstance().addAuthStateListener {
+            _giftUntilMs.value = storedGiftUntilMs()
+            _serverEntitled.value = null
+            _subscriptionClaimedByOtherAccount.value = false
+            refreshEntitlement()
+        }
     }
 
     private var retryCount = 0
@@ -321,6 +350,57 @@ class PremiumManager private constructor(private val context: Context) {
         purchased.filterNot { it.isAcknowledged }.forEach { acknowledgePurchase(it) }
 
         updatePremiumStatus(purchased.isNotEmpty())
+
+        syncServerEntitlement(purchased.firstOrNull()?.purchaseToken)
+    }
+
+    /**
+     * Allinea l'entitlement a quello che dice il server.
+     *
+     * Due strade, a seconda di cosa ha trovato il telefono:
+     *
+     * - c'è un acquisto sul dispositivo → si chiede al Worker di verificarlo e
+     *   di legarlo a QUESTO account. Se l'acquisto appartiene già a un altro
+     *   account PokeVault, la risposta è un rifiuto netto e il premium non si
+     *   accende: è questo che impedisce al secondo account sullo stesso
+     *   telefono di ereditare l'abbonamento del primo.
+     * - non c'è nessun acquisto locale → si legge l'entitlement memorizzato.
+     *   È la strada con cui chi ha comprato su un altro dispositivo, o ha perso
+     *   lo stato locale, ritrova il premium senza ricomprare.
+     *
+     * In entrambe, se il server non risponde lo stato resta ignoto e vale la
+     * verifica locale di sempre: il Worker è autorevole quando c'è, non un
+     * punto di rottura unico.
+     */
+    private fun syncServerEntitlement(purchaseToken: String?) {
+        if (!WorkerApi.isConfigured) return
+        scope.launch {
+            if (purchaseToken != null) {
+                when (val result = EntitlementRepository.verify(purchaseToken)) {
+                    is EntitlementRepository.VerifyResult.Verified -> {
+                        _subscriptionClaimedByOtherAccount.value = false
+                        _serverEntitled.value = result.entitlement.entitled
+                    }
+
+                    EntitlementRepository.VerifyResult.ClaimedByOtherAccount -> {
+                        _subscriptionClaimedByOtherAccount.value = true
+                        _serverEntitled.value = false
+                    }
+
+                    EntitlementRepository.VerifyResult.Unavailable -> {
+                        // Non si tocca nulla: resta l'esito locale.
+                    }
+                }
+                return@launch
+            }
+
+            val stored = EntitlementRepository.fetchEntitlement() ?: return@launch
+            _subscriptionClaimedByOtherAccount.value = false
+            // Uno stato 'none' vuol dire che il server non sa niente di questo
+            // account, non che gli nega il premium: lasciare deciderlo al
+            // telefono e' l'unica lettura che non danneggia nessuno.
+            _serverEntitled.value = if (stored.isUnknown) null else stored.entitled
+        }
     }
 
     fun launchPurchaseFlow(activity: Activity, productDetails: ProductDetails) {
@@ -371,6 +451,10 @@ class PremiumManager private constructor(private val context: Context) {
                         // traduceva in un rimborso automatico dopo 3 giorni.
                         if (acknowledgePurchase(purchase)) {
                             updatePremiumStatus(true)
+                            // Si lega l'acquisto a questo account subito, non al
+                            // prossimo avvio: chi paga deve risultarne il
+                            // proprietario prima che qualcun altro lo verifichi.
+                            syncServerEntitlement(purchase.purchaseToken)
                             _purchaseState.value = PurchaseState.Success
                         } else {
                             _purchaseState.value = PurchaseState.NotAcknowledged

@@ -128,6 +128,52 @@ dispositivo, **il riscatto di un codice regalo non produce alcun effetto
 visibile**, perche' il premium risulta gia' acceso. Per provare i regali serve
 un account Play senza abbonamento, o annullare quello di test.
 
+## Un acquisto, un account
+
+Regola scelta il 16/09/2026: **vince il primo account che verifica**
+quell'acquisto. Gli altri ricevono `409` con
+`{"entitled": false, "reason": "token_claimed_by_other_account"}` e restano
+senza premium.
+
+Senza questa regola la verifica lato server non avrebbe risolto niente:
+`saveEntitlement` risolve il conflitto su `uid` e l'indice su `purchase_token`
+non era unico, quindi ogni account poteva rivendicare lo stesso abbonamento e
+ottenere la sua riga. Lo chiude `schema/011_entitlement_one_token_one_account.sql`,
+che rende unico il token.
+
+### Sbloccare un abbonamento legato all'account sbagliato
+
+Capita: l'utente apre l'app col primo account che trova e quello si prende
+l'abbonamento. Si libera cosi', e al giro successivo il primo che verifica se
+lo riprende:
+
+```bash
+npx wrangler d1 execute pokevault-catalog --remote \
+  --command "DELETE FROM entitlements WHERE purchase_token = '<token>'"
+```
+
+Per trovare il token partendo dall'utente:
+
+```bash
+npx wrangler d1 execute pokevault-catalog --remote \
+  --command "SELECT purchase_token, state FROM entitlements WHERE uid = '<uid>'"
+```
+
+## Cosa NON risolve
+
+Non ferma un'app modificata. Le funzioni premium di PokeVault sono tutte locali
+— album, deck, export, sprite — quindi un APK patchato le sblocca comunque,
+qualunque cosa risponda il Worker. Nessuna verifica lato server puo' impedirlo:
+l'unica difesa sarebbe spostare qualche funzione premium sul server, che e' un
+lavoro di tutt'altra portata.
+
+Quello che risolve, e che e' il motivo per cui esiste:
+
+- il premium segue l'account PokeVault, non l'account Google Play del telefono;
+- chi paga e perde lo stato locale (cache Play stantia, cambio dispositivo,
+  reinstallo) puo' **recuperare** il premium, cosa che prima era impossibile;
+- rimborsi, disdette e sospensioni diventano visibili in fretta.
+
 ## Cosa manca ancora nell'app
 
 Il Worker è pronto; **il client Android non lo chiama ancora**. Per chiudere il

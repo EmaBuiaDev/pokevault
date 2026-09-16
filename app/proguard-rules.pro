@@ -41,6 +41,7 @@
 # debug -- dove R8 non gira -- funzionava tutto.
 -keep class com.emabuia.pokevault.data.billing.GiftCodeRepository$GiftStatusPayload { *; }
 -keep class com.emabuia.pokevault.data.billing.GiftCodeRepository$RedeemPayload { *; }
+-keep class com.emabuia.pokevault.data.billing.EntitlementRepository$EntitlementPayload { *; }
 
 # ── Attributi richiesti da Retrofit e Gson per i tipi generici ──
 -keepattributes Signature

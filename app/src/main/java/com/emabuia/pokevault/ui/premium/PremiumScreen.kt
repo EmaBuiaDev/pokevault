@@ -43,6 +43,7 @@ fun PremiumScreen(
     val giftUntilMs by premiumManager.giftUntilMs.collectAsStateWithLifecycle()
     val purchaseState by premiumManager.purchaseState.collectAsStateWithLifecycle()
     val billingProblem by premiumManager.billingProblem.collectAsStateWithLifecycle()
+    val subscriptionClaimed by premiumManager.subscriptionClaimedByOtherAccount.collectAsStateWithLifecycle()
     val products by premiumManager.products.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = context as? Activity
@@ -323,6 +324,34 @@ fun PremiumScreen(
                         fontWeight = FontWeight.Bold,
                         color = AppColors.textPrimary
                     )
+
+                    // Ha un abbonamento sul telefono ma appartiene a un altro
+                    // account: senza dirlo, leggerebbe solo "non sei premium"
+                    // con un addebito attivo sul Play Store.
+                    if (subscriptionClaimed) {
+                        Surface(
+                            color = AppColors.gold.copy(alpha = 0.10f),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, AppColors.gold.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(
+                                    text = AppLocale.billingClaimedTitle,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppColors.textPrimary
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = AppLocale.billingClaimedBody,
+                                    fontSize = 12.sp,
+                                    color = AppColors.textSecondary,
+                                    lineHeight = 17.sp
+                                )
+                            }
+                        }
+                    }
 
                     // Il servizio non risponde: si dice qui, accanto ai piani
                     // che non funzionano, invece di gridarlo con una snackbar

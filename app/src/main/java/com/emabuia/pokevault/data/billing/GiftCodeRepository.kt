@@ -3,19 +3,13 @@ package com.emabuia.pokevault.data.billing
 import android.annotation.SuppressLint
 import android.content.Context
 import android.provider.Settings
-import com.emabuia.pokevault.BuildConfig
-import com.google.firebase.auth.FirebaseAuth
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import timber.log.Timber
-import java.util.concurrent.TimeUnit
 
 /**
  * Codici regalo da 1 mese: il codice AMICO dell'utente e il riscatto.
@@ -33,14 +27,9 @@ object GiftCodeRepository {
 
     private val gson = Gson()
 
-    private val httpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
-    }
-
-    private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+    /** true quando il Worker e' configurato: senza URL la funzione resta nascosta. */
+    val isConfigured: Boolean
+        get() = WorkerApi.isConfigured
 
     /** Stato del codice AMICO dell'utente autenticato. */
     data class GiftStatus(
@@ -128,9 +117,6 @@ object GiftCodeRepository {
         @SerializedName("giftUntilMs") val giftUntilMs: Long? = null
     )
 
-    /** true quando il Worker e' configurato: senza URL la funzione resta nascosta. */
-    val isConfigured: Boolean
-        get() = BuildConfig.POKEWALLET_PROXY_URL.trim().isNotBlank()
 
     /**
      * Legge il codice AMICO dell'utente, creandolo lato server se non esiste.
@@ -140,8 +126,8 @@ object GiftCodeRepository {
      * nessun altro.
      */
     suspend fun fetchStatus(): GiftStatus? = withContext(Dispatchers.IO) {
-        val url = endpoint(PATH_ME) ?: return@withContext null
-        val token = idToken() ?: return@withContext null
+        val url = WorkerApi.endpoint(PATH_ME) ?: return@withContext null
+        val token = WorkerApi.idToken() ?: return@withContext null
 
         runCatching {
             val request = Request.Builder()
@@ -150,7 +136,7 @@ object GiftCodeRepository {
                 .get()
                 .build()
 
-            httpClient.newCall(request).execute().use { response ->
+            WorkerApi.httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) error("HTTP ${response.code}")
                 val payload = gson.fromJson(
                     response.body?.string().orEmpty(),
@@ -179,12 +165,12 @@ object GiftCodeRepository {
      */
     suspend fun redeem(context: Context, rawCode: String): RedeemResult =
         withContext(Dispatchers.IO) {
-            val url = endpoint(PATH_REDEEM) ?: return@withContext RedeemResult.Unavailable
-            val token = idToken() ?: return@withContext RedeemResult.Unavailable
+            val url = WorkerApi.endpoint(PATH_REDEEM) ?: return@withContext RedeemResult.Unavailable
+            val token = WorkerApi.idToken() ?: return@withContext RedeemResult.Unavailable
 
             val body = gson.toJson(
                 mapOf("code" to rawCode.trim(), "deviceId" to deviceId(context))
-            ).toRequestBody(jsonMediaType)
+            ).toRequestBody(WorkerApi.jsonMediaType)
 
             runCatching {
                 val request = Request.Builder()
@@ -193,7 +179,7 @@ object GiftCodeRepository {
                     .post(body)
                     .build()
 
-                httpClient.newCall(request).execute().use { response ->
+                WorkerApi.httpClient.newCall(request).execute().use { response ->
                     val payload = runCatching {
                         gson.fromJson(response.body?.string().orEmpty(), RedeemPayload::class.java)
                     }.getOrNull()
@@ -215,22 +201,6 @@ object GiftCodeRepository {
             }.onFailure { Timber.w(it, "Riscatto codice regalo fallito") }
                 .getOrDefault(RedeemResult.Unavailable)
         }
-
-    private fun endpoint(path: String): String? {
-        val base = BuildConfig.POKEWALLET_PROXY_URL.trim().trimEnd('/')
-        if (base.isBlank()) return null
-        return "$base/$path"
-    }
-
-    private suspend fun idToken(): String? {
-        val user = FirebaseAuth.getInstance().currentUser ?: return null
-        // false: un token in cache va benissimo finche' e' valido, e Firebase
-        // lo rinnova da se' quando scade. true costringerebbe a un giro di rete
-        // in piu' a ogni apertura della schermata.
-        return runCatching { user.getIdToken(false).await().token }
-            .onFailure { Timber.w(it, "ID token Firebase non ottenuto") }
-            .getOrNull()
-    }
 
     /**
      * Identificatore del dispositivo per il vincolo anti multi-account.
