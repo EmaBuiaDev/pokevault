@@ -86,23 +86,45 @@ contratto è verificato da `GiftRejectionMappingTest` lato Android: **se aggiung
 o rinomini una sigla qui, quel test va aggiornato**, altrimenti il rifiuto
 scivola su `UNKNOWN` e l'utente legge un errore di rete che non c'è stato.
 
-## Cosa devi configurare tu
+## Stato: in produzione
 
-Questi passaggi **non sono stati eseguiti**: il codice è pronto ma inattivo
-finché i secret mancano. Senza di essi l'app nasconde la voce "Codici regalo"
-solo se manca `POKEWALLET_PROXY_URL`; con l'URL configurato ma i secret assenti
-la schermata mostra un errore.
+**La configurazione è già stata fatta, il 16 settembre 2026.** Non va rifatta.
+Quello che segue serve solo a ricostruire l'ambiente da zero — un altro account
+Cloudflare, un disastro, un secondo ambiente di prova.
+
+| Cosa | Stato |
+|---|---|
+| `GIFT_CODE_SECRET` | impostato |
+| `GIFT_ADMIN_SECRET` | impostato |
+| `FIREBASE_PROJECT_ID` | impostato (`pokevault-32d28`) |
+| `schema/010_gift_codes.sql` | applicato al D1 remoto |
+| Deploy | fatto, versione `fbb2b7eb-ab28-49b5-aab1-b8cca1a71f0a` |
+
+> ### ⚠️ Non rimettere `GIFT_CODE_SECRET`
+>
+> È il segreto da cui si deriva il codice AMICO di ogni account. Rimetterlo con
+> un valore diverso **cambia il codice di tutti gli utenti in una volta**: chi
+> aveva già condiviso il suo si ritrova con un codice che non esiste più, e i
+> codici in giro smettono di funzionare senza alcun messaggio di errore
+> utile — risponderebbero `code_not_found`, indistinguibile da un refuso.
+>
+> Le righe già in `gift_codes` non si aggiornano da sole, quindi il vecchio
+> codice resterebbe nel database, orfano e non più raggiungibile da nessuno.
+>
+> Se devi davvero ruotarlo, va fatto insieme a una migrazione che ricalcola la
+> colonna `code` di tutte le righe con `kind = 'friend'`. Non esiste ancora.
 
 ### 1. Secret del Worker
 
 ```bash
 cd pokevault-proxy-worker
 
-# Stringa casuale lunga. Deriva i codici AMICO e anonimizza i device id:
-# cambiarla cambia il codice di tutti gli utenti. Generane una e non toccarla.
+# Stringa casuale lunga. Deriva i codici AMICO e anonimizza i device id.
+# Vedi l'avviso qui sopra prima di eseguirlo su un ambiente già attivo.
 npx wrangler secret put GIFT_CODE_SECRET
 
 # Altra stringa casuale, serve solo a te per coniare i lotti promo.
+# Questa si può ruotare quando vuoi: non c'è niente di derivato da lei.
 npx wrangler secret put GIFT_ADMIN_SECRET
 ```
 

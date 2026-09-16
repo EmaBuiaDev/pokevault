@@ -122,9 +122,16 @@ Questo passo è deliberatamente separato: senza i secret configurati (punto 2)
 gli endpoint rispondono 500/502, e cablare subito il client renderebbe il
 premium non funzionante finché la configurazione non è completa.
 
-> **Aggiornamento.** Il client ora chiama il Worker, ma **solo** per i codici
-> regalo (`/v1/gift/*`, vedi `GIFT.md`). Quelli hanno bisogno di
-> `FIREBASE_PROJECT_ID` — l'unico secret condiviso con questa pagina — e non del
-> service account Play. I tre punti qui sopra, che riguardano l'abbonamento,
-> restano da fare: l'entitlement Play è ancora verificato solo in locale da
-> `PremiumManager`.
+> **Aggiornamento (16 settembre 2026).** Il client ora chiama il Worker, ma
+> **solo** per i codici regalo (`/v1/gift/*`, vedi `GIFT.md`), che sono in
+> produzione.
+>
+> Di conseguenza **`FIREBASE_PROJECT_ID` è già impostato** (`pokevault-32d28`):
+> è l'unico secret condiviso fra questa pagina e i codici regalo, e non va
+> rimesso. Del punto 2 qui sopra resta da fare solo
+> `PLAY_SERVICE_ACCOUNT_JSON` / `PLAY_PACKAGE_NAME` / `RTDN_SHARED_SECRET`.
+>
+> I punti 1, 3 e 4 restano interi: l'entitlement Play è ancora verificato solo
+> in locale da `PremiumManager`, e `/v1/billing/verify` risponde 502 finché il
+> service account non è configurato. I codici regalo funzionano lo stesso —
+> non passano da Google.
