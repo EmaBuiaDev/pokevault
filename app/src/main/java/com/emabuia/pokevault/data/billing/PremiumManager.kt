@@ -45,6 +45,46 @@ class PremiumManager private constructor(private val context: Context) {
         fun isWithinFreeLimit(isPremium: Boolean, currentCount: Int, freeLimit: Int): Boolean =
             isPremium || currentCount < freeLimit
 
+        /**
+         * Perche' il servizio di fatturazione non e' raggiungibile.
+         *
+         * Serve a dire all'utente qualcosa di utile al posto del `debugMessage`
+         * inglese di Google ("Server is disconnected"), che non e' ne' tradotto
+         * ne' azionabile.
+         */
+        enum class BillingProblem {
+            /** Connessione al servizio caduta o mai stabilita. Di solito passa da sola. */
+            DISCONNECTED,
+            /** Rete assente o instabile. */
+            NETWORK,
+            /** Play Store assente o disattivato, o account senza fatturazione. */
+            UNAVAILABLE,
+            /**
+             * Prodotti non pubblicati, o app non riconosciuta da Play.
+             *
+             * E' quello che si vede installando una build firmata con la chiave
+             * di debug: il package combacia, la firma no.
+             */
+            MISCONFIGURED,
+            OTHER
+        }
+
+        /**
+         * Traduce un response code di BillingClient nel guasto corrispondente.
+         *
+         * Funzione pura e in companion apposta: e' l'unico pezzo di questa
+         * logica verificabile senza un BillingClient e un Context.
+         */
+        fun billingProblemFor(responseCode: Int): BillingProblem = when (responseCode) {
+            BillingClient.BillingResponseCode.SERVICE_DISCONNECTED -> BillingProblem.DISCONNECTED
+            BillingClient.BillingResponseCode.NETWORK_ERROR,
+            BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE -> BillingProblem.NETWORK
+            BillingClient.BillingResponseCode.BILLING_UNAVAILABLE -> BillingProblem.UNAVAILABLE
+            BillingClient.BillingResponseCode.DEVELOPER_ERROR,
+            BillingClient.BillingResponseCode.ITEM_UNAVAILABLE -> BillingProblem.MISCONFIGURED
+            else -> BillingProblem.OTHER
+        }
+
         private const val ACK_MAX_ATTEMPTS = 3
         private const val ACK_RETRY_DELAY_MS = 1500L
 
@@ -147,6 +187,16 @@ class PremiumManager private constructor(private val context: Context) {
     private val _purchaseState = MutableStateFlow<PurchaseState>(PurchaseState.Idle)
     val purchaseState: StateFlow<PurchaseState> = _purchaseState.asStateFlow()
 
+    /**
+     * Guasto del servizio di fatturazione, o null se e' raggiungibile.
+     *
+     * Separato da [purchaseState] perche' risponde a una domanda diversa: non
+     * "com'e' andato l'acquisto" ma "si puo' comprare adesso". Il primo merita
+     * una snackbar, il secondo una riga spenta accanto ai piani.
+     */
+    private val _billingProblem = MutableStateFlow<BillingProblem?>(null)
+    val billingProblem: StateFlow<BillingProblem?> = _billingProblem.asStateFlow()
+
     private val billingClient: BillingClient = BillingClient.newBuilder(context)
         .setListener { billingResult, purchases ->
             scope.launch { handlePurchasesUpdated(billingResult, purchases) }
@@ -178,6 +228,7 @@ class PremiumManager private constructor(private val context: Context) {
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                     retryCount = 0
+                    clearBillingProblem()
                     scope.launch {
                         queryProducts()
                         queryExistingPurchases()
@@ -186,7 +237,7 @@ class PremiumManager private constructor(private val context: Context) {
                     // Prima ogni esito diverso da OK veniva ignorato: con
                     // BILLING_UNAVAILABLE o SERVICE_DISABLED l'utente non
                     // riceveva alcun segnale.
-                    reportBillingProblem(result, "startConnection")
+                    reportBillingUnavailable(result, "startConnection")
                 }
             }
 
@@ -240,7 +291,7 @@ class PremiumManager private constructor(private val context: Context) {
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                     cont.resume(queryResult.productDetailsList)
                 } else {
-                    reportBillingProblem(billingResult, "queryProductDetails")
+                    reportBillingUnavailable(billingResult, "queryProductDetails")
                     cont.resume(emptyList())
                 }
             }
@@ -259,7 +310,7 @@ class PremiumManager private constructor(private val context: Context) {
         if (result.billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
             // Su errore NON si tocca lo stato: un problema di rete non deve
             // togliere il premium a chi ha pagato.
-            reportBillingProblem(result.billingResult, "queryPurchases")
+            reportBillingUnavailable(result.billingResult, "queryPurchases")
             return
         }
 
@@ -322,9 +373,7 @@ class PremiumManager private constructor(private val context: Context) {
                             updatePremiumStatus(true)
                             _purchaseState.value = PurchaseState.Success
                         } else {
-                            _purchaseState.value = PurchaseState.Error(
-                                "Acquisto non confermato. Riapri l'app quando torni online."
-                            )
+                            _purchaseState.value = PurchaseState.NotAcknowledged
                         }
                     }
             }
@@ -337,9 +386,12 @@ class PremiumManager private constructor(private val context: Context) {
                 _purchaseState.value = PurchaseState.Success
             }
             else -> {
-                _purchaseState.value = PurchaseState.Error(
-                    billingResult.debugMessage ?: "Purchase error"
+                android.util.Log.w(
+                    "PremiumManager",
+                    "acquisto: codice ${billingResult.responseCode} ${billingResult.debugMessage}"
                 )
+                _purchaseState.value =
+                    PurchaseState.Failed(billingProblemFor(billingResult.responseCode))
             }
         }
     }
@@ -371,7 +423,15 @@ class PremiumManager private constructor(private val context: Context) {
             if (attempt < ACK_MAX_ATTEMPTS - 1) {
                 delay(ACK_RETRY_DELAY_MS * (attempt + 1))
             } else {
-                reportBillingProblem(result, "acknowledgePurchase")
+                // Solo log: questa funzione ha due chiamanti. Da
+                // handlePurchasesUpdated l'utente ha comprato davvero, e li' il
+                // fallimento diventa gia' un PurchaseState.Error con una frase
+                // sua; da queryExistingPurchases siamo all'avvio, e non c'e'
+                // nessun acquisto di cui annunciare il fallimento.
+                android.util.Log.w(
+                    "PremiumManager",
+                    "acknowledgePurchase: codice ${result.responseCode} ${result.debugMessage}"
+                )
             }
         }
         return false
@@ -408,15 +468,42 @@ class PremiumManager private constructor(private val context: Context) {
     )
 
     /**
-     * Porta l'errore fino alla UI invece di lasciarlo silenzioso.
+     * Registra che il servizio di fatturazione non e' raggiungibile.
      *
-     * onBillingSetupFinished ignorava ogni esito diverso da OK, quindi
-     * BILLING_UNAVAILABLE o SERVICE_DISABLED non producevano alcun segnale.
+     * Prima questi guasti finivano in [PurchaseState.Error], che la schermata
+     * Premium mostra come "Acquisto non riuscito: <messaggio di Google>". Ma
+     * connessione caduta, prodotti non interrogabili e acquisti non rileggibili
+     * capitano all'AVVIO dell'app, senza che nessuno abbia comprato niente:
+     * l'errore restava nello stato e la snackbar partiva appena si apriva la
+     * schermata. L'utente leggeva di un acquisto fallito che non aveva mai
+     * tentato, per giunta con la frase inglese grezza di Google dentro.
+     *
+     * Ora sono due cose separate: qui la disponibilita' del servizio, in
+     * [PurchaseState] solo l'esito di un acquisto davvero avviato.
      */
-    private fun reportBillingProblem(result: BillingResult, operation: String) {
-        val message = result.debugMessage.takeIf { it.isNotBlank() }
-            ?: "$operation: codice ${result.responseCode}"
-        _purchaseState.value = PurchaseState.Error(message)
+    private fun reportBillingUnavailable(result: BillingResult, operation: String) {
+        android.util.Log.w(
+            "PremiumManager",
+            "$operation: codice ${result.responseCode} ${result.debugMessage}"
+        )
+        _billingProblem.value = billingProblemFor(result.responseCode)
+    }
+
+    /** Il servizio risponde: si cancella un eventuale guasto precedente. */
+    private fun clearBillingProblem() {
+        _billingProblem.value = null
+    }
+
+    /**
+     * Riprova a connettersi, per il bottone nella schermata Premium.
+     *
+     * Azzera anche [retryCount]: i tentativi automatici si esauriscono dopo tre,
+     * e senza questo un utente che riapre la schermata mezz'ora dopo non avrebbe
+     * piu' alcun modo di far ritentare la connessione.
+     */
+    fun retryBillingConnection() {
+        retryCount = 0
+        connectAndQueryPurchases()
     }
 
     private fun updatePremiumStatus(entitledByBilling: Boolean) {
@@ -632,12 +719,33 @@ class PremiumManager private constructor(private val context: Context) {
         return regularPhase.formattedPrice
     }
 
+    /**
+     * Esito di un acquisto **avviato dall'utente**, e nient'altro.
+     *
+     * I guasti del servizio che capitano all'avvio stanno in [billingProblem]:
+     * mescolarli qui e' ciò che faceva comparire "Acquisto non riuscito" a chi
+     * si limitava ad aprire la schermata.
+     */
     sealed class PurchaseState {
         data object Idle : PurchaseState()
         data object Loading : PurchaseState()
         data object Success : PurchaseState()
         /** Acquisto avviato ma non ancora confermato da Google. */
         data object Pending : PurchaseState()
-        data class Error(val message: String) : PurchaseState()
+        /**
+         * Pagato, ma la conferma a Google non è passata.
+         *
+         * Va detto all'utente perché senza conferma Google rimborsa da sé dopo
+         * tre giorni: chi non riapre l'app perde il premium senza spiegazione.
+         */
+        data object NotAcknowledged : PurchaseState()
+        /**
+         * L'acquisto è fallito. Porta il motivo, non la frase.
+         *
+         * Prima portava una `String`, che era il `debugMessage` inglese di
+         * Google inoltrato tale e quale: un utente italiano leggeva "Acquisto
+         * non riuscito: Server is disconnected".
+         */
+        data class Failed(val problem: BillingProblem) : PurchaseState()
     }
 }

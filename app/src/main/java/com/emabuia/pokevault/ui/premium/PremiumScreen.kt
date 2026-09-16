@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.ui.premium
 
 import android.app.Activity
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -40,6 +42,7 @@ fun PremiumScreen(
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
     val giftUntilMs by premiumManager.giftUntilMs.collectAsStateWithLifecycle()
     val purchaseState by premiumManager.purchaseState.collectAsStateWithLifecycle()
+    val billingProblem by premiumManager.billingProblem.collectAsStateWithLifecycle()
     val products by premiumManager.products.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = context as? Activity
@@ -321,6 +324,45 @@ fun PremiumScreen(
                         color = AppColors.textPrimary
                     )
 
+                    // Il servizio non risponde: si dice qui, accanto ai piani
+                    // che non funzionano, invece di gridarlo con una snackbar
+                    // appena si apre la schermata.
+                    billingProblem?.let { problem ->
+                        Surface(
+                            color = AppColors.card,
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, AppColors.textMuted.copy(alpha = 0.25f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(
+                                    text = AppLocale.billingUnavailableTitle,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppColors.textSecondary
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = billingProblemMessage(problem),
+                                    fontSize = 12.sp,
+                                    color = AppColors.textMuted,
+                                    lineHeight = 17.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                TextButton(
+                                    onClick = { premiumManager.retryBillingConnection() },
+                                    contentPadding = PaddingValues(horizontal = 4.dp)
+                                ) {
+                                    Text(
+                                        text = AppLocale.billingRetry,
+                                        color = AppColors.blue,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Monthly plan
                     val monthlyProduct = premiumManager.getMonthlyProduct()
                     val monthlyPrice = premiumManager.getBasePlanFormattedPrice(monthlyProduct)
@@ -330,6 +372,7 @@ fun PremiumScreen(
                         title = AppLocale.premiumMonthly,
                         price = "${AppLocale.premiumPriceMonthly(monthlyPrice)}",
                         isHighlighted = false,
+                        enabled = monthlyProduct != null && billingProblem == null,
                         onClick = {
                             if (activity != null && monthlyProduct != null) {
                                 premiumManager.launchPurchaseFlow(activity, monthlyProduct)
@@ -347,6 +390,7 @@ fun PremiumScreen(
                         price = "${AppLocale.premiumPriceAnnual(annualPrice)}",
                         badge = AppLocale.premiumSaveBadge,
                         isHighlighted = true,
+                        enabled = annualProduct != null && billingProblem == null,
                         onClick = {
                             if (activity != null && annualProduct != null) {
                                 premiumManager.launchPurchaseFlow(activity, annualProduct)
@@ -422,10 +466,22 @@ fun PremiumScreen(
                     premiumManager.resetPurchaseState()
                 }
             }
-            is PremiumManager.PurchaseState.Error -> {
-                val error = (purchaseState as PremiumManager.PurchaseState.Error).message
-                LaunchedEffect(error) {
-                    snackbarHostState.showSnackbar(AppLocale.premiumPurchaseError(error))
+            is PremiumManager.PurchaseState.NotAcknowledged -> {
+                LaunchedEffect(Unit) {
+                    snackbarHostState.showSnackbar(AppLocale.premiumPurchaseNotAcknowledged)
+                    premiumManager.resetPurchaseState()
+                }
+            }
+            is PremiumManager.PurchaseState.Failed -> {
+                // Arriva qui SOLO un acquisto che l'utente ha avviato davvero.
+                // I guasti del servizio che capitano all'avvio non passano piu'
+                // di qui: stanno in billingProblem, e si vedono come riga
+                // spenta accanto ai piani invece che come snackbar allarmista.
+                val problem = (purchaseState as PremiumManager.PurchaseState.Failed).problem
+                LaunchedEffect(problem) {
+                    snackbarHostState.showSnackbar(
+                        AppLocale.premiumPurchaseError(billingProblemMessage(problem))
+                    )
                     premiumManager.resetPurchaseState()
                 }
             }
@@ -438,6 +494,16 @@ fun PremiumScreen(
         )
     }
 }
+
+/** Il guasto, nella lingua scelta dall'utente. */
+private fun billingProblemMessage(problem: PremiumManager.Companion.BillingProblem): String =
+    when (problem) {
+        PremiumManager.Companion.BillingProblem.DISCONNECTED -> AppLocale.billingProblemDisconnected
+        PremiumManager.Companion.BillingProblem.NETWORK -> AppLocale.billingProblemNetwork
+        PremiumManager.Companion.BillingProblem.UNAVAILABLE -> AppLocale.billingProblemUnavailable
+        PremiumManager.Companion.BillingProblem.MISCONFIGURED -> AppLocale.billingProblemMisconfigured
+        PremiumManager.Companion.BillingProblem.OTHER -> AppLocale.billingProblemOther
+    }
 
 private fun formatGiftDate(epochMs: Long): String =
     java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
@@ -483,10 +549,17 @@ private fun PlanCard(
     price: String,
     badge: String? = null,
     isHighlighted: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    val borderColor = if (isHighlighted) AppColors.gold else AppColors.surface
-    val bgColor = if (isHighlighted) AppColors.gold.copy(alpha = 0.08f) else AppColors.card
+    // Un piano che non si puo' comprare deve sembrare non comprabile: prima il
+    // tocco partiva comunque e non succedeva niente, senza spiegazioni.
+    val borderColor = when {
+        !enabled -> AppColors.surface
+        isHighlighted -> AppColors.gold
+        else -> AppColors.surface
+    }
+    val bgColor = if (isHighlighted && enabled) AppColors.gold.copy(alpha = 0.08f) else AppColors.card
 
     Box(
         modifier = Modifier
@@ -494,7 +567,8 @@ private fun PlanCard(
             .clip(RoundedCornerShape(16.dp))
             .border(1.5.dp, borderColor, RoundedCornerShape(16.dp))
             .background(bgColor)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.45f)
             .padding(20.dp)
     ) {
         Row(

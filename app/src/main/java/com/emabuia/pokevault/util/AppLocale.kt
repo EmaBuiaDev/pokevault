@@ -1049,6 +1049,40 @@ object AppLocale {
         "Acquisto non riuscito: $reason"
     else
         "Purchase failed: $reason"
+    val premiumPurchaseNotAcknowledged: String get() = if (isItalian)
+        "Acquisto non confermato. Riapri l'app quando torni online."
+    else
+        "Purchase not confirmed. Reopen the app once you are back online."
+
+    // ── Disponibilità del servizio di fatturazione ──
+    // Messaggi di stato, non di errore: descrivono perché non si può comprare
+    // adesso. Sostituiscono il debugMessage inglese di Google, che arrivava
+    // all'utente non tradotto e senza dirgli cosa fare.
+    val billingUnavailableTitle: String get() = if (isItalian)
+        "Acquisti non disponibili"
+    else
+        "Purchases unavailable"
+    val billingProblemDisconnected: String get() = if (isItalian)
+        "Non riesco a collegarmi a Google Play. Di solito si risolve da sé: riprova fra poco."
+    else
+        "Cannot reach Google Play right now. It usually sorts itself out: try again shortly."
+    val billingProblemNetwork: String get() = if (isItalian)
+        "Serve una connessione per acquistare. Controlla la rete e riprova."
+    else
+        "A connection is needed to purchase. Check your network and try again."
+    val billingProblemUnavailable: String get() = if (isItalian)
+        "Il Play Store non è disponibile su questo dispositivo, o l'account non può fare acquisti."
+    else
+        "The Play Store is unavailable on this device, or this account cannot make purchases."
+    val billingProblemMisconfigured: String get() = if (isItalian)
+        "Gli abbonamenti non risultano disponibili per questa versione dell'app."
+    else
+        "Subscriptions are not available for this build of the app."
+    val billingProblemOther: String get() = if (isItalian)
+        "Gli acquisti non sono disponibili in questo momento."
+    else
+        "Purchases are not available at the moment."
+    val billingRetry: String get() = if (isItalian) "Riprova" else "Try again"
     val themeLabel: String get() = if (isItalian) "Tema" else "Theme"
     fun themeSubtitle(mode: String): String = when (mode) {
         "light" -> if (isItalian) "Chiaro" else "Light"
