@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.PokeVault" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="android:windowTranslucentStatus">false</item>
-        <item name="android:windowTranslucentNavigation">false</item>
-        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-    </style>
+    <!--
+        Nessun attributo di colore o di trasparenza delle barre di sistema.
+
+        windowTranslucentStatus, windowTranslucentNavigation,
+        windowDrawsSystemBarBackgrounds, statusBarColor e navigationBarColor
+        sono deprecati da API 35 e da li' in poi vengono ignorati: e' l'avviso
+        di Play sulle "API o parametri deprecati per l'edge-to-edge". Sotto
+        API 35 l'equivalente lo imposta gia' enableEdgeToEdge() in
+        MainActivity, quindi toglierli non cambia come si vede l'app: e'
+        l'unico punto da cui passa adesso, invece di due che si sovrascrivono.
+    -->
+    <style name="Theme.PokeVault" parent="Theme.AppCompat.DayNight.NoActionBar" />
 
     <!-- Splash screen theme -->
     <style name="Theme.PokeVault.Splash" parent="Theme.PokeVault">
