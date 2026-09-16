@@ -47,8 +47,14 @@ fun Modifier.sharedCardImage(cardId: String): Modifier {
     val visibilityScope = LocalNavAnimatedVisibilityScope.current ?: return this
 
     return with(sharedScope) {
+        // Primo parametro passato per posizione, non per nome: si chiama
+        // `state` in compose-animation 1.7 e `sharedContentState` dalla 1.8, e
+        // in questo progetto le due versioni convivono. Il BOM fissa la 1.7.0,
+        // ma in debug ui-tooling tira dentro la 1.9.2, quindi qualunque nome
+        // si scriva rompe una delle due varianti. L'ordine dei parametri e'
+        // lo stesso in entrambe.
         this@sharedCardImage.sharedElement(
-            sharedContentState = rememberSharedContentState(key = "card-$cardId"),
+            rememberSharedContentState(key = "card-$cardId"),
             animatedVisibilityScope = visibilityScope,
             boundsTransform = { _, _ -> AppMotion.landing<Rect>() }
         )
