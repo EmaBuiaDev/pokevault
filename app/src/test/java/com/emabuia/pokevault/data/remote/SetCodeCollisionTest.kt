@@ -86,4 +86,78 @@ class SetCodeCollisionTest {
             }
         }
     }
+
+    /**
+     * Non basta che BLK e WHT siano diversi: devono essere quelli giusti.
+     * Black Bolt e' "Luce Nera" (rsv10pt5), White Flare e' "Fuoco Bianco"
+     * (zsv10pt5), e la lettera iniziale dell'id non segue la lettera del
+     * codice. Scambiandoli i due restano distinti, quindi ogni verifica di
+     * sola collisione passa lo stesso mentre ogni carta importata esce dal
+     * set sbagliato: e' l'unico modo per accorgersene da qui.
+     */
+    @Test
+    fun testBlackBoltEWhiteFlareVannoSuiSetGiusti() {
+        assertEquals("rsv10pt5", code("BLK")?.lowercase())
+        assertEquals("zsv10pt5", code("WHT")?.lowercase())
+    }
+
+    /**
+     * Il codice e il nome per esteso dello stesso set devono dare lo stesso
+     * id. normalizeDecklistSetCode prova prima l'alias e poi il nome, e una
+     * decklist puo' contenere l'uno o l'altro: sistemata una meta' sola, il
+     * bug resta in piedi la meta' delle volte. E' quello che era successo a
+     * BLK/WHT, corretti fra gli alias e lasciati su "sv11" fra i nomi.
+     */
+    @Test
+    fun testCodiceENomeDelloStessoSetCoincidono() {
+        val stessoSet = listOf(
+            "BLK" to "Black Bolt",
+            "WHT" to "White Flare",
+            "SVI" to "Scarlet Violet",
+            "TWM" to "Twilight Masquerade",
+            "ASC" to "Ascended Heroes",
+            "CRI" to "Chaos Rising",
+            "CRZ" to "Crown Zenith"
+        )
+
+        for ((codice, nome) in stessoSet) {
+            assertEquals(
+                "$codice e \"$nome\" sono lo stesso set",
+                code(codice)?.lowercase(),
+                code(nome)?.lowercase()
+            )
+        }
+    }
+
+    /**
+     * La stessa regola di testNessunaCollisioneFraSetDiversi, applicata ai
+     * nomi per esteso: erano il ramo dove la collisione BLK/WHT era
+     * sopravvissuta, con "black bolt" e "white flare" tutti e due su un
+     * "sv11" che in catalogo non esiste nemmeno.
+     */
+    @Test
+    fun testNessunaCollisioneFraNomiDiSetDiversi() {
+        val nomi = listOf(
+            "Black Bolt", "White Flare", "Scarlet Violet", "Paldea Evolved",
+            "Obsidian Flames", "Pokemon 151", "Paradox Rift", "Paldean Fates",
+            "Temporal Forces", "Twilight Masquerade", "Shrouded Fable",
+            "Stellar Crown", "Surging Sparks", "Prismatic Evolutions",
+            "Journey Together", "Destined Rivals", "Ascended Heroes",
+            "Chaos Rising", "Rebel Clash", "Darkness Ablaze", "Champions Path",
+            "Vivid Voltage", "Battle Styles", "Chilling Reign",
+            "Evolving Skies", "Fusion Strike", "Brilliant Stars",
+            "Astral Radiance", "Lost Origin", "Silver Tempest", "Crown Zenith"
+        )
+
+        for (a in nomi) {
+            for (b in nomi) {
+                if (a == b) continue
+                assertNotEquals(
+                    "\"$a\" e \"$b\" sono set diversi ma normalizzano allo stesso codice",
+                    code(a)?.lowercase(),
+                    code(b)?.lowercase()
+                )
+            }
+        }
+    }
 }

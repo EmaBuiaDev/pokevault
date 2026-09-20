@@ -46,8 +46,14 @@ object SetCodeMapper {
         // Black Bolt e White Flare sono due set diversi usciti insieme, e sono
         // questi i loro id veri: "sv11" non esiste, e mandandoceli entrambi si
         // rendevano indistinguibili esattamente come MEG e MEP.
-        "BLK" to "zsv10pt5",
-        "WHT" to "rsv10pt5",
+        //
+        // L'accoppiamento non si indovina dalla lettera dell'id: Black Bolt e'
+        // "Luce Nera" e sta su rsv10pt5, White Flare e' "Fuoco Bianco" e sta su
+        // zsv10pt5. Scambiati, i due codici restano distinti -- quindi un test
+        // che guardi solo le collisioni passa lo stesso -- ma ogni carta
+        // importata esce dal set sbagliato.
+        "BLK" to "rsv10pt5",
+        "WHT" to "zsv10pt5",
         "RCL" to "swsh2",
         "DAA" to "swsh3",
         "CPA" to "swsh35",
@@ -82,8 +88,10 @@ object SetCodeMapper {
         "destined rivals" to "sv10",
         "ascended heroes" to "asc",
         "chaos rising" to "dcr",
-        "black bolt" to "sv11",
-        "white flare" to "sv11",
+        // Stessi id degli alias BLK/WHT qui sopra: il percorso per nome e'
+        // l'altra meta' della stessa ricerca e deve dare lo stesso risultato.
+        "black bolt" to "rsv10pt5",
+        "white flare" to "zsv10pt5",
         "rebel clash" to "swsh2",
         "darkness ablaze" to "swsh3",
         "champions path" to "swsh35",
