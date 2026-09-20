@@ -37,18 +37,18 @@ jobs:
           echo "POKEWALLET_PROXY_URL=" >> local.properties
 
       - name: Run Unit Tests
-        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+        run: ./gradlew testProdDebugUnitTest --no-daemon --stacktrace
 
       - name: Upload Test Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-reports
-          path: app/build/reports/tests/testDebugUnitTest/
+          path: app/build/reports/tests/testProdDebugUnitTest/
 
       - name: Publish Test Results
         if: always()
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          files: app/build/test-results/testDebugUnitTest/**/*.xml
+          files: app/build/test-results/testProdDebugUnitTest/**/*.xml
           check_name: Unit Test Results

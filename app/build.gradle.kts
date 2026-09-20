@@ -31,6 +31,38 @@ android {
         buildConfigField("String", "ITALIAN_CATALOG_URL", "\"${localProperties.getProperty("ITALIAN_CATALOG_URL", "")}\"")
     }
 
+    // ── Ambienti ────────────────────────────────────────────────────────────
+    //
+    // Due progetti Firebase distinti, cosi' provare l'app sul telefono non
+    // significa piu' scrivere nei dati veri. Lo staging ha un applicationId
+    // suo, quindi le due app convivono sullo stesso dispositivo e si passa
+    // dall'una all'altra senza disinstallare niente.
+    //
+    // Cosa NON e' separato, e perche':
+    //   - il Worker Cloudflare resta condiviso: catalogo, prezzi e immagini
+    //     sono dati di riferimento, non dati dell'utente, e duplicarli
+    //     vorrebbe dire tenerli allineati a mano;
+    //   - le rotte autenticate del Worker (/billing, /gift) rifiutano pero'
+    //     gli utenti di staging: verificano l'ID token contro un solo
+    //     FIREBASE_PROJECT_ID, quello di produzione (src/billing.ts);
+    //   - gli acquisti Play non funzionano in staging, perche' Play riconosce
+    //     solo il package pubblicato. Gli abbonamenti si provano in
+    //     produzione con i license tester, come prima.
+    flavorDimensions += "environment"
+    productFlavors {
+        create("prod") {
+            dimension = "environment"
+            // Nessun suffisso, e va lasciato cosi': l'app su Play deve restare
+            // esattamente com.emabuia.pokevault, altrimenti saltano insieme
+            // billing, firma di Play e Google Sign-In.
+        }
+        create("staging") {
+            dimension = "environment"
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+        }
+    }
+
     signingConfigs {
         create("release") {
             val ksFile = rootProject.file(localProperties.getProperty("RELEASE_STORE_FILE", "release.keystore"))
@@ -255,17 +287,23 @@ jacoco {
 }
 
 /**
- * Report di coverage per la variante debug.
+ * Report di coverage per la variante prodDebug.
  *
  * Il plugin jacoco era applicato ma nessun task JacocoReport era registrato:
  * AGP non li crea da solo per variante. Di conseguenza
  * `jacocoTestDebugUnitTestReport`, invocato da android-advanced-tests.yml,
  * non esisteva e quel workflow falliva prima ancora di eseguire i test.
+ *
+ * Dall'introduzione dei flavor `prod`/`staging` la variante si chiama
+ * prodDebug: `testDebugUnitTest` non esiste piu' (AGP genera un task per
+ * combinazione flavor+buildType) e anche le cartelle delle classi hanno il
+ * flavor nel nome. Si misura prod perche' e' la variante che viene
+ * pubblicata; il codice e' lo stesso, cambia solo a quale Firebase punta.
  */
-tasks.register<JacocoReport>("jacocoTestDebugUnitTestReport") {
-    dependsOn("testDebugUnitTest")
+tasks.register<JacocoReport>("jacocoTestProdDebugUnitTestReport") {
+    dependsOn("testProdDebugUnitTest")
     group = "verification"
-    description = "Genera il report Jacoco per i test unitari della variante debug."
+    description = "Genera il report Jacoco per i test unitari della variante prodDebug."
 
     reports {
         xml.required.set(true)
@@ -284,12 +322,23 @@ tasks.register<JacocoReport>("jacocoTestDebugUnitTestReport") {
 
     classDirectories.setFrom(
         files(
-            fileTree("${layout.buildDirectory.get()}/tmp/kotlin-classes/debug") { exclude(excludes) },
-            fileTree("${layout.buildDirectory.get()}/intermediates/javac/debug/classes") { exclude(excludes) }
+            fileTree("${layout.buildDirectory.get()}/tmp/kotlin-classes/prodDebug") { exclude(excludes) },
+            fileTree("${layout.buildDirectory.get()}/intermediates/javac/prodDebug/classes") { exclude(excludes) }
         )
     )
     sourceDirectories.setFrom(files("$projectDir/src/main/java"))
+
+    // Un file preciso, non un fileTree su tutta la build dir. Quello pescava
+    // qualunque .exec ci fosse rimasto -- compresi quelli di varianti diverse,
+    // che dall'arrivo dei flavor esistono davvero -- e mescolava coverage di
+    // build che non c'entravano niente. Gradle lo segnalava anche come
+    // dipendenza implicita dagli output di altri task, e il report falliva
+    // quando girava nella stessa invocazione di una compilazione release.
     executionData.setFrom(
-        fileTree(layout.buildDirectory) { include("**/*.exec", "**/*.ec") }
+        files(
+            layout.buildDirectory.file(
+                "outputs/unit_test_code_coverage/prodDebugUnitTest/testProdDebugUnitTest.exec"
+            )
+        )
     )
 }

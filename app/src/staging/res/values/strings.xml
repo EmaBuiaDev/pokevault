@@ -1,0 +1,9 @@
+<resources>
+    <!--
+        Sovrascrive il nome di main/res/values/strings.xml solo per lo
+        staging. Le due app stanno sullo stesso telefono con la stessa icona:
+        senza un nome diverso sotto, non c'e' modo di sapere quale si sta
+        aprendo, e si finisce per provare le modifiche sui dati veri.
+    -->
+    <string name="app_name">PokeVault Staging</string>
+</resources>

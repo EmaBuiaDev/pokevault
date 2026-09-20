@@ -19,3 +19,8 @@ node_modules/
 app/release/
 *.aab
 *.apk
+
+# Firebase CLI — log locali di debug, non configurazione
+firebase-debug.log
+firebase-debug.*.log
+.firebase/

@@ -26,28 +26,28 @@ Prerequisiti: JDK 21 (non il JBR 25 di Android Studio, vedi nota in
 
 ```bash
 # Solo unit test (veloce, nessun emulatore richiesto)
-./gradlew testDebugUnitTest
+./gradlew testProdDebugUnitTest
 
 # Un file/classe/metodo specifico
-./gradlew testDebugUnitTest --tests "*CardPriceUtilsTest"
-./gradlew testDebugUnitTest --tests "com.emabuia.pokevault.util.CardPriceUtilsTest.testMinimumEurPriceWithLowPrice"
+./gradlew testProdDebugUnitTest --tests "*CardPriceUtilsTest"
+./gradlew testProdDebugUnitTest --tests "com.emabuia.pokevault.util.CardPriceUtilsTest.testMinimumEurPriceWithLowPrice"
 
 # Test instrumentati (richiede emulatore avviato o device connesso)
-./gradlew connectedAndroidTest
+./gradlew connectedProdDebugAndroidTest
 
 # Tutto insieme
-./gradlew test connectedAndroidTest
+./gradlew test connectedProdDebugAndroidTest
 
 # Coverage (Jacoco)
-./gradlew testDebugUnitTest jacocoTestDebugUnitTestReport
-# Report: app/build/reports/jacoco/jacocoTestDebugUnitTestReport/html/index.html
+./gradlew testProdDebugUnitTest jacocoTestProdDebugUnitTestReport
+# Report: app/build/reports/jacoco/jacocoTestProdDebugUnitTestReport/html/index.html
 
 # Analisi statica
-./gradlew lint
+./gradlew lintProdDebug
 # Report: app/build/reports/lint-results-debug.html
 ```
 
-Report dei test unitari: `app/build/reports/tests/testDebugUnitTest/index.html`.
+Report dei test unitari: `app/build/reports/tests/testProdDebugUnitTest/index.html`.
 Report dei test instrumentati: `app/build/reports/androidTests/release/index.html`.
 
 Da Android Studio: click destro sulla classe o sul singolo metodo di test → *Run*.
@@ -65,8 +65,8 @@ Due workflow, entrambi in `.github/workflows/`:
 workflow gira sui branch di lavoro reali del progetto (`release/R3.0.0`,
 `claude/*`) a meno che il nome combaci con `release/**`; `android-advanced-tests.yml`
 non ha `release/**` tra i trigger. `android-advanced-tests.yml` usa inoltre
-JDK 11, incompatibile con AGP 8.13.2 (il task `jacocoTestDebugUnitTestReport`
-non è mai stato registrato correttamente). Prima di fidarsi del verde CI su un
+JDK 11, incompatibile con AGP 8.13.2 (il task allora invocato,
+`jacocoTestDebugUnitTestReport`, non era mai stato registrato). Prima di fidarsi del verde CI su un
 branch che non sia `main`/`develop`, verificare che il workflow sia effettivamente
 partito nel tab *Actions*.
 
@@ -180,7 +180,7 @@ class MyDaoTest {
 | Sintomo | Soluzione |
 |---|---|
 | Test fallisce in CI ma passa in locale | `./gradlew clean && ./gradlew build --refresh-dependencies && ./gradlew test` |
-| Emulatore non risponde | `emulator -list-avds` → `emulator -avd <nome>`, attendere il boot completo prima di lanciare `connectedAndroidTest` |
+| Emulatore non risponde | `emulator -list-avds` → `emulator -avd <nome>`, attendere il boot completo prima di lanciare `connectedProdDebugAndroidTest` |
 | Timeout su GitHub Actions | Aumentare `timeout-minutes` nel workflow YAML interessato |
 | `local.properties` mancante in CI | I workflow lo generano al volo (`echo "..." > local.properties`) — se manca una chiave, verificare lo step *Create local.properties* nel workflow |
 
@@ -189,4 +189,4 @@ class MyDaoTest {
 Coverage line dichiarato in questo documento come obiettivo: **50%** (vedi
 `MIGRATION_PLAN.md` sez. 8 voce 25 — mai raggiunto, non ancora misurato in modo
 sistematico). Non esiste oggi un numero di coverage reale da citare: va generato
-con `jacocoTestDebugUnitTestReport` prima di poter dire dove si è.
+con `jacocoTestProdDebugUnitTestReport` prima di poter dire dove si è.
