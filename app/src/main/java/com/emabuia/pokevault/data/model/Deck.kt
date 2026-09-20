@@ -12,7 +12,17 @@ data class Deck(
     val totalCards: Int = 0,
     val recommendedEnergy: List<String> = emptyList(),
     val coverImageUrl: String = "",
-    val coverImageUrls: List<String> = emptyList()
+    val coverImageUrls: List<String> = emptyList(),
+
+    /**
+     * Il deck contiene almeno una carta che l'utente non possiede.
+     *
+     * Non e' una preferenza ma una constatazione: viene ricalcolato a ogni
+     * salvataggio guardando le carte dentro al deck. Serve solo a dirlo
+     * nell'elenco, perche' un mazzo che non si puo' portare a un torneo deve
+     * distinguersi da uno che si puo'.
+     */
+    val deckOnly: Boolean = false
 ) {
     fun displayCoverImageUrls(): List<String> {
         return (coverImageUrls + coverImageUrl)

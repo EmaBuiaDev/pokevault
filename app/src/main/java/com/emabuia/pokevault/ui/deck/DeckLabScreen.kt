@@ -73,7 +73,7 @@ fun DeckLabScreen(
     fun closeDeckSheet() {
         showDiscardDeckDialog = false
         showSheet = false
-        viewModel.resetNewDeckState()
+        viewModel.discardEditingDeck()
     }
     var showImportDialog by remember { mutableStateOf(false) }
     var showPremiumDeckDialog by remember { mutableStateOf(false) }
@@ -247,7 +247,10 @@ fun DeckLabScreen(
                 selectedDeck != null -> {
                     DeckDetailView(
                         deck = selectedDeck!!,
-                        allOwnedCards = viewModel.ownedCards,
+                        // allCards e non ownedCards: un deck di prova ha dentro
+                        // carte che non sono in collezione, e senza queste il
+                        // dettaglio mostrerebbe un mazzo mezzo vuoto.
+                        allOwnedCards = viewModel.allCards,
                         onBack = { selectedDeck = null },
                         onCardClick = onCardClick,
                         onEdit = {
@@ -286,8 +289,8 @@ fun DeckLabScreen(
                     } else {
                         // Indice costruito una volta per l'intera lista, invece che
                         // scandito da ogni riga.
-                        val ownedById = remember(viewModel.ownedCards) {
-                            viewModel.ownedCards.associateBy { it.id }
+                        val ownedById = remember(viewModel.allCards) {
+                            viewModel.allCards.associateBy { it.id }
                         }
                         LazyColumn(
                             contentPadding = PaddingValues(20.dp),
@@ -426,24 +429,30 @@ fun DeckLabScreen(
             )
         }
 
-        // Risultato import
+        // Import: prima la scelta su dove finiscono le carte che non possiedi,
+        // poi il riepilogo. Sono due momenti diversi e non vanno mescolati --
+        // decidere in fondo a un elenco di carte mancanti e' una domanda che
+        // arriva quando l'utente sta gia' leggendo un esito.
         val importResult = viewModel.importResult
         if (importResult != null) {
-            ImportResultDialog(
-                result = importResult,
-                isAddingMissingCards = viewModel.isAddingMissingCards,
-                onDismiss = {
-                    viewModel.clearImportResult()
-                    if (viewModel.selectedCardsIds.isNotEmpty()) {
-                        showSheet = true
+            if (viewModel.isImportSourceChoicePending) {
+                DeckImportSourceDialog(
+                    missingCount = importResult.missingMetaDeckCards.sumOf { it.qty },
+                    isWorking = viewModel.isAddingMissingCards,
+                    onChoose = { source -> viewModel.applyImportCardSource(source, context) },
+                    onSkip = { viewModel.skipMissingCards() }
+                )
+            } else {
+                ImportResultDialog(
+                    result = importResult,
+                    onDismiss = {
+                        viewModel.clearImportResult()
+                        if (viewModel.selectedCardsIds.isNotEmpty()) {
+                            showSheet = true
+                        }
                     }
-                },
-                onAddMissingCards = {
-                    viewModel.addMissingCardsToCollection(importResult.missingMetaDeckCards, context) {
-                        showSheet = true
-                    }
-                }
-            )
+                )
+            }
         }
 
         // Premium gate dialogs

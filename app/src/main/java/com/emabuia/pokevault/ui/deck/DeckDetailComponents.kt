@@ -235,6 +235,32 @@ fun DeckDetailView(
                     color = AppColors.textMuted,
                     fontSize = 13.sp
                 )
+                if (deck.deckOnly) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        color = AppColors.purple.copy(alpha = 0.85f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Science,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = AppLocale.deckTestBadge,
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
         }
 

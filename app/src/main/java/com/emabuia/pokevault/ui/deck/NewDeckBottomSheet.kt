@@ -109,6 +109,16 @@ fun NewDeckBottomSheetContent(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        // Sta qui, sopra a tutto e in tutti e due i passi, perche' e' la
+        // domanda che decide cosa succede alla collezione quando si aggiunge
+        // una carta trovata nei set: prima non veniva posta affatto.
+        DeckCardSourceSelector(
+            source = viewModel.deckCardSource,
+            onSelect = { viewModel.deckCardSource = it }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
         // Un solo figlio con weight(1f) alla volta. Prima la griglia locale e
         // quella dei risultati online potevano essere presenti insieme, e si
         // spartivano l'altezza dimezzandosi a vicenda.
@@ -284,6 +294,74 @@ private fun DeckStepSwitch(step: Int, onSelect: (Int) -> Unit) {
     }
 }
 
+/**
+ * Dove finiscono le carte che l'utente non possiede.
+ *
+ * Deve stare davanti agli occhi mentre si costruisce il mazzo, non nascosto in
+ * un menu: e' la differenza fra un deck fatto con le proprie carte e un deck
+ * di prova, e l'utente deve saperlo prima di aggiungerne una, non dopo.
+ */
+@Composable
+private fun DeckCardSourceSelector(
+    source: DeckLabViewModel.DeckCardSource,
+    onSelect: (DeckLabViewModel.DeckCardSource) -> Unit
+) {
+    val options = listOf(
+        DeckLabViewModel.DeckCardSource.COLLECTION to AppLocale.deckSourceChipCollection,
+        DeckLabViewModel.DeckCardSource.DECK_ONLY to AppLocale.deckSourceChipDeckOnly
+    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = AppLocale.deckSourceSelectorLabel,
+                color = AppColors.textMuted,
+                fontSize = 11.sp,
+                modifier = Modifier.weight(1f)
+            )
+
+            options.forEach { (value, label) ->
+                val selected = value == source
+                val background by animateColorAsState(
+                    targetValue = if (selected) AppColors.purple else AppColors.card,
+                    animationSpec = tween(AppMotion.state),
+                    label = "sourceChipBackground"
+                )
+                val textColor by animateColorAsState(
+                    targetValue = if (selected) AppColors.onAccent else AppColors.textSecondary,
+                    animationSpec = tween(AppMotion.state),
+                    label = "sourceChipText"
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(background)
+                        .clickable { onSelect(value) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = label,
+                        color = textColor,
+                        fontSize = 11.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                    )
+                }
+            }
+        }
+
+        if (source == DeckLabViewModel.DeckCardSource.DECK_ONLY) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = AppLocale.deckSourceDeckOnlyDesc,
+                color = AppColors.purple.copy(alpha = 0.85f),
+                fontSize = 10.sp
+            )
+        }
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // Passo 1: le carte
 // ══════════════════════════════════════════════════════════════════════════
@@ -303,17 +381,22 @@ private fun DeckCardsStep(
         pendingSelectedCounts = emptyMap()
     }
 
+    // deckUsableCards e non ownedCards: in un deck di prova la griglia deve
+    // mostrare anche le carte solo-deck che stanno in questo mazzo, altrimenti
+    // sparirebbero appena aggiunte e non ci sarebbe modo di toglierle.
+    val usableCards = viewModel.deckUsableCards
+
     val filteredCards = remember(
         selectedTabIndex,
-        viewModel.ownedCards,
+        usableCards,
         viewModel.selectedCardsIds,
         viewModel.isImportReviewMode,
         cardSearchQuery
     ) {
-        val ownedById = viewModel.ownedCards.associateBy { it.id }
+        val usableById = usableCards.associateBy { it.id }
         val deckCardKeys = if (viewModel.isImportReviewMode) {
             viewModel.selectedCardsIds
-                .mapNotNull { id -> ownedById[id] }
+                .mapNotNull { id -> usableById[id] }
                 .map { viewModel.getCardKey(it) }
                 .toSet()
         } else {
@@ -321,9 +404,9 @@ private fun DeckCardsStep(
         }
 
         val sourceCards = if (viewModel.isImportReviewMode) {
-            viewModel.ownedCards.filter { card -> viewModel.getCardKey(card) in deckCardKeys }
+            usableCards.filter { card -> viewModel.getCardKey(card) in deckCardKeys }
         } else {
-            viewModel.ownedCards
+            usableCards
         }
 
         sourceCards
@@ -668,9 +751,11 @@ private fun DeckDetailsStep(
 ) {
     val focusManager = LocalFocusManager.current
 
-    val deckCards = remember(viewModel.ownedCards, viewModel.selectedCardsIds) {
+    // allCards: le copertine si scelgono fra le carte del deck, comprese
+    // quelle solo-deck, non fra quelle che l'utente possiede.
+    val deckCards = remember(viewModel.allCards, viewModel.selectedCardsIds) {
         val selected = viewModel.selectedCardsIds.toSet()
-        viewModel.ownedCards
+        viewModel.allCards
             .filter { it.id in selected && it.imageUrl.isNotBlank() }
             .distinctBy { it.imageUrl }
     }

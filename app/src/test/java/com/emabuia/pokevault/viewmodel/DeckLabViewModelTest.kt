@@ -3,6 +3,7 @@ package com.emabuia.pokevault.viewmodel
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.DeckAnalysis
 import com.emabuia.pokevault.data.model.DeckImportParser
+import com.emabuia.pokevault.data.model.PokemonCard
 import org.junit.Test
 import org.junit.Assert.*
 
@@ -23,6 +24,22 @@ class DeckLabViewModelTest {
         assertTrue(deck.cards.isEmpty())
         assertEquals(0, deck.totalCards)
         assertEquals("", deck.name)
+    }
+
+    /**
+     * Il default di deckOnly decide cosa succede a tutti i documenti scritti
+     * prima che il campo esistesse: Firestore li deserializza con questo
+     * valore. Se diventasse true, l'intera collezione degli utenti sparirebbe
+     * dalle schermate in un colpo solo.
+     */
+    @Test
+    fun testDeckIsNotDeckOnlyByDefault() {
+        assertFalse(Deck().deckOnly)
+    }
+
+    @Test
+    fun testCardIsNotDeckOnlyByDefault() {
+        assertFalse(PokemonCard().deckOnly)
     }
 
     @Test

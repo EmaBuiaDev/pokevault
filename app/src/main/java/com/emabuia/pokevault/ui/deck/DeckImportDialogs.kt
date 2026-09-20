@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.ui.deck
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -98,17 +99,22 @@ fun DeckImportDialog(
     )
 }
 
+/**
+ * Il riepilogo di un import, e basta.
+ *
+ * La domanda "che ne facciamo delle carte che non hai?" ha una sua schermata,
+ * [DeckImportSourceDialog], e arriva prima di questa: qui non si decide piu'
+ * niente, si legge com'e' andata.
+ */
 @Composable
 fun ImportResultDialog(
     result: DeckLabViewModel.ImportResult,
-    isAddingMissingCards: Boolean = false,
-    onDismiss: () -> Unit,
-    onAddMissingCards: () -> Unit = {}
+    onDismiss: () -> Unit
 ) {
     val hasMissingCards = result.missingMetaDeckCards.isNotEmpty()
 
     AlertDialog(
-        onDismissRequest = { if (!isAddingMissingCards) onDismiss() },
+        onDismissRequest = onDismiss,
         containerColor = AppColors.surface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -193,14 +199,14 @@ fun ImportResultDialog(
                             verticalAlignment = Alignment.Top
                         ) {
                             Icon(
-                                Icons.Default.AddCircle,
+                                Icons.Default.Info,
                                 contentDescription = null,
                                 tint = AppColors.orange,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = AppLocale.importAddMissingMessage,
+                                text = AppLocale.importLeftOutMessage,
                                 color = AppColors.textPrimary,
                                 fontSize = 12.sp
                             )
@@ -222,15 +228,89 @@ fun ImportResultDialog(
                     )
                 }
 
-                if (isAddingMissingCards) {
-                    Spacer(modifier = Modifier.height(12.dp))
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(AppLocale.ok)
+            }
+        }
+    )
+}
+
+/**
+ * La scelta che arriva prima del risultato: le carte che l'utente non possiede
+ * entrano in collezione, restano confinate nel deck, o non entrano affatto.
+ *
+ * E' la stessa domanda che prima stava in fondo al riepilogo, ma spostata dove
+ * serve -- e con una terza risposta che prima non c'era: un deck completo
+ * senza dichiarare di possedere carte che non si hanno.
+ */
+@Composable
+fun DeckImportSourceDialog(
+    missingCount: Int,
+    isWorking: Boolean,
+    onChoose: (DeckLabViewModel.DeckCardSource) -> Unit,
+    onSkip: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!isWorking) onSkip() },
+        containerColor = AppColors.surface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Inventory2,
+                    contentDescription = null,
+                    tint = AppColors.purple,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(AppLocale.deckSourceTitle, color = AppColors.textPrimary, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    text = AppLocale.deckSourceQuestion(missingCount),
+                    color = AppColors.textSecondary,
+                    fontSize = 13.sp
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                DeckImportSourceOption(
+                    icon = Icons.Default.Inventory2,
+                    accent = AppColors.green,
+                    title = AppLocale.deckSourceCollection,
+                    description = AppLocale.deckSourceCollectionDesc,
+                    enabled = !isWorking,
+                    onClick = { onChoose(DeckLabViewModel.DeckCardSource.COLLECTION) }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                DeckImportSourceOption(
+                    icon = Icons.Default.Science,
+                    accent = AppColors.purple,
+                    title = AppLocale.deckSourceDeckOnly,
+                    description = AppLocale.deckSourceDeckOnlyDesc,
+                    enabled = !isWorking,
+                    onClick = { onChoose(DeckLabViewModel.DeckCardSource.DECK_ONLY) }
+                )
+
+                if (isWorking) {
+                    Spacer(modifier = Modifier.height(14.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CircularProgressIndicator(
-                            color = AppColors.orange,
+                            color = AppColors.purple,
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp
                         )
@@ -244,34 +324,55 @@ fun ImportResultDialog(
                 }
             }
         },
-        confirmButton = {
-            if (hasMissingCards && !isAddingMissingCards) {
-                Button(
-                    onClick = onAddMissingCards,
-                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.orange),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(AppLocale.importAddMissingConfirm, fontSize = 13.sp)
-                }
-            } else if (!isAddingMissingCards) {
-                Button(
-                    onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(AppLocale.ok)
-                }
-            }
-        },
+        confirmButton = {},
         dismissButton = {
-            if (hasMissingCards && !isAddingMissingCards) {
-                TextButton(onClick = onDismiss) {
-                    Text(AppLocale.importAddMissingSkip, color = AppColors.textMuted)
+            if (!isWorking) {
+                TextButton(onClick = onSkip) {
+                    Text(AppLocale.deckSourceSkip, color = AppColors.textMuted, fontSize = 12.sp)
                 }
             }
         }
     )
+}
+
+@Composable
+private fun DeckImportSourceOption(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color,
+    title: String,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = accent.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.5f)
+            .clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = title,
+                    color = AppColors.textPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    color = AppColors.textMuted,
+                    fontSize = 11.sp
+                )
+            }
+        }
+    }
 }
 

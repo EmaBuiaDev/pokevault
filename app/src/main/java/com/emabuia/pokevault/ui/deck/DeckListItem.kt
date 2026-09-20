@@ -34,6 +34,7 @@ import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.util.AppLocale
 @Composable
 fun DeckItem(
     deck: Deck,
@@ -253,8 +254,25 @@ fun DeckItem(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Un mazzo che non si puo' portare a un torneo deve dirlo da
+                // fuori, senza doverlo aprire.
+                if (deck.deckOnly) {
+                    Surface(
+                        color = AppColors.purple.copy(alpha = 0.85f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = AppLocale.deckTestBadge,
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
+                }
                 deck.mainTypes.take(2).forEach { type ->
                     TypeBadge(type, small = true)
                 }

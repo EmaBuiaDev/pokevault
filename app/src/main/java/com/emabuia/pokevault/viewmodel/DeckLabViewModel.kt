@@ -49,8 +49,25 @@ class DeckLabViewModel : ViewModel() {
     var decks by mutableStateOf<List<Deck>>(emptyList())
         private set
 
-    var ownedCards by mutableStateOf<List<PokemonCard>>(emptyList())
+    /**
+     * Tutto quello che un deck puo' contenere: collezione + carte solo-deck.
+     *
+     * Serve per *risolvere* gli id dentro ai deck, mai per dire cosa l'utente
+     * possiede. Per quello c'e' [ownedCards], che e' l'unica lista che il
+     * selettore delle carte e i conteggi di disponibilita' devono vedere.
+     */
+    var allCards by mutableStateOf<List<PokemonCard>>(emptyList())
         private set
+
+    /** Le sole carte possedute davvero. */
+    val ownedCards: List<PokemonCard> by derivedStateOf {
+        allCards.filter { !it.deckOnly }
+    }
+
+    /** Indice per id su [allCards]: un deck di prova contiene anche carte non possedute. */
+    private val allCardsById by derivedStateOf {
+        allCards.associateBy { it.id }
+    }
 
     var isLoading by mutableStateOf(false)
         private set
@@ -72,6 +89,45 @@ class DeckLabViewModel : ViewModel() {
         private set
 
     /**
+     * Che fine fanno le carte che il deck usa e l'utente non possiede.
+     *
+     * E' una proprieta' della sessione di modifica, non del singolo import:
+     * vale anche per le carte pescate da "Cerca nei set", che prima finivano
+     * in collezione senza chiedere niente a nessuno.
+     */
+    enum class DeckCardSource {
+        /** Le carte mancanti entrano in collezione: il deck e' fatto di carte tue. */
+        COLLECTION,
+
+        /** Le carte mancanti restano dentro al deck: deck di prova. */
+        DECK_ONLY
+    }
+
+    var deckCardSource by mutableStateOf(DeckCardSource.COLLECTION)
+
+    /**
+     * L'import ha trovato delle carte mancanti e aspetta che l'utente dica
+     * cosa farne. Finche' e' true, al posto del risultato si mostra la scelta.
+     */
+    var isImportSourceChoicePending by mutableStateOf(false)
+        private set
+
+    /**
+     * Gli id delle carte solo-deck create durante questa sessione di modifica.
+     *
+     * Li teniamo a parte perche' [allCards] arriva da uno snapshot listener:
+     * fra la scrittura e l'emissione c'e' un istante in cui una carta appena
+     * creata non e' ancora in lista, e in quell'istante il deck sembrerebbe
+     * fatto di sole carte possedute.
+     */
+    private var sessionDeckOnlyCardIds by mutableStateOf<Set<String>>(emptySet())
+
+    /** Il deck in modifica contiene almeno una carta non posseduta. */
+    val editingDeckHasDeckOnlyCards: Boolean by derivedStateOf {
+        selectedCardsIds.any { it in sessionDeckOnlyCardIds || allCardsById[it]?.deckOnly == true }
+    }
+
+    /**
      * Le carte aggiunte in collezione che il catalogo italiano non conosce.
      *
      * Entrano senza immagine e con i soli dati della decklist. Prima succedeva
@@ -89,23 +145,38 @@ class DeckLabViewModel : ViewModel() {
     var tcgSearchError by mutableStateOf<String?>(null)
         private set
 
-    // Optimized map for quick lookups during UI rendering
+    // Optimized map for quick lookups during UI rendering.
+    // Su allCards: mappa gli id che stanno nel deck, non quelli posseduti.
     private val cardIdToKeyMap by derivedStateOf {
-        ownedCards.associate { it.id to getCardKey(it) }
+        allCards.associate { it.id to getCardKey(it) }
     }
 
-    /** Indice per id: evita ownedCards.find { } dentro i loop di validazione. */
-    private val ownedCardsById by derivedStateOf {
-        ownedCards.associateBy { it.id }
-    }
-
-    /** Documenti posseduti raggruppati per chiave carta. */
-    private val ownedCardsByKey by derivedStateOf {
-        ownedCards.groupBy { getCardKey(it) }
+    /** Le carte solo-deck che stanno nel deck attualmente in modifica. */
+    private val deckOnlyCardsInDeck: List<PokemonCard> by derivedStateOf {
+        selectedCardsIds.distinct()
+            .mapNotNull { allCardsById[it] }
+            .filter { it.deckOnly }
     }
 
     /**
-     * Copie possedute per chiave carta.
+     * Quello che il selettore carte puo' offrire a questo deck.
+     *
+     * Per un deck normale e' esattamente la collezione, quindi niente cambia.
+     * Per un deck di prova ci sono anche le sue carte solo-deck: senza,
+     * sparirebbero dalla griglia appena aggiunte, e l'utente non avrebbe modo
+     * di toglierle o rimetterle.
+     */
+    val deckUsableCards: List<PokemonCard> by derivedStateOf {
+        ownedCards + deckOnlyCardsInDeck
+    }
+
+    /** Documenti utilizzabili raggruppati per chiave carta. */
+    private val ownedCardsByKey by derivedStateOf {
+        deckUsableCards.groupBy { getCardKey(it) }
+    }
+
+    /**
+     * Copie disponibili per chiave carta.
      *
      * getTotalOwnedQuantity filtrava l'intera lista posseduta costruendo una
      * stringa chiave per ogni elemento. Veniva chiamata anche dentro gli item
@@ -113,7 +184,7 @@ class DeckLabViewModel : ViewModel() {
      * frame durante lo scroll, e in un loop da addAllCopiesToDeck.
      */
     private val ownedQuantitiesByKey by derivedStateOf {
-        ownedCards.groupingBy { getCardKey(it) }
+        deckUsableCards.groupingBy { getCardKey(it) }
             .fold(0) { acc, card -> acc + card.quantity }
     }
 
@@ -159,8 +230,10 @@ class DeckLabViewModel : ViewModel() {
             // composizione la lista e' ancora vuota. Il timeout evita che una
             // collezione davvero vuota lasci qui una coroutine in attesa per
             // tutta la vita del ViewModel.
+            // Anche le carte solo-deck: sono proprio quelle che l'Hand
+            // Simulator deve valutare in un deck di prova.
             val cards = withTimeoutOrNull(STAGE_BACKFILL_WAIT_MS) {
-                snapshotFlow { ownedCards }.first { it.isNotEmpty() }
+                snapshotFlow { allCards }.first { it.isNotEmpty() }
             } ?: run {
                 cardStageBackfillStarted.set(false)
                 return@launch
@@ -202,8 +275,11 @@ class DeckLabViewModel : ViewModel() {
 
     private fun loadOwnedCards() {
         viewModelScope.launch {
-            repository.getCards().collectLatest { cards ->
-                ownedCards = cards.sortedWith(
+            // Qui, e solo qui in tutta l'app, servono anche le carte solo-deck:
+            // senza, i deck di prova mostrerebbero dei buchi al posto delle
+            // carte che l'utente ha scelto di non mettere in collezione.
+            repository.getCardsIncludingDeckOnly().collectLatest { cards ->
+                allCards = cards.sortedWith(
                     compareBy<PokemonCard> { 
                         val category = classifyCard(it)
                         when (category) {
@@ -256,7 +332,7 @@ class DeckLabViewModel : ViewModel() {
             // O(deck x possedute) a ogni tocco -- e addAllCopiesToDeck chiama
             // questa funzione fino a 60 volte di fila.
             val sameNameCount = selectedCardsIds.count { id ->
-                ownedCardsById[id]?.name == card.name
+                allCardsById[id]?.name == card.name
             }
             if (sameNameCount >= 4) {
                 validationError = "Massimo 4 copie di ${card.name}."
@@ -317,9 +393,8 @@ class DeckLabViewModel : ViewModel() {
     }
 
     private fun analyzeDeck() {
-        val cardMap = ownedCards.associateBy { it.id }
-        val selectedCards = selectedCardsIds.mapNotNull { cardMap[it] }
-        
+        val selectedCards = selectedCardsIds.mapNotNull { allCardsById[it] }
+
         if (selectedCards.isEmpty()) {
             currentAnalysis = DeckAnalysis()
             return
@@ -351,6 +426,9 @@ class DeckLabViewModel : ViewModel() {
         selectedCardsIds = deck.cards
         coverImageUrls = deck.displayCoverImageUrls()
         coverImageUrl = coverImageUrls.firstOrNull().orEmpty()
+        // Riaprendo un deck di prova, le carte aggiunte adesso seguono la
+        // stessa regola di quelle gia' dentro: nessuna sorpresa in collezione.
+        deckCardSource = if (deck.deckOnly) DeckCardSource.DECK_ONLY else DeckCardSource.COLLECTION
         analyzeDeck()
     }
 
@@ -376,7 +454,11 @@ class DeckLabViewModel : ViewModel() {
             totalCards = selectedCardsIds.size,
             recommendedEnergy = currentAnalysis.recommendedEnergy,
             coverImageUrl = coverImageUrls.firstOrNull().orEmpty(),
-            coverImageUrls = coverImageUrls.take(2)
+            coverImageUrls = coverImageUrls.take(2),
+            // Non salviamo l'intenzione ma il fatto: un deck e' "di prova" se
+            // dentro ci sono davvero carte che l'utente non ha. Cosi' l'etichetta
+            // nell'elenco resta vera anche se l'utente cambia idea a meta' strada.
+            deckOnly = editingDeckHasDeckOnlyCards
         )
 
         viewModelScope.launch {
@@ -391,9 +473,45 @@ class DeckLabViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Cancella il deck e, con lui, le sue carte solo-deck rimaste orfane.
+     *
+     * Quelle carte esistono solo per questo deck e nessuna schermata le mostra:
+     * lasciarle in Firestore vorrebbe dire accumulare documenti invisibili che
+     * l'utente non ha modo di ripulire. Quelle usate anche da un altro deck
+     * restano dove sono.
+     */
     fun deleteDeck(deckId: String) {
+        val deck = decks.find { it.id == deckId }
         viewModelScope.launch {
             repository.deleteDeck(deckId)
+
+            if (deck == null) return@launch
+            val idsStillInUse = decks.filter { it.id != deckId }.flatMapTo(mutableSetOf()) { it.cards }
+            deck.cards.distinct()
+                .filter { id -> id !in idsStillInUse && allCardsById[id]?.deckOnly == true }
+                .forEach { repository.deleteCard(it) }
+        }
+    }
+
+    /**
+     * L'utente ha buttato via il deck che stava costruendo.
+     *
+     * Le carte solo-deck create durante questa sessione erano solo per lui:
+     * se nessun deck salvato le referenzia, spariscono con lui. Senza questo,
+     * ogni import di prova abbandonato lascerebbe in Firestore documenti che
+     * nessuna schermata mostra e che l'utente non puo' cancellare.
+     */
+    fun discardEditingDeck() {
+        val idsInSavedDecks = decks.flatMapTo(mutableSetOf()) { it.cards }
+        val orphans = (sessionDeckOnlyCardIds + deckOnlyCardsInDeck.map { it.id })
+            .filter { it !in idsInSavedDecks }
+
+        resetNewDeckState()
+
+        if (orphans.isEmpty()) return
+        viewModelScope.launch {
+            orphans.forEach { repository.deleteCard(it) }
         }
     }
 
@@ -405,6 +523,9 @@ class DeckLabViewModel : ViewModel() {
         coverImageUrls = emptyList()
         isImportReviewMode = false
         importPlaceholderNames = emptyList()
+        deckCardSource = DeckCardSource.COLLECTION
+        isImportSourceChoicePending = false
+        sessionDeckOnlyCardIds = emptySet()
         currentAnalysis = DeckAnalysis()
         validationError = null
     }
@@ -434,7 +555,7 @@ class DeckLabViewModel : ViewModel() {
 
     private fun syncCoverImagesWithSelectedCards() {
         val availableUrls = selectedCardsIds
-            .mapNotNull { id -> ownedCards.find { it.id == id }?.imageUrl }
+            .mapNotNull { id -> allCardsById[id]?.imageUrl }
             .filter { it.isNotBlank() }
             .distinct()
 
@@ -562,7 +683,7 @@ class DeckLabViewModel : ViewModel() {
         selectedCardsIds = idsToAdd.take(60) // Limite 60 carte
         if (idsToAdd.isNotEmpty()) {
             val importedUrls = selectedCardsIds
-                .mapNotNull { id -> ownedCards.find { it.id == id }?.imageUrl }
+                .mapNotNull { id -> allCardsById[id]?.imageUrl }
                 .filter { it.isNotBlank() }
                 .distinct()
             coverImageUrls = importedUrls.take(2)
@@ -579,6 +700,9 @@ class DeckLabViewModel : ViewModel() {
             totalRequested = totalRequested
         )
         importResult = result
+        // Se non manca niente, non c'e' niente da chiedere: il deck e' gia'
+        // fatto solo di carte che l'utente possiede.
+        isImportSourceChoicePending = missingMetaDeckCards.isNotEmpty()
         return result
     }
 
@@ -669,7 +793,9 @@ class DeckLabViewModel : ViewModel() {
     }
 
     fun buildPtcgDecklist(deck: Deck): String {
-        val idToCard = ownedCards.associateBy { it.id }
+        // Anche le carte solo-deck: una decklist esportata deve essere la lista
+        // che si porta al tavolo, non l'inventario di chi la esporta.
+        val idToCard = allCardsById
         val grouped = linkedMapOf<String, Pair<PokemonCard, Int>>()
 
         for (cardId in deck.cards) {
@@ -746,13 +872,48 @@ class DeckLabViewModel : ViewModel() {
         private set
 
     /**
-     * Aggiunge le carte mancanti alla collezione e poi al deck corrente.
-     * Cerca ogni carta sulla Pokemon TCG API per ottenere immagine, HP, tipo, ecc.
-     * Se la ricerca API fallisce, crea la carta con dati minimi.
+     * L'utente ha scelto cosa fare delle carte mancanti: eseguiamo.
+     *
+     * [source] decide se quelle carte diventano sue o restano confinate nel
+     * deck. In entrambi i casi il deck esce completo -- e' l'unica differenza
+     * rispetto a "continua senza", che invece lo lascia con dei buchi.
+     */
+    fun applyImportCardSource(source: DeckCardSource, context: Context) {
+        deckCardSource = source
+
+        val missing = importResult?.missingMetaDeckCards.orEmpty()
+        if (missing.isEmpty()) {
+            isImportSourceChoicePending = false
+            return
+        }
+
+        // La scelta resta a schermo finche' il lavoro non e' finito: e' li' che
+        // vive l'indicatore di avanzamento. Sparire subito mostrerebbe un
+        // riepilogo che parla di carte non ancora create.
+        addMissingCardsToCollection(missing, context) {
+            isImportSourceChoicePending = false
+        }
+    }
+
+    /**
+     * L'utente non vuole ne' l'una ne' l'altra: il deck resta con le sole carte
+     * che gia' possiede, incompleto. Era il vecchio "No, continua senza".
+     */
+    fun skipMissingCards() {
+        isImportSourceChoicePending = false
+    }
+
+    /**
+     * Materializza le carte mancanti e le aggiunge al deck corrente.
+     *
+     * Cerca ogni carta nel catalogo italiano per ottenere immagine, HP, tipo,
+     * ecc.; se la ricerca fallisce, crea la carta con dati minimi. Finiscono in
+     * collezione o restano solo-deck a seconda di [deckCardSource].
      */
     fun addMissingCardsToCollection(missingCards: List<MetaDeckCard>, context: Context, onComplete: () -> Unit = {}) {
         if (missingCards.isEmpty()) return
         isAddingMissingCards = true
+        val deckOnly = deckCardSource == DeckCardSource.DECK_ONLY
 
         viewModelScope.launch {
             // Prima cosa, lookup di TUTTE le carte mancanti in parallelo. Prima era
@@ -762,7 +923,7 @@ class DeckLabViewModel : ViewModel() {
             val built = coroutineScope {
                 missingCards.map { card ->
                     async(Dispatchers.IO) {
-                        card to lookupAndCreateCard(card, context)
+                        card to lookupAndCreateCard(card, context, deckOnly)
                     }
                 }.awaitAll()
             }
@@ -777,13 +938,19 @@ class DeckLabViewModel : ViewModel() {
                 val result = repository.addCard(pokemonCard)
                 result.onSuccess { docId ->
                     repeat(card.qty) { newIds.add(docId) }
+                    if (deckOnly) sessionDeckOnlyCardIds = sessionDeckOnlyCardIds + docId
                 }
             }
             importPlaceholderNames = placeholders.distinct()
 
             // Se alcune carte entrano a 0, prova una hydration immediata del prezzo
-            // per riallineare anche il totalValue della collezione.
-            hydrateImportedCardPrices(newIds.toSet(), context)
+            // per riallineare anche il totalValue della collezione. Per le carte
+            // solo-deck non c'e' nessun totale da riallineare: sarebbero chiamate
+            // a PokeWallet spese per un numero che non viene mostrato da nessuna
+            // parte (vedi le note sul rate limit in MIGRATION_PLAN.md).
+            if (!deckOnly) {
+                hydrateImportedCardPrices(newIds.toSet(), context)
+            }
 
             // Aggiungi al deck corrente
             if (newIds.isNotEmpty()) {
@@ -792,7 +959,14 @@ class DeckLabViewModel : ViewModel() {
             }
 
             isAddingMissingCards = false
-            importResult = null
+            // Il risultato resta a schermo, ma senza piu' mancanti: adesso le
+            // carte ci sono tutte e il dialog e' solo un riepilogo.
+            importResult = importResult?.copy(
+                matched = selectedCardsIds.size,
+                missing = 0,
+                missingCards = emptyList(),
+                missingMetaDeckCards = emptyList()
+            )
             onComplete()
         }
     }
@@ -805,7 +979,11 @@ class DeckLabViewModel : ViewModel() {
      * il fallback a dati minimi sotto (nessuna immagine) -- niente piu' PokeWallet come
      * secondo tentativo.
      */
-    private suspend fun lookupAndCreateCard(card: MetaDeckCard, context: Context): PokemonCard {
+    private suspend fun lookupAndCreateCard(
+        card: MetaDeckCard,
+        context: Context,
+        deckOnly: Boolean
+    ): PokemonCard {
         // Tre tentativi prima di arrendersi a una carta senza immagine.
         // Prima ce n'era uno solo, e bastava un codice di set che il catalogo
         // italiano non conosce — SVE per le energie, o un'espansione appena
@@ -816,7 +994,10 @@ class DeckLabViewModel : ViewModel() {
             ?: resolveByNameOnly(card, context)
 
         return if (tcgCard != null) {
-            val price = resolveBestPrice(
+            // Una carta solo-deck non vale niente perche' non e' posseduta:
+            // cercarne il prezzo sarebbe una chiamata di rete per un numero
+            // che nessuna schermata somma.
+            val price = if (deckOnly) 0.0 else resolveBestPrice(
                 card = tcgCard,
                 fallbackSet = card.set,
                 fallbackNumber = card.number,
@@ -842,7 +1023,8 @@ class DeckLabViewModel : ViewModel() {
                 estimatedValue = price,
                 quantity = card.qty,
                 condition = "Near Mint",
-                variant = "Normal"
+                variant = "Normal",
+                deckOnly = deckOnly
             )
         } else {
             // Fallback: dati minimi dal MetaDeckCard
@@ -858,7 +1040,8 @@ class DeckLabViewModel : ViewModel() {
                 supertype = supertype,
                 hp = if (supertype == "Pokémon") 100 else 0,
                 condition = "Near Mint",
-                variant = "Normal"
+                variant = "Normal",
+                deckOnly = deckOnly
             )
         }
     }
@@ -960,9 +1143,18 @@ class DeckLabViewModel : ViewModel() {
         isSearchingCards = false
     }
 
+    /**
+     * Aggiunge al deck una carta trovata nei set.
+     *
+     * Rispetta [deckCardSource]: la stessa carta finisce in collezione o resta
+     * confinata nel deck a seconda del tipo di deck che si sta costruendo.
+     * Prima entrava sempre in collezione, e cercare una carta per provarla in
+     * un mazzo significava dichiarare di possederla.
+     */
     fun addTcgCardToDeck(card: TcgCard, qty: Int, context: Context, onComplete: () -> Unit = {}) {
+        val deckOnly = deckCardSource == DeckCardSource.DECK_ONLY
         viewModelScope.launch {
-            val price = resolveBestPrice(
+            val price = if (deckOnly) 0.0 else resolveBestPrice(
                 card = card,
                 fallbackSet = card.set?.id ?: card.set?.name,
                 fallbackNumber = card.number,
@@ -983,10 +1175,12 @@ class DeckLabViewModel : ViewModel() {
                 estimatedValue = price,
                 quantity = qty,
                 condition = "Near Mint",
-                variant = "Normal"
+                variant = "Normal",
+                deckOnly = deckOnly
             )
             val result = repository.addCard(pokemonCard)
             result.onSuccess { docId ->
+                if (deckOnly) sessionDeckOnlyCardIds = sessionDeckOnlyCardIds + docId
                 val newIds = List(qty) { docId }
                 selectedCardsIds = (selectedCardsIds + newIds).take(60)
                 analyzeDeck()

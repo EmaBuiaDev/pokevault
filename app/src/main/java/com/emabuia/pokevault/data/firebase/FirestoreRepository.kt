@@ -19,6 +19,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
 class FirestoreRepository {
@@ -53,7 +54,23 @@ class FirestoreRepository {
     private val goalAlbumsCollection
         get() = userDoc.collection("goal_albums")
 
-    fun getCards(): Flow<List<PokemonCard>> = callbackFlow {
+    /**
+     * Le carte possedute.
+     *
+     * Le carte segnate [PokemonCard.deckOnly] non sono possedute: vivono nella
+     * stessa collection solo perche' un deck referenzia id di documenti, ma
+     * qui non escono. Chiunque voglia anche quelle -- cioe' il solo Deck Lab --
+     * usa [getCardsIncludingDeckOnly].
+     *
+     * Il filtro e' client-side di proposito: `whereEqualTo("deckOnly", false)`
+     * non matcherebbe i documenti scritti prima che il campo esistesse, che
+     * sono tutti quelli gia' in circolazione.
+     */
+    fun getCards(): Flow<List<PokemonCard>> =
+        getCardsIncludingDeckOnly().map { cards -> cards.filter { !it.deckOnly } }
+
+    /** Collezione + carte solo-deck. Vedi [getCards]. */
+    fun getCardsIncludingDeckOnly(): Flow<List<PokemonCard>> = callbackFlow {
         val col = try { cardsCollection } catch (e: Exception) {
             trySend(emptyList()); close(); return@callbackFlow
         }
@@ -76,7 +93,7 @@ class FirestoreRepository {
                 if (error != null) { close(error); return@addSnapshotListener }
                 val cards = snapshot?.documents?.mapNotNull { doc ->
                     doc.toObject(PokemonCard::class.java)?.copy(id = doc.id)
-                } ?: emptyList()
+                }?.filter { !it.deckOnly } ?: emptyList()
                 trySend(cards)
             }
         awaitClose { listener.remove() }
@@ -239,6 +256,7 @@ class FirestoreRepository {
                 "cardNumber" to card.cardNumber,
                 "variant" to card.variant,
                 "language" to canonicalLanguage,
+                "deckOnly" to card.deckOnly,
                 "addedAt" to com.google.firebase.Timestamp.now()
             )
 
@@ -252,8 +270,12 @@ class FirestoreRepository {
                     null // cache miss: trattiamo come carta nuova
                 }
 
+                // Una carta solo-deck e una posseduta non si fondono mai, anche
+                // a parita' di stampa: sommarle vorrebbe dire far crescere la
+                // collezione per una carta che l'utente non ha comprato.
                 val existingForLanguage = existing?.documents?.firstOrNull { doc ->
-                    normalizeLanguageKey(doc.getString("language")) == normalizeLanguageKey(canonicalLanguage)
+                    normalizeLanguageKey(doc.getString("language")) == normalizeLanguageKey(canonicalLanguage) &&
+                        (doc.getBoolean("deckOnly") ?: false) == card.deckOnly
                 }
 
                 if (existingForLanguage != null) {
@@ -315,10 +337,14 @@ class FirestoreRepository {
 
             // Aggiornamento dei totali utente fire-and-forget (i totali vengono
             // comunque ricalcolati client-side dalla lista delle carte).
-            userDoc.update(
-                "totalCards", FieldValue.increment(card.quantity.toLong()),
-                "totalValue", FieldValue.increment(effectiveEstimatedValue * card.quantity)
-            )
+            // Una carta solo-deck non e' posseduta: non conta ne' nel numero di
+            // carte ne' nel valore della collezione.
+            if (!card.deckOnly) {
+                userDoc.update(
+                    "totalCards", FieldValue.increment(card.quantity.toLong()),
+                    "totalValue", FieldValue.increment(effectiveEstimatedValue * card.quantity)
+                )
+            }
 
             Result.success(docId)
         } catch (e: Exception) { Result.failure(e) }
@@ -350,6 +376,12 @@ class FirestoreRepository {
             // Write diretto: finisce immediatamente nella cache locale, lo
             // snapshot listener emette l'aggiornamento all'istante.
             cardsCollection.document(cardId).update(data)
+
+            // Una carta solo-deck non ha mai contribuito ai totali: se si
+            // arriva qui dal dettaglio di una carta aperta da un deck di prova,
+            // muovere i contatori inventerebbe carte possedute.
+            val isDeckOnly = oldCardDoc?.getBoolean("deckOnly") ?: false
+            if (isDeckOnly) return Result.success(Unit)
 
             // Totali fire-and-forget.
             if (qtyDiff != 0) {
@@ -408,15 +440,17 @@ class FirestoreRepository {
                 cardsCollection.document(cardId).get(Source.CACHE).await()
             } catch (_: Exception) { null }
 
-            val quantity = cardDoc?.getLong("quantity")?.toInt() ?: 0
-            val value = cardDoc?.getDouble("estimatedValue") ?: 0.0
+            val isDeckOnly = cardDoc?.getBoolean("deckOnly") ?: false
+            val quantity = if (isDeckOnly) 0 else cardDoc?.getLong("quantity")?.toInt() ?: 0
+            val value = if (isDeckOnly) 0.0 else cardDoc?.getDouble("estimatedValue") ?: 0.0
             val totalCardValue = value * quantity
 
             // Delete diretto: la carta sparisce subito dalla cache locale e
             // lo snapshot listener aggiorna la UI all'istante.
             cardsCollection.document(cardId).delete()
 
-            // Totali fire-and-forget.
+            // Totali fire-and-forget: una carta solo-deck non li ha mai toccati
+            // entrando, quindi non li tocca nemmeno uscendo.
             if (quantity != 0) {
                 userDoc.update("totalCards", FieldValue.increment(-quantity.toLong()))
             }
@@ -439,9 +473,11 @@ class FirestoreRepository {
             } catch (_: Exception) { null }
 
             if (snapshot != null) {
+                // Le copie solo-deck restano: chi cancella una carta dalla
+                // collezione non sta cancellando i deck di prova che la usano.
                 deleteCards(snapshot.documents.mapNotNull { doc ->
                     doc.toObject(PokemonCard::class.java)?.copy(id = doc.id)
-                })
+                }.filter { !it.deckOnly })
             }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
@@ -480,6 +516,7 @@ class FirestoreRepository {
                     "cardNumber" to card.cardNumber,
                     "variant" to card.variant,
                     "language" to canonicalLanguage,
+                    "deckOnly" to card.deckOnly,
                     "addedAt" to com.google.firebase.Timestamp.now()
                 )
 
@@ -493,8 +530,11 @@ class FirestoreRepository {
                         null
                     }
 
+                    // Stessa regola di addCard: le copie solo-deck sono un
+                    // insieme a parte e non assorbono quantita' di collezione.
                     val existingForLanguage = existing?.documents?.firstOrNull { doc ->
-                        normalizeLanguageKey(doc.getString("language")) == normalizeLanguageKey(canonicalLanguage)
+                        normalizeLanguageKey(doc.getString("language")) == normalizeLanguageKey(canonicalLanguage) &&
+                            (doc.getBoolean("deckOnly") ?: false) == card.deckOnly
                     }
 
                     if (existingForLanguage != null) {
@@ -550,8 +590,10 @@ class FirestoreRepository {
                     addedIds += newDocRef.id
                 }
 
-                totalCardsDelta += card.quantity.toLong()
-                totalValueDelta += effectiveEstimatedValue * card.quantity
+                if (!card.deckOnly) {
+                    totalCardsDelta += card.quantity.toLong()
+                    totalValueDelta += effectiveEstimatedValue * card.quantity
+                }
             }
 
             batch.update(
@@ -579,8 +621,10 @@ class FirestoreRepository {
 
             cards.forEach { card ->
                 batch.delete(cardsCollection.document(card.id))
-                totalCardsDelta += card.quantity.toLong()
-                totalValueDelta += card.estimatedValue * card.quantity
+                if (!card.deckOnly) {
+                    totalCardsDelta += card.quantity.toLong()
+                    totalValueDelta += card.estimatedValue * card.quantity
+                }
             }
 
             batch.update(
@@ -636,8 +680,12 @@ class FirestoreRepository {
             val cachedTotal = userSnapshot.getLong("totalCards")?.toInt() ?: 0
             val cachedValue = userSnapshot.getDouble("totalValue") ?: 0.0
 
+            // Le carte solo-deck non sono possedute: se finissero qui dentro
+            // riallineerebbero totalCards/totalValue a un valore gonfiato, e
+            // questa funzione quel valore lo riscrive sul profilo.
             val cards = cardsCollection.get().await()
                 .documents.mapNotNull { it.toObject(PokemonCard::class.java) }
+                .filter { !it.deckOnly }
 
             val uniqueKey: (PokemonCard) -> String = { c -> c.collectionGroupKey() }
 
@@ -686,6 +734,9 @@ class FirestoreRepository {
                 "recommendedEnergy" to deck.recommendedEnergy,
                 "coverImageUrl" to deck.coverImageUrl,
                 "coverImageUrls" to deck.displayCoverImageUrls(),
+                // set() riscrive il documento intero: se questo campo non c'e',
+                // modificare un deck di prova lo farebbe tornare un deck normale.
+                "deckOnly" to deck.deckOnly,
                 "createdAt" to com.google.firebase.Timestamp.now()
             )
             val docRef = if (deck.id.isEmpty()) {

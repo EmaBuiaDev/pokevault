@@ -29,7 +29,18 @@ data class PokemonCard(
     val apiCardId: String = "",
     val cardNumber: String = "",
     val variant: String = "Normal",
-    val language: String = "Italiano"
+    val language: String = "Italiano",
+
+    /**
+     * La carta esiste solo per stare dentro a un deck, non e' posseduta.
+     *
+     * Non compare in Collezione, Album, Wishlist, Graded o statistiche, e non
+     * entra nei totali dell'utente: serve a costruire un mazzo completo senza
+     * dichiarare di avere carte che non si hanno. Il filtro sta in un punto
+     * solo, [com.emabuia.pokevault.data.firebase.FirestoreRepository.getCards],
+     * cosi' chi legge la collezione non deve saperne niente.
+     */
+    val deckOnly: Boolean = false
 ) {
     /** Vedi [CardClassifier]: implementazione unica condivisa da tutta l'app. */
     fun classify(): String = CardClassifier.classify(this)

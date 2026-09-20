@@ -841,6 +841,38 @@ object AppLocale {
     val importAddingCards: String get() = if (isItalian) "Aggiunta carte in corso..." else "Adding cards..."
     val importAndMore: String get() = if (isItalian) "e altre" else "and more"
 
+    // Deck Import - dove finiscono le carte che l'utente non possiede
+    val deckSourceTitle: String get() = if (isItalian) "Dove mettiamo le carte?" else "Where do the cards go?"
+    fun deckSourceQuestion(missing: Int): String = if (isItalian)
+        "$missing carte del deck non sono nella tua collezione."
+    else
+        "$missing cards in this deck are not in your collection."
+    val deckSourceCollection: String get() = if (isItalian) "Aggiungile alla collezione" else "Add them to my collection"
+    val deckSourceCollectionDesc: String get() = if (isItalian)
+        "Le carte entrano fra le tue e contano nel valore della collezione."
+    else
+        "The cards join your collection and count towards its value."
+    val deckSourceDeckOnly: String get() = if (isItalian) "Solo in questo deck" else "Only in this deck"
+    val deckSourceDeckOnlyDesc: String get() = if (isItalian)
+        "Deck di prova: il mazzo e' completo, ma la collezione non cambia."
+    else
+        "Test deck: the deck is complete, but your collection stays untouched."
+    val deckSourceSkip: String get() = if (isItalian) "Lascia il deck incompleto" else "Leave the deck incomplete"
+    val importLeftOutMessage: String get() = if (isItalian)
+        "Queste carte sono rimaste fuori dal deck. Puoi aggiungerle a mano dal passo Carte."
+    else
+        "These cards were left out of the deck. You can add them by hand from the Cards step."
+
+    // Deck editor - tipo di deck
+    val deckSourceSelectorLabel: String get() = if (isItalian) "Carte che non possiedi" else "Cards you don't own"
+    val deckSourceChipCollection: String get() = if (isItalian) "In collezione" else "In collection"
+    val deckSourceChipDeckOnly: String get() = if (isItalian) "Solo nel deck" else "Deck only"
+    val deckTestBadge: String get() = if (isItalian) "Deck di prova" else "Test deck"
+    val deckTestBadgeExplain: String get() = if (isItalian)
+        "Contiene carte che non possiedi: non sono nella tua collezione."
+    else
+        "Contains cards you don't own: they are not in your collection."
+
     // Meta Archetype
     val metaShare: String get() = "Meta Share"
     val metaAvgWinrate: String get() = if (isItalian) "Win Rate medio" else "Avg Win Rate"
