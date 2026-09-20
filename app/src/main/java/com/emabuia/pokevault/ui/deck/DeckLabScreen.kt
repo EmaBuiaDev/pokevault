@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.CardClassifier
 import com.emabuia.pokevault.data.model.Deck
@@ -48,6 +49,7 @@ fun DeckLabScreen(
     // tocco, che e' gia' il comportamento corretto. Raccoglierlo senza usarlo
     // faceva solo ricomporre l'intero schermo a ogni cambio di stato premium.
     val context = LocalContext.current
+    val deckScope = rememberCoroutineScope()
 
     // La tabella nome -> sprite si legge da un asset: fuori dal thread
     // principale e una volta sola, prima che l'elenco dei mazzi ne abbia
@@ -73,9 +75,12 @@ fun DeckLabScreen(
     // il risultato era che scorrendo la griglia delle carte -- quando la lista
     // e' gia' in cima, il resto dello scorrimento arriva al pannello e lui lo
     // legge come un tentativo di chiusura -- compariva dal nulla un dialog che
-    // chiedeva se buttare via il deck. La conferma ha senso quando si chiude
-    // apposta: il tasto X, il tasto indietro, il tocco fuori. Quelli passano da
-    // onDismissRequest, non da qui.
+    // chiedeva se buttare via il deck.
+    //
+    // Chi invece chiude apposta: il tasto X (onRequestClose) e il tasto
+    // indietro (il BackHandler dentro al pannello). Il tocco fuori passa di
+    // qui come lo swipe, quindi finche' c'e' del lavoro non fa niente: le due
+    // vie esplicite restano, e nessuna delle due puo' scattare per sbaglio.
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { target ->
@@ -371,14 +376,25 @@ fun DeckLabScreen(
         if (showSheet) {
             ModalBottomSheet(
                 onDismissRequest = {
-                    // Vale anche per il tasto indietro e per il tocco fuori:
-                    // sono tre modi di dire la stessa cosa per sbaglio.
+                    // Resta per il tocco fuori dal pannello. Il tasto indietro
+                    // non passa piu' di qui: vedi il BackHandler sotto.
                     if (hasDeckWork()) showDiscardDeckDialog = true else closeDeckSheet()
                 },
                 sheetState = sheetState,
                 containerColor = AppColors.surface,
+                // Il pannello non si chiude da solo col tasto indietro.
+                // Lasciandoglielo fare, spariva prima che la conferma
+                // comparisse: si rispondeva "continua" a un dialog sopra al
+                // nulla, e il pannello non tornava piu' su perche' il suo stato
+                // era gia' Hidden. Ora il tasto indietro lo gestiamo noi, e il
+                // pannello resta dov'e' finche' non si e' deciso.
+                properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
                 dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.textMuted) }
             ) {
+                BackHandler {
+                    if (hasDeckWork()) showDiscardDeckDialog = true else closeDeckSheet()
+                }
+
                 NewDeckBottomSheetContent(
                     viewModel = viewModel,
                     isEditing = viewModel.editingDeckId != null,
@@ -473,7 +489,16 @@ fun DeckLabScreen(
                     // Continuare e' la scelta sicura, quindi sta dove il pollice
                     // arriva per primo e ha il peso visivo.
                     Button(
-                        onClick = { showDiscardDeckDialog = false },
+                        onClick = {
+                            showDiscardDeckDialog = false
+                            // Rete di sicurezza: il pannello non dovrebbe mai
+                            // essere nascosto arrivando qui, ma se un dispositivo
+                            // lo chiudesse lo stesso, "continua" deve riportare
+                            // dove si stava -- non lasciare uno schermo vuoto.
+                            if (!sheetState.isVisible) {
+                                deckScope.launch { sheetState.show() }
+                            }
+                        },
                         colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
                         shape = RoundedCornerShape(10.dp)
                     ) {
