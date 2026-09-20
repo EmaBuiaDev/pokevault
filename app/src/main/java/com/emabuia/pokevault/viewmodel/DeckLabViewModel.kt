@@ -180,16 +180,33 @@ class DeckLabViewModel : ViewModel() {
      * di toglierle o rimetterle.
      */
     val deckUsableCards: List<PokemonCard> by derivedStateOf {
-        ownedCards + deckOnlyCardsInDeck
+        val extra = deckOnlyCardsInDeck
+        // La stessa lista, non una copia, quando non c'e' niente da
+        // aggiungere: per un deck normale chi dipende da qui non si
+        // invalida a ogni carta aggiunta o tolta.
+        if (extra.isEmpty()) ownedCards else ownedCards + extra
     }
 
-    /** Documenti utilizzabili raggruppati per chiave carta. */
-    private val ownedCardsByKey by derivedStateOf {
-        deckUsableCards.groupBy { getCardKey(it) }
+    // I due indici sono tenuti separati di proposito.
+    //
+    // Quello della collezione e' il pesante -- una chiave costruita per ogni
+    // carta posseduta -- e cambia solo quando cambia la collezione. Quello
+    // delle carte solo-deck e' lungo al massimo sessanta elementi e cambia a
+    // ogni carta aggiunta o tolta. Calcolandoli insieme sul totale, ogni
+    // singolo tocco ri-raggruppava anche tutta la collezione.
+
+    /** Documenti posseduti per chiave carta. */
+    private val ownedDocsByKey by derivedStateOf {
+        ownedCards.groupBy { getCardKey(it) }
+    }
+
+    /** Documenti solo-deck del deck in modifica, per chiave carta. */
+    private val deckOnlyDocsByKey by derivedStateOf {
+        deckOnlyCardsInDeck.groupBy { getCardKey(it) }
     }
 
     /**
-     * Copie disponibili per chiave carta.
+     * Copie possedute per chiave carta.
      *
      * getTotalOwnedQuantity filtrava l'intera lista posseduta costruendo una
      * stringa chiave per ogni elemento, e viene chiamata dentro gli item della
@@ -197,7 +214,13 @@ class DeckLabViewModel : ViewModel() {
      * durante lo scorrimento.
      */
     private val ownedQuantitiesByKey by derivedStateOf {
-        deckUsableCards.groupingBy { getCardKey(it) }
+        ownedCards.groupingBy { getCardKey(it) }
+            .fold(0) { acc, card -> acc + card.quantity }
+    }
+
+    /** Copie solo-deck per chiave carta. */
+    private val deckOnlyQuantitiesByKey by derivedStateOf {
+        deckOnlyCardsInDeck.groupingBy { getCardKey(it) }
             .fold(0) { acc, card -> acc + card.quantity }
     }
 
@@ -314,8 +337,10 @@ class DeckLabViewModel : ViewModel() {
         return deckQuantitiesByKey[getCardKey(card)] ?: 0
     }
 
+    /** Copie che questo deck puo' usare: possedute, piu' le sue solo-deck. */
     fun getTotalOwnedQuantity(card: PokemonCard): Int {
-        return ownedQuantitiesByKey[getCardKey(card)] ?: 0
+        val key = getCardKey(card)
+        return (ownedQuantitiesByKey[key] ?: 0) + (deckOnlyQuantitiesByKey[key] ?: 0)
     }
 
     /** Vedi [CardClassifier]: implementazione unica condivisa da tutta l'app. */
@@ -352,8 +377,7 @@ class DeckLabViewModel : ViewModel() {
             }
         }
 
-        val availableId = ownedCardsByKey[key]
-            .orEmpty()
+        val availableId = (ownedDocsByKey[key].orEmpty() + deckOnlyDocsByKey[key].orEmpty())
             .firstOrNull { doc ->
                 val docInDeckCount = selectedCardsIds.count { it == doc.id }
                 docInDeckCount < doc.quantity
@@ -1023,7 +1047,21 @@ class DeckLabViewModel : ViewModel() {
         // italiano non conosce — SVE per le energie, o un'espansione appena
         // uscita — perche' la carta entrasse in collezione come un rettangolo
         // vuoto col nome sopra.
-        val tcgCard = pokeTcgRepository.findExactItalianCard(card.set, card.number, context)
+        // Il nome viene passato insieme a set e numero: due espansioni diverse
+        // possono rispondere allo stesso codice, e senza il nome si prendeva la
+        // prima del catalogo -- e' cosi' che un "Kadabra MEG 55" tornava un
+        // Treecko. Sui Pokemon il nome e' anche un veto, perche' in italiano si
+        // chiamano come in inglese: se non combacia, meglio cercare per nome
+        // che tenersi la carta sbagliata. Su Allenatori ed Energie no, li' i
+        // nomi sono tradotti e il confronto fallirebbe sempre.
+        val isPokemon = card.type.equals("pokemon", ignoreCase = true)
+        val tcgCard = pokeTcgRepository.findExactItalianCard(
+            setCode = card.set,
+            number = card.number,
+            context = context,
+            expectedName = card.name,
+            requireNameMatch = isPokemon
+        )
             ?: resolveBasicEnergyCard(card, context)
             ?: resolveByNameOnly(card, context)
 

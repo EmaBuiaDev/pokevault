@@ -438,27 +438,36 @@ private fun DeckCardsStep(
     // sparirebbero appena aggiunte e non ci sarebbe modo di toglierle.
     val usableCards = viewModel.deckUsableCards
 
+    // Le chiavi del deck servono solo in revisione import, ma stavano fra le
+    // dipendenze del filtro: bastava aggiungere o togliere una carta per
+    // rifiltrare tutta la collezione, anche fuori da quella modalita'. Qui
+    // fuori il risultato e' emptySet(), che in Kotlin e' sempre la stessa
+    // istanza: il filtro non si accorge di niente e non rifa' il lavoro.
+    val deckCardKeys = remember(
+        usableCards,
+        viewModel.selectedCardsIds,
+        viewModel.isImportReviewMode
+    ) {
+        if (!viewModel.isImportReviewMode) {
+            emptySet()
+        } else {
+            val usableById = usableCards.associateBy { it.id }
+            viewModel.selectedCardsIds
+                .mapNotNull { id -> usableById[id] }
+                .mapTo(mutableSetOf()) { viewModel.getCardKey(it) }
+        }
+    }
+
     val filteredCards = remember(
         selectedTabIndex,
         usableCards,
-        viewModel.selectedCardsIds,
-        viewModel.isImportReviewMode,
+        deckCardKeys,
         cardSearchQuery
     ) {
-        val usableById = usableCards.associateBy { it.id }
-        val deckCardKeys = if (viewModel.isImportReviewMode) {
-            viewModel.selectedCardsIds
-                .mapNotNull { id -> usableById[id] }
-                .map { viewModel.getCardKey(it) }
-                .toSet()
-        } else {
-            emptySet()
-        }
-
-        val sourceCards = if (viewModel.isImportReviewMode) {
-            usableCards.filter { card -> viewModel.getCardKey(card) in deckCardKeys }
-        } else {
+        val sourceCards = if (deckCardKeys.isEmpty()) {
             usableCards
+        } else {
+            usableCards.filter { card -> viewModel.getCardKey(card) in deckCardKeys }
         }
 
         sourceCards

@@ -36,10 +36,18 @@ object SetCodeMapper {
         "CRI" to "dcr",
         "ME01" to "MEG",
         "ME02" to "PFL",
-        "MEP" to "MEG",
+        // MEP e' un'espansione a se' (le promo Mega Evolution), non un altro
+        // nome di MEG. Mandandoli tutti e due su "MEG" il catalogo non poteva
+        // piu' distinguerli, e una carta cercata per set+numero usciva da
+        // qualunque delle due venisse prima: "Kadabra MEG 55" tornava la 55 di
+        // MEP, che e' un altro Pokemon.
+        "MEP" to "mep",
         "ME2PT5" to "asc",
-        "BLK" to "sv11",
-        "WHT" to "sv11",
+        // Black Bolt e White Flare sono due set diversi usciti insieme, e sono
+        // questi i loro id veri: "sv11" non esiste, e mandandoceli entrambi si
+        // rendevano indistinguibili esattamente come MEG e MEP.
+        "BLK" to "zsv10pt5",
+        "WHT" to "rsv10pt5",
         "RCL" to "swsh2",
         "DAA" to "swsh3",
         "CPA" to "swsh35",

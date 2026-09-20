@@ -1161,10 +1161,27 @@ class CatalogRepository {
      * per decklist in inglese (es. import da PTCGL/Limitless) senza bisogno di matchare
      * il nome -- vedi MIGRATION_PLAN.md M4.6, lookupAndCreateCard in DeckLabViewModel.
      */
+    /**
+     * La carta italiana con quel set e quel numero.
+     *
+     * [expectedName], quando c'e', non e' un filtro ma un arbitro: fra piu'
+     * record che rispondono allo stesso set+numero vince quello che si chiama
+     * cosi'. Serve perche' due espansioni diverse possono rispondere allo
+     * stesso codice -- e' successo con MEG e MEP -- e senza un criterio si
+     * prendeva semplicemente la prima del catalogo.
+     *
+     * [requireNameMatch] trasforma l'arbitro in un veto: se nessuno combacia,
+     * meglio niente che la carta sbagliata. Va usato quando il nome e'
+     * confrontabile, cioe' sui Pokemon, che in italiano si chiamano come in
+     * inglese. Per Allenatori ed Energie i nomi sono tradotti e un confronto
+     * fallirebbe sempre, quindi li' resta solo la preferenza.
+     */
     suspend fun findExactItalianCard(
         setCode: String?,
         number: String?,
-        context: Context
+        context: Context,
+        expectedName: String? = null,
+        requireNameMatch: Boolean = false
     ): TcgCard? {
         val normalizedNumber = number?.trim()?.substringBefore('/')?.trim()?.trimStart('0')?.ifBlank { "0" }
             ?: return null
@@ -1176,14 +1193,40 @@ class CatalogRepository {
 
         val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false).getOrNull() ?: return null
 
-        val record = catalog.cards.firstOrNull { rec ->
-            matchesItalianExpansionHint(rec.espansioneId.trim().lowercase(Locale.ROOT), normalizedTargetSet) &&
-                run {
-                    val ref = rec.imageReference()
-                    val cardNum = (ref?.cardNumber ?: extractCardNumber(rec.cardId)).trimStart('0').ifBlank { "0" }
-                    cardNum.equals(normalizedNumber, ignoreCase = true)
-                }
-        } ?: return null
+        val wantedName = expectedName?.let(::normalizeCardNameForComparison)?.takeIf { it.isNotBlank() }
+
+        // Una passata sola, e si ferma appena trova la carta giusta.
+        //
+        // Il catalogo ha circa quindicimila record e per ognuno serve una
+        // regex per estrarre il numero: filtrarli tutti per poi scegliere
+        // voleva dire scandirlo per intero a ogni carta mancante di un import.
+        // Qui il primo record che combacia anche nel nome chiude la ricerca;
+        // si arriva in fondo solo quando il nome non si trova, che e' il caso
+        // in cui serve davvero sapere se esisteva un'alternativa.
+        var fallback: ItalianCardRecord? = null
+        var chosen: ItalianCardRecord? = null
+
+        for (rec in catalog.cards) {
+            if (!matchesItalianExpansionHint(rec.espansioneId.trim().lowercase(Locale.ROOT), normalizedTargetSet)) continue
+            val ref = rec.imageReference()
+            val cardNum = (ref?.cardNumber ?: extractCardNumber(rec.cardId)).trimStart('0').ifBlank { "0" }
+            if (!cardNum.equals(normalizedNumber, ignoreCase = true)) continue
+
+            if (wantedName == null) {
+                chosen = rec
+                break
+            }
+
+            val found = normalizeCardNameForComparison(rec.nome)
+            if (found == wantedName || found.startsWith(wantedName) || wantedName.startsWith(found)) {
+                chosen = rec
+                break
+            }
+            if (fallback == null) fallback = rec
+        }
+
+        val record = chosen
+            ?: if (requireNameMatch) return null else (fallback ?: return null)
 
         val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
         val setInfo = TcgSet(
@@ -2197,6 +2240,22 @@ class CatalogRepository {
     private fun matchesItalianSetHint(setId: String?, expectedSetId: String): Boolean {
         val expansionId = setId?.let(::parseItalianExpansionId) ?: return false
         return matchesItalianExpansionHint(expansionId, expectedSetId)
+    }
+
+    /**
+     * La forma con cui si confrontano due nomi di carta.
+     *
+     * Toglie accenti, punteggiatura e spazi: "Fezandipiti ex" e
+     * "Fezandipiti-ex" sono la stessa carta scritta da due fonti diverse.
+     */
+    internal fun normalizeCardNameForComparison(raw: String?): String {
+        val decomposed = java.text.Normalizer.normalize(
+            raw.orEmpty().lowercase(Locale.ROOT),
+            java.text.Normalizer.Form.NFD
+        )
+        return decomposed
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z0-9]+"), "")
     }
 
     private fun matchesItalianExpansionHint(expansionId: String, expectedSetId: String): Boolean {
