@@ -104,25 +104,25 @@ class DeckLabViewModel : ViewModel() {
     }
 
     var deckCardSource by mutableStateOf(DeckCardSource.COLLECTION)
+        private set
+
+    /**
+     * L'utente ha scelto, prima ancora di aprire l'editor.
+     *
+     * Vale per il deck creato da zero: la domanda si fa una volta all'inizio
+     * invece di tenere un selettore acceso in cima al pannello per tutto il
+     * tempo. Per l'import c'e' [applyImportCardSource], che oltre a scegliere
+     * deve anche materializzare le carte mancanti.
+     */
+    fun chooseDeckCardSource(source: DeckCardSource) {
+        deckCardSource = source
+    }
 
     /**
      * L'import ha trovato delle carte mancanti e aspetta che l'utente dica
      * cosa farne. Finche' e' true, al posto del risultato si mostra la scelta.
      */
     var isImportSourceChoicePending by mutableStateOf(false)
-        private set
-
-    /**
-     * La domanda su dove finiscono le carte ha gia' avuto una risposta.
-     *
-     * Dopo un import l'utente ha appena scelto in un dialog: rimettergli
-     * davanti lo stesso bivio nell'editor non e' un promemoria, e' la stessa
-     * domanda posta due volte -- e la seconda sembra poter cambiare qualcosa
-     * che invece e' gia' successo, perche' le carte a quel punto sono state
-     * create. Da qui in poi l'editor lo dice soltanto, e solo quando c'e'
-     * qualcosa di non ovvio da dire.
-     */
-    var isDeckCardSourceDecided by mutableStateOf(false)
         private set
 
     /**
@@ -562,7 +562,6 @@ class DeckLabViewModel : ViewModel() {
         importPlaceholderNames = emptyList()
         deckCardSource = DeckCardSource.COLLECTION
         isImportSourceChoicePending = false
-        isDeckCardSourceDecided = false
         sessionDeckOnlyCardIds = emptySet()
         // Un annulla che risalisse a un deck precedente rimetterebbe dentro le
         // carte di quello.
@@ -915,7 +914,6 @@ class DeckLabViewModel : ViewModel() {
      */
     fun applyImportCardSource(source: DeckCardSource, context: Context) {
         deckCardSource = source
-        isDeckCardSourceDecided = true
 
         val missing = importResult?.missingMetaDeckCards.orEmpty()
         if (missing.isEmpty()) {

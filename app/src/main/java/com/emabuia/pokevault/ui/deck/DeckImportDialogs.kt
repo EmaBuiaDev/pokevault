@@ -103,7 +103,7 @@ fun DeckImportDialog(
  * Il riepilogo di un import, e basta.
  *
  * La domanda "che ne facciamo delle carte che non hai?" ha una sua schermata,
- * [DeckImportSourceDialog], e arriva prima di questa: qui non si decide piu'
+ * [DeckCardSourceDialog], e arriva prima di questa: qui non si decide piu'
  * niente, si legge com'e' andata.
  */
 @Composable
@@ -243,22 +243,28 @@ fun ImportResultDialog(
 }
 
 /**
- * La scelta che arriva prima del risultato: le carte che l'utente non possiede
- * entrano in collezione, restano confinate nel deck, o non entrano affatto.
+ * Dove finiscono le carte che l'utente non possiede.
  *
- * E' la stessa domanda che prima stava in fondo al riepilogo, ma spostata dove
- * serve -- e con una terza risposta che prima non c'era: un deck completo
- * senza dichiarare di possedere carte che non si hanno.
+ * Una domanda sola per due momenti diversi: dopo un import, dove le carte
+ * mancanti si contano gia'; e prima di creare un deck da zero, dove la
+ * risposta vale per quelle che verranno. Farla qui, una volta, evita di
+ * tenere un selettore acceso in cima all'editor per tutto il tempo -- che era
+ * spazio occupato per ripetere una cosa gia' decisa.
+ *
+ * [onSkip] c'e' solo nel caso dell'import: "lascia il deck incompleto" ha
+ * senso quando le carte mancanti esistono gia'. Creando un mazzo vuoto non
+ * c'e' niente da saltare, e chiudere il dialog vuol dire rinunciare.
  */
 @Composable
-fun DeckImportSourceDialog(
-    missingCount: Int,
-    isWorking: Boolean,
+fun DeckCardSourceDialog(
+    prompt: String,
+    isWorking: Boolean = false,
     onChoose: (DeckLabViewModel.DeckCardSource) -> Unit,
-    onSkip: () -> Unit
+    onSkip: (() -> Unit)? = null,
+    onDismiss: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = { if (!isWorking) onSkip() },
+        onDismissRequest = { if (!isWorking) (onSkip ?: onDismiss)() },
         containerColor = AppColors.surface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -275,7 +281,7 @@ fun DeckImportSourceDialog(
         text = {
             Column {
                 Text(
-                    text = AppLocale.deckSourceQuestion(missingCount),
+                    text = prompt,
                     color = AppColors.textSecondary,
                     fontSize = 13.sp
                 )
@@ -326,7 +332,9 @@ fun DeckImportSourceDialog(
         },
         confirmButton = {},
         dismissButton = {
-            if (!isWorking) {
+            // Solo dopo un import: senza carte mancanti non c'e' niente da
+            // lasciare incompleto.
+            if (!isWorking && onSkip != null) {
                 TextButton(onClick = onSkip) {
                     Text(AppLocale.deckSourceSkip, color = AppColors.textMuted, fontSize = 12.sp)
                 }

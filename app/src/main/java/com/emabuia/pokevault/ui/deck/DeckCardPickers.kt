@@ -151,7 +151,7 @@ fun CardSelectionItem(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(22.dp)
+                    .height(18.dp)
                     .clickable(onClick = onRemove)
             ) {
                 Box(contentAlignment = Alignment.Center) {

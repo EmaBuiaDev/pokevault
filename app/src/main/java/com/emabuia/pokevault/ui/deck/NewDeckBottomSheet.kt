@@ -143,7 +143,7 @@ fun NewDeckBottomSheetContent(
             onClose = onRequestClose
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         DeckStepSwitch(
             step = step,
@@ -153,29 +153,18 @@ fun NewDeckBottomSheetContent(
             }
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        when {
-            // Dopo un import la scelta e' gia' stata fatta nel dialog: qui la
-            // si constata, e solo se e' quella che cambia le regole. Un deck
-            // normale non ha niente da annunciare.
-            viewModel.isDeckCardSourceDecided -> {
-                if (viewModel.deckCardSource == DeckLabViewModel.DeckCardSource.DECK_ONLY) {
-                    DeckTestDeckNotice()
-                    Spacer(modifier = Modifier.height(10.dp))
-                }
-            }
-
-            // Nessuno ha ancora chiesto niente: e' il caso del deck creato da
-            // zero, dove la domanda decide cosa succede alla collezione quando
-            // si aggiunge una carta trovata nei set.
-            else -> {
-                DeckCardSourceSelector(
-                    source = viewModel.deckCardSource,
-                    onSelect = { viewModel.deckCardSource = it }
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-            }
+        // Qui non si chiede piu' niente: la domanda su dove finiscono le carte
+        // che non possiedi si fa prima di entrare, in un dialog, sia creando
+        // un mazzo da zero sia importandolo. Resta una riga sola, e solo per i
+        // deck di prova, perche' quella conseguenza dura oltre il momento
+        // della scelta -- anche le carte cercate nei set resteranno fuori
+        // dalla collezione, e l'unico posto dove l'utente l'ha letto e' un
+        // dialog che ha gia' chiuso.
+        if (viewModel.deckCardSource == DeckLabViewModel.DeckCardSource.DECK_ONLY) {
+            DeckTestDeckNotice()
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         // Un solo figlio con weight(1f) alla volta. Prima la griglia locale e
@@ -211,7 +200,7 @@ fun NewDeckBottomSheetContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         Button(
             onClick = {
@@ -416,74 +405,6 @@ private fun DeckTestDeckNotice() {
     }
 }
 
-/**
- * Dove finiscono le carte che l'utente non possiede.
- *
- * Deve stare davanti agli occhi mentre si costruisce il mazzo, non nascosto in
- * un menu: e' la differenza fra un deck fatto con le proprie carte e un deck
- * di prova, e l'utente deve saperlo prima di aggiungerne una, non dopo.
- */
-@Composable
-private fun DeckCardSourceSelector(
-    source: DeckLabViewModel.DeckCardSource,
-    onSelect: (DeckLabViewModel.DeckCardSource) -> Unit
-) {
-    val options = listOf(
-        DeckLabViewModel.DeckCardSource.COLLECTION to AppLocale.deckSourceChipCollection,
-        DeckLabViewModel.DeckCardSource.DECK_ONLY to AppLocale.deckSourceChipDeckOnly
-    )
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = AppLocale.deckSourceSelectorLabel,
-                color = AppColors.textMuted,
-                fontSize = 11.sp,
-                modifier = Modifier.weight(1f)
-            )
-
-            options.forEach { (value, label) ->
-                val selected = value == source
-                val background by animateColorAsState(
-                    targetValue = if (selected) AppColors.purple else AppColors.card,
-                    animationSpec = tween(AppMotion.state),
-                    label = "sourceChipBackground"
-                )
-                val textColor by animateColorAsState(
-                    targetValue = if (selected) AppColors.onAccent else AppColors.textSecondary,
-                    animationSpec = tween(AppMotion.state),
-                    label = "sourceChipText"
-                )
-
-                Spacer(modifier = Modifier.width(6.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(background)
-                        .clickable { onSelect(value) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = label,
-                        color = textColor,
-                        fontSize = 11.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                    )
-                }
-            }
-        }
-
-        if (source == DeckLabViewModel.DeckCardSource.DECK_ONLY) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = AppLocale.deckSourceDeckOnlyDesc,
-                color = AppColors.purple.copy(alpha = 0.85f),
-                fontSize = 10.sp
-            )
-        }
-    }
-}
-
 // ══════════════════════════════════════════════════════════════════════════
 // Passo 1: le carte
 // ══════════════════════════════════════════════════════════════════════════
@@ -662,32 +583,28 @@ private fun DeckCardsStep(
                 textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
             )
 
-            Button(
-                onClick = {
-                    filteredCards.forEach { card ->
-                        val qty = pendingSelectedCounts[viewModel.getCardKey(card)] ?: 0
-                        repeat(qty) { viewModel.addCardToDeck(card) }
-                    }
-                    pendingSelectedCounts = emptyMap()
-                },
-                enabled = pendingTotal > 0,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AppColors.blue,
-                    disabledContainerColor = AppColors.card,
-                    disabledContentColor = AppColors.textMuted
-                ),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = if (pendingTotal > 0) {
-                        AppLocale.deckPendingSelection(pendingTotal)
-                    } else {
-                        AppLocale.deckAddButton
+            // Compare solo quando c'e' davvero qualcosa da aggiungere. Prima
+            // stava li' sempre, spento, a togliere larghezza alla ricerca per
+            // non fare niente.
+            if (pendingTotal > 0) {
+                Button(
+                    onClick = {
+                        filteredCards.forEach { card ->
+                            val qty = pendingSelectedCounts[viewModel.getCardKey(card)] ?: 0
+                            repeat(qty) { viewModel.addCardToDeck(card) }
+                        }
+                        pendingSelectedCounts = emptyMap()
                     },
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                )
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = AppLocale.deckPendingSelection(pendingTotal),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
 
@@ -807,16 +724,16 @@ private fun DeckCardsStep(
             }
 
             LazyVerticalGrid(
-                // Quattro colonne e non cinque: a cinque la carta e' larga
-                // quanto un polpastrello, e questa griglia ora ha anche un
-                // comando per togliere da centrare.
-                columns = GridCells.Fixed(4),
+                // Cinque colonne: il comando per togliere e. una striscia larga
+                // quanto la carta, quindi resta un bersaglio comodo anche qui,
+                // e in cambio si vedono venticinque carte invece di sedici.
+                columns = GridCells.Fixed(5),
                 state = gridState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (cardsInDeck.isNotEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {

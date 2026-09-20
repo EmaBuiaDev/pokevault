@@ -446,7 +446,6 @@ object AppLocale {
         "Aggiungi $count"
     else
         "Add $count"
-    val deckAddButton: String get() = if (isItalian) "Aggiungi" else "Add"
     val deckImportReviewTitle: String get() = if (isItalian) "Revisione import" else "Import review"
     val deckImportReviewBody: String get() = if (isItalian)
         "Vedi solo le carte appena importate"
@@ -875,15 +874,15 @@ object AppLocale {
     else
         "Test deck: the deck is complete, but your collection stays untouched."
     val deckSourceSkip: String get() = if (isItalian) "Lascia il deck incompleto" else "Leave the deck incomplete"
+    val deckSourceNewDeckQuestion: String get() = if (isItalian)
+        "Mentre costruisci il mazzo puoi aggiungere carte che non possiedi."
+    else
+        "While building the deck you can add cards you don’t own."
     val importLeftOutMessage: String get() = if (isItalian)
         "Queste carte sono rimaste fuori dal deck. Puoi aggiungerle a mano dal passo Carte."
     else
         "These cards were left out of the deck. You can add them by hand from the Cards step."
 
-    // Deck editor - tipo di deck
-    val deckSourceSelectorLabel: String get() = if (isItalian) "Carte che non possiedi" else "Cards you don't own"
-    val deckSourceChipCollection: String get() = if (isItalian) "In collezione" else "In collection"
-    val deckSourceChipDeckOnly: String get() = if (isItalian) "Solo nel deck" else "Deck only"
     val deckTestBadge: String get() = if (isItalian) "Deck di prova" else "Test deck"
     val deckTestBadgeExplain: String get() = if (isItalian)
         "Contiene carte che non possiedi: non sono nella tua collezione."

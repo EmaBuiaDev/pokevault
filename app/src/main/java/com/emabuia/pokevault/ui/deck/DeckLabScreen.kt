@@ -59,23 +59,27 @@ fun DeckLabScreen(
     var showSheet by remember { mutableStateOf(false) }
     var showDiscardDeckDialog by remember { mutableStateOf(false) }
     var showDeleteDeckDialog by remember { mutableStateOf(false) }
+    var showNewDeckSourceDialog by remember { mutableStateOf(false) }
 
     /** C'e' del lavoro che uno swipe distruggerebbe. */
     fun hasDeckWork(): Boolean =
         viewModel.selectedCardsIds.isNotEmpty() || viewModel.newDeckName.isNotBlank()
 
-    // Uno swipe leggero verso il basso non puo' buttare via un deck appena
-    // importato: cinquanta carte riconosciute, il nome, la copertina scelta.
-    // Il gesto viene rifiutato e al suo posto si chiede conferma.
+    // Uno swipe verso il basso non puo' buttare via un deck appena importato:
+    // cinquanta carte riconosciute, il nome, la copertina scelta. Il gesto
+    // viene rifiutato e il pannello torna su.
+    //
+    // Rifiutato in silenzio, pero'. Prima apriva la richiesta di conferma, e
+    // il risultato era che scorrendo la griglia delle carte -- quando la lista
+    // e' gia' in cima, il resto dello scorrimento arriva al pannello e lui lo
+    // legge come un tentativo di chiusura -- compariva dal nulla un dialog che
+    // chiedeva se buttare via il deck. La conferma ha senso quando si chiude
+    // apposta: il tasto X, il tasto indietro, il tocco fuori. Quelli passano da
+    // onDismissRequest, non da qui.
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { target ->
-            if (target == SheetValue.Hidden && hasDeckWork()) {
-                showDiscardDeckDialog = true
-                false
-            } else {
-                true
-            }
+            !(target == SheetValue.Hidden && hasDeckWork())
         }
     )
 
@@ -236,7 +240,10 @@ fun DeckLabScreen(
                         onClick = {
                             if (premiumManager.canCreateDeck(viewModel.decks.size)) {
                                 viewModel.resetNewDeckState()
-                                showSheet = true
+                                // La domanda si fa qui, una volta, invece di
+                                // tenere un selettore acceso in cima
+                                // all'editor per tutta la sessione.
+                                showNewDeckSourceDialog = true
                             } else {
                                 showPremiumDeckDialog = true
                             }
@@ -494,6 +501,22 @@ fun DeckLabScreen(
             )
         }
 
+        // Deck nuovo: la stessa domanda dell'import, ma al contrario -- le
+        // carte che non possiedi non ci sono ancora, la risposta vale per
+        // quelle che verranno. Chiudere senza scegliere non apre l'editor:
+        // e' una rinuncia, non un valore predefinito preso di nascosto.
+        if (showNewDeckSourceDialog) {
+            DeckCardSourceDialog(
+                prompt = AppLocale.deckSourceNewDeckQuestion,
+                onChoose = { source ->
+                    showNewDeckSourceDialog = false
+                    viewModel.chooseDeckCardSource(source)
+                    showSheet = true
+                },
+                onDismiss = { showNewDeckSourceDialog = false }
+            )
+        }
+
         // Import: prima la scelta su dove finiscono le carte che non possiedi,
         // poi il riepilogo. Sono due momenti diversi e non vanno mescolati --
         // decidere in fondo a un elenco di carte mancanti e' una domanda che
@@ -501,11 +524,14 @@ fun DeckLabScreen(
         val importResult = viewModel.importResult
         if (importResult != null) {
             if (viewModel.isImportSourceChoicePending) {
-                DeckImportSourceDialog(
-                    missingCount = importResult.missingMetaDeckCards.sumOf { it.qty },
+                DeckCardSourceDialog(
+                    prompt = AppLocale.deckSourceQuestion(
+                        importResult.missingMetaDeckCards.sumOf { it.qty }
+                    ),
                     isWorking = viewModel.isAddingMissingCards,
                     onChoose = { source -> viewModel.applyImportCardSource(source, context) },
-                    onSkip = { viewModel.skipMissingCards() }
+                    onSkip = { viewModel.skipMissingCards() },
+                    onDismiss = { viewModel.skipMissingCards() }
                 )
             } else {
                 ImportResultDialog(
