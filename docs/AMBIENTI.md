@@ -43,8 +43,20 @@ Le due righe in grassetto sono limiti reali, non dimenticanze:
 Nella console Firebase: nuovo progetto, nome a piacere (es.
 `pokevault-staging`). Poi, dentro al progetto:
 
-1. **Firestore Database** → crea in *Native mode*, stessa region di
-   produzione (`eur3` se prod è lì, così i tempi di risposta sono simili).
+1. **Firestore Database** → crea il database.
+
+   - **Località**: la stessa di produzione (`eur3`, se è lì che sta prod —
+     si legge in cima alla scheda dati del progetto `pokevault-32d28`). Va
+     scelta bene al primo colpo: **non è modificabile dopo**.
+   - **Modalità**: *produzione*, non *test*. La modalità test scrive una
+     regola che lascia leggere e scrivere a chiunque per 30 giorni: oltre a
+     essere un database aperto, non sono le regole di produzione, quindi lo
+     staging si comporterebbe come un'app diversa dalla tua — cioè non
+     servirebbe a niente.
+
+   La modalità produzione nega tutto finché non ci deployi sopra le regole
+   vere (punti 2 e 3 qui sotto). Nel frattempo l'app di staging non legge e
+   non scrive: è atteso, non è un guasto.
 2. **Authentication → Sign-in method** → abilita **Google**, e imposta l'email
    di supporto. Senza questo passaggio il login non parte e non si arriva a
    vedere nient'altro, perché l'app si apre sulla schermata di accesso.
@@ -85,45 +97,58 @@ Oggi le regole di sicurezza e gli indici vivono **solo nella console di
 produzione**: se qualcuno le cambia non se ne accorge nessuno, e lo staging
 partirebbe con regole diverse da prod — cioè testerebbe un'altra app.
 
-Serve la CLI (Node è già richiesto dagli script di ingest):
+Serve la CLI. Node è già richiesto dagli script di ingest, e `npx` evita
+un'installazione globale:
 
 ```bash
-npm install -g firebase-tools
-firebase login
+npx firebase-tools login      # apre il browser, una volta sola
 ```
 
-Poi, puntando a **produzione**, si scaricano i file che `firebase.json` si
-aspetta:
+**Gli indici** si esportano da riga di comando:
 
 ```bash
-firebase use prod
-
-# indici: la CLI li stampa già nel formato giusto
-firebase firestore:indexes > firestore.indexes.json
-
-# regole: firebase init scarica quelle esistenti se il file non c'è ancora.
-# Se non lo fa, copiale a mano dalla console (Firestore → Regole) dentro
-# firestore.rules -- ma non inventarle: devono essere quelle già in vigore.
-firebase init firestore
+npx firebase-tools firestore:indexes --project prod > firestore.indexes.json
 ```
 
-Rileggi `firestore.rules` prima di committarlo e assicurati che sia davvero
-quello che gira in produzione. Da quel momento le regole sono versionate e si
-vedono nelle diff.
+Oggi quel file esce vuoto (`"indexes": []`), e non è un export fallito: le
+query dell'app sono a sola uguaglianza (`apiCardId` + `variant`, `set`) o con
+un solo `orderBy("createdAt")`, e Firestore le serve con gli indici a campo
+singolo che crea da sé. Gli indici compositi servono per uguaglianza + range
+o ordinamento su un altro campo, che qui non compaiono ancora.
+
+**Le regole no**: non esiste un comando per scaricarle (`firebase firestore`
+ha solo `delete`, `bulkdelete`, `indexes`, `locations`, `operations`,
+`databases`, `backups`). Si copiano dalla console:
+
+> Console Firebase → progetto `pokevault-32d28` → *Firestore Database* →
+> scheda **Regole** → seleziona tutto il testo e incollalo in
+> `firestore.rules`.
+
+In alternativa `npx firebase-tools init firestore` propone di scaricarle, ma è
+interattivo e fa domande anche sugli indici: il copia-incolla è più corto e non
+lascia dubbi su cosa hai preso.
+
+Qualunque strada, **non inventare quelle regole**: devono essere esattamente
+quelle in vigore, altrimenti lo staging testerebbe un'app diversa e un deploy
+distratto su prod aprirebbe i dati di tutti. Rileggi il file prima di
+committarlo.
 
 ### 3. Allineare lo staging a produzione
 
+Gli alias `prod` e `staging` sono già in `.firebaserc`, quindi basta:
+
 ```bash
-firebase use --add        # scegli il progetto di staging, alias: staging
-firebase use staging
-firebase deploy --only firestore:rules,firestore:indexes
+npx firebase-tools deploy --only firestore:rules,firestore:indexes --project staging
 ```
 
-Da rifare ogni volta che le regole cambiano, prima su staging e poi su prod:
+Su **prod non serve deployare adesso**: le regole lì sono già quelle, il file
+nel repo ne è solo la copia versionata. Il deploy su prod si fa quando le
+regole cambiano davvero, e dopo averle provate su staging.
+
+Quando quel momento arriva, è la stessa riga con l'altro progetto:
 
 ```bash
-firebase use prod
-firebase deploy --only firestore:rules,firestore:indexes
+npx firebase-tools deploy --only firestore:rules,firestore:indexes --project prod
 ```
 
 > In `.firebaserc` **non c'è un alias `default`**, di proposito: senza, la CLI
