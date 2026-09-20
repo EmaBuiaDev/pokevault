@@ -1,10 +1,21 @@
 name: Advanced Android Testing with Coverage
 
+# Questo workflow accende un emulatore per i test strumentati, quindi costa
+# molto piu' tempo di `android-tests.yml`: resta un cancello di integrazione,
+# non qualcosa che gira a ogni push su un branch di lavoro.
+#
+# `main` e `develop` non sono mai esistiti in questo repo: erano i due branch
+# del template di partenza, e con quei filtri il workflow viveva solo del cron
+# giornaliero. I branch di integrazione veri sono `master` e i `release/**`.
+#
+# Per farlo girare a mano su un branch qualsiasi c'e' `workflow_dispatch`:
+# tab Actions -> questo workflow -> Run workflow -> scegli il branch.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ master, 'release/**' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ master, 'release/**' ]
+  workflow_dispatch: {}
   schedule:
     # Esegui i test ogni giorno alle 2:00 UTC
     - cron: '0 2 * * *'

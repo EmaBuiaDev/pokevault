@@ -56,19 +56,27 @@ Da Android Studio: click destro sulla classe o sul singolo metodo di test → *R
 
 Due workflow, entrambi in `.github/workflows/`:
 
-| Workflow | Job | Trigger attuale |
+| Workflow | Job | Trigger |
 |---|---|---|
-| `android-tests.yml` | `test` (unit test) | push su `main`, `develop`, `release/**`, `feature/**`, `fix/**`; PR verso `main`/`develop` |
-| `android-advanced-tests.yml` | `unit-tests`, `instrumented-tests`, `lint-analysis`, `build` | push/PR su `main`/`develop`; schedule giornaliero |
+| `android-tests.yml` | `test` (unit test) | push su `master`, `R*`, `release/**`, `feature/**`, `fix/**`, `claude/**`; PR verso `master`/`release/**` |
+| `android-advanced-tests.yml` | `unit-tests`, `instrumented-tests`, `lint-analysis`, `build` | push/PR su `master`/`release/**`; `workflow_dispatch`; schedule giornaliero |
 
-**Debito noto** (vedi `MIGRATION_PLAN.md` sez. 1.2, voci 2-3): nessuno dei due
-workflow gira sui branch di lavoro reali del progetto (`release/R3.0.0`,
-`claude/*`) a meno che il nome combaci con `release/**`; `android-advanced-tests.yml`
-non ha `release/**` tra i trigger. `android-advanced-tests.yml` usa inoltre
-JDK 11, incompatibile con AGP 8.13.2 (il task allora invocato,
-`jacocoTestDebugUnitTestReport`, non era mai stato registrato). Prima di fidarsi del verde CI su un
-branch che non sia `main`/`develop`, verificare che il workflow sia effettivamente
-partito nel tab *Actions*.
+I due workflow hanno una portata diversa di proposito: i test unitari sono
+veloci e girano su tutti i branch su cui si lavora, mentre quello avanzato
+accende un emulatore per i test strumentati e resta un cancello di
+integrazione. Per lanciarlo a mano su un branch qualsiasi: tab *Actions* →
+*Advanced Android Testing with Coverage* → *Run workflow*.
+
+**Storia, per capire le diff vecchie**: fino al 20/09/2026 entrambi filtravano
+su `main` e `develop`, due branch che in questo repo non sono mai esistiti (il
+default è `master`). I branch di versione (`R3.1.3` e simili) non combaciavano
+con nessun pattern, quindi si è lavorato a lungo senza che la CI girasse: il
+workflow avanzato viveva solo del cron giornaliero. `android-advanced-tests.yml`
+usava inoltre JDK 11, incompatibile con AGP 8.13.2 (il task allora invocato,
+`jacocoTestDebugUnitTestReport`, non era mai stato registrato).
+
+Prima di fidarsi di un verde CI, vale comunque la pena verificare nel tab
+*Actions* che il workflow sia effettivamente partito.
 
 Ogni run produce artifact scaricabili dal tab *Actions* → run → *Artifacts*:
 `unit-test-reports`, `instrumented-test-reports`, `lint-report`, `debug-apk`.
