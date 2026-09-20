@@ -12,14 +12,20 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -151,7 +157,7 @@ object Routes {
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun AppNavigation(
     navController: NavHostController,
@@ -251,10 +257,30 @@ fun AppNavigation(
     // dire che si sta andando avanti.
     val coverFade = (motion.screenEnter / 3).coerceAtLeast(0)
 
+    // ── Tastiera, una volta per tutta l'app ─────────────────────────────────
+    //
+    // enableEdgeToEdge() in MainActivity dice ad Android di non ridimensionare
+    // la finestra quando la tastiera si apre: l'IME arriva come inset, e sta a
+    // noi lasciargli lo spazio. Finche' l'ha fatto solo qualche schermata (due
+    // su diciotto con dei campi di testo), in tutte le altre la tastiera
+    // copriva il campo su cui si stava scrivendo.
+    //
+    // Farlo qui invece che in ogni schermata significa che il comportamento e'
+    // uno solo e che una schermata nuova lo eredita senza doversene ricordare.
+    val imeVisible = WindowInsets.isImeVisible
+    val focusManager = LocalFocusManager.current
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AppColors.background)
+            // Toccare fuori da un campo chiude la tastiera, come ci si aspetta
+            // ovunque. detectTapGestures lavora sul Main pass, quindi i figli
+            // che gestiscono il tocco (bottoni, liste) lo consumano prima e qui
+            // non arriva niente: reagisce solo al vuoto.
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { focusManager.clearFocus() })
+            }
     ) {
             // Un solo SharedTransitionLayout attorno a tutto il grafo: le
             // schermate che partecipano alla transizione della carta lo trovano
@@ -264,7 +290,9 @@ fun AppNavigation(
             NavHost(
                 navController = navController,
                 startDestination = startDestination,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding(),
                 // Entrata e uscita non sono simmetriche di proposito: la schermata
                 // nuova arriva con un filo di scivolamento (un dodicesimo di larghezza,
                 // non una pagina intera), quella che esce scivola via dalla parte
@@ -671,7 +699,11 @@ fun AppNavigation(
             }
             }
 
-        if (showBottomBar) {
+        // Con la tastiera aperta la barra e il FAB si tolgono di mezzo: sono
+        // navigazione, e mentre si scrive non servono. Lasciarli vorrebbe dire
+        // vederli galleggiare sopra la tastiera, o spingere via il campo che si
+        // sta compilando.
+        if (showBottomBar && !imeVisible) {
             ScannerFab(
                 onClick = { navController.navigate(Routes.SCANNER) },
                 modifier = Modifier
