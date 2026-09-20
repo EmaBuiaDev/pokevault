@@ -430,7 +430,14 @@ class DeckLabViewModel : ViewModel() {
             return
         }
 
-        val typesCount = selectedCards.flatMap { it.type.split(",").map { t -> t.trim() } }
+        // Solo i Pokemon. Il tipo di una Trainer non esiste: all'import prende
+        // "Colorless" come ripiego, e in un mazzo da 60 ce ne sono quaranta
+        // contro quindici Pokemon. Contandole tutte, "Colorless" vinceva
+        // sempre e i due tipi mostrati sull'elenco dei mazzi non dicevano
+        // niente del mazzo.
+        val typesCount = selectedCards
+            .filter { classifyCard(it) == CardClassifier.POKEMON }
+            .flatMap { it.type.split(",").map { t -> t.trim() } }
             .filter { it.isNotEmpty() }
             .groupingBy { it }
             .eachCount()
@@ -588,23 +595,21 @@ class DeckLabViewModel : ViewModel() {
     }
 
     private fun syncCoverImagesWithSelectedCards() {
-        val availableUrls = selectedCardsIds
-            .mapNotNull { id -> allCardsById[id]?.imageUrl }
-            .filter { it.isNotBlank() }
-            .distinct()
-
-        if (availableUrls.isEmpty()) {
+        if (selectedCardsIds.isEmpty()) {
             coverImageUrls = emptyList()
             coverImageUrl = ""
             return
         }
 
-        // Mantieni solo le copertine ancora presenti nel deck.
-        // Non riempire automaticamente per permettere all'utente
-        // di rimuoverle e sceglierne altre in modo esplicito.
-        coverImageUrls = coverImageUrls
-            .filter { it in availableUrls }
-            .take(2)
+        // Le copertine sono indirizzi di sprite, non di carte: qui non si
+        // possono piu' confrontare con le immagini delle carte nel deck --
+        // farlo le cancellerebbe tutte, perche' non combaciano mai.
+        //
+        // Una copertina che punta a un Pokemon non piu' nel mazzo non viene
+        // tolta qui ma ignorata quando si disegna: l'elenco e il dettaglio
+        // mostrano l'intersezione fra quelle scelte e quelle disponibili, e
+        // saperlo richiede di risolvere i nomi, che e' lavoro della UI.
+        coverImageUrls = coverImageUrls.take(2)
         coverImageUrl = coverImageUrls.firstOrNull().orEmpty()
     }
 
@@ -715,14 +720,10 @@ class DeckLabViewModel : ViewModel() {
         }
 
         selectedCardsIds = idsToAdd.take(60) // Limite 60 carte
-        if (idsToAdd.isNotEmpty()) {
-            val importedUrls = selectedCardsIds
-                .mapNotNull { id -> allCardsById[id]?.imageUrl }
-                .filter { it.isNotBlank() }
-                .distinct()
-            coverImageUrls = importedUrls.take(2)
-            coverImageUrl = coverImageUrls.firstOrNull().orEmpty()
-        }
+        // Nessuna copertina assegnata d'ufficio: erano le prime due immagini
+        // di carta che capitavano, e ora che il mazzo si presenta con gli
+        // sprite non verrebbero comunque mostrate. Senza scelta esplicita
+        // decide headlineScore, che sceglie meglio di "le prime due".
         analyzeDeck()
 
         val result = ImportResult(

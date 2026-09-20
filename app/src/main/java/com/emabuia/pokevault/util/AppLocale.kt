@@ -384,7 +384,7 @@ object AppLocale {
     fun deckCover(index: Int): String = if (isItalian) "Copertina deck $index" else "Deck cover $index"
     fun selectCover(cardName: String): String = if (isItalian) "Seleziona copertina $cardName" else "Select cover $cardName"
     val selectedCover: String get() = if (isItalian) "Copertina selezionata" else "Selected cover"
-    val onlyDeckCardsCanBeCover: String get() = if (isItalian) "Solo le carte gia presenti nel deck possono diventare copertina." else "Only cards already in the deck can become a cover."
+    val onlyDeckCardsCanBeCover: String get() = if (isItalian) "Solo i Pokémon già presenti nel deck possono diventare copertina." else "Only Pokémon already in the deck can become a cover."
 
     // ── Editor del deck: due passi ─────────────────────────────────────────
     val deckStepCards: String get() = if (isItalian) "Carte" else "Cards"
@@ -392,9 +392,9 @@ object AppLocale {
     val deckNameLabel: String get() = if (isItalian) "Nome del deck" else "Deck name"
     val deckCoverTitle: String get() = if (isItalian) "Copertina" else "Cover"
     val deckCoverHint: String get() = if (isItalian)
-        "Fino a 2 carte del deck. Sono quelle che vedrai sulla card del deck nell'elenco."
+        "Fino a 2 Pokémon del deck. Sono quelli che rappresentano il mazzo nell’elenco e in cima al dettaglio. Se non scegli niente, ci pensa l’app."
     else
-        "Up to 2 cards from the deck. They are what you see on the deck card in the list."
+        "Up to 2 Pokémon from the deck. They stand for the deck in the list and at the top of its detail. Pick none and the app decides."
     val deckCoverEmpty: String get() = if (isItalian)
         "Nessuna copertina scelta"
     else
@@ -405,9 +405,9 @@ object AppLocale {
     else
         if (count == 1) "1 card of 2" else "$count cards of 2"
     val deckNoCardsYet: String get() = if (isItalian)
-        "Aggiungi prima qualche carta: la copertina si sceglie fra quelle del deck."
+        "Aggiungi prima qualche Pokémon: la copertina si sceglie fra quelli del deck."
     else
-        "Add some cards first: the cover is picked from the ones in the deck."
+        "Add some Pokémon first: the cover is picked from the ones in the deck."
     val deckImportedTitle: String get() = if (isItalian) "Deck importato" else "Deck imported"
     fun deckImportedBody(count: Int): String = if (isItalian)
         "$count carte riconosciute. Controlla il nome, scegli la copertina e salva."

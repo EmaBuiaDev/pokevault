@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.data.model
 
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.google.firebase.Timestamp
 
 data class Deck(
@@ -30,6 +31,18 @@ data class Deck(
             .distinct()
             .take(2)
     }
+
+    /**
+     * Le copertine scelte a mano, se sono sprite.
+     *
+     * I deck salvati prima che le copertine diventassero sprite hanno qui
+     * dentro indirizzi di immagini di carte. Disegnarli vorrebbe dire
+     * rimettere una carta stirata al posto del Pokemon -- proprio quello che
+     * si e' tolto di mezzo -- quindi vengono scartati e il mazzo torna alla
+     * scelta automatica, senza bisogno di migrare niente su Firestore.
+     */
+    fun chosenSpriteCovers(): List<String> =
+        displayCoverImageUrls().filter { PokemonSpriteResolver.isSpriteUrl(it) }
 }
 
 data class DeckAnalysis(

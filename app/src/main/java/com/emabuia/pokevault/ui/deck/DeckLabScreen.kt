@@ -30,6 +30,7 @@ import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.emabuia.pokevault.viewmodel.DeckLabViewModel
 import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,6 +48,13 @@ fun DeckLabScreen(
     // tocco, che e' gia' il comportamento corretto. Raccoglierlo senza usarlo
     // faceva solo ricomporre l'intero schermo a ogni cambio di stato premium.
     val context = LocalContext.current
+
+    // La tabella nome -> sprite si legge da un asset: fuori dal thread
+    // principale e una volta sola, prima che l'elenco dei mazzi ne abbia
+    // bisogno. Vedi PokemonSpriteResolver.
+    LaunchedEffect(Unit) {
+        PokemonSpriteResolver.preload(context)
+    }
 
     var showSheet by remember { mutableStateOf(false) }
     var showDiscardDeckDialog by remember { mutableStateOf(false) }

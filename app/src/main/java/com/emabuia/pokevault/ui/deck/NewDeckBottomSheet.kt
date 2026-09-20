@@ -40,14 +40,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.emabuia.pokevault.data.model.CardClassifier
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.emabuia.pokevault.viewmodel.DeckLabViewModel
 
 private const val STEP_CARDS = 0
 private const val STEP_DETAILS = 1
+
+/**
+ * Un Pokemon del mazzo, proposto come copertina.
+ *
+ * La copertina era l'immagine di una carta: adesso che il mazzo si presenta
+ * con gli sprite, scegliere una carta non avrebbe piu' alcun effetto visibile.
+ * Il campo salvato e' lo stesso di prima, cambia cosa ci si mette dentro --
+ * vedi PokemonSpriteResolver.isSpriteUrl per i deck salvati prima di questo.
+ */
+private data class DeckCoverOption(
+    val name: String,
+    val spriteUrl: String
+)
 
 /**
  * L'editor del deck, in due passi.
@@ -924,13 +939,26 @@ private fun DeckDetailsStep(
 ) {
     val focusManager = LocalFocusManager.current
 
-    // allCards: le copertine si scelgono fra le carte del deck, comprese
-    // quelle solo-deck, non fra quelle che l'utente possiede.
-    val deckCards = remember(viewModel.allCards, viewModel.selectedCardsIds) {
-        val selected = viewModel.selectedCardsIds.toSet()
+    // I Pokemon del mazzo, come sprite: sono quelli che lo rappresentano
+    // nell'elenco e nel dettaglio, quindi sono quelli fra cui ha senso
+    // scegliere. Ordinati con lo stesso criterio della scelta automatica, cosi'
+    // i primi proposti sono gia' quelli che comparirebbero da soli.
+    val coverContext = LocalContext.current
+    val coverOptions = remember(
+        viewModel.allCards,
+        viewModel.selectedCardsIds,
+        PokemonSpriteResolver.isReady
+    ) {
+        val copies = viewModel.selectedCardsIds.groupingBy { it }.eachCount()
         viewModel.allCards
-            .filter { it.id in selected && it.imageUrl.isNotBlank() }
-            .distinctBy { it.imageUrl }
+            .filter { it.id in copies }
+            .filter { CardClassifier.classify(it) == CardClassifier.POKEMON }
+            .sortedByDescending { headlineScore(it, copies[it.id] ?: 0) }
+            .mapNotNull { card ->
+                PokemonSpriteResolver.spriteUrlForCardName(coverContext, card.name)
+                    ?.let { url -> DeckCoverOption(name = card.name, spriteUrl = url) }
+            }
+            .distinctBy { it.spriteUrl }
     }
 
     Column(
@@ -984,7 +1012,7 @@ private fun DeckDetailsStep(
         }
 
         DeckCoverSection(
-            deckCards = deckCards,
+            options = coverOptions,
             selectedCovers = viewModel.coverImageUrls,
             onToggleCover = { viewModel.toggleCoverCard(it) }
         )
@@ -1100,7 +1128,7 @@ private fun PlaceholderCardsWarning(names: List<String>) {
  */
 @Composable
 private fun DeckCoverSection(
-    deckCards: List<PokemonCard>,
+    options: List<DeckCoverOption>,
     selectedCovers: List<String>,
     onToggleCover: (String) -> Unit
 ) {
@@ -1136,7 +1164,7 @@ private fun DeckCoverSection(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (deckCards.isEmpty()) {
+        if (options.isEmpty()) {
             Text(
                 text = AppLocale.deckNoCardsYet,
                 color = AppColors.textMuted,
@@ -1152,8 +1180,8 @@ private fun DeckCoverSection(
         // La griglia sta dentro una colonna scorrevole, quindi non puo'
         // scorrere a sua volta: le righe si calcolano e l'altezza e' fissa.
         val columns = 5
-        val rows = (deckCards.size + columns - 1) / columns
-        val rowHeight = 78.dp
+        val rows = (options.size + columns - 1) / columns
+        val rowHeight = 72.dp
         val gridHeight = rowHeight * rows + 8.dp * (rows - 1).coerceAtLeast(0)
 
         LazyVerticalGrid(
@@ -1165,11 +1193,11 @@ private fun DeckCoverSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(deckCards, key = { it.imageUrl }) { card ->
+            items(options, key = { it.spriteUrl }) { option ->
                 CoverCandidate(
-                    card = card,
-                    isSelected = selectedCovers.contains(card.imageUrl),
-                    onClick = { onToggleCover(card.imageUrl) }
+                    option = option,
+                    isSelected = selectedCovers.contains(option.spriteUrl),
+                    onClick = { onToggleCover(option.spriteUrl) }
                 )
             }
         }
@@ -1198,8 +1226,10 @@ private fun CoverPreview(selectedCovers: List<String>) {
                 val url = selectedCovers.getOrNull(index)
                 Box(
                     modifier = Modifier
-                        .size(54.dp, 76.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        // Quadrato e non a proporzioni di carta: dentro ci va
+                        // uno sprite, che e' quadrato.
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(AppColors.background)
                         .border(
                             BorderStroke(
@@ -1256,29 +1286,29 @@ private fun CoverPreview(selectedCovers: List<String>) {
 
 @Composable
 private fun CoverCandidate(
-    card: PokemonCard,
+    option: DeckCoverOption,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
-            .height(78.dp)
-            .clip(RoundedCornerShape(7.dp))
+            .height(72.dp)
+            .clip(RoundedCornerShape(10.dp))
             .border(
                 BorderStroke(
                     if (isSelected) 2.dp else 1.dp,
                     if (isSelected) AppColors.blue else AppColors.textMuted.copy(alpha = 0.3f)
                 ),
-                RoundedCornerShape(7.dp)
+                RoundedCornerShape(10.dp)
             )
             .clickable(onClick = onClick)
     ) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
-                .data(card.imageUrl)
-                .size(140, 200)
+                .data(option.spriteUrl)
+                .crossfade(true)
                 .build(),
-            contentDescription = AppLocale.selectCover(card.name),
+            contentDescription = AppLocale.selectCover(option.name),
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize()
         )
