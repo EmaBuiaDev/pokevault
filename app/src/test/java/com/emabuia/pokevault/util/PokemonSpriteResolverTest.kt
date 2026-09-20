@@ -92,6 +92,35 @@ class PokemonSpriteResolverTest {
         assertEquals(1007, dex("Koraidon ex"))
     }
 
+    /**
+     * I nomi degli archetipi, che e' come si scrive il mazzo di un avversario.
+     * Qui non c'e' una carta sola da riconoscere ma due Pokemon dentro una
+     * frase, insieme a parole che Pokemon non sono.
+     */
+    @Test
+    fun testArchetipiAvversari() = runBlocking {
+        PokemonSpriteResolver.preload(context)
+
+        fun sprites(nome: String) = PokemonSpriteResolver.spriteUrlsForArchetype(context, nome)
+        fun ids(nome: String) = sprites(nome).map { it.substringAfterLast('/').removeSuffix(".png") }
+
+        assertEquals(listOf("6"), ids("Charizard ex"))
+        assertEquals(listOf("6", "18"), ids("Charizard ex Pidgeot"))
+        assertEquals(listOf("887", "477"), ids("Dragapult Dusknoir"))
+
+        // Nomi di due parole dentro all'archetipo: vanno riconosciuti interi.
+        assertEquals(listOf("1021", "1017"), ids("Raging Bolt Ogerpon"))
+        assertEquals(listOf("1006"), ids("Iron Valiant ex"))
+
+        // Le parole che non sono Pokemon si saltano senza rompere niente.
+        assertEquals(listOf("151"), ids("Lost Box Mew"))
+        assertTrue(ids("Lost Zone Toolbox").isEmpty())
+
+        // Mai piu' di due, che e' lo spazio che c'e' in una riga.
+        assertEquals(2, sprites("Charizard Pidgeot Dusknoir Dragapult").size)
+        assertTrue(ids("").isEmpty())
+    }
+
     @Test
     fun testCarteCheNonSonoPokemon() {
         assertNull(dex("Professor's Research"))

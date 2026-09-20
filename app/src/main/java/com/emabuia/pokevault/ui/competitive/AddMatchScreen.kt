@@ -25,8 +25,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalContext
+import com.emabuia.pokevault.ui.components.ArchetypeSpriteRow
+import com.emabuia.pokevault.ui.components.DeckSpriteCompact
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.emabuia.pokevault.viewmodel.CompetitiveLogViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -111,6 +115,17 @@ fun AddMatchScreen(
 
             // ── Avversario ──
             SectionLabel(AppLocale.matchOpponent)
+
+            // Risolti una volta: servono per decidere se il campo ha
+            // un'icona, e la stessa risposta la riusa la riga qui sotto.
+            val spriteContext = LocalContext.current
+            val opponentSprites = remember(
+                viewModel.matchOpponentDeck,
+                PokemonSpriteResolver.isReady
+            ) {
+                PokemonSpriteResolver.spriteUrlsForArchetype(spriteContext, viewModel.matchOpponentDeck)
+            }
+
             MatchTextField(
                 value = viewModel.matchOpponentName,
                 onValueChange = { viewModel.matchOpponentName = it },
@@ -121,7 +136,23 @@ fun AddMatchScreen(
                 value = viewModel.matchOpponentDeck,
                 onValueChange = { viewModel.matchOpponentDeck = it },
                 label = AppLocale.matchOpponentDeck,
-                placeholder = if (AppLocale.isItalian) "Es. Lugia VSTAR" else "E.g. Lugia VSTAR"
+                placeholder = if (AppLocale.isItalian) "Es. Lugia VSTAR" else "E.g. Lugia VSTAR",
+                // Gli sprite compaiono mentre si scrive, appena il nome viene
+                // riconosciuto: sono anche la conferma di aver scritto
+                // l'archetipo in un modo che l'app capisce.
+                //
+                // null e non un composable vuoto quando non si riconosce
+                // niente: lo slot dell'icona esiste comunque, e riempirlo di
+                // nulla lascerebbe uno scalino nel campo.
+                leadingIcon = if (opponentSprites.isEmpty()) null else {
+                    {
+                        ArchetypeSpriteRow(
+                            archetype = viewModel.matchOpponentDeck,
+                            size = DeckSpriteCompact,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
             )
 
             // I mazzi gia' incontrati, da toccare invece che riscrivere.
@@ -220,15 +251,23 @@ private fun OpponentDeckSuggestions(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.clickable { onPick(deck) }
                 ) {
-                    Text(
-                        text = deck,
-                        color = if (selected) AppColors.orange else AppColors.textSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Su una fila di archetipi scritti in fretta, la figura
+                        // si riconosce prima del nome.
+                        ArchetypeSpriteRow(archetype = deck, size = 24.dp)
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = deck,
+                            color = if (selected) AppColors.orange else AppColors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -276,12 +315,14 @@ private fun MatchTextField(
     label: String,
     placeholder: String = "",
     keyboardType: KeyboardType = KeyboardType.Text,
-    maxLines: Int = 1
+    maxLines: Int = 1,
+    leadingIcon: (@Composable () -> Unit)? = null
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
+        leadingIcon = leadingIcon,
         placeholder = if (placeholder.isNotBlank()) {{ Text(placeholder) }} else null,
         maxLines = maxLines,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),

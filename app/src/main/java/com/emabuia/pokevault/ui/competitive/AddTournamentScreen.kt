@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.model.Tournament
+import com.emabuia.pokevault.ui.components.DeckSpriteCompact
+import com.emabuia.pokevault.ui.components.DeckSpriteRow
+import com.emabuia.pokevault.ui.components.hasChosenSprites
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.CompetitiveLogViewModel
@@ -258,6 +261,13 @@ fun AddTournamentScreen(
                     )
                 } else {
                     var showDeckDropdown by remember { mutableStateOf(false) }
+                    // Il mazzo scelto, per mostrarne gli sprite nel campo:
+                    // riconoscerlo dall'immagine e' piu' immediato che
+                    // rileggerne il nome.
+                    val selectedDeck = remember(viewModel.tournamentDeckId, viewModel.userDecks) {
+                        viewModel.userDecks.firstOrNull { it.id == viewModel.tournamentDeckId }
+                    }
+
                     ExposedDropdownMenuBox(
                         expanded = showDeckDropdown,
                         onExpandedChange = { showDeckDropdown = it }
@@ -268,6 +278,15 @@ fun AddTournamentScreen(
                             },
                             onValueChange = {},
                             readOnly = true,
+                            leadingIcon = if (selectedDeck.hasChosenSprites()) {
+                                {
+                                    DeckSpriteRow(
+                                        deck = selectedDeck,
+                                        size = DeckSpriteCompact,
+                                        modifier = Modifier.padding(start = 8.dp)
+                                    )
+                                }
+                            } else null,
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showDeckDropdown) },
                             modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
                             colors = tournamentTextFieldColors(),
@@ -280,6 +299,9 @@ fun AddTournamentScreen(
                         ) {
                             viewModel.userDecks.forEach { deck ->
                                 DropdownMenuItem(
+                                    leadingIcon = if (deck.hasChosenSprites()) {
+                                        { DeckSpriteRow(deck = deck, size = DeckSpriteCompact) }
+                                    } else null,
                                     text = {
                                         Text(
                                             "${deck.name} (${deck.totalCards} carte)",

@@ -45,6 +45,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.ui.theme.AppMotion
 import com.emabuia.pokevault.ui.auth.AuthScreen
@@ -269,6 +270,16 @@ fun AppNavigation(
     // uno solo e che una schermata nuova lo eredita senza doversene ricordare.
     val imeVisible = WindowInsets.isImeVisible
     val focusManager = LocalFocusManager.current
+
+    // La tabella nome -> sprite si legge da un asset, fuori dal thread
+    // principale e una volta sola. Sta qui e non nelle singole schermate
+    // perche' i posti che la usano sono ormai piu' di uno -- l'elenco dei
+    // mazzi, il dettaglio, il Match Log -- e una schermata nuova che se ne
+    // dimenticasse mostrerebbe semplicemente il vuoto, senza errori.
+    val spriteContext = LocalContext.current
+    LaunchedEffect(Unit) {
+        PokemonSpriteResolver.preload(spriteContext)
+    }
 
     Box(
         modifier = Modifier

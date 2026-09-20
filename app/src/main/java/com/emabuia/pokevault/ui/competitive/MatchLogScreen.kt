@@ -23,8 +23,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.Tournament
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
+import com.emabuia.pokevault.ui.components.DeckSpriteRow
+import com.emabuia.pokevault.ui.components.hasChosenSprites
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.CompetitiveLogViewModel
@@ -47,6 +50,20 @@ fun MatchLogScreen(
     // faceva solo ricomporre l'intero schermo a ogni cambio di stato premium.
     var showDeleteDialog by remember { mutableStateOf<Tournament?>(null) }
     var showPremiumDialog by remember { mutableStateOf(false) }
+
+    // Contati una volta per tutta la lista. Prima ogni riga scorreva l'intero
+    // archivio dei match per contare i suoi, quindi il costo cresceva con
+    // (tornei x match) a ogni ricomposizione -- cioe' a ogni frame di
+    // scorrimento.
+    val matchCountByTournament = remember(viewModel.allMatches) {
+        viewModel.allMatches.groupingBy { it.tournamentId }.eachCount()
+    }
+
+    // Il mazzo di un torneo serve solo per le sue copertine: l'indice evita di
+    // cercarlo riga per riga.
+    val decksById = remember(viewModel.userDecks) {
+        viewModel.userDecks.associateBy { it.id }
+    }
 
     // Due domande diverse sullo stesso archivio: "cosa ho giocato" e "come sto
     // andando". Prima c'era solo la prima, e la seconda si riduceva a due
@@ -143,7 +160,8 @@ fun MatchLogScreen(
                     items(viewModel.tournaments, key = { it.id }) { tournament ->
                         TournamentCard(
                             tournament = tournament,
-                            matchCount = viewModel.allMatches.count { it.tournamentId == tournament.id },
+                            matchCount = matchCountByTournament[tournament.id] ?: 0,
+                            deck = decksById[tournament.deckId],
                             onClick = { onTournamentClick(tournament.id) },
                             onDelete = { showDeleteDialog = tournament }
                         )
@@ -191,6 +209,7 @@ fun MatchLogScreen(
 private fun TournamentCard(
     tournament: Tournament,
     matchCount: Int,
+    deck: Deck?,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -213,24 +232,32 @@ private fun TournamentCard(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Type badge
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(typeColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = when (tournament.type) {
-                        "Cup" -> Icons.Default.EmojiEvents
-                        "Challenge" -> Icons.Default.Star
-                        else -> Icons.Default.Group
-                    },
-                    contentDescription = null,
-                    tint = typeColor,
-                    modifier = Modifier.size(22.dp)
-                )
+            // Il mazzo con cui hai giocato, quando ha delle copertine: e' la
+            // cosa per cui si riconosce un torneo passato. Il tipo resta
+            // scritto nella targhetta qui accanto, quindi l'icona a cerchio
+            // ripeteva un'informazione gia' presente: la teniamo solo per i
+            // tornei senza copertine, cosi' la riga non perde il suo inizio.
+            if (deck.hasChosenSprites()) {
+                DeckSpriteRow(deck = deck, size = 40.dp)
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(typeColor.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = when (tournament.type) {
+                            "Cup" -> Icons.Default.EmojiEvents
+                            "Challenge" -> Icons.Default.Star
+                            else -> Icons.Default.Group
+                        },
+                        contentDescription = null,
+                        tint = typeColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
 
             Spacer(Modifier.width(12.dp))

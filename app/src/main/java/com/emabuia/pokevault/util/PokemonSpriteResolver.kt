@@ -205,6 +205,48 @@ object PokemonSpriteResolver {
      */
     fun isSpriteUrl(url: String): Boolean = url.startsWith(SPRITE_BASE)
 
+    /**
+     * Gli sprite dei Pokemon nominati dentro al nome di un archetipo.
+     *
+     * Il mazzo di un avversario si scrive a mano e non e' uno dei nostri,
+     * quindi non ha copertine da mostrare: l'unica cosa che abbiamo e' come si
+     * chiama. Ma un archetipo si chiama con i suoi Pokemon -- "Charizard ex",
+     * "Raging Bolt Ogerpon", "Dragapult Dusknoir" -- e quelli la tabella li
+     * conosce gia'.
+     *
+     * Legge i pezzi da sinistra provando prima i nomi lunghi: "Iron Valiant" e
+     * "Roaring Moon" sono di due parole, e cercandoli una parola alla volta non
+     * si troverebbero mai. Quello che non e' un Pokemon -- "ex", "Box",
+     * "Control" -- non combacia e viene saltato senza far danni.
+     */
+    fun spriteUrlsForArchetype(context: Context, archetype: String, limit: Int = 2): List<String> {
+        if (!isReady || archetype.isBlank() || limit <= 0) return emptyList()
+        val table = load(context)
+        if (table.isEmpty()) return emptyList()
+
+        val parts = tokens(archetype)
+        val found = LinkedHashSet<Int>()
+
+        var i = 0
+        while (i < parts.size && found.size < limit) {
+            var consumed = 0
+            // Tre pezzi di margine: le specie piu' lunghe ne hanno due
+            // ("Great Tusk", "Iron Hands"), ma un nome scritto a mano puo'
+            // infilarci di mezzo qualcosa.
+            for (window in minOf(3, parts.size - i) downTo 1) {
+                val id = table[matchKey(parts.subList(i, i + window).joinToString(""))]
+                if (id != null) {
+                    found += id
+                    consumed = window
+                    break
+                }
+            }
+            i += if (consumed > 0) consumed else 1
+        }
+
+        return found.map { "$SPRITE_BASE/$it.png" }
+    }
+
     fun spriteUrlForCardName(context: Context, cardName: String): String? {
         if (!isReady) return null
         val id = dexNumberForCardName(context, cardName) ?: return null

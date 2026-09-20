@@ -1067,7 +1067,6 @@ object AppLocale {
     val matchDeleteTitle: String get() = if (isItalian) "Eliminare partita?" else "Delete match?"
     val matchDeleteMessage: String get() = if (isItalian) "Questa azione è irreversibile." else "This action is irreversible."
     fun matchRecord(wins: Int, losses: Int, ties: Int) = "$wins W - $losses L - $ties T"
-    val matchRecordLabel: String get() = if (isItalian) "Record" else "Record"
     val matchWinRate: String get() = if (isItalian) "Win Rate" else "Win Rate"
     val selectDate: String get() = if (isItalian) "Seleziona data" else "Select date"
     val today: String get() = if (isItalian) "Oggi" else "Today"
