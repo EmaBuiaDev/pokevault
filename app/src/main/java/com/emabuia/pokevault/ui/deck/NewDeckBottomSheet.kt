@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +23,8 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,10 +82,38 @@ fun NewDeckBottomSheetContent(
 
     val canSave = viewModel.newDeckName.isNotBlank() && viewModel.selectedCardsIds.isNotEmpty()
 
-    Column(
+    // Togliere una carta non chiede conferma prima: la offre dopo, qui. Il
+    // pannello e' una finestra a se' (ModalBottomSheet), quindi uno snackbar
+    // dello Scaffold sottostante finirebbe dietro e non lo vedrebbe nessuno:
+    // l'host deve stare dentro al pannello.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
+    var undoJob by remember { mutableStateOf<Job?>(null) }
+
+    fun announceRemoval(cardName: String) {
+        // Il precedente si chiude subito: due rimozioni di fila devono lasciare
+        // l'annulla dell'ultima, non metterla in coda dietro alla prima.
+        undoJob?.cancel()
+        undoJob = snackbarScope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = AppLocale.deckCardRemoved(cardName),
+                actionLabel = AppLocale.undo,
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.undoLastRemoval()
+            }
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(0.92f)
+    ) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
             // La tastiera comprime il pannello, e va bene: ogni passo ha un
             // corpo che scorre, quindi quello che resta visibile si raggiunge
             // comunque. Prima non era cosi', perche' il corpo conteneva due
@@ -109,15 +140,28 @@ fun NewDeckBottomSheetContent(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Sta qui, sopra a tutto e in tutti e due i passi, perche' e' la
-        // domanda che decide cosa succede alla collezione quando si aggiunge
-        // una carta trovata nei set: prima non veniva posta affatto.
-        DeckCardSourceSelector(
-            source = viewModel.deckCardSource,
-            onSelect = { viewModel.deckCardSource = it }
-        )
+        when {
+            // Dopo un import la scelta e' gia' stata fatta nel dialog: qui la
+            // si constata, e solo se e' quella che cambia le regole. Un deck
+            // normale non ha niente da annunciare.
+            viewModel.isDeckCardSourceDecided -> {
+                if (viewModel.deckCardSource == DeckLabViewModel.DeckCardSource.DECK_ONLY) {
+                    DeckTestDeckNotice()
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
 
-        Spacer(modifier = Modifier.height(10.dp))
+            // Nessuno ha ancora chiesto niente: e' il caso del deck creato da
+            // zero, dove la domanda decide cosa succede alla collezione quando
+            // si aggiunge una carta trovata nei set.
+            else -> {
+                DeckCardSourceSelector(
+                    source = viewModel.deckCardSource,
+                    onSelect = { viewModel.deckCardSource = it }
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+        }
 
         // Un solo figlio con weight(1f) alla volta. Prima la griglia locale e
         // quella dei risultati online potevano essere presenti insieme, e si
@@ -126,6 +170,7 @@ fun NewDeckBottomSheetContent(
             when (step) {
                 STEP_CARDS -> DeckCardsStep(
                     viewModel = viewModel,
+                    onCardRemoved = { name -> announceRemoval(name) },
                     onTcgCardClick = { card ->
                         tcgCardToAdd = card
                         tcgAddQty = 1
@@ -181,6 +226,26 @@ fun NewDeckBottomSheetContent(
         }
 
         Spacer(modifier = Modifier.height(12.dp))
+    }
+
+        // Sopra al contenuto, non in colonna con lui: in colonna comparirebbe
+        // e scomparirebbe spostando il tasto di salvataggio sotto al pollice.
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .imePadding()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(horizontal = 12.dp, vertical = 12.dp)
+        ) { data ->
+            Snackbar(
+                snackbarData = data,
+                containerColor = AppColors.card,
+                contentColor = AppColors.textPrimary,
+                actionColor = AppColors.blue,
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
     }
 
     tcgCardToAdd?.let { dialogCard ->
@@ -295,6 +360,48 @@ private fun DeckStepSwitch(step: Int, onSelect: (Int) -> Unit) {
 }
 
 /**
+ * Non chiede niente: ricorda che questo e' un deck di prova.
+ *
+ * Serve perche' la conseguenza dura oltre il momento della scelta -- anche le
+ * carte cercate nei set da adesso in poi resteranno fuori dalla collezione --
+ * e senza una riga qui l'unico posto dove l'utente l'ha letto e' un dialog che
+ * ha gia' chiuso.
+ */
+@Composable
+private fun DeckTestDeckNotice() {
+    Surface(
+        color = AppColors.purple.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Science,
+                contentDescription = null,
+                tint = AppColors.purple,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = AppLocale.deckTestBadge,
+                color = AppColors.purple,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = AppLocale.deckSourceDeckOnlyDesc,
+                color = AppColors.textMuted,
+                fontSize = 10.sp
+            )
+        }
+    }
+}
+
+/**
  * Dove finiscono le carte che l'utente non possiede.
  *
  * Deve stare davanti agli occhi mentre si costruisce il mazzo, non nascosto in
@@ -369,6 +476,7 @@ private fun DeckCardSourceSelector(
 @Composable
 private fun DeckCardsStep(
     viewModel: DeckLabViewModel,
+    onCardRemoved: (String) -> Unit,
     onTcgCardClick: (TcgCard) -> Unit
 ) {
     val context = LocalContext.current
@@ -377,8 +485,16 @@ private fun DeckCardsStep(
     var pendingSelectedCounts by remember { mutableStateOf(mapOf<String, Int>()) }
     val tabs = listOf("Pokémon", "Trainer", "Energia")
 
+    // La griglia aveva lo stato di scroll implicito, quindi condiviso fra i
+    // tab: scendevi in fondo ai Pokemon, passavi a Trainer -- lista piu' corta
+    // -- e ti ritrovavi in fondo a quella, o davanti a uno spazio vuoto. Il tab
+    // sembrava non aver funzionato. Ogni cambio di tab o di ricerca riporta in
+    // cima, che e' dove inizia l'elenco che hai appena chiesto.
+    val gridState = rememberLazyGridState()
+
     LaunchedEffect(selectedTabIndex, cardSearchQuery) {
         pendingSelectedCounts = emptyMap()
+        gridState.scrollToItem(0)
     }
 
     // deckUsableCards e non ownedCards: in un deck di prova la griglia deve
@@ -427,6 +543,17 @@ private fun DeckCardsStep(
             .distinctBy { viewModel.getCardKey(it) }
     }
 
+    // Le carte gia' nel deck in una sezione loro, in cima. Prima stavano
+    // sparse in ordine alfabetico in mezzo a tutta la collezione: per sapere
+    // cosa avevi messo dentro dovevi scorrere l'elenco intero cercando i
+    // pallini blu, e per toglierne una dovevi ritrovarla.
+    val cardsInDeck = remember(filteredCards, viewModel.selectedCardsIds) {
+        filteredCards.filter { viewModel.getQuantityInDeck(it) > 0 }
+    }
+    val cardsAvailable = remember(filteredCards, viewModel.selectedCardsIds) {
+        filteredCards.filter { viewModel.getQuantityInDeck(it) == 0 }
+    }
+
     val pendingTotal = pendingSelectedCounts.values.sum()
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -445,10 +572,15 @@ private fun DeckCardsStep(
                 Tab(
                     selected = selectedTabIndex == index,
                     onClick = { selectedTabIndex = index },
+                    // Altezza dichiarata invece che lasciata al default: il
+                    // bersaglio deve restare di 48dp anche quando la tastiera
+                    // comprime il pannello e l'etichetta e' corta.
+                    modifier = Modifier.height(48.dp),
                     text = {
                         Text(
                             text = title,
-                            fontSize = 12.sp,
+                            fontSize = 13.sp,
+                            maxLines = 1,
                             fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal
                         )
                     },
@@ -615,42 +747,83 @@ private fun DeckCardsStep(
             // Collezione e risultati online nella stessa griglia, sotto due
             // intestazioni: sono due sorgenti della stessa cosa, e come due
             // griglie affiancate si rubavano l'altezza a vicenda.
+            // Una cella sola, usata da tutte e due le sezioni: la regola su
+            // cosa fa il "meno" deve esistere in un posto solo, o le due
+            // sezioni finirebbero per comportarsi diversamente.
+            val cardCell: @Composable (PokemonCard) -> Unit = { card ->
+                val key = viewModel.getCardKey(card)
+                val inDeckCount = viewModel.getQuantityInDeck(card)
+                val totalOwned = viewModel.getTotalOwnedQuantity(card)
+                val availableToAdd = (totalOwned - inDeckCount).coerceAtLeast(0)
+                val pendingCount = pendingSelectedCounts[key] ?: 0
+
+                CardSelectionItem(
+                    card = card,
+                    inDeckCount = inDeckCount,
+                    totalOwned = totalOwned,
+                    isEditable = true,
+                    pendingSelectionCount = pendingCount,
+                    onAdd = {
+                        if (pendingCount < availableToAdd) {
+                            pendingSelectedCounts =
+                                pendingSelectedCounts + (key to (pendingCount + 1))
+                        }
+                    },
+                    onRemove = {
+                        // Prima si disfa quello che non e' ancora stato
+                        // confermato, poi si tocca il deck: altrimenti il
+                        // "meno" toglierebbe dal deck una carta mentre a
+                        // schermo c'e' ancora una selezione in attesa, e il
+                        // conto non tornerebbe con quello che si vede.
+                        if (pendingCount > 0) {
+                            pendingSelectedCounts = if (pendingCount == 1) {
+                                pendingSelectedCounts - key
+                            } else {
+                                pendingSelectedCounts + (key to (pendingCount - 1))
+                            }
+                        } else {
+                            // Solo una rimozione vera merita l'annulla: disfare
+                            // una selezione non ancora confermata non ha tolto
+                            // niente da nessuna parte.
+                            viewModel.removeCardFromDeck(card)?.let(onCardRemoved)
+                        }
+                    }
+                )
+            }
+
             LazyVerticalGrid(
-                columns = GridCells.Fixed(5),
+                // Quattro colonne e non cinque: a cinque la carta e' larga
+                // quanto un polpastrello, e questa griglia ora ha anche un
+                // comando per togliere da centrare.
+                columns = GridCells.Fixed(4),
+                state = gridState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (filteredCards.isNotEmpty()) {
+                if (cardsInDeck.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        GridSectionHeader(
+                            label = AppLocale.deckCardsInDeck,
+                            count = cardsInDeck.size
+                        )
+                    }
+                    items(cardsInDeck, key = { "deck_" + viewModel.getCardKey(it) }) { card ->
+                        cardCell(card)
+                    }
+                }
+
+                if (cardsAvailable.isNotEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         GridSectionHeader(
                             label = AppLocale.deckInYourCollection,
-                            count = filteredCards.size
+                            count = cardsAvailable.size
                         )
                     }
-                    items(filteredCards, key = { "owned_" + viewModel.getCardKey(it) }) { card ->
-                        val key = viewModel.getCardKey(card)
-                        val inDeckCount = viewModel.getQuantityInDeck(card)
-                        val totalOwned = viewModel.getTotalOwnedQuantity(card)
-                        val availableToAdd = (totalOwned - inDeckCount).coerceAtLeast(0)
-                        val pendingCount = pendingSelectedCounts[key] ?: 0
-
-                        CardSelectionItem(
-                            card = card,
-                            inDeckCount = inDeckCount,
-                            totalOwned = totalOwned,
-                            isEditable = true,
-                            pendingSelectionCount = pendingCount,
-                            onAdd = {
-                                if (pendingCount < availableToAdd) {
-                                    pendingSelectedCounts =
-                                        pendingSelectedCounts + (key to (pendingCount + 1))
-                                }
-                            },
-                            onRemove = { viewModel.removeCardFromDeck(card) }
-                        )
+                    items(cardsAvailable, key = { "owned_" + viewModel.getCardKey(it) }) { card ->
+                        cardCell(card)
                     }
                 }
 

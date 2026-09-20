@@ -113,6 +113,19 @@ class DeckLabViewModel : ViewModel() {
         private set
 
     /**
+     * La domanda su dove finiscono le carte ha gia' avuto una risposta.
+     *
+     * Dopo un import l'utente ha appena scelto in un dialog: rimettergli
+     * davanti lo stesso bivio nell'editor non e' un promemoria, e' la stessa
+     * domanda posta due volte -- e la seconda sembra poter cambiare qualcosa
+     * che invece e' gia' successo, perche' le carte a quel punto sono state
+     * create. Da qui in poi l'editor lo dice soltanto, e solo quando c'e'
+     * qualcosa di non ovvio da dire.
+     */
+    var isDeckCardSourceDecided by mutableStateOf(false)
+        private set
+
+    /**
      * Gli id delle carte solo-deck create durante questa sessione di modifica.
      *
      * Li teniamo a parte perche' [allCards] arriva da uno snapshot listener:
@@ -179,9 +192,9 @@ class DeckLabViewModel : ViewModel() {
      * Copie disponibili per chiave carta.
      *
      * getTotalOwnedQuantity filtrava l'intera lista posseduta costruendo una
-     * stringa chiave per ogni elemento. Veniva chiamata anche dentro gli item
-     * di una LazyVerticalGrid a 5 colonne, cioe' per ogni cella visibile a ogni
-     * frame durante lo scroll, e in un loop da addAllCopiesToDeck.
+     * stringa chiave per ogni elemento, e viene chiamata dentro gli item della
+     * griglia del selettore: una volta per ogni cella visibile a ogni frame
+     * durante lo scorrimento.
      */
     private val ownedQuantitiesByKey by derivedStateOf {
         deckUsableCards.groupingBy { getCardKey(it) }
@@ -329,8 +342,7 @@ class DeckLabViewModel : ViewModel() {
 
         if (!isEnergy(card)) {
             // Era ownedCards.find { } per ogni carta gia' nel deck, cioe'
-            // O(deck x possedute) a ogni tocco -- e addAllCopiesToDeck chiama
-            // questa funzione fino a 60 volte di fila.
+            // O(deck x possedute) a ogni tocco.
             val sameNameCount = selectedCardsIds.count { id ->
                 allCardsById[id]?.name == card.name
             }
@@ -355,41 +367,59 @@ class DeckLabViewModel : ViewModel() {
         }
     }
 
-    fun removeCardFromDeck(card: PokemonCard) {
+    /**
+     * Lo stato delle carte prima dell'ultima rimozione.
+     *
+     * Serve all'annulla: si rimette esattamente com'era invece di ricostruirlo
+     * riaggiungendo la carta. Riaggiungerla passerebbe di nuovo dai controlli
+     * di addCardToDeck -- copie possedute, limite di 4, tetto di 60 -- e
+     * un'operazione che deve solo disfare l'ultima potrebbe fallire, o far
+     * rientrare la carta in un'altra posizione. Copre anche le copertine,
+     * perche' togliere una carta puo' averne fatta cadere una.
+     */
+    private data class DeckRemovalUndo(
+        val cardIds: List<String>,
+        val coverUrls: List<String>
+    )
+
+    private var lastRemoval by mutableStateOf<DeckRemovalUndo?>(null)
+
+    /**
+     * Toglie una copia dal deck e restituisce il nome della carta tolta, o
+     * null se non c'era niente da togliere.
+     *
+     * Il nome torna al chiamante perche' e' lui a dover dire cosa e' appena
+     * successo: la rimozione non chiede conferma prima, la offre dopo con un
+     * annulla, che su un'azione reversibile costa un tocco invece di due.
+     */
+    fun removeCardFromDeck(card: PokemonCard): String? {
         val key = getCardKey(card)
         val idToRemove = selectedCardsIds.findLast { id ->
             cardIdToKeyMap[id] == key
-        }
-        
-        if (idToRemove != null) {
-            selectedCardsIds = selectedCardsIds - idToRemove
-            syncCoverImagesWithSelectedCards()
-            validationError = null
-            analyzeDeck()
-        }
+        } ?: return null
+
+        lastRemoval = DeckRemovalUndo(
+            cardIds = selectedCardsIds,
+            coverUrls = coverImageUrls
+        )
+
+        selectedCardsIds = selectedCardsIds - idToRemove
+        syncCoverImagesWithSelectedCards()
+        validationError = null
+        analyzeDeck()
+        return card.name
     }
 
-    fun addAllCopiesToDeck(card: PokemonCard) {
-        val before = selectedCardsIds.size
-        while (selectedCardsIds.size < 60) {
-            val previousSize = selectedCardsIds.size
-            addCardToDeck(card)
-            if (selectedCardsIds.size == previousSize) break
-        }
-        if (selectedCardsIds.size > before) {
-            validationError = null
-        }
-    }
+    /** Rimette il deck com'era prima dell'ultima rimozione. */
+    fun undoLastRemoval() {
+        val snapshot = lastRemoval ?: return
+        lastRemoval = null
 
-    fun removeAllCopiesFromDeck(card: PokemonCard) {
-        val key = getCardKey(card)
-        val remainingIds = selectedCardsIds.filterNot { id -> cardIdToKeyMap[id] == key }
-        if (remainingIds.size != selectedCardsIds.size) {
-            selectedCardsIds = remainingIds
-            syncCoverImagesWithSelectedCards()
-            validationError = null
-            analyzeDeck()
-        }
+        selectedCardsIds = snapshot.cardIds
+        coverImageUrls = snapshot.coverUrls
+        coverImageUrl = snapshot.coverUrls.firstOrNull().orEmpty()
+        validationError = null
+        analyzeDeck()
     }
 
     private fun analyzeDeck() {
@@ -525,7 +555,11 @@ class DeckLabViewModel : ViewModel() {
         importPlaceholderNames = emptyList()
         deckCardSource = DeckCardSource.COLLECTION
         isImportSourceChoicePending = false
+        isDeckCardSourceDecided = false
         sessionDeckOnlyCardIds = emptySet()
+        // Un annulla che risalisse a un deck precedente rimetterebbe dentro le
+        // carte di quello.
+        lastRemoval = null
         currentAnalysis = DeckAnalysis()
         validationError = null
     }
@@ -880,6 +914,7 @@ class DeckLabViewModel : ViewModel() {
      */
     fun applyImportCardSource(source: DeckCardSource, context: Context) {
         deckCardSource = source
+        isDeckCardSourceDecided = true
 
         val missing = importResult?.missingMetaDeckCards.orEmpty()
         if (missing.isEmpty()) {

@@ -50,6 +50,7 @@ fun DeckLabScreen(
 
     var showSheet by remember { mutableStateOf(false) }
     var showDiscardDeckDialog by remember { mutableStateOf(false) }
+    var showDeleteDeckDialog by remember { mutableStateOf(false) }
 
     /** C'e' del lavoro che uno swipe distruggerebbe. */
     fun hasDeckWork(): Boolean =
@@ -257,10 +258,10 @@ fun DeckLabScreen(
                             viewModel.prepareEdit(selectedDeck!!)
                             showSheet = true
                         },
-                        onDelete = {
-                            viewModel.deleteDeck(selectedDeck!!.id)
-                            selectedDeck = null
-                        },
+                        // Il cestino non esegue piu' da solo: cancellare un
+                        // deck non si annulla, e da quando esistono i deck di
+                        // prova si porta via anche le loro carte.
+                        onDelete = { showDeleteDeckDialog = true },
                         onDuplicate = {
                             if (premiumManager.canCreateDeck(viewModel.decks.size)) {
                                 viewModel.duplicateDeck(selectedDeck!!)
@@ -377,6 +378,62 @@ fun DeckLabScreen(
                     }
                 )
             }
+        }
+
+        val deckToDelete = selectedDeck
+        if (showDeleteDeckDialog && deckToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDeckDialog = false },
+                containerColor = AppColors.card,
+                title = {
+                    Text(
+                        text = AppLocale.deckDeleteTitle,
+                        color = AppColors.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = AppLocale.deckDeleteBody(deckToDelete.name),
+                            color = AppColors.textSecondary,
+                            fontSize = 13.sp
+                        )
+                        // Su un deck di prova si perde di piu' di quanto dica
+                        // il nome del deck: vale la pena scriverlo prima.
+                        if (deckToDelete.deckOnly) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = AppLocale.deckDeleteBodyTestDeck,
+                                color = AppColors.yellow,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    // Tenere il deck e' la scelta sicura, quindi ha il peso
+                    // visivo e sta dove il pollice arriva per primo.
+                    Button(
+                        onClick = { showDeleteDeckDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(AppLocale.cancel, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteDeckDialog = false
+                            viewModel.deleteDeck(deckToDelete.id)
+                            selectedDeck = null
+                        }
+                    ) {
+                        Text(AppLocale.delete, color = AppColors.red)
+                    }
+                }
+            )
         }
 
         if (showDiscardDeckDialog) {

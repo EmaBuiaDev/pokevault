@@ -114,11 +114,15 @@ fun CardSelectionItem(
             }
         }
 
+        // Le copie possedute stavano in alto a destra come il contatore del
+        // deck: quando una carta era nel deck ed erano avanzate delle copie, i
+        // due cerchi finivano uno sopra l'altro e non si leggeva ne' l'uno ne'
+        // l'altro. Qui sotto non si scontrano con niente.
         if (totalOwned > 1 && inDeckCount < totalOwned) {
             Surface(
                 color = Color.Black.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(bottomStart = 6.dp),
-                modifier = Modifier.align(Alignment.TopEnd)
+                shape = RoundedCornerShape(topStart = 6.dp),
+                modifier = Modifier.align(Alignment.BottomEnd)
             ) {
                 Text(
                     text = "x$totalOwned",
@@ -127,6 +131,37 @@ fun CardSelectionItem(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                 )
+            }
+        }
+
+        // Il modo per togliere. Prima `onRemove` era un parametro che nessun
+        // gesto invocava: si poteva solo aggiungere, e per correggere un errore
+        // bisognava buttare via il deck. E' una striscia larga quanto la carta
+        // invece di un pallino in un angolo, perche' su una griglia di celle da
+        // pochi dp un bersaglio piccolo si sbaglia piu' spesso di quanto si
+        // centri -- e sbagliarlo qui vuol dire aggiungere una copia invece di
+        // toglierla.
+        if (isEditable && (pendingSelectionCount > 0 || inDeckCount > 0)) {
+            Surface(
+                color = if (pendingSelectionCount > 0) {
+                    AppColors.yellow.copy(alpha = 0.92f)
+                } else {
+                    AppColors.blue.copy(alpha = 0.92f)
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(22.dp)
+                    .clickable(onClick = onRemove)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Remove,
+                        contentDescription = AppLocale.deckRemoveOneCopy,
+                        tint = if (pendingSelectionCount > 0) AppColors.textPrimary else Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
     }

@@ -417,6 +417,23 @@ object AppLocale {
     val deckSearchOnline: String get() = if (isItalian) "Cerca nei set online" else "Search online sets"
     val deckOnlineResults: String get() = if (isItalian) "Risultati online" else "Online results"
     val deckInYourCollection: String get() = if (isItalian) "Nella tua collezione" else "In your collection"
+    val deckCardsInDeck: String get() = if (isItalian) "Nel deck" else "In the deck"
+    val deckRemoveOneCopy: String get() = if (isItalian) "Togli una copia" else "Remove one copy"
+    fun deckCardRemoved(name: String): String = if (isItalian)
+        "$name tolta dal deck"
+    else
+        "$name removed from the deck"
+
+    // Cancellazione di un deck: prima non chiedeva niente
+    val deckDeleteTitle: String get() = if (isItalian) "Eliminare il deck?" else "Delete the deck?"
+    fun deckDeleteBody(name: String): String = if (isItalian)
+        "\"$name\" verra' eliminato. L'operazione non si puo' annullare."
+    else
+        "\"$name\" will be deleted. This cannot be undone."
+    val deckDeleteBodyTestDeck: String get() = if (isItalian)
+        "Le carte che tieni solo in questo deck di prova, e che nessun altro deck usa, verranno eliminate con lui."
+    else
+        "The cards you keep only in this test deck, and that no other deck uses, will be deleted with it."
     val deckNoCardsInCategory: String get() = if (isItalian)
         "Nessuna carta in questa categoria."
     else
