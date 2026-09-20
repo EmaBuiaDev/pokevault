@@ -1,0 +1,532 @@
+[
+ {
+  "numero": "1",
+  "nome": "Blaziken",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "2",
+  "nome": "Cresselia",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "3",
+  "nome": "Darkrai",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "4",
+  "nome": "Darkrai",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "5",
+  "nome": "Pachirisu",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "6",
+  "nome": "Porygon-Z",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "7",
+  "nome": "Rotom",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "8",
+  "nome": "Sceptile",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "9",
+  "nome": "Swampert",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "10",
+  "nome": "Tangrowth",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "11",
+  "nome": "Togekiss",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "12",
+  "nome": "Altaria",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "13",
+  "nome": "Beedrill",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "14",
+  "nome": "Butterfree",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "15",
+  "nome": "Claydol",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "16",
+  "nome": "Dialga",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "17",
+  "nome": "Exploud",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "18",
+  "nome": "Houndoom",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "19",
+  "nome": "Hypno",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "20",
+  "nome": "Kingler",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "21",
+  "nome": "Lapras",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "22",
+  "nome": "Latias",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "23",
+  "nome": "Latios",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "24",
+  "nome": "Mawile",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "25",
+  "nome": "Milotic",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "26",
+  "nome": "Palkia",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "27",
+  "nome": "Primeape",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "28",
+  "nome": "Slowking",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "29",
+  "nome": "Unown H",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "30",
+  "nome": "Wailord",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "31",
+  "nome": "Weezing",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "32",
+  "nome": "Wigglytuff",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "33",
+  "nome": "Arbok",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "34",
+  "nome": "Cacturne",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "35",
+  "nome": "Combusken",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "36",
+  "nome": "Delibird",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "37",
+  "nome": "Floatzel",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "38",
+  "nome": "Gorebyss",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "39",
+  "nome": "Granbull",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "40",
+  "nome": "Grovyle",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "41",
+  "nome": "Hariyama",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "42",
+  "nome": "Huntail",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "43",
+  "nome": "Linoone",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "44",
+  "nome": "Loudred",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "45",
+  "nome": "Magcargo",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "46",
+  "nome": "Marshtomp",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "47",
+  "nome": "Metapod",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "48",
+  "nome": "Pelipper",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "49",
+  "nome": "Porygon2",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "50",
+  "nome": "Purugly",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "51",
+  "nome": "Relicanth",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "52",
+  "nome": "Seviper",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "53",
+  "nome": "Skarmory",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "54",
+  "nome": "Slowbro",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "55",
+  "nome": "Togetic",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "56",
+  "nome": "Unown F",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "57",
+  "nome": "Unown G",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "58",
+  "nome": "Wailmer",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "59",
+  "nome": "Zangoose",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "60",
+  "nome": "Baltoy",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "61",
+  "nome": "Buizel",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "62",
+  "nome": "Cacnea",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "63",
+  "nome": "Caterpie",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "64",
+  "nome": "Clamperl",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "65",
+  "nome": "Drowzee",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "66",
+  "nome": "Ekans",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "67",
+  "nome": "Feebas",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "68",
+  "nome": "Glameow",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "69",
+  "nome": "Houndour",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "70",
+  "nome": "Igglybuff",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "71",
+  "nome": "Illumise",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "72",
+  "nome": "Jigglypuff",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "73",
+  "nome": "Kakuna",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "74",
+  "nome": "Koffing",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "75",
+  "nome": "Krabby",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "76",
+  "nome": "Lunatone",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "77",
+  "nome": "Luvdisc",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "78",
+  "nome": "Makuhita",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "79",
+  "nome": "Mankey",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "80",
+  "nome": "Mudkip",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "81",
+  "nome": "Porygon",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "82",
+  "nome": "Slowpoke",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "83",
+  "nome": "Slugma",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "84",
+  "nome": "Snubbull",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "85",
+  "nome": "Solrock",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "86",
+  "nome": "Swablu",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "87",
+  "nome": "Tangela",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "88",
+  "nome": "Togepi",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "89",
+  "nome": "Torchic",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "90",
+  "nome": "Treecko",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "91",
+  "nome": "Unown L",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "92",
+  "nome": "Volbeat",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "93",
+  "nome": "Weedle",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "94",
+  "nome": "Whismur",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "95",
+  "nome": "Wingull",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "96",
+  "nome": "Zigzagoon",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "97",
+  "nome": "Monetamuleto",
+  "fonte": "carta"
+ },
+ {
+  "numero": "98",
+  "nome": "Estrazione di Felicity",
+  "fonte": "carta"
+ },
+ {
+  "numero": "99",
+  "nome": "Avanzi",
+  "fonte": "carta"
+ },
+ {
+  "numero": "100",
+  "nome": "Stadio della Luce Lunare",
+  "fonte": "carta"
+ },
+ {
+  "numero": "101",
+  "nome": "Premier Ball",
+  "fonte": "carta"
+ },
+ {
+  "numero": "102",
+  "nome": "Caramella Rara",
+  "fonte": "carta"
+ },
+ {
+  "numero": "103",
+  "nome": "Cresselia",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "104",
+  "nome": "Darkrai",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "105",
+  "nome": "Dialga",
+  "fonte": "tcgdex-en"
+ },
+ {
+  "numero": "106",
+  "nome": "Palkia",
+  "fonte": "tcgdex-en"
+ }
+]
