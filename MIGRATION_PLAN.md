@@ -339,6 +339,21 @@ Tutti i 5 punti sopra completati, committati (`a9e58c1`) e deployati in produzio
 
 **Prossimo passo naturale in M4.6**: rimuovere `resolveItalianCardRarity()` (ora ridondante nella stragrande maggioranza dei casi) e valutare se la glue ITA->ENG (`getEnglishBaseCardForItalianOverlay`, `loadStandardCardsForSet`) serve ancora per altro (supertype/subtypes) prima di procedere al punto 2 della sequenza M4.6 (ripuntare DeckLab/Album Obiettivo sulla ricerca ITA).
 
+#### Ripreso il 2026-09-21: il backfill non era una cosa sola, era la prima
+
+Segnalazione utente: nel Pokedex troppe carte mostrano le due stelle verdi, cioe' il ramo `else` di `RarityUtils.getRarityInfo()` — il cestino delle stringhe che non riconosciamo. Misurato sul catalogo vivo: **3.102 carte su 18.815 (16,5%)** finivano li'.
+
+La causa non era l'app: dal 08/09 sono entrate ~3.300 carte nuove (topup, `dp4`, `bw10`, i 25 set pre-DP dal wiki, il 30°) e **nessun import scrive la rarita'**, quindi ogni set nuovo nasce bucato. Il backfill va quindi trattato come ricorrente, non come una tantum: `backfill-rarity-tcgdex.mjs` ha adesso un flag **`--only-missing`** che legge da D1 solo le carte con `rarity` vuota e, con `--all`, visita solo le espansioni che ne hanno (senza, un giro completo sono 18.815 chiamate TCGdex per coprirne 3.050, ognuna un'occasione di sovrascrivere un valore giusto).
+
+Risultato: **2.999 carte da TCGdex** (38 set, 98,3%) piu' 49 chiuse a mano in `fix-rarity-residui.sql` (`det` e `mep` sono set interamente promo; `cel25c` ha rarita' unica `Classic Collection`; quattro Aquapolis dal wiki italiano; la Litografia d'Alfa, che TCGdex numera `TWO` e non 96). Restano scoperte **2 carte**: `bw1 PIKA` e `rsv10pt5 173`, che a monte non esistono.
+
+Due cose imparate, utili al prossimo giro:
+
+- **TCGdex appiattisce le holo dei set storici.** Charizard del Set Base e' `Rare`, non `Rare Holo`. Confronto misurato su 1.657 schede del wiki italiano gia' scaricate (`pokevault-wiki-import/schede/`): coincidono al 72%, e le differenze sono quasi tutte TCGdex meno preciso (280 `Rare Holo`, 36 `Rare Holo ex`, 22 Shining/Super ridotte a `Rare`). Scelta dell'utente: TCGdex comunque, la precisione holo non vale un secondo importatore. Il materiale wiki resta li' se un giorno si cambia idea.
+- **Le UPDATE mirate vanno per `expansion_id` + `card_number`, mai per `card_id`**: i set arrivati dal wiki hanno l'immagine in `.webp`, quelli storici in `.png`, e indovinare l'estensione fa fallire l'UPDATE **in silenzio** (zero righe scritte, nessun errore).
+
+Il verde passa cosi' da 3.102 carte a **109 (0,6%)**, che non sono piu' un buco di dati ma un buco di vocabolario nell'app: `None` (39, `xy0`: TCGdex risponde letteralmente cosi'), `Pikachu Rare` (30, rarita' vera del 30°), `Classic Collection` (25), piu' le 13 stringhe italiane lasciate dai topup XY (`Segreto rara`, `Ultrarara`, `Nessuna`). Le prime tre vanno insegnate a `RarityUtils`, le ultime normalizzate in D1.
+
 ### Pokedex "confusionario" — segnalazione utente 2026-09-08, stessa causa architetturale
 
 Dopo il fix rarita', l'utente ha chiesto di sistemare il Pokedex: espansioni ordinate/raggruppate male e che "si muovono" durante lo scroll, loghi assenti su parecchie espansioni, Buio Pesto (me05) apparentemente non presente. Analisi: **stessa identica causa strutturale della rarita'** — data di uscita e logo dei set ITA venivano anche loro "presi in prestito" dal set base ENG a runtime, con lo stesso tasso di fallimento.
