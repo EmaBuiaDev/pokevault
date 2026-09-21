@@ -823,6 +823,7 @@ type D1CardRow = {
   attacchi_json: string;
   rarity: string | null;
   stage: string | null;
+  illustratore: string | null;
 };
 
 // Shared row -> payload mapping, used by both /ita/catalog.json (buildCatalogJsonFromD1)
@@ -842,6 +843,10 @@ function mapCardRow(r: D1CardRow) {
     // Lo stadio evolutivo (schema/009): e' il campo con cui l'app distingue un
     // Pokemon che si puo' calare in campo dalla mano da uno che va evoluto.
     stage: r.stage,
+    // Omesso quando manca invece di serializzare null: lo ha solo il catalogo
+    // storico preso dal wiki, e /ita/catalog.json porta sedicimila carte --
+    // una chiave nulla per ognuna sarebbe peso puro per ogni client.
+    ...(r.illustratore ? { illustratore: r.illustratore } : {}),
   };
 }
 
@@ -849,7 +854,7 @@ async function buildCatalogJsonFromD1(db: D1Database): Promise<string | null> {
   try {
     const { results } = await db
       .prepare(
-        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage
+        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage, c.illustratore
          FROM cards c JOIN expansions e ON e.id = c.expansion_id
          WHERE e.published = 1`
       )
@@ -2007,7 +2012,7 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
     // /v1/expansions listing.
     const { results } = await db
       .prepare(
-        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage
+        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage, c.illustratore
          FROM cards c JOIN expansions e ON e.id = c.expansion_id
          WHERE c.expansion_id = ?1 AND e.published = 1
            AND NOT EXISTS (
