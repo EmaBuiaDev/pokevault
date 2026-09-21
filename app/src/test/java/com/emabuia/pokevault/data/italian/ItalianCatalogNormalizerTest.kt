@@ -105,4 +105,28 @@ class ItalianCatalogNormalizerTest {
     fun parseExpansionCardsResponse_blankInputReturnsEmptyList() {
         assertEquals(emptyList<ItalianCardRecord>(), ItalianCatalogNormalizer.parseExpansionCardsResponse("  "))
     }
+
+    /**
+     * "30 Anniversario Collezione Classica" e' il primo set il cui codice porta
+     * un trattino (30TH-C, imposto dall'archivio ufficiale). Se il cardId non
+     * viene riconosciuto non fallisce niente: l'immagine finisce su un URL
+     * costruito col nome del file al posto del numero, e il numero carta
+     * diventa Int.MAX_VALUE, cioe' il set si ordina alfabeticamente.
+     */
+    @Test
+    fun toImageReference_reggeIlTrattinoNelCodiceSet() {
+        val ref = ItalianCatalogNormalizer.toImageReference("30TH-C_IT_1.png")
+        assertEquals("30TH-C", ref?.setCode)
+        assertEquals("1", ref?.cardNumber)
+
+        // I codici senza trattino continuano a comportarsi come prima, padding
+        // del numero compreso.
+        val storico = ItalianCatalogNormalizer.toImageReference("DP1_IT_007.png")
+        assertEquals("DP1", storico?.setCode)
+        assertEquals("7", storico?.cardNumber)
+
+        // E le promo numerate a lettere restano tali, non diventano numeri.
+        val promo = ItalianCatalogNormalizer.toImageReference("SWSHP_IT_SWSH026.png")
+        assertEquals("SWSH026", promo?.cardNumber)
+    }
 }

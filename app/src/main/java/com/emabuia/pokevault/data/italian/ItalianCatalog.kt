@@ -122,8 +122,14 @@ object ItalianCatalogNormalizer {
     private val expansionCardsResponseType = object : TypeToken<ItalianExpansionCardsResponse>() {}.type
     private val expansionsResponseType = object : TypeToken<ItalianExpansionsResponse>() {}.type
     private const val UTF8_BOM = "\uFEFF"
+    // Il trattino nel codice set serve da "30TH-C" (30 Anniversario Collezione
+    // Classica), il primo set il cui codice non e' solo lettere e cifre: senza,
+    // `30TH-C_IT_1.png` non combacia, `toImageReference` torna null e da li' in
+    // poi va storto tutto in silenzio -- l'immagine finisce su un URL
+    // malformato e il numero carta diventa Int.MAX_VALUE, cioe' le carte del
+    // set si ordinano alfabeticamente (1, 10, 11, 2...).
     private val imageIdRegex = Regex(
-        "^([A-Za-z0-9]+)_IT_([A-Za-z0-9_]+)\\.(png|webp|jpe?g)$",
+        "^([A-Za-z0-9-]+)_IT_([A-Za-z0-9_]+)\\.(png|webp|jpe?g)$",
         RegexOption.IGNORE_CASE
     )
 

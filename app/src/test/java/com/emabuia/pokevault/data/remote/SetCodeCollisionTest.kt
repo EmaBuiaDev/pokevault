@@ -25,6 +25,22 @@ class SetCodeCollisionTest {
         )
     }
 
+    /**
+     * "30 Anniversario" e "30 Anniversario Collezione Classica" sono usciti lo
+     * stesso giorno e il codice del secondo comincia col primo, quindi basta
+     * un taglio al trattino di troppo per far uscire dall'import la carta
+     * dell'altro set: la 1 del 30° e' Exeggcute, la 1 della Classica e'
+     * Charizard.
+     */
+    @Test
+    fun testTrentesimoENonLaSuaCollezioneClassica() {
+        assertNotEquals(
+            "il 30° e la sua Collezione Classica sono due espansioni diverse",
+            code("30TH")?.lowercase(),
+            code("30TH-C")?.lowercase()
+        )
+    }
+
     @Test
     fun testBlackBoltENonWhiteFlare() {
         assertNotEquals(
@@ -71,7 +87,10 @@ class SetCodeCollisionTest {
             "TEF", "SV05", "TWM", "SV06", "SCR", "SV07", "SSP", "SV08",
             "JTG", "SV09", "DRI", "SV10", "CRI", "ME04", "POR", "ME03",
             "ASC", "ME2PT5", "MEG", "MEP", "ME01", "ME02", "PFL",
-            "BLK", "WHT", "PRE", "SFA", "MEW", "PAF"
+            "BLK", "WHT", "PRE", "SFA", "MEW", "PAF",
+            // Il 30° e la sua Collezione Classica: il secondo codice comincia
+            // col primo, che e' la forma in cui la collisione si presenta.
+            "30TH", "30TH-C"
         )
 
         for (a in codici) {
