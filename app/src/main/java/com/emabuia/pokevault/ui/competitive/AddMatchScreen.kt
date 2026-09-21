@@ -95,12 +95,12 @@ fun AddMatchScreen(
             // ── Risultato ──
             SectionLabel(AppLocale.matchResult)
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 ResultButton("W", AppLocale.matchWin, AppColors.green, viewModel.matchResult == "W", { viewModel.matchResult = "W" }, Modifier.weight(1f))
                 ResultButton("L", AppLocale.matchLoss, AppColors.red, viewModel.matchResult == "L", { viewModel.matchResult = "L" }, Modifier.weight(1f))
-                ResultButton("T", AppLocale.matchTie, AppColors.yellow, viewModel.matchResult == "T", { viewModel.matchResult = "T" }, Modifier.weight(1f))
+                ResultButton("T", AppLocale.matchTie, AppColors.orange, viewModel.matchResult == "T", { viewModel.matchResult = "T" }, Modifier.weight(1f))
             }
 
             // ── Turno ──
@@ -285,7 +285,7 @@ private fun ResultButton(
 ) {
     Box(
         modifier = modifier
-            .height(56.dp)
+            .height(48.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(if (isSelected) color.copy(alpha = 0.2f) else AppColors.card)
             .border(
@@ -296,9 +296,29 @@ private fun ResultButton(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(code, color = if (isSelected) color else AppColors.textSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-            Text(label, color = if (isSelected) color else AppColors.textMuted, fontSize = 10.sp)
+        // lineHeight esplicito e spacedBy(1.dp): coi default le due righe si
+        // allontanano abbastanza da far sembrare il bottone sbilanciato.
+        // "Sconfitta" e' la parola piu' lunga e su un terzo di larghezza sta
+        // al limite: una riga sola, e se non entra si accorcia.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
+            Text(
+                code,
+                color = if (isSelected) color else AppColors.textSecondary,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 14.sp,
+                lineHeight = 16.sp
+            )
+            Text(
+                label,
+                color = if (isSelected) color else AppColors.textMuted,
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
