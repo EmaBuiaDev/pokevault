@@ -37,6 +37,15 @@ data class SetDetailUiState(
     val set: TcgSet? = null,
     val cards: List<TcgCard> = emptyList(),
     val ownedCardIds: Set<String> = emptySet(),
+    /**
+     * Le varianti possedute di ogni carta (id carta -> "Normal", "Reverse"...).
+     *
+     * `ownedCardIds` dice solo che la carta c'e': per sapere *quale* stampa si
+     * ha bisognava aprire il dettaglio. La griglia la usa per i badge sulla
+     * miniatura. Arriva dalla stessa lista di `ownedCardIds`, in una passata
+     * sola, quindi non costa una lettura in piu'.
+     */
+    val ownedVariants: Map<String, Set<String>> = emptyMap(),
     val isLoading: Boolean = true,
     val isLoadingCards: Boolean = true,
     val isAddingCard: String? = null,
@@ -436,7 +445,18 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                         .filter { it.isNotBlank() && it in currentCardIds }
                         .toSet()
 
-                    uiState = uiState.copy(ownedCardIds = ownedIds)
+                    // Stessa lista, stessa passata: raggruppa le varianti per
+                    // carta cosi' la griglia puo' mostrarle senza aprire il
+                    // dettaglio. Le copie doppie della stessa variante
+                    // collassano, al badge interessa esserci o no.
+                    val ownedVariants = ownedCards
+                        .asSequence()
+                        .filter { it.apiCardId.isNotBlank() && it.apiCardId in currentCardIds }
+                        .filter { it.variant.isNotBlank() }
+                        .groupBy({ it.apiCardId }, { it.variant })
+                        .mapValues { (_, variants) -> variants.toSet() }
+
+                    uiState = uiState.copy(ownedCardIds = ownedIds, ownedVariants = ownedVariants)
                 }
         }
     }
@@ -504,7 +524,11 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 .onSuccess {
                     uiState = uiState.copy(
                         successMessage = "${tcgCard.name} aggiunta!",
-                        ownedCardIds = uiState.ownedCardIds + tcgCard.id
+                        ownedCardIds = uiState.ownedCardIds + tcgCard.id,
+                        // Il badge della variante deve comparire subito: il
+                        // flusso Firestore arriva un attimo dopo e riscrive lo
+                        // stesso valore.
+                        ownedVariants = uiState.ownedVariants.withVariant(tcgCard.id, variant)
                     )
                     // Keep highlight visible briefly so feedback is noticeable.
                     delay(350)
@@ -522,7 +546,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             val preparedCards = cards.map { tcgCard ->
                 val availableVariants = CardOptions.getVariantsForCard(
-                    tcgCard.tcgplayer?.prices?.keys ?: emptySet(), tcgCard.rarity
+                    tcgCard.tcgplayer?.prices?.keys ?: emptySet(), tcgCard.rarity, tcgCard.set?.releaseDate
                 )
                 val actualVariant = if (preferredVariant in availableVariants) preferredVariant
                     else availableVariants.firstOrNull() ?: "Holo"
@@ -544,7 +568,15 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
             val addedIds = preparedCards.map { it.apiCardId }.toSet()
             val originalOwnedIds = uiState.ownedCardIds
-            uiState = uiState.copy(ownedCardIds = originalOwnedIds + addedIds)
+            val originalOwnedVariants = uiState.ownedVariants
+            var optimisticVariants = originalOwnedVariants
+            for (prepared in preparedCards) {
+                optimisticVariants = optimisticVariants.withVariant(prepared.apiCardId, prepared.variant)
+            }
+            uiState = uiState.copy(
+                ownedCardIds = originalOwnedIds + addedIds,
+                ownedVariants = optimisticVariants
+            )
 
             firestoreRepository.addCards(preparedCards)
                 .onSuccess {
@@ -555,6 +587,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 .onFailure {
                     uiState = uiState.copy(
                         ownedCardIds = originalOwnedIds,
+                        ownedVariants = originalOwnedVariants,
                         errorMessage = "Errore"
                     )
                 }
@@ -666,4 +699,16 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
     }
+}
+
+/**
+ * Aggiunge una variante alla mappa delle possedute senza toccare le altre.
+ *
+ * Serve all'aggiornamento ottimistico: la carta appena aggiunta deve mostrare
+ * subito il suo badge, e una carta puo' averne piu' d'una (Normale *e*
+ * Reverse), quindi non basta sostituire la voce.
+ */
+private fun Map<String, Set<String>>.withVariant(cardId: String, variant: String): Map<String, Set<String>> {
+    if (cardId.isBlank() || variant.isBlank()) return this
+    return this + (cardId to ((this[cardId] ?: emptySet()) + variant))
 }

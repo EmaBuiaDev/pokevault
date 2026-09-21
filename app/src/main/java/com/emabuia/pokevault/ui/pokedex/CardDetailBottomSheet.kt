@@ -66,7 +66,7 @@ fun CardDetailBottomSheet(
 
     // Varianti disponibili (API + fallback per rarità)
     val availableVariants = remember(card) {
-        CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity)
+        CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity, card.set?.releaseDate)
     }
     val resolvedLanguageOptions = remember(languageOptions) {
         languageOptions.distinct().ifEmpty { CardOptions.LANGUAGES }

@@ -38,7 +38,9 @@ import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.model.collectionCardKey
 import com.emabuia.pokevault.data.model.collectionGroupKey
+import com.emabuia.pokevault.ui.components.CardVariants
 import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.ui.navigation.sharedCardImage
@@ -182,9 +184,19 @@ fun CardDetailScreen(
                 }
             }.onFailure {
                 repository.getCards().first().let { allCards ->
-                    val found = allCards.filter {
-                        it.collectionGroupKey() == cardId || it.apiCardId == cardId || it.id == cardId
-                    }
+                    // `collectionCardKey` e' la chiave con cui la collezione
+                    // apre una tessera: raccoglie tutte le stampe della carta,
+                    // che la schermata sa gia' elencare una per riga con la
+                    // sua quantita'. Le altre due forme restano per chi arriva
+                    // qui con l'id del documento o della carta a catalogo.
+                    val found = allCards
+                        .filter {
+                            it.collectionGroupKey() == cardId ||
+                                it.collectionCardKey() == cardId ||
+                                it.apiCardId == cardId ||
+                                it.id == cardId
+                        }
+                        .sortedBy { CardVariants.order(it.variant) }
                     variants = found
                     editedQuantities = found.associate { it.id to it.quantity }
                 }

@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,7 +55,10 @@ import com.emabuia.pokevault.ui.wishlist.WishlistEditorDialog
 import com.emabuia.pokevault.ui.wishlist.WishlistPickerDialog
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ImageUrlUtils
+import com.emabuia.pokevault.ui.components.CardImageSkeleton
+import com.emabuia.pokevault.ui.components.OwnedVariantBadges
 import com.emabuia.pokevault.ui.components.RaritySymbolIcon
+import com.emabuia.pokevault.ui.components.VariantChoiceChip
 import com.emabuia.pokevault.util.RarityInfo
 import com.emabuia.pokevault.util.RarityUtils
 import com.emabuia.pokevault.viewmodel.SetDetailViewModel
@@ -318,6 +322,14 @@ fun SetDetailScreen(
         }
     }
 
+    // La stessa chiave che la griglia da' alle celle, per risalire dalla cella
+    // toccata alla carta durante la selezione a trascinamento. Calcolata una
+    // volta per lista invece che a ogni evento di drag, che su un set da 250
+    // carte sarebbe una scansione lineare per ogni pixel percorso dal dito.
+    val cardsByGridKey = remember(displayedCards) {
+        displayedCards.associateBy { "${it.id}_${it.number}" as Any }
+    }
+
     val rarityCounts = remember(state.cards, state.ownedCardIds) {
         state.cards.groupBy { RarityUtils.getRarityInfo(it.rarity) }
             .mapValues { (_, cards) -> Pair(cards.count { it.id in state.ownedCardIds }, cards.size) }
@@ -438,18 +450,28 @@ fun SetDetailScreen(
                     ),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.pointerInput(sortedCards.size, state.viewMode) {
+                    modifier = Modifier.pointerInput(cardsByGridKey, state.viewMode) {
                         if (state.viewMode == "grid") {
-                            val headerCount = 4
+                            // La carta si trova per la chiave dell'elemento, non
+                            // contando gli header: erano quattro e il conto
+                            // tornava, ma bastava aggiungerne uno perche' il
+                            // trascinamento selezionasse la carta sbagliata di
+                            // una riga, senza che niente segnalasse l'errore.
+                            fun cardAt(position: Offset): TcgCard? {
+                                val item = gridState.layoutInfo.visibleItemsInfo.find { info ->
+                                    position.x.toInt() in info.offset.x until (info.offset.x + info.size.width) &&
+                                        position.y.toInt() in info.offset.y until (info.offset.y + info.size.height)
+                                } ?: return null
+                                return cardsByGridKey[item.key]
+                            }
+
                             detectDragGesturesAfterLongPress(
                                 onDragStart = { offset ->
-                                    val item = gridState.layoutInfo.visibleItemsInfo.find { info ->
-                                        offset.x.toInt() in info.offset.x until (info.offset.x + info.size.width) &&
-                                        offset.y.toInt() in info.offset.y until (info.offset.y + info.size.height)
-                                    }
-                                    val cardIndex = (item?.index ?: -1) - headerCount
-                                    val card = displayedCards.getOrNull(cardIndex)
+                                    val card = cardAt(offset)
                                     if (card != null) {
+                                        // L'aptica la dava il long press della
+                                        // cella, che ora non c'e' piu'.
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         isSelectionMode = true
                                         selectedCardIds = selectedCardIds + card.id
                                     }
@@ -457,13 +479,12 @@ fun SetDetailScreen(
                                 onDrag = { change, _ ->
                                     if (isSelectionMode) {
                                         change.consume()
-                                        val item = gridState.layoutInfo.visibleItemsInfo.find { info ->
-                                            change.position.x.toInt() in info.offset.x until (info.offset.x + info.size.width) &&
-                                            change.position.y.toInt() in info.offset.y until (info.offset.y + info.size.height)
-                                        }
-                                        val cardIndex = (item?.index ?: -1) - headerCount
-                                        val card = displayedCards.getOrNull(cardIndex)
+                                        val card = cardAt(change.position)
                                         if (card != null && card.id !in selectedCardIds) {
+                                            // Un tocco corto a ogni carta che
+                                            // entra: senza, trascinando non si
+                                            // capisce quante se ne sono prese.
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             selectedCardIds = selectedCardIds + card.id
                                         }
                                     }
@@ -741,6 +762,7 @@ fun SetDetailScreen(
                                     isPopupOpen = quickAddCard?.id == card.id,
                                     isSelected = card.id in selectedCardIds,
                                     isSelectionMode = isSelectionMode,
+                                    ownedVariants = state.ownedVariants[card.id].orEmpty(),
                                     onClick = {
                                         if (isSelectionMode) {
                                             selectedCardIds = if (card.id in selectedCardIds) selectedCardIds - card.id else selectedCardIds + card.id
@@ -749,16 +771,15 @@ fun SetDetailScreen(
                                             selectedCard = card
                                         }
                                     },
-                                    onLongClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        isSelectionMode = true
-                                        selectedCardIds = selectedCardIds + card.id
-                                    },
+                                    // Niente long press qui: lo gestisce il
+                                    // contenitore della griglia insieme al
+                                    // trascinamento, vedi il pointerInput sopra.
+                                    onLongClick = null,
                                     onQuickAddClick = {
                                         if (!isSelectionMode) {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             val variants = CardOptions.getVariantsForCard(
-                                                card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity
+                                                card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity, card.set?.releaseDate
                                             )
                                             if (variants.size <= 1) {
                                                 viewModel.addCardWithDetails(card, variants.firstOrNull() ?: "Holo", 1, "Near Mint", collectionLanguage)
@@ -795,6 +816,7 @@ fun SetDetailScreen(
                                     card = card,
                                     isOwned = card.id in state.ownedCardIds,
                                     isWishlisted = wishlistViewModel.isCardWishlisted(card.id),
+                                    ownedVariants = state.ownedVariants[card.id].orEmpty(),
                                     onClick = { selectedCard = card },
                                     onWishlistClick = {
                                         val wishlists = wishlistViewModel.wishlists
@@ -877,13 +899,22 @@ fun ShimmerCardPlaceholder(modifier: Modifier = Modifier) {
         ),
         label = "shimmerAlpha"
     )
+    // Lo stesso fondo delle carte che stanno per arrivare, con un velo che
+    // pulsa sopra: prima era un rettangolo bianco lampeggiante, che non
+    // somigliava a niente di quello che poi compariva al suo posto.
     Box(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(0.72f)
             .clip(RoundedCornerShape(10.dp))
-            .background(Color.White.copy(alpha = alpha))
-    )
+    ) {
+        CardImageSkeleton()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White.copy(alpha = alpha * 0.5f))
+        )
+    }
 }
 
 @Composable
@@ -1149,14 +1180,15 @@ fun TcgCardCompactItem(
     isPopupOpen: Boolean = false,
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
+    ownedVariants: Set<String> = emptySet(),
     onClick: () -> Unit,
-    onLongClick: () -> Unit = {},
+    onLongClick: (() -> Unit)? = null,
     onQuickAddClick: () -> Unit,
     onWishlistClick: () -> Unit,
     onVariantSelected: (String) -> Unit = {}
 ) {
-    val variantOptions = remember(card.tcgplayer?.prices?.keys, card.rarity) {
-        CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity)
+    val variantOptions = remember(card.tcgplayer?.prices?.keys, card.rarity, card.set?.releaseDate) {
+        CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity, card.set?.releaseDate)
     }
     var currentImageUrl by remember(card.id, card.images.small, card.images.large) {
         mutableStateOf(card.images.small.ifBlank { card.images.large })
@@ -1181,9 +1213,26 @@ fun TcgCardCompactItem(
                     else -> Modifier
                 }
             )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            // `combinedClickable` solo dove serve davvero il long press (la
+            // vista lista). Nella griglia il long press lo gestisce il
+            // contenitore insieme al trascinamento: averlo anche qui faceva
+            // due gestori per lo stesso gesto, la cella lo consumava per
+            // prima e la selezione a trascinamento partiva a intermittenza.
+            .then(
+                if (onLongClick != null) {
+                    Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                } else {
+                    Modifier.clickable(onClick = onClick)
+                }
+            )
         ) {
             if (!imageLoadFailed && currentImageUrl.isNotBlank()) {
+                // Il fondo sta sotto, non dentro l'immagine: cosi' resta
+                // visibile mentre l'immagine arriva e la dissolvenza lo copre.
+                // Mettendolo come `.background()` dell'AsyncImage si vedeva
+                // solo un rettangolo pieno.
+                CardImageSkeleton(number = card.number)
+
                 // Vedi la nota in TcgCardListRow: SubcomposeAsyncImage costava
                 // tre subcomposition per cella, qui moltiplicate per l'intera
                 // griglia del set.
@@ -1191,9 +1240,7 @@ fun TcgCardCompactItem(
                     model = remember(currentImageUrl) { ImageUrlUtils.safeImageUrl(currentImageUrl) },
                     contentDescription = card.name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(AppColors.surface),
+                    modifier = Modifier.fillMaxSize(),
                     onSuccess = {
                         isImageAvailable = true
                         imageLoadFailed = false
@@ -1254,15 +1301,26 @@ fun TcgCardCompactItem(
                 }
             }
 
-            // Owned badge (top-right)
+            // In alto a destra: quali stampe si hanno, non solo che si ha la
+            // carta. Le collezioni vecchie possono non avere la variante
+            // salvata, e li' resta la spunta di prima.
             if (isOwned && !isSelectionMode) {
-                Box(modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(4.dp)
-                    .size(18.dp)
-                    .clip(CircleShape)
-                    .background(AppColors.green), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(12.dp))
+                if (ownedVariants.isNotEmpty()) {
+                    OwnedVariantBadges(
+                        variants = ownedVariants,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                    )
+                } else {
+                    Box(modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(AppColors.green), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(12.dp))
+                    }
                 }
             }
 
@@ -1273,46 +1331,27 @@ fun TcgCardCompactItem(
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
                 .padding(horizontal = 6.dp, vertical = 5.dp)
             ) {
+                // La scelta della stampa sta *sopra* la riga del nome, non al
+                // suo posto: cosi' il tasto aggiungi e il cuore restano
+                // raggiungibili anche mentre si sceglie.
                 if (isPopupOpen) {
-                    // Inline variant pills
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(3.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         variantOptions.forEach { variant ->
-                            val label = when (variant) {
-                                "Normal" -> "Norm"
-                                "Reverse" -> "Rev"
-                                "1st Edition Holo" -> "1st H"
-                                "1st Edition" -> "1st"
-                                "Unlimited Holo" -> "Unl H"
-                                else -> variant.take(5)
-                            }
-                            Text(
-                                text = label,
-                                color = AppColors.textPrimary,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(AppColors.blue.copy(alpha = 0.7f))
-                                    .clickable { onVariantSelected(variant) }
-                                    .padding(vertical = 6.dp)
-                            )
+                            VariantChoiceChip(
+                                variant = variant,
+                                alreadyOwned = variant in ownedVariants,
+                                modifier = Modifier.weight(1f)
+                            ) { onVariantSelected(variant) }
                         }
-                        Icon(
-                            Icons.Default.Close, null,
-                            tint = AppColors.textMuted,
-                            modifier = Modifier
-                                .size(16.dp)
-                                .clip(CircleShape)
-                                .clickable { onQuickAddClick() }
-                        )
                     }
-                } else {
+                }
+
                     // Card name + price + actions inside card
                     Column(modifier = Modifier.fillMaxWidth()) {
                         if (isSelectionMode) {
@@ -1420,10 +1459,17 @@ fun TcgCardCompactItem(
                                                     strokeWidth = 1.5.dp
                                                 )
                                             } else {
+                                                // Con la scelta della stampa
+                                                // aperta lo stesso tasto la
+                                                // chiude, e l'icona lo dice.
                                                 Icon(
-                                                    Icons.Default.Add,
+                                                    if (isPopupOpen) Icons.Default.Close else Icons.Default.Add,
                                                     null,
-                                                    tint = if (isOwned) AppColors.textMuted.copy(alpha = 0.5f) else Color.White,
+                                                    tint = when {
+                                                        isPopupOpen -> Color.White
+                                                        isOwned -> AppColors.textMuted.copy(alpha = 0.5f)
+                                                        else -> Color.White
+                                                    },
                                                     modifier = Modifier.size(13.dp)
                                                 )
                                             }
@@ -1433,7 +1479,6 @@ fun TcgCardCompactItem(
                             }
                         }
                     }
-                }
             }
         }
     }
@@ -1444,6 +1489,7 @@ fun TcgCardListRow(
     card: TcgCard,
     isOwned: Boolean,
     isWishlisted: Boolean,
+    ownedVariants: Set<String> = emptySet(),
     onClick: () -> Unit,
     onWishlistClick: () -> Unit
 ) {
@@ -1468,18 +1514,19 @@ fun TcgCardListRow(
             .height(63.dp)
             .clip(RoundedCornerShape(6.dp))) {
             if (!imageLoadFailed && currentImageUrl.isNotBlank()) {
+                CardImageSkeleton(number = card.number)
+
                 // AsyncImage, non SubcomposeAsyncImage: i suoi slot loading/error/
                 // success sono tre subcomposition per cella, e in una griglia di
-                // ~120 carte era il costo principale del jank in scroll. Lo sfondo
-                // fa da placeholder, e il fallback d'errore e' gia' il ramo else
-                // qui sotto, che scatta quando imageLoadFailed diventa true.
+                // ~120 carte era il costo principale del jank in scroll. Il fondo
+                // qui sopra fa da placeholder, e il fallback d'errore e' gia' il
+                // ramo else qui sotto, che scatta quando imageLoadFailed diventa
+                // true.
                 AsyncImage(
                     model = remember(currentImageUrl) { ImageUrlUtils.safeImageUrl(currentImageUrl) },
                     contentDescription = card.name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(AppColors.surface),
+                    modifier = Modifier.fillMaxSize(),
                     onSuccess = {
                         isImageAvailable = true
                         imageLoadFailed = false
@@ -1518,7 +1565,12 @@ fun TcgCardListRow(
             // info.label, non translateRarity: la seconda su una rarita' che
             // non c'e' lascia la riga a meta' ("#4 · "), la prima dice
             // "Sconosciuta".
-            Text("#${card.number} · ${rarityInfo.label}", color = AppColors.textMuted, fontSize = 11.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("#${card.number} · ${rarityInfo.label}", color = AppColors.textMuted, fontSize = 11.sp)
+                // Le stampe possedute anche qui: le due viste della stessa
+                // schermata devono dire le stesse cose.
+                if (isOwned) OwnedVariantBadges(variants = ownedVariants, size = 14, fontSize = 8)
+            }
         }
         val priceText = resolveDisplayPriceText(card)
         if (priceText != null) {

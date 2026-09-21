@@ -53,7 +53,9 @@ import coil.imageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.PokemonCard
-import com.emabuia.pokevault.data.model.collectionGroupKey
+import com.emabuia.pokevault.data.model.collectionCardKey
+import com.emabuia.pokevault.ui.components.CardVariants
+import com.emabuia.pokevault.ui.components.OwnedVariantBadges
 import com.emabuia.pokevault.ui.components.CollectionSkeleton
 import com.emabuia.pokevault.ui.components.holoFoil
 import com.emabuia.pokevault.ui.navigation.sharedCardImage
@@ -184,11 +186,17 @@ fun CollectionScreen(
     }
 
     // Compute grouped cards by logical card key and organize them by expansion.
+    // Raggruppate per *carta*, non per stampa: prima chi aveva la Normale e la
+    // Reverse della stessa carta se la vedeva due volte in collezione. Ora e'
+    // una tessera sola, con la somma delle copie e i badge delle stampe.
+    // Dentro ogni gruppo l'ordine e' quello delle stampe (N, R, H), cosi' la
+    // carta mostrata e i dati presi dal rappresentante non dipendono
+    // dall'ordine con cui Firestore restituisce i documenti.
     val groupedCards = remember(state.filteredCards) {
         state.filteredCards
-            .groupBy { it.collectionGroupKey() }
+            .groupBy { it.collectionCardKey() }
             .entries
-            .map { (key, group) -> key to group }
+            .map { (key, group) -> key to group.sortedBy { CardVariants.order(it.variant) } }
     }
     val groupedByExpansion = remember(groupedCards, state.sortOrder) {
         groupedCards.groupBy { (_, group) ->
@@ -524,6 +532,7 @@ fun CollectionScreen(
                                                             isSelected = groupKey in selectedGroupKeys,
                                                             isSelectionMode = isSelectionMode,
                                                             gridColumns = state.gridColumns,
+                                                            ownedVariants = group.mapTo(mutableSetOf()) { it.variant },
                                                             sharedKey = groupKey,
                                                             onClick = {
                                                                 if (isSelectionMode) {
@@ -567,6 +576,7 @@ fun CollectionScreen(
                                                         card = representative.copy(quantity = totalQty),
                                                         isSelected = groupKey in selectedGroupKeys,
                                                         isSelectionMode = isSelectionMode,
+                                                        ownedVariants = group.mapTo(mutableSetOf()) { it.variant },
                                                         onClick = {
                                                             if (isSelectionMode) {
                                                                 selectedGroupKeys = if (groupKey in selectedGroupKeys) {
@@ -1258,6 +1268,8 @@ fun CollectionCardGridItem(
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
     gridColumns: Int = 3,
+    /** Le stampe possedute di questa carta: la tessera le riunisce tutte. */
+    ownedVariants: Set<String> = emptySet(),
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     /**
@@ -1314,6 +1326,20 @@ fun CollectionCardGridItem(
             }
         }
 
+        // Le stampe possedute, in alto a sinistra: dall'altra parte c'e' gia'
+        // il contatore delle copie. Sotto le cinque colonne le tessere sono
+        // troppo piccole perche' una lettera si legga, e li' si saltano.
+        if (ownedVariants.isNotEmpty() && gridColumns <= 4 && !isSelectionMode) {
+            OwnedVariantBadges(
+                variants = ownedVariants,
+                size = if (gridColumns > 3) 13 else 16,
+                fontSize = if (gridColumns > 3) 7 else 9,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(4.dp)
+            )
+        }
+
         // Quantity badge (top-right)
         Box(
             modifier = Modifier
@@ -1346,6 +1372,8 @@ fun CollectionCardListItem(
     card: PokemonCard,
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
+    /** Le stampe possedute di questa carta: la riga le riunisce tutte. */
+    ownedVariants: Set<String> = emptySet(),
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     onDelete: () -> Unit
@@ -1393,7 +1421,11 @@ fun CollectionCardListItem(
                     Text("\u20AC${"%.2f".format(card.estimatedValue)}", color = AppColors.green, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                 }
             }
-            Text("${AppLocale.displaySetName(card.set)} \u00B7 x${card.quantity}", color = AppColors.textMuted, fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("${AppLocale.displaySetName(card.set)} \u00B7 x${card.quantity}", color = AppColors.textMuted, fontSize = 12.sp)
+                // Quali stampe compongono quel "x2".
+                OwnedVariantBadges(variants = ownedVariants, size = 15, fontSize = 8)
+            }
         }
         if (!isSelectionMode) {
             Icon(Icons.Default.ChevronRight, null, tint = AppColors.textMuted)

@@ -235,7 +235,8 @@ class GoalAlbumViewModel : ViewModel() {
         viewModelScope.launch {
             val variants = CardOptions.getVariantsForCard(
                 card.tcgplayer?.prices?.keys ?: emptySet(),
-                card.rarity
+                card.rarity,
+                card.set?.releaseDate
             )
             val selectedVariant = variants.firstOrNull() ?: "Holo"
 

@@ -2753,7 +2753,8 @@ class CatalogRepository {
             id = setInfo.id,
             name = setInfo.name,
             series = setInfo.series,
-            printedTotal = setInfo.printedTotal
+            printedTotal = setInfo.printedTotal,
+            releaseDate = setInfo.releaseDate
         )
 
         return TcgCard(

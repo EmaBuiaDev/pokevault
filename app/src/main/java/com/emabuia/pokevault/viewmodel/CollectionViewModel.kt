@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.CollectionStats
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.model.collectionCardKey
 import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.data.remote.CatalogRepository
 import com.emabuia.pokevault.util.AppLocale
@@ -93,7 +94,10 @@ class CollectionViewModel : ViewModel() {
         val (newStats, filtered) = withContext(Dispatchers.Default) {
             val stats = CollectionStats(
                 totalCards = cards.sumOf { it.quantity },
-                uniqueCards = cards.map { it.collectionGroupKey() }.toSet().size,
+                // Carte diverse, non stampe diverse: la collezione mostra una
+                // tessera per carta, e contare separatamente Normale e Reverse
+                // faceva dire "2" dove sullo schermo se ne vede una.
+                uniqueCards = cards.map { it.collectionCardKey() }.toSet().size,
                 totalValue = cards.sumOf { it.estimatedValue * it.quantity }
             )
             stats to applyFilters(cards, criteria)
@@ -257,11 +261,20 @@ class CollectionViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Cancella per chiave, accettando tutte e due le forme.
+     *
+     * La collezione raggruppa per carta ([collectionCardKey]) e non piu' per
+     * singola stampa, quindi le chiavi che arrivano da li' non contengono la
+     * variante: cancellare una tessera vuol dire togliere tutte le sue stampe.
+     * Le chiavi con la variante restano valide -- le usa chi vuole togliere
+     * una stampa sola.
+     */
     fun deleteMultipleGroups(groupKeys: Set<String>) {
         viewModelScope.launch {
             val originalCards = uiState.cards
             val cardsToDelete = originalCards.filter { card ->
-                card.collectionGroupKey() in groupKeys
+                card.collectionGroupKey() in groupKeys || card.collectionCardKey() in groupKeys
             }
             if (cardsToDelete.isEmpty()) return@launch
 

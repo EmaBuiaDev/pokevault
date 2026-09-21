@@ -8,7 +8,7 @@ import com.emabuia.pokevault.data.model.MatchLog
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.Tournament
 import com.emabuia.pokevault.data.model.Wishlist
-import com.emabuia.pokevault.data.model.collectionGroupKey
+import com.emabuia.pokevault.data.model.collectionCardKey
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -687,7 +687,11 @@ class FirestoreRepository {
                 .documents.mapNotNull { it.toObject(PokemonCard::class.java) }
                 .filter { !it.deckOnly }
 
-            val uniqueKey: (PokemonCard) -> String = { c -> c.collectionGroupKey() }
+            // Carte diverse, non stampe diverse: la collezione mostra una
+            // tessera per carta e conta allo stesso modo (CollectionViewModel).
+            // Con due chiavi diverse, "Carte Uniche" diceva un numero in
+            // Statistiche e un altro in Collezione.
+            val uniqueKey: (PokemonCard) -> String = { c -> c.collectionCardKey() }
 
             val totalCards = cards.sumOf { it.quantity }
             val totalValue = cards.sumOf { it.estimatedValue * it.quantity }

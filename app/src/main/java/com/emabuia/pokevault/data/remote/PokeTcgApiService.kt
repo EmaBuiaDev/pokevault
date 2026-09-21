@@ -45,7 +45,15 @@ data class TcgCardSet(
     val name: String = "",
     val series: String = "",
     /** Totale stampato del set (es. 87 per "067/087"); 0 se sconosciuto. */
-    val printedTotal: Int = 0
+    val printedTotal: Int = 0,
+    /**
+     * Data di uscita del set (YYYY-MM-DD), vuota dove non la conosciamo.
+     *
+     * Serve a sapere quali stampe di una carta esistono davvero: il reverse
+     * holo nasce nel 2002, e senza questa data lo si proponeva anche sulle
+     * carte del Set Base. Vuota vale "non so", e allora si propone.
+     */
+    val releaseDate: String = ""
 )
 
 @Immutable
