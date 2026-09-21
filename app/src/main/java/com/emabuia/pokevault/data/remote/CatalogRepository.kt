@@ -2290,8 +2290,20 @@ class CatalogRepository {
             "sv08" -> "SSP"
             "sv09" -> "JTG"
             "sv10" -> "DRI"
-                "zsv10pt5" -> "BLK"
-                "rsv10pt5" -> "WHT"
+            // ATTENZIONE: queste due sono scambiate rispetto alla verita', e
+            // vanno lasciate cosi'. zsv10pt5 e' "Fuoco Bianco" (White Flare) e
+            // rsv10pt5 e' "Luce Nera" (Black Bolt) -- lo conferma SetCodeMapper,
+            // dove l'accoppiamento giusto e' BLK->rsv10pt5 e WHT->zsv10pt5.
+            // Ma su R2 i due loghi sono caricati sotto la chiave sbagliata
+            // (it/BLK/logo.png contiene White Flare, it/WHT/logo.png Black
+            // Bolt), quindi le due inversioni si annullano e il logo mostrato
+            // e' quello giusto. Raddrizzare SOLO questa mappa rompe i loghi.
+            // Per sistemarle davvero bisogna scambiare i due oggetti su R2 e
+            // questa mappa nella stessa release: R2 e' condiviso da tutte le
+            // versioni installate, quindi cambiarlo da solo sbaglia il logo a
+            // chi non ha ancora aggiornato.
+            "zsv10pt5" -> "BLK"
+            "rsv10pt5" -> "WHT"
             "sv3pt5" -> "MEW"
             "sv4pt5" -> "PAF"
             "sv6pt5" -> "SFA"
