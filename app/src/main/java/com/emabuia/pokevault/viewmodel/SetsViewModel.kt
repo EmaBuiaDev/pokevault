@@ -559,7 +559,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             val card = PokemonCard(
                 name = tcgCard.name, imageUrl = tcgCard.images.small,
                 set = tcgCard.set?.name ?: "",
-                rarity = tcgCard.rarity ?: "Unknown",
+                rarity = tcgCard.rarity.orEmpty(),
                 type = tcgCard.types?.firstOrNull() ?: "Colorless",
                 hp = tcgCard.hp?.toIntOrNull() ?: 0,
                 supertype = tcgCard.supertype.ifBlank { "Pokémon" },

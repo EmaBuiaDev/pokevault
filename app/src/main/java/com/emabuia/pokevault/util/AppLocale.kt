@@ -76,7 +76,23 @@ object AppLocale {
         "radiant rare" to "Rara Radiante",
         "rare prime" to "Rara Prime",
         "legend" to "LEGEND",
-        "black white rare" to "Rara B/W"
+        "black white rare" to "Rara B/W",
+        // Le forme con le parole invertite ("Holo Rare V" da TCGdex contro
+        // "Rare Holo V" da PokeWallet) vivono tutte e due nel catalogo, e
+        // senza la loro riga qui il chip del filtro resta in inglese in meta'
+        // dei set SWSH.
+        "holo rare v" to "Rara Holo V",
+        "holo rare vmax" to "Rara Holo VMAX",
+        "holo rare vstar" to "Rara Holo VSTAR",
+        "shiny rare v" to "Rara Shiny V",
+        "shiny rare vmax" to "Rara Shiny VMAX",
+        "rare holo lv.x" to "Rara Holo LV.X",
+        "mega hyper rare" to "Mega Iper Rara",
+        "full art trainer" to "Allenatore Full Art",
+        "classic collection" to "Collezione Classica",
+        "pikachu rare" to "Rara Pikachu",
+        // Le carte dei mazzi introduttivi la rarita' stampata non ce l'hanno.
+        "none" to "Nessuna"
     )
 
     fun translateRarity(rarity: String): String {

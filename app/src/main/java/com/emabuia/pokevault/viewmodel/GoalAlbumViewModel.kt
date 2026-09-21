@@ -251,7 +251,7 @@ class GoalAlbumViewModel : ViewModel() {
                 name = card.name,
                 imageUrl = card.images.small,
                 set = card.set?.name ?: "",
-                rarity = card.rarity ?: "Unknown",
+                rarity = card.rarity.orEmpty(),
                 type = card.types?.firstOrNull() ?: "Colorless",
                 hp = card.hp?.toIntOrNull() ?: 0,
                 supertype = card.supertype.ifBlank { "Pokémon" },

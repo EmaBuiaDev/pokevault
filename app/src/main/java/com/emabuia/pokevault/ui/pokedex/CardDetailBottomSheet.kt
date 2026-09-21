@@ -43,6 +43,7 @@ import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.ui.components.RaritySymbolIcon
 import com.emabuia.pokevault.util.RarityUtils.getRarityInfo
 
 @Composable
@@ -217,7 +218,16 @@ fun CardDetailBottomSheet(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            InfoPill(icon = "✦", text = card.rarity ?: "Sconosciuto", color = rarityInfo.color)
+                            // rarityInfo.label, non la stringa grezza: quella
+                            // arriva in inglese dal catalogo ("Holo Rare") e
+                            // quando manca lasciava un "Sconosciuto" scritto
+                            // a mano, fuori da AppLocale.
+                            InfoPill(
+                                icon = "",
+                                text = rarityInfo.label,
+                                color = if (rarityInfo.adaptive) AppColors.textPrimary else rarityInfo.color,
+                                leading = { RaritySymbolIcon(rarityInfo, size = 12.dp) }
+                            )
                             if (price != null && price > 0) {
                                 InfoPill(icon = "💰", text = "${"%.2f".format(price)} €", color = AppColors.green)
                             }
@@ -758,7 +768,7 @@ fun OptionSelector(
 }
 
 @Composable
-fun InfoPill(icon: String, text: String, color: Color) {
+fun InfoPill(icon: String, text: String, color: Color, leading: (@Composable () -> Unit)? = null) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
@@ -767,7 +777,9 @@ fun InfoPill(icon: String, text: String, color: Color) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text(text = icon, fontSize = 12.sp)
+        // `leading` serve al segno di rarita', che e' disegnato su Canvas e
+        // dentro una stringa non ci sta.
+        if (leading != null) leading() else Text(text = icon, fontSize = 12.sp)
         Text(text = text, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }

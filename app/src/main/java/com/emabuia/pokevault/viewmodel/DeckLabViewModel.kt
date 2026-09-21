@@ -1081,7 +1081,7 @@ class DeckLabViewModel : ViewModel() {
                 name = tcgCard.name,
                 imageUrl = tcgCard.images.small,
                 set = tcgCard.set?.name ?: card.set ?: "",
-                rarity = tcgCard.rarity ?: "Unknown",
+                rarity = tcgCard.rarity.orEmpty(),
                 type = tcgCard.types?.firstOrNull() ?: "Colorless",
                 hp = tcgCard.hp?.toIntOrNull() ?: 0,
                 supertype = tcgCard.supertype.ifBlank {
@@ -1237,7 +1237,7 @@ class DeckLabViewModel : ViewModel() {
                 name = card.name,
                 imageUrl = card.images.small,
                 set = card.set?.name ?: "",
-                rarity = card.rarity ?: "Unknown",
+                rarity = card.rarity.orEmpty(),
                 type = card.types?.firstOrNull() ?: "Colorless",
                 hp = card.hp?.toIntOrNull() ?: 0,
                 supertype = card.supertype.ifBlank { "Pokémon" },

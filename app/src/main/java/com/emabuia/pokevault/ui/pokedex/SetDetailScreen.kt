@@ -54,6 +54,7 @@ import com.emabuia.pokevault.ui.wishlist.WishlistEditorDialog
 import com.emabuia.pokevault.ui.wishlist.WishlistPickerDialog
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ImageUrlUtils
+import com.emabuia.pokevault.ui.components.RaritySymbolIcon
 import com.emabuia.pokevault.util.RarityInfo
 import com.emabuia.pokevault.util.RarityUtils
 import com.emabuia.pokevault.viewmodel.SetDetailViewModel
@@ -678,9 +679,10 @@ fun SetDetailScreen(
                                             val info = RarityUtils.getRarityInfo(rarity)
                                             val count = state.cards.count { it.rarity == rarity }
                                             RarityFilterChip(
-                                                "${info.emoji} ${AppLocale.translateRarity(rarity)} ($count)",
-                                                selectedRarityFilter == rarity,
-                                                info.color
+                                                info = info,
+                                                name = AppLocale.translateRarity(rarity),
+                                                count = count,
+                                                isSelected = selectedRarityFilter == rarity
                                             ) { selectedRarityFilter = rarity }
                                         }
                                     }
@@ -1037,30 +1039,48 @@ fun SetInfoHeader(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Una riga sola, sempre: le voci si spartiscono la larghezza con
+        // `weight(1f)` invece di andare a capo. Un set moderno ne ha fino a
+        // dieci, quindi simbolo e testo si stringono al crescere del numero --
+        // tre stelle da 14dp sarebbero 45dp a voce e manderebbero l'ultima
+        // sotto, che e' esattamente il difetto di prima (Iper Rara in Buio
+        // Pesto, Futuristica nel 30°).
+        val voci = rarityCounts.count { it.value.second > 0 }
+        val simbolo = when {
+            voci >= 9 -> 10.dp
+            voci >= 7 -> 12.dp
+            else -> 14.dp
+        }
+        val corpo = if (voci >= 9) 7 else 8
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.Top
         ) {
             rarityCounts.forEach { (info, counts) ->
                 if (counts.second > 0) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Text(
-                            text = info.emoji,
-                            color = info.color,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
+                        RaritySymbolIcon(info, size = simbolo)
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "${counts.first}/${counts.second}",
                             color = if (counts.first == counts.second) AppColors.green else AppColors.textPrimary.copy(
                                 alpha = 0.8f
                             ),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = (corpo + 2).sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = info.shortLabel,
+                            color = AppColors.textMuted,
+                            fontSize = corpo.sp,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1079,6 +1099,44 @@ fun RarityFilterChip(label: String, isSelected: Boolean, color: Color = AppColor
             .background(if (isSelected) color.copy(alpha = 0.5f) else AppColors.card)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp))
+}
+
+/**
+ * Stesso chip, ma col segno di rarita' disegnato accanto al nome invece che
+ * concatenato nella stringa: un simbolo su Canvas non si puo' infilare dentro
+ * un `Text`.
+ *
+ * Il nome arriva da fuori e non da `info.label` di proposito: il filtro lavora
+ * sulla stringa esatta del catalogo, e `info.label` raggruppa -- "Holo Rare V"
+ * e "Holo Rare VMAX" sono tutte e due "Doppia Rara", per cui i set SWSH si
+ * ritroverebbero due o tre chip scritti uguale che filtrano cose diverse.
+ */
+@Composable
+fun RarityFilterChip(
+    info: RarityInfo,
+    name: String,
+    count: Int,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isSelected) info.color.copy(alpha = 0.5f) else AppColors.card)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    ) {
+        RaritySymbolIcon(info, size = 12.dp)
+        Text(
+            text = "$name ($count)",
+            maxLines = 1,
+            color = if (isSelected) AppColors.textPrimary else AppColors.textMuted,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            fontSize = 12.sp
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1453,11 +1511,14 @@ fun TcgCardListRow(
         }
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(rarityInfo.emoji, color = rarityInfo.color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                RaritySymbolIcon(rarityInfo, size = 12.dp)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(card.name, color = if (isOwned) AppColors.textPrimary else AppColors.textMuted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text("#${card.number} · ${AppLocale.translateRarity(card.rarity ?: "")}", color = AppColors.textMuted, fontSize = 11.sp)
+            // info.label, non translateRarity: la seconda su una rarita' che
+            // non c'e' lascia la riga a meta' ("#4 · "), la prima dice
+            // "Sconosciuta".
+            Text("#${card.number} · ${rarityInfo.label}", color = AppColors.textMuted, fontSize = 11.sp)
         }
         val priceText = resolveDisplayPriceText(card)
         if (priceText != null) {
