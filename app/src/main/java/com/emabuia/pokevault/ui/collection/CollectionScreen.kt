@@ -148,6 +148,12 @@ fun CollectionScreen(
     LaunchedEffect(Unit) {
         viewModel.attachPreferences(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
     }
+    // Dopo le preferenze e non prima: altrimenti il ripristino della vista
+    // salvata cancellerebbe la richiesta della Home. Chiave sulla richiesta,
+    // cosi' vale anche quando la schermata c'era gia' e viene solo ripresa.
+    LaunchedEffect(CollectionShortcut.pendingRecent) {
+        if (CollectionShortcut.consumeRecent()) viewModel.showRecentFirst()
+    }
 
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedGroupKeys by remember { mutableStateOf(setOf<String>()) }

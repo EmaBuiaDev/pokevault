@@ -301,6 +301,16 @@ object AppLocale {
     val editCard: String get() = if (isItalian) "Modifica carta" else "Edit Card"
     val myCards: String get() = if (isItalian) "Le mie\ncarte" else "My\nCards"
     val myCardsSingleLine: String get() = if (isItalian) "Le mie carte" else "My Cards"
+    // Home: aggiunte di recente
+    val homeRecentTitle: String get() = if (isItalian) "Aggiunte di recente" else "Recently added"
+    val addedToday: String get() = if (isItalian) "Oggi" else "Today"
+    val addedYesterday: String get() = if (isItalian) "Ieri" else "Yesterday"
+    fun addedDaysAgo(days: Int): String = if (isItalian) "$days giorni fa" else "$days days ago"
+    val homeEmptyTitle: String get() = if (isItalian) "La tua collezione è vuota" else "Your collection is empty"
+    val homeEmptyHint: String get() = if (isItalian)
+        "Scansiona la prima carta per iniziare."
+    else
+        "Scan your first card to get started."
     val collection: String get() = if (isItalian) "Collezione" else "Collection"
     val cards: String get() = if (isItalian) "Carte" else "Cards"
     fun cardsCount(count: Int) = if (isItalian) "$count carte" else "$count cards"

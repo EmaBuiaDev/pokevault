@@ -350,6 +350,21 @@ class CollectionViewModel : ViewModel() {
         savePreferences()
     }
 
+    /**
+     * Dal "Vedi tutte" della Home: tutte le carte, le ultime aggiunte in cima.
+     * I filtri si azzerano, o un filtro dimenticato nasconderebbe proprio le
+     * carte che si e' venuti a vedere.
+     */
+    fun showRecentFirst() {
+        uiState = uiState.copy(
+            layout = CollectionLayout.ALL,
+            sort = CollectionSort.NEWEST,
+            filter = CollectionFilter()
+        )
+        savePreferences()
+        scheduleRecompute()
+    }
+
     fun toggleViewMode() {
         uiState = uiState.copy(isGridView = !uiState.isGridView)
         savePreferences()

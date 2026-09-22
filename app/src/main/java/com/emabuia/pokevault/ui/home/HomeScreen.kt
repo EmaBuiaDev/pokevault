@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.ui.collection.CollectionShortcut
 import com.emabuia.pokevault.ui.components.OfflineBanner
 import com.emabuia.pokevault.ui.home.components.*
 import com.emabuia.pokevault.ui.navigation.Routes
@@ -109,11 +110,19 @@ fun HomeScreen(
                 }
             )
 
-            // Sezione Collezione con dati reali
-            CollectionSection(
-                cards = viewModel.getFilteredCards(),
+            // Le ultime carte aggiunte. Il tocco apre la carta con la chiave di
+            // gruppo, la stessa che usa Collezione: con l'id del documento si
+            // apriva una stampa sola invece della carta con tutte le sue stampe.
+            RecentCardsSection(
+                groups = viewModel.recentGroups,
+                hasCards = viewModel.hasCards,
                 isLoading = viewModel.isLoading,
-                onCardClick = { cardId -> onNavigate(Routes.cardDetail(cardId)) }
+                onCardClick = { key -> onNavigate(Routes.cardDetail(key)) },
+                onSeeAll = {
+                    CollectionShortcut.requestRecent()
+                    onNavigate(Routes.COLLECTION)
+                },
+                onScan = { onNavigate(Routes.SCANNER) }
             )
 
             // Spazio per il FAB dello scanner, che ora vive in AppNavigation e
