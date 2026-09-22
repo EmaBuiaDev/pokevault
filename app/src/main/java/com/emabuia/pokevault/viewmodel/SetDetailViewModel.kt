@@ -162,11 +162,18 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             avg7 = priceData.eurAvg7,
             avg30 = priceData.eurAvg30
         )
+        // Il prezzo in dollari va sotto CardOptions.USD_ONLY_PRICE_KEY, non
+        // sotto "normal". Qui c'era "normal", che e' anche il nome di una
+        // stampa: getVariantsForCard legge queste chiavi per sapere quali
+        // stampe esistono e, trovandone una, smette di guardare la rarita'.
+        // Su un set di sole Holo si finiva a offrire "Normale" -- e la
+        // pastiglia del prezzo, che cerca la chiave della stampa scelta, ci
+        // pescava dentro un numero in dollari e lo stampava con la €.
         val tcgPlayer = if (priceData.usdMarket != null || priceData.usdLow != null) {
             TcgPlayer(
                 url = priceData.tcgPlayerUrl ?: card.tcgplayer?.url.orEmpty(),
                 prices = mapOf(
-                    "normal" to TcgPriceInfo(
+                    CardOptions.USD_ONLY_PRICE_KEY to TcgPriceInfo(
                         low = priceData.usdLow,
                         market = priceData.usdMarket
                     )
@@ -505,7 +512,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {
         viewModelScope.launch {
             uiState = uiState.copy(isAddingCard = tcgCard.id)
-            val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero()
+            val price = priced(tcgCard).cardmarket?.prices.minimumEurPriceOrZero()
             val resolvedLanguage = language.ifBlank { defaultCollectionLanguage() }
 
             val card = PokemonCard(
@@ -550,7 +557,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 val actualVariant = if (preferredVariant in availableVariants) preferredVariant
                     else availableVariants.firstOrNull() ?: "Holo"
-                val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero()
+                val price = priced(tcgCard).cardmarket?.prices.minimumEurPriceOrZero()
 
                 PokemonCard(
                     name = tcgCard.name, imageUrl = tcgCard.images.small,
@@ -654,6 +661,23 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         lastPricedCardId = null
         uiState = uiState.copy(selectedCardPokeWalletPrices = null, isLoadingPokeWalletPrices = false)
     }
+
+    /**
+     * La stessa carta, ma col prezzo se nel frattempo e' arrivato.
+     *
+     * I prezzi non stanno dentro `uiState.cards`: arrivano carta per carta
+     * mentre la griglia scorre ([ensureCardPrice]) e si depositano in
+     * [pricedCards]. La griglia lo sa e sostituisce la carta prima di
+     * disegnarla, cosi' il prezzo si vede; la selezione multipla no, e mandava
+     * in collezione gli originali. Le carte entravano con estimatedValue a
+     * zero -- e siccome addCards somma proprio quello nel totale dell'utente,
+     * aggiungerne venti non muoveva il valore della collezione di un centesimo.
+     *
+     * Il prezzo si prende da qui, la stampa no: [withPriceData] puo' rifare il
+     * campo `tcgplayer`, e quello e' il campo da cui si ricavano le stampe
+     * disponibili. Le varianti si leggono sempre dalla carta com'e' a catalogo.
+     */
+    private fun priced(card: TcgCard): TcgCard = pricedCards[card.id] ?: card
 
     fun ensureCardPrice(card: TcgCard) {
         val current = pricedCards[card.id] ?: card

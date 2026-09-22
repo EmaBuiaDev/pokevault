@@ -130,6 +130,24 @@ object CardOptions {
     )
     val DEFAULT_VARIANTS = listOf("Normal", "Reverse", "Holo")
 
+    /**
+     * La chiave sotto cui viaggia un prezzo in dollari che NON e' un listino.
+     *
+     * `TcgCard.tcgplayer.prices` ha due letture diverse: e' un listino, e
+     * insieme -- in [getVariantsForCard] -- e' la prova di quali stampe della
+     * carta esistono, perche' TCGplayer quota separatamente normale, reverse e
+     * holo. Le carte italiane un listino TCGplayer non ce l'hanno, e il loro
+     * prezzo in dollari arriva da PokeWallet come numero unico: i ViewModel
+     * lo infilavano li' sotto la chiave "normal", che e' anche il nome di una
+     * stampa. Da li' getVariantsForCard concludeva che la carta esce solo
+     * normale, e su un set di sole Holo offriva "Normale".
+     *
+     * Con una chiave sua il numero continua ad arrivare a chi legge i valori
+     * (il prezzo in dollari sotto la miniatura), e chi legge le chiavi per
+     * sapere le stampe la scarta.
+     */
+    const val USD_ONLY_PRICE_KEY = "__usdOnly"
+
     fun languageLabelForMacro(macro: String?): String? {
         return when (macro?.trim()?.uppercase()) {
             "ITA" -> "🇮🇹 Italiano"
@@ -185,7 +203,10 @@ object CardOptions {
     }
 
     fun getVariantsForCard(priceKeys: Set<String>, rarity: String?, setReleaseDate: String? = null): List<String> {
-        val apiVariants = priceKeys.map { key ->
+        // Vedi [USD_ONLY_PRICE_KEY]: quella chiave porta un prezzo, non una
+        // stampa, e scartandola la carta ricade sul ramo della rarita' qui
+        // sotto -- che per le carte italiane e' l'unica fonte vera.
+        val apiVariants = priceKeys.filterNot { it == USD_ONLY_PRICE_KEY }.map { key ->
             when (key) {
                 "normal" -> "Normal"
                 "holofoil" -> "Holo"

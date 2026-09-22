@@ -7,6 +7,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
@@ -56,6 +58,7 @@ import com.emabuia.pokevault.ui.wishlist.WishlistPickerDialog
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.ui.components.CardImageSkeleton
+import com.emabuia.pokevault.ui.components.CardVariants
 import com.emabuia.pokevault.ui.components.OwnedVariantBadges
 import com.emabuia.pokevault.ui.components.RaritySymbolIcon
 import com.emabuia.pokevault.ui.components.VariantChoiceChip
@@ -841,14 +844,46 @@ fun SetDetailScreen(
 
                 // Selection bottom bar
                 if (isSelectionMode && selectedCardIds.isNotEmpty()) {
+                    // Le stampe che hanno DAVVERO le carte selezionate, non le
+                    // tre di default. La barra offriva sempre Normale, Reverse
+                    // e Holo: su un set di sole Holo -- il 30 Anniversario, per
+                    // dirne uno -- due scelte su tre non esistevano, e
+                    // sceglierle non dava errore, semplicemente
+                    // addMultipleCards ripiegava in silenzio sull'unica
+                    // possibile. L'unione e non l'intersezione: in una
+                    // selezione mista ogni carta prende la piu' vicina, ed e'
+                    // gia' quello che fa il ViewModel.
+                    val selectionVariantOptions = remember(selectedCardIds, displayedCards) {
+                        val selected = displayedCards.filter { it.id in selectedCardIds }
+                        val union = selected.flatMapTo(mutableSetOf()) { card ->
+                            CardOptions.getVariantsForCard(
+                                card.tcgplayer?.prices?.keys ?: emptySet(),
+                                card.rarity,
+                                card.set?.releaseDate
+                            )
+                        }
+                        CardVariants.sorted(union).ifEmpty { CardOptions.DEFAULT_VARIANTS }
+                    }
+                    // La stampa scelta puo' non esistere fra quelle offerte:
+                    // si parte da "Normal", e cambiando selezione le stampe
+                    // disponibili cambiano sotto. Si ricava qui, subito, senza
+                    // riscrivere `selectionVariant` da un LaunchedEffect --
+                    // quello correggeva lo stato un frame dopo, e in quel
+                    // frame la barra non aveva nessuna pastiglia accesa e
+                    // "aggiungi" leggeva ancora la stampa vecchia.
+                    val effectiveSelectionVariant = selectionVariant
+                        .takeIf { it in selectionVariantOptions }
+                        ?: selectionVariantOptions.first()
+
                     SelectionBottomBar(
                         selectedCount = selectedCardIds.size,
-                        selectedVariant = selectionVariant,
+                        selectedVariant = effectiveSelectionVariant,
+                        variants = selectionVariantOptions,
                         onVariantChange = { selectionVariant = it },
                         onAddAll = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             val cards = displayedCards.filter { it.id in selectedCardIds }
-                            viewModel.addMultipleCards(cards, selectionVariant)
+                            viewModel.addMultipleCards(cards, effectiveSelectionVariant)
                             isSelectionMode = false
                             selectedCardIds = emptySet()
                         },
@@ -927,13 +962,17 @@ fun ShimmerCardPlaceholder(modifier: Modifier = Modifier) {
 fun SelectionBottomBar(
     selectedCount: Int,
     selectedVariant: String,
+    /**
+     * Le stampe fra cui scegliere. Le decide il chiamante guardando le carte
+     * selezionate: qui c'era [CardOptions.DEFAULT_VARIANTS] fisso, cioe' tre
+     * scelte sempre uguali a prescindere dalle carte davanti.
+     */
+    variants: List<String>,
     onVariantChange: (String) -> Unit,
     onAddAll: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val variants = CardOptions.DEFAULT_VARIANTS
-
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -952,18 +991,24 @@ fun SelectionBottomBar(
         }
 
         // Variant pills
+        //
+        // Scorre di lato: le stampe ora le decidono le carte selezionate e
+        // possono essere piu' di tre, con nomi lunghi ("1ª Ed. Holo"). Prima
+        // erano tre corte e fisse, e la riga non poteva traboccare.
         Row(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             variants.forEach { variant ->
                 val isActive = variant == selectedVariant
                 Text(
-                    text = when (variant) {
-                        "Normal" -> "Norm"
-                        "Reverse" -> "Rev"
-                        else -> variant
-                    },
+                    // CardVariants.label, come le pastiglie della scheda
+                    // carta: la stessa stampa si chiama allo stesso modo in
+                    // tutta l'app, e in italiano. "Norm" non era ne' l'uno
+                    // ne' l'altro.
+                    text = CardVariants.label(variant),
                     color = if (isActive) AppColors.textPrimary else AppColors.textMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,

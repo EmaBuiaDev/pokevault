@@ -86,4 +86,33 @@ class CardVariantsTest {
         assertTrue("Reverse" in fromApi)
         assertEquals(2, fromApi.size)
     }
+
+    /**
+     * Il prezzo in dollari delle carte italiane viaggia dentro la mappa dei
+     * prezzi TCGplayer, che e' lo stesso posto da cui questa funzione ricava
+     * le stampe esistenti. Stava sotto la chiave "normal", che e' anche il
+     * nome di una stampa: bastava quello per far credere alla funzione di
+     * avere davanti un listino vero, e da li' in poi la rarita' non veniva
+     * nemmeno guardata. Su un set di sole Holo -- il 30 Anniversario -- si
+     * finiva a proporre "Normale", e a salvarla cosi'.
+     */
+    @Test
+    fun `il prezzo in dollari non vale come elenco delle stampe`() {
+        val soloDollari = setOf(CardOptions.USD_ONLY_PRICE_KEY)
+
+        // Si ricade sulla rarita', che e' l'unica fonte vera per le italiane.
+        assertEquals(listOf("Holo"), CardOptions.getVariantsForCard(soloDollari, "Ultra Rare", "2024-01-01"))
+        assertEquals(listOf("Holo"), CardOptions.getVariantsForCard(soloDollari, "Classic Collection", "2024-01-01"))
+        assertEquals(listOf("Normal", "Reverse"), CardOptions.getVariantsForCard(soloDollari, "Common", "2024-01-01"))
+
+        // La forma del difetto, per confronto: con la vecchia chiave "normal"
+        // la stessa carta si prendeva la sola stampa normale, che su una Ultra
+        // Rara non esiste nemmeno.
+        assertEquals(listOf("Normal"), CardOptions.getVariantsForCard(setOf("normal"), "Ultra Rare", "2024-01-01"))
+
+        // E se accanto al prezzo finto c'e' anche un listino vero, quello vale.
+        val misto = setOf(CardOptions.USD_ONLY_PRICE_KEY, "holofoil", "reverseHolofoil")
+        val stampe = CardOptions.getVariantsForCard(misto, "Common")
+        assertEquals(setOf("Holo", "Reverse"), stampe.toSet())
+    }
 }

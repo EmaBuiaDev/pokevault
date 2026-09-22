@@ -794,10 +794,16 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             val numberKey = normalizeSnapshotNumberKey(card.number) ?: return@map card
             val entry = snapshot.priceMapFor(lookupCode)[numberKey] ?: return@map card
             val hasEur = entry.avg != null || entry.low != null || entry.trend != null
+            // CardOptions.USD_ONLY_PRICE_KEY e non "normal": vedi la stessa
+            // riga in SetDetailViewModel.withPriceData. Questa mappa la
+            // rilegge getVariantsForCard per sapere quali stampe esistono, e
+            // "normal" le faceva credere che la carta esca solo normale.
             val tcgPlayer = if (entry.usd != null || entry.usdLow != null) {
                 TcgPlayer(
                     url = entry.url.takeIf { !hasEur }.orEmpty(),
-                    prices = mapOf("normal" to TcgPriceInfo(low = entry.usdLow, market = entry.usd))
+                    prices = mapOf(
+                        CardOptions.USD_ONLY_PRICE_KEY to TcgPriceInfo(low = entry.usdLow, market = entry.usd)
+                    )
                 )
             } else {
                 card.tcgplayer

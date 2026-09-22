@@ -535,8 +535,15 @@ fun CardDetailBottomSheet(
                             DetailInfoRow("Serie", card.set.series)
                         }
 
-                        // Varianti disponibili con prezzi
+                        // Varianti disponibili con prezzi.
+                        //
+                        // Senza USD_ONLY_PRICE_KEY: quella voce non e' una
+                        // stampa, e' il prezzo in dollari che le carte italiane
+                        // si portano dietro li' dentro per mancanza di un
+                        // listino TCGplayer. Finiva in elenco come una riga a
+                        // se', col numero in dollari stampato con la €.
                         val variants = card.tcgplayer?.prices
+                            ?.filterKeys { it != CardOptions.USD_ONLY_PRICE_KEY }
                         if (variants != null && variants.isNotEmpty()) {
                             HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 4.dp))
                             Text(AppLocale.pricesByVariant, color = AppColors.textPrimary, fontWeight = FontWeight.Medium, fontSize = 13.sp)
