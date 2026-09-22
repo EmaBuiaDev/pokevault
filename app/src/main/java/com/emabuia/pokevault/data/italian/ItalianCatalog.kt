@@ -27,7 +27,17 @@ data class ItalianCardRecord(
      * nostro in D1 dallo schema/009. E' il campo che dice se un Pokemon si
      * puo' calare in campo dalla mano: null su Trainer ed Energie.
      */
-    val stage: String? = null
+    val stage: String? = null,
+    /**
+     * Chi ha disegnato la carta, nostro in D1 dal backfill TCGdex (copre il
+     * 98% del catalogo). Sempre in inglese perche' il nome di una persona non
+     * si traduce.
+     *
+     * Il worker OMETTE la chiave quando e' vuota invece di serializzarla a
+     * null -- /ita/catalog.json porta diciottomila carte a ogni client -- per
+     * questo qui il default e' null e non "".
+     */
+    val illustratore: String? = null
 ) {
     fun imageReference(): ItalianImageReference? = ItalianCatalogNormalizer.toImageReference(cardId)
 

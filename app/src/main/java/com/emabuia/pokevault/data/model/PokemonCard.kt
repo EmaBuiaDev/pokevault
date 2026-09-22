@@ -140,9 +140,13 @@ object CardOptions {
         }
     }
 
-    fun languageOptionsForMacro(macro: String?): List<String> {
-        return languageLabelForMacro(macro)?.let(::listOf) ?: LANGUAGES
-    }
+    // C'era anche languageOptionsForMacro(), che dal macro del set ricavava
+    // l'UNICA lingua selezionabile. E' stata tolta: la lingua del set dice che
+    // immagine si vede, non che copia si possiede, e restringere l'elenco
+    // impediva di mettere in collezione la stampa inglese o giapponese di una
+    // carta trovata nella sezione italiana. Il macro serve ancora, ma solo per
+    // decidere quale voce parte selezionata -- languageLabelForMacro qui
+    // sopra.
 
     // Rarita' che escono in una stampa sola: chiedere "Normale o Reverse?" su
     // una Ultra Rara non ha senso, quella stampa non esiste.

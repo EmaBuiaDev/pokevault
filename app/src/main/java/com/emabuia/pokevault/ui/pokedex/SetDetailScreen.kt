@@ -221,9 +221,13 @@ fun SetDetailScreen(
     val collectionLanguage = remember(sourceMacro, state.set?.language) {
         CardOptions.languageLabelForMacro(sourceMacro ?: state.set?.language) ?: CardOptions.LANGUAGES.first()
     }
-    val collectionLanguageOptions = remember(sourceMacro, state.set?.language) {
-        CardOptions.languageOptionsForMacro(sourceMacro ?: state.set?.language)
-    }
+    // Tutte le lingue, sempre, anche nella sezione italiana: la lingua del set
+    // dice che immagine si vede, non che copia si possiede. Una carta inglese
+    // o giapponese si cerca per nome italiano e si aggiunge da qui, e prima
+    // non si poteva -- l'elenco aveva la sola voce "Italiano". Quella resta
+    // preselezionata (collectionLanguage), cosi' il caso normale e' ancora
+    // zero tocchi.
+    val collectionLanguageOptions = CardOptions.LANGUAGES
     val isItalianSection = remember(sourceMacro, state.set?.language) {
         sourceMacro?.trim()?.uppercase() == "ITA" || state.set?.language?.trim()?.uppercase() == "ITA"
     }
@@ -358,7 +362,9 @@ fun SetDetailScreen(
             onRemoveCard = { viewModel.removeCard(sheetCard); selectedCard = null },
             onDismiss = { selectedCard = null },
             cardList = sortedCards,
-            onCardChange = { selectedCard = it }
+            onCardChange = { selectedCard = it },
+            // La scheda sa dire quali stampe si hanno gia', come la griglia.
+            ownedVariants = state.ownedVariants[sheetCard.id].orEmpty()
         )
     }
 

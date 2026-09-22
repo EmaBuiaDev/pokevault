@@ -36,7 +36,18 @@ data class TcgCard(
     val rarity: String? = null,
     val images: CardImages = CardImages(),
     val tcgplayer: TcgPlayer? = null,
-    val cardmarket: CardMarket? = null
+    val cardmarket: CardMarket? = null,
+    /**
+     * L'illustratore della carta, in inglese: il nome di una persona non si
+     * traduce.
+     *
+     * Lo riempie il catalogo italiano (ItalianCardRecord.illustratore, da D1)
+     * in toItalianTcgCard. PokeWallet non lo espone affatto, quindi sulle
+     * carte inglesi resta null -- ed e' anche il motivo per cui
+     * CachedCardEntity non ha una colonna per lui: la cache Room serve solo
+     * il ramo PokeWallet, dove il campo sarebbe null su ogni riga.
+     */
+    val artist: String? = null
 )
 
 @Immutable

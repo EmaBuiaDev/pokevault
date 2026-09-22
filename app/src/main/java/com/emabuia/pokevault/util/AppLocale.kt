@@ -357,10 +357,25 @@ object AppLocale {
     val minPrice: String get() = if (isItalian) "Prezzo minimo" else "Minimum price"
     val livePricesUnavailable: String get() = if (isItalian) "Prezzi live non disponibili per questa carta" else "Live prices not available for this card"
     val inCollection: String get() = if (isItalian) "Nella tua collezione" else "In your collection"
-    val tapToAddCopy: String get() = if (isItalian) "Tocca per aggiungere un'altra copia" else "Tap to add another copy"
     val addCopy: String get() = if (isItalian) "Aggiungi copia" else "Add copy"
-    val version: String get() = if (isItalian) "Versione" else "Version"
     val pricesByVariant: String get() = if (isItalian) "Prezzi per variante" else "Prices by variant"
+    /** Chi ha disegnato la carta. Il nome resta com'e': non si traduce. */
+    val illustrator: String get() = if (isItalian) "Illustratore" else "Illustrator"
+    val addToCollection: String get() = if (isItalian) "Aggiungi alla collezione" else "Add to collection"
+    /**
+     * L'etichetta del campo che sceglie normale/reverse/holo.
+     *
+     * Si chiamava "Versione", che nel gergo delle carte non vuol dire niente:
+     * la parola che si usa e' "stampa".
+     */
+    val printLabel: String get() = if (isItalian) "Stampa" else "Print"
+    val alreadyOwnedPrint: String get() = if (isItalian) "Già in collezione" else "Already owned"
+    val removeFromCollection: String get() = if (isItalian) "Rimuovi" else "Remove"
+    /** Il testo del tasto quando si stanno aggiungendo piu' copie in un colpo solo. */
+    fun addCopies(quantity: Int): String =
+        if (isItalian) "Aggiungi $quantity copie" else "Add $quantity copies"
+    val previousCard: String get() = if (isItalian) "Carta precedente" else "Previous card"
+    val nextCard: String get() = if (isItalian) "Carta successiva" else "Next card"
     val noImage: String get() = if (isItalian) "Nessuna immagine" else "No image"
     val noneOfThese: String get() = if (isItalian) "Nessuna di queste" else "None of these"
     val discard: String get() = if (isItalian) "Scarta" else "Discard"

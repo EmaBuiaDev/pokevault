@@ -361,6 +361,10 @@ fun WishlistDetailScreen(
             onDismiss = { selectedCard = null },
             cardList = visibleCards,
             onCardChange = { selectedCard = it }
+            // Niente `ownedVariants`: qui il SetDetailViewModel serve solo ad
+            // aggiungere, nessuno gli ha mai caricato un set, quindi la sua
+            // mappa delle stampe possedute e' vuota. La scheda in quel caso
+            // non dice nulla sulle stampe, che e' giusto.
         )
     }
 

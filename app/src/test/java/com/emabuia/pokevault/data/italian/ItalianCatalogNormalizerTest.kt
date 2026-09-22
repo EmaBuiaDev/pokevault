@@ -3,6 +3,7 @@ package com.emabuia.pokevault.data.italian
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ItalianCatalogNormalizerTest {
@@ -128,5 +129,74 @@ class ItalianCatalogNormalizerTest {
         // E le promo numerate a lettere restano tali, non diventano numeri.
         val promo = ItalianCatalogNormalizer.toImageReference("SWSHP_IT_SWSH026.png")
         assertEquals("SWSH026", promo?.cardNumber)
+    }
+
+    /**
+     * L'illustratore e' l'unico campo che il Worker OMETTE quando manca invece
+     * di serializzarlo a null -- il catalogo completo porta diciottomila carte
+     * a ogni client e una chiave vuota per ognuna sarebbe peso puro. Le due
+     * forme devono quindi convivere nella stessa risposta: chi ce l'ha lo
+     * legge, chi non ce l'ha resta a null e non fa saltare il parse.
+     */
+    @Test
+    fun parseExpansionCardsResponse_leggeIllustratoreEReggeLaChiaveAssente() {
+        val rawJson = """
+            {
+              "expansionId": "base1",
+              "cards": [
+                {
+                  "cardId": "BASE1_IT_4.png",
+                  "espansioneId": "base1",
+                  "nome": "Charizard",
+                  "attacchi": [],
+                  "illustratore": "Mitsuhiro Arita"
+                },
+                {
+                  "cardId": "BASE1_IT_5.png",
+                  "espansioneId": "base1",
+                  "nome": "Clefairy",
+                  "attacchi": []
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val cards = ItalianCatalogNormalizer.parseExpansionCardsResponse(rawJson)
+
+        assertEquals(2, cards.size)
+        assertEquals("Mitsuhiro Arita", cards[0].illustratore)
+        assertNull(cards[1].illustratore)
+    }
+
+    /**
+     * Il catalogo completo non viene messo in cache com'e' arrivato: prima di
+     * finire in SharedPreferences passa per toCatalogJson, che lo riserializza
+     * dai record (vedi saveToPrefs in ItalianCatalogRemoteRepository). Se un
+     * campo si perdesse in quel giro non si romperebbe niente subito -- la
+     * prima lettura viene dalla rete ed e' completa -- ma da li' in avanti la
+     * scheda in collezione, che legge il catalogo cachato, resterebbe senza
+     * illustratore fino al riavvio dell'app.
+     */
+    @Test
+    fun toCatalogJson_nonPerdeLIllustratoreNelGiroInCache() {
+        val original = ItalianCatalogNormalizer.parseCatalogJson(
+            """
+            [
+              {
+                "cardId": "BASE1_IT_4.png",
+                "espansioneId": "base1",
+                "nome": "Charizard",
+                "attacchi": [],
+                "illustratore": "Mitsuhiro Arita"
+              }
+            ]
+            """.trimIndent()
+        )
+        assertEquals("Mitsuhiro Arita", original.cards.single().illustratore)
+
+        val roundTripped = ItalianCatalogNormalizer.parseCatalogJson(
+            ItalianCatalogNormalizer.toCatalogJson(original)
+        )
+        assertEquals("Mitsuhiro Arita", roundTripped.cards.single().illustratore)
     }
 }

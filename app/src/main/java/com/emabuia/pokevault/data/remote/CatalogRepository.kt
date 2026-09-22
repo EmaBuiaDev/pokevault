@@ -1265,6 +1265,38 @@ class CatalogRepository {
         return stages
     }
 
+    /**
+     * Illustratore delle carte italiane richieste, per apiCardId. Gemello di
+     * [italianStagesByCardId], stesse chiavi e stesso modo di fallire: mappa
+     * vuota se il catalogo non c'e', perche' un nome in meno non e' un errore.
+     *
+     * Passa dal catalogo intero e non da [getCard] perche' quello, sulle carte
+     * italiane, risolve solo da `memoryCards`/`memoryItalianCards` -- cache che
+     * si riempiono aprendo il set. Chi guarda una carta in collezione quel set
+     * puo' non averlo mai aperto, e li' getCard non trova niente. Il catalogo
+     * invece e' in SharedPreferences con cinque minuti di TTL: la prima carta
+     * paga il parse, le successive no.
+     */
+    suspend fun italianIllustratorsByCardId(context: Context, cardIds: Set<String>): Map<String, String> {
+        if (cardIds.isEmpty()) return emptyMap()
+        // Nessun id italiano fra quelli chiesti: si esce PRIMA di caricare il
+        // catalogo. Chi ha una collezione tutta inglese aprirebbe altrimenti
+        // il blob da diciottomila carte a ogni carta guardata, per poi non
+        // trovarci niente.
+        if (cardIds.none { isItalianOverlayCardId(it) }) return emptyMap()
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false).getOrNull()
+            ?: return emptyMap()
+
+        val illustrators = HashMap<String, String>()
+        for (record in catalog.cards) {
+            val illustrator = record.illustratore?.trim()?.takeIf { it.isNotBlank() } ?: continue
+            val cardId = buildItalianCardId(record)
+            if (cardId in cardIds) illustrators[cardId] = illustrator
+        }
+        return illustrators
+    }
+
     suspend fun findExactCardInCatalog(
         name: String?,
         setCode: String?,
@@ -2792,7 +2824,12 @@ class CatalogRepository {
                 large = largeImageWithBust
             ),
             tcgplayer = baseCard?.tcgplayer,
-            cardmarket = baseCard?.cardmarket
+            cardmarket = baseCard?.cardmarket,
+            // L'illustratore e' nostro in D1 (98% del catalogo). La carta
+            // inglese di appoggio arriva da PokeWallet, che non lo espone:
+            // il fallback resta per simmetria con gli altri campi, ma in
+            // pratica non scatta mai.
+            artist = record.illustratore?.takeIf { it.isNotBlank() } ?: baseCard?.artist
         )
     }
 

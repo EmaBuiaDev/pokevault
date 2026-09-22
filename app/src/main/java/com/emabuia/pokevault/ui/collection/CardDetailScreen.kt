@@ -160,6 +160,13 @@ fun CardDetailScreen(
     var isLoadingLivePrices by remember { mutableStateOf(false) }
     val livePriceCacheByApiId = remember { mutableStateMapOf<String, PokeWalletPriceData?>() }
 
+    // L'illustratore, per apiCardId. Una mappa e non una variabile sola
+    // perche' la schermata elenca tutte le stampe della carta e si passa
+    // dall'una all'altra: ognuna ha il suo apiCardId, e chi e' gia' stato
+    // cercato non si cerca due volte -- nemmeno quando la risposta e' "non lo
+    // so", ed e' il motivo per cui il valore e' nullable invece di assente.
+    val illustratorByApiId = remember { mutableStateMapOf<String, String?>() }
+
     var tempIsGraded by remember { mutableStateOf(false) }
     var tempGrade by remember { mutableStateOf<Float?>(null) }
     var tempGradeStr by remember { mutableStateOf("") }
@@ -216,6 +223,20 @@ fun CardDetailScreen(
             tempGradeStr = it.grade?.toString() ?: ""
             tempCompany = it.gradingCompany
         }
+    }
+
+    // L'illustratore ha un effetto suo e non viaggia con i prezzi: quello sotto
+    // esce prima di leggere la carta quando il prezzo e' gia' in cache, e la
+    // carta e' l'unica cosa che porta il nome.
+    LaunchedEffect(selectedVariantIndex, variants) {
+        val apiCardId = variants.getOrNull(selectedVariantIndex)
+            ?.apiCardId
+            ?.takeIf { it.isNotBlank() }
+            ?: return@LaunchedEffect
+        if (illustratorByApiId.containsKey(apiCardId)) return@LaunchedEffect
+
+        illustratorByApiId[apiCardId] = tcgRepository
+            .italianIllustratorsByCardId(context, setOf(apiCardId))[apiCardId]
     }
 
     LaunchedEffect(selectedVariantIndex, variants) {
@@ -615,6 +636,15 @@ fun CardDetailScreen(
                     DetailRow(AppLocale.condition, currentCard.condition)
                     DetailRow(AppLocale.languageLabel, currentCard.language)
                     DetailRow(AppLocale.estimatedValue, "€${"%.2f".format(currentCard.estimatedValue)}")
+                    // Ultimo, e non in mezzo agli altri, perche' e' l'unico
+                    // che parla della carta invece che di questa copia:
+                    // condizione, lingua e valore cambiano da copia a copia,
+                    // l'illustratore no. Arriva da D1 e copre il 98% del
+                    // catalogo: dove manca la riga non c'e' affatto, invece di
+                    // un trattino da riempire.
+                    illustratorByApiId[currentCard.apiCardId]?.let { illustrator ->
+                        DetailRow(AppLocale.illustrator, illustrator)
+                    }
                     if (currentCard.notes.isNotBlank()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(currentCard.notes, color = AppColors.textSecondary, fontSize = 13.sp)
