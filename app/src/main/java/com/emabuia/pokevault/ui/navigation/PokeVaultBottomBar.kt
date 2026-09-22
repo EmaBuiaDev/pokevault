@@ -14,15 +14,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,6 +48,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.emabuia.pokevault.ui.theme.AppColors
@@ -101,7 +105,7 @@ private val BottomBarHairline = 1.dp
  * piu' il layout a togliere questo spazio alle schermate: se lo tolgono loro,
  * leggendo questa costante. Serve che sia pubblica per quello.
  */
-val PokeVaultBottomBarHeight: androidx.compose.ui.unit.Dp = BottomBarHairline + BottomBarRowHeight
+val PokeVaultBottomBarHeight: Dp = BottomBarHairline + BottomBarRowHeight
 
 /**
  * Barra di navigazione principale.
@@ -122,6 +126,21 @@ fun PokeVaultBottomBar(
     // un bianco al 7% sopra una surface bianca non si vedrebbe.
     val hairline = AppColors.textPrimary.copy(alpha = 0.07f)
 
+    // La striscia di sistema sotto la riga: gesture bar o tre tasti.
+    //
+    // La tastiera va tolta dal conto. `safeDrawing` comprende anche l'IME, e la
+    // barra sta fuori dal NavHost, dove nessuno ha gia' consumato quell'inset:
+    // quando la tastiera si chiude `isImeVisible` diventa falso subito, mentre
+    // l'inset si sgonfia in un paio di decimi di secondo. In quel momento la
+    // barra tornava in composizione con sotto di se' tutta l'altezza della
+    // tastiera, e la riga si ritrovava a meta' schermo — con le voci, e i loro
+    // tocchi, insieme a lei.
+    val bottomInset = WindowInsets.safeDrawing
+        .only(WindowInsetsSides.Bottom)
+        .exclude(WindowInsets.ime)
+        .asPaddingValues()
+        .calculateBottomPadding()
+
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
@@ -134,14 +153,7 @@ fun PokeVaultBottomBar(
             label = "bottomBarIndicatorOffset"
         )
 
-        // Gli insets stanno qui dentro e non sul Box: cosi' la surface continua
-        // a dipingere dietro la barra di sistema, e sono i contenuti a
-        // scansarsi.
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -160,17 +172,28 @@ fun PokeVaultBottomBar(
                     )
                 }
 
+                // La riga arriva fino al bordo dello schermo, e sono le voci a
+                // scansare la barra di sistema dentro di se'. Prima lo spazio lo
+                // toglieva un padding sopra la riga: sotto restava la surface
+                // della barra, ma nessuna voce da toccare, e un dito appoggiato
+                // in basso — dove si tocca una bottom bar — cadeva nel vuoto.
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(BottomBarRowHeight)
+                        .height(BottomBarRowHeight + bottomInset)
                 ) {
                     tabs.forEach { tab ->
                         BottomBarItem(
                             tab = tab,
                             isSelected = tab == selected,
                             onClick = { onSelect(tab) },
-                            modifier = Modifier.width(tabWidth)
+                            contentBottomPadding = bottomInset,
+                            // weight e non width(tabWidth): quattro larghezze
+                            // arrotondate ognuna per conto suo possono non
+                            // ricoprire tutta la riga, e fra una voce e l'altra
+                            // resta una cucitura che non risponde. tabWidth
+                            // resta all'indicatore, che si muove e non si tocca.
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -184,6 +207,7 @@ private fun BottomBarItem(
     tab: BottomTab,
     isSelected: Boolean,
     onClick: () -> Unit,
+    contentBottomPadding: Dp,
     modifier: Modifier = Modifier
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -209,6 +233,10 @@ private fun BottomBarItem(
                 interactionSource = interaction,
                 indication = null
             )
+            // Il padding viene dopo il selectable di proposito: l'area che
+            // risponde resta alta quanto la voce, fino al bordo dello schermo, ed
+            // e' solo il contenuto a stare sopra la barra di sistema.
+            .padding(bottom = contentBottomPadding)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale

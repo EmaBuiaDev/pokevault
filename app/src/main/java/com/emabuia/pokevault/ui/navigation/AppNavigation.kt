@@ -16,8 +16,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.only
@@ -719,7 +721,14 @@ fun AppNavigation(
                 onClick = { navController.navigate(Routes.SCANNER) },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    // L'IME resta fuori dal conto, come nella barra: qui nessuno
+                    // l'ha ancora consumato, e mentre la tastiera si chiude
+                    // spedirebbe il FAB a meta' schermo.
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing
+                            .only(WindowInsetsSides.Bottom)
+                            .exclude(WindowInsets.ime)
+                    )
                     .padding(end = 20.dp, bottom = PokeVaultBottomBarHeight + 16.dp)
             )
 
