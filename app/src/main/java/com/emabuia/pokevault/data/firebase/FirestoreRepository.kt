@@ -465,6 +465,42 @@ class FirestoreRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    /**
+     * Toglie UNA copia da un documento: scala la quantita' di uno, o cancella
+     * il documento se era l'ultima.
+     *
+     * Serve all'"Annulla" dello scanner. [addCard] non crea sempre un documento
+     * nuovo -- se la stessa stampa c'e' gia' ne aumenta la quantita' -- quindi
+     * annullare un'aggiunta non puo' voler dire cancellare il documento: si
+     * perderebbero le copie che c'erano prima.
+     *
+     * Non passa da [updateCard] di proposito: quella riscrive un insieme fisso
+     * di campi dalla carta ricevuta. Qui si tocca solo la quantita', e i totali
+     * dell'utente con lo stesso criterio di [deleteCard] (niente per le carte
+     * solo-deck, che non li hanno mai mossi).
+     */
+    suspend fun removeOneCopy(cardId: String): Result<Unit> {
+        return try {
+            val doc = try {
+                cardsCollection.document(cardId).get(Source.CACHE).await()
+            } catch (_: Exception) { null }
+            if (doc == null || !doc.exists()) return Result.failure(IllegalStateException("card not found"))
+
+            val quantity = doc.getLong("quantity")?.toInt() ?: 1
+            if (quantity <= 1) return deleteCard(cardId)
+
+            val isDeckOnly = doc.getBoolean("deckOnly") ?: false
+            val value = doc.getDouble("estimatedValue") ?: 0.0
+
+            cardsCollection.document(cardId).update("quantity", FieldValue.increment(-1L))
+            if (!isDeckOnly) {
+                userDoc.update("totalCards", FieldValue.increment(-1L))
+                if (value != 0.0) userDoc.update("totalValue", FieldValue.increment(-value))
+            }
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
     suspend fun deleteCardByApiId(apiCardId: String): Result<Unit> {
         return try {
             // Query locale: le carte da cancellare sono già in cache perché

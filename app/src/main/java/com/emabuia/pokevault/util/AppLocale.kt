@@ -387,6 +387,57 @@ object AppLocale {
     val previousCard: String get() = if (isItalian) "Carta precedente" else "Previous card"
     val nextCard: String get() = if (isItalian) "Carta successiva" else "Next card"
     val noImage: String get() = if (isItalian) "Nessuna immagine" else "No image"
+    // Scanner. Prima questi testi erano scritti a mano in italiano, anche con
+    // l'app in inglese.
+    val scannerHintMissingId: String get() = if (isItalian)
+        "Non leggo il numero in basso a sinistra: avvicina la carta e riempi la cornice."
+    else
+        "I can't read the number at the bottom left: move closer and fill the frame."
+    val scannerAlreadyAdded: String get() = if (isItalian)
+        "Già aggiunta: passa alla carta successiva."
+    else
+        "Already added: move on to the next card."
+    fun scannerSearchError(message: String): String = if (isItalian) "Errore ricerca: $message" else "Search error: $message"
+    fun scannerSaveError(message: String): String = if (isItalian) "Errore salvataggio: $message" else "Save error: $message"
+    fun scannerUndoFailed(message: String): String = if (isItalian) "Non riesco ad annullare: $message" else "Couldn't undo: $message"
+    val scannerAllRejected: String get() = if (isItalian)
+        "Le hai scartate tutte per questo numero."
+    else
+        "You've discarded every card for this number."
+    fun scannerMissingTotal(number: String): String = if (isItalian)
+        "Numero $number letto, ma non il totale del set. Avvicina la carta."
+    else
+        "Read number $number, but not the set total. Move closer."
+    fun scannerNotInCatalog(number: String, total: String): String = if (isItalian)
+        "Nessuna carta $number/$total nel catalogo italiano."
+    else
+        "No card $number/$total in the Italian catalog."
+    fun scannerAddUndone(name: String): String = if (isItalian) "$name tolta dalla collezione." else "$name removed from your collection."
+    val scannerFillFrame: String get() = if (isItalian) "Riempi la cornice con la carta" else "Fill the frame with the card"
+    val scannerSearching: String get() = if (isItalian) "Cerco la carta…" else "Looking up the card…"
+    val scannerAddedTitle: String get() = if (isItalian) "Aggiunta!" else "Added!"
+    val scannerWhichOne: String get() = if (isItalian) "Quale di queste?" else "Which one?"
+    val scannerSameNumberHint: String get() = if (isItalian)
+        "Hanno lo stesso numero: cambia l'espansione."
+    else
+        "Same number, different set."
+    val scannerModeContinuous: String get() = if (isItalian) "Continuo" else "Continuous"
+    val scannerModeConfirm: String get() = if (isItalian) "A conferma" else "Confirm each"
+    val scannerManualSearch: String get() = if (isItalian) "Cercala a mano" else "Search by hand"
+    val scannerCantFind: String get() = if (isItalian) "Non è tra queste?" else "Not listed?"
+    val scannerRetryRejected: String get() = if (isItalian) "Riproponi tutte" else "Show them again"
+    val scannerDismissedLabel: String get() = if (isItalian) "Carta scartata" else "Card discarded"
+    fun scannerAddedLabel(name: String): String = if (isItalian) "Aggiunta: $name" else "Added: $name"
+    val scannerPrint: String get() = if (isItalian) "Stampa" else "Print"
+    val scannerPermissionRationale: String get() = if (isItalian)
+        "La fotocamera serve per scansionare le carte Pokémon e aggiungerle alla collezione."
+    else
+        "The camera is used to scan Pokémon cards and add them to your collection."
+    val scannerPermissionNeeded: String get() = if (isItalian)
+        "Per usare lo scanner serve il permesso fotocamera."
+    else
+        "The scanner needs camera permission."
+    val scannerUnknownExpansion: String get() = if (isItalian) "Espansione sconosciuta" else "Unknown set"
     val noneOfThese: String get() = if (isItalian) "Nessuna di queste" else "None of these"
     val discard: String get() = if (isItalian) "Scarta" else "Discard"
     val grantPermission: String get() = if (isItalian) "Concedi permesso" else "Grant permission"

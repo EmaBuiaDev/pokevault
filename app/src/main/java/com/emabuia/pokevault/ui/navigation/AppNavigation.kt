@@ -479,7 +479,8 @@ fun AppNavigation(
                 // ── Scanner ──
                 composable(Routes.SCANNER) {
                     ScannerScreen(
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onManualSearch = { navController.navigate(Routes.pokedexSearch()) }
                     )
                 }
 

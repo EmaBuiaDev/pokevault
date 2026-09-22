@@ -37,7 +37,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOff
@@ -94,6 +97,7 @@ import com.emabuia.pokevault.ocr.ImagePreprocessor
 import com.emabuia.pokevault.ocr.OCRTextBlock
 import com.emabuia.pokevault.ocr.ScannedFrame
 import com.emabuia.pokevault.ocr.ZoneBoundingBox
+import com.emabuia.pokevault.ui.components.CardVariants
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.Constants
 import com.emabuia.pokevault.util.ImageUrlUtils
@@ -116,6 +120,19 @@ import kotlin.math.roundToInt
  * Proporzioni carta Pokemon standard (63mm × 88mm).
  * Usato per calcolare la zona di scansione.
  */
+/**
+ * I pannelli dello scanner sono sempre scuri, qualunque sia il tema.
+ *
+ * Stanno sopra l'anteprima della fotocamera, e prima usavano lo sfondo del
+ * tema -- bianco nel tema chiaro -- con il testo bianco fisso: nome ed
+ * espansione della carta da confermare sparivano, bianco su bianco. Un
+ * pannello da fotocamera scuro si legge in entrambi i temi e non stona sopra
+ * l'immagine viva.
+ */
+private val ScannerPanelBackground = Color(0xF21B1B2E)
+private val ScannerPanelTextSecondary = Color.White.copy(alpha = 0.74f)
+private val ScannerPanelTextMuted = Color.White.copy(alpha = 0.55f)
+
 private const val CARD_ASPECT_RATIO = 63f / 88f // ~0.716
 
 /**
@@ -185,6 +202,8 @@ private fun ScannerCardImageFallback(
 @Composable
 fun ScannerScreen(
     onBack: () -> Unit,
+    /** Quando lo scanner non ci arriva: la ricerca carte del Pokedex. */
+    onManualSearch: () -> Unit = {},
     viewModel: ScannerViewModel = viewModel()
 ) {
     val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
@@ -301,7 +320,7 @@ fun ScannerScreen(
                 ) {
                     IconButton(onClick = onBack) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack, "Indietro",
+                            Icons.AutoMirrored.Filled.ArrowBack, AppLocale.back,
                             tint = Color.White,
                             modifier = Modifier
                                 .size(36.dp)
@@ -355,7 +374,7 @@ fun ScannerScreen(
                 state.detectedName.isBlank()
             ) {
                 Text(
-                    "Riempi la cornice con la carta",
+                    AppLocale.scannerFillFrame,
                     color = Color.White.copy(alpha = 0.92f),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
@@ -402,17 +421,41 @@ fun ScannerScreen(
                     }
                 }
 
-                // Errore
+                // L'ultima azione annullabile: scarto o aggiunta.
+                state.undo?.let { undo ->
+                    UndoBar(
+                        undo = undo,
+                        onUndo = {
+                            when (undo) {
+                                is com.emabuia.pokevault.viewmodel.ScannerUndo.Dismissed -> viewModel.undoDismiss()
+                                is com.emabuia.pokevault.viewmodel.ScannerUndo.Added -> viewModel.undoLastAdd()
+                            }
+                        },
+                        onClose = { viewModel.dismissUndo() }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Errore, con una strada per uscirne quando la carta non si trova.
                 state.errorMessage?.let { error ->
                     Text(
                         error,
                         color = Color.White,
                         fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier
                             .background(Color(0xE0EF4444), RoundedCornerShape(12.dp))
                             .padding(horizontal = 14.dp, vertical = 9.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                    if (state.notFound) {
+                        NotFoundActions(
+                            canRetryRejected = state.canRetryRejected,
+                            onManualSearch = onManualSearch,
+                            onRetryRejected = { viewModel.retryRejected() }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
 
                 // Un solo pannello per volta, in dissolvenza sul posto.
@@ -441,14 +484,16 @@ fun ScannerScreen(
                         is ScannerPanel.Confirm -> PendingCardConfirmation(
                             card = panel.card,
                             condition = state.condition,
-                            onConfirm = { viewModel.confirmAdd() },
+                            variants = remember(panel.card.id) { viewModel.variantsFor(panel.card) },
+                            onConfirm = { variant -> viewModel.confirmAdd(variant) },
                             onDismiss = { viewModel.dismissCard() }
                         )
 
                         is ScannerPanel.Choose -> CandidateCardPicker(
                             cards = panel.cards,
                             onSelect = { viewModel.selectCandidate(it) },
-                            onDismiss = { viewModel.dismissCard() }
+                            onDismiss = { viewModel.dismissCard() },
+                            onManualSearch = onManualSearch
                         )
 
                         is ScannerPanel.Added -> AddedCardBanner(card = panel.card)
@@ -577,7 +622,7 @@ private fun ScannerControls(
         ConditionSelector(condition = condition, onSelected = onConditionSelected)
 
         ScannerChip(
-            text = if (continuousMode) "Continuo" else "A conferma",
+            text = if (continuousMode) AppLocale.scannerModeContinuous else AppLocale.scannerModeConfirm,
             highlighted = continuousMode,
             icon = if (continuousMode) Icons.Default.Check else null,
             onClick = onToggleContinuous
@@ -694,7 +739,7 @@ private fun SearchingIndicator() {
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
-            "Ricerca carta in corso...",
+            AppLocale.scannerSearching,
             color = Color.White,
             fontSize = 14.sp
         )
@@ -735,7 +780,7 @@ private fun AddedCardBanner(card: com.emabuia.pokevault.data.remote.TcgCard) {
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    "Aggiunta!",
+                    AppLocale.scannerAddedTitle,
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
@@ -760,25 +805,26 @@ private fun AddedCardBanner(card: com.emabuia.pokevault.data.remote.TcgCard) {
 private fun CandidateCardPicker(
     cards: List<com.emabuia.pokevault.data.remote.TcgCard>,
     onSelect: (com.emabuia.pokevault.data.remote.TcgCard) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onManualSearch: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(AppColors.surface.copy(alpha = 0.97f))
+            .background(ScannerPanelBackground)
             .padding(14.dp)
     ) {
         Text(
-            "Quale di queste?",
+            AppLocale.scannerWhichOne,
             color = AppColors.blue,
             fontWeight = FontWeight.Bold,
             fontSize = 15.sp
         )
         Spacer(modifier = Modifier.height(3.dp))
         Text(
-            "Hanno lo stesso numero: cambia l'espansione.",
-            color = AppColors.textSecondary,
+            AppLocale.scannerSameNumberHint,
+            color = ScannerPanelTextSecondary,
             fontSize = 12.sp
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -790,17 +836,110 @@ private fun CandidateCardPicker(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        OutlinedButton(
-            onClick = onDismiss,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(42.dp),
+        // "Nessuna di queste" propone le successive; "Cercala a mano" e' l'uscita
+        // quando lo scanner proprio non ci arriva. Prima c'era solo la prima, e
+        // una carta che il catalogo sa ma lo scanner non legge restava fuori.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = ScannerPanelTextSecondary)
+            ) {
+                Icon(Icons.Default.Close, null, modifier = Modifier.size(17.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(AppLocale.noneOfThese, fontSize = 13.sp, maxLines = 1)
+            }
+            OutlinedButton(
+                onClick = onManualSearch,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.blue)
+            ) {
+                Icon(Icons.Default.Search, null, modifier = Modifier.size(17.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(AppLocale.scannerManualSearch, fontSize = 13.sp, maxLines = 1)
+            }
+        }
+    }
+}
+
+/**
+ * L'"Annulla" dell'ultima azione. Sta sopra i pannelli e non dentro: dopo uno
+ * scarto la scansione riparte subito e puo' gia' proporre altre carte, e
+ * l'annullamento deve restare raggiungibile anche con quelle sullo schermo.
+ */
+@Composable
+private fun UndoBar(
+    undo: com.emabuia.pokevault.viewmodel.ScannerUndo,
+    onUndo: () -> Unit,
+    onClose: () -> Unit
+) {
+    val label = when (undo) {
+        is com.emabuia.pokevault.viewmodel.ScannerUndo.Dismissed -> AppLocale.scannerDismissedLabel
+        is com.emabuia.pokevault.viewmodel.ScannerUndo.Added -> AppLocale.scannerAddedLabel(undo.card.name)
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(ScannerPanelBackground)
+            .padding(start = 14.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)
+    ) {
+        Text(
+            label,
+            color = Color.White,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        TextButton(onClick = onUndo) {
+            Icon(Icons.AutoMirrored.Filled.Undo, null, tint = AppColors.gold, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(AppLocale.undo, color = AppColors.gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+        IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Close, contentDescription = null, tint = ScannerPanelTextMuted, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+/**
+ * Quando non trova niente: il messaggio da solo lasciava l'utente senza una
+ * strada. Qui la ricerca a mano, e se si sono scartate tutte, riproporle.
+ */
+@Composable
+private fun NotFoundActions(
+    canRetryRejected: Boolean,
+    onManualSearch: () -> Unit,
+    onRetryRejected: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (canRetryRejected) {
+            Button(
+                onClick = onRetryRejected,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = ScannerPanelBackground)
+            ) {
+                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(AppLocale.scannerRetryRejected, fontSize = 13.sp)
+            }
+        }
+        Button(
+            onClick = onManualSearch,
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textSecondary)
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue)
         ) {
-            Icon(Icons.Default.Close, null, modifier = Modifier.size(17.dp))
+            Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text(AppLocale.noneOfThese, fontSize = 14.sp)
+            Text(AppLocale.scannerManualSearch, fontSize = 13.sp)
         }
     }
 }
@@ -847,7 +986,7 @@ private fun CandidateRow(
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                card.set?.name?.takeIf { it.isNotBlank() } ?: "Espansione sconosciuta",
+                card.set?.name?.takeIf { it.isNotBlank() } ?: AppLocale.scannerUnknownExpansion,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
@@ -857,7 +996,7 @@ private fun CandidateRow(
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 card.name,
-                color = AppColors.textSecondary,
+                color = ScannerPanelTextSecondary,
                 fontSize = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -869,7 +1008,7 @@ private fun CandidateRow(
             ) {
                 CardMetaPill("#${card.number}", AppColors.blue)
                 card.rarity?.takeIf { it.isNotBlank() }?.let {
-                    CardMetaPill(it, AppColors.lavender)
+                    CardMetaPill(AppLocale.translateRarity(it), AppColors.lavender)
                 }
                 if (price > 0.0) {
                     CardMetaPill("${"%.2f".format(price)} €", AppColors.green)
@@ -888,16 +1027,21 @@ private fun CandidateRow(
 private fun PendingCardConfirmation(
     card: com.emabuia.pokevault.data.remote.TcgCard,
     condition: String,
-    onConfirm: () -> Unit,
+    variants: List<String>,
+    onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val price = card.cardmarket?.prices.minimumEurPriceOrZero()
+    // La stampa parte dalla prima possibile per questa carta: per una rara
+    // holo e' la Holo. Prima lo scanner non la impostava, e tutto entrava come
+    // "Normale", anche le carte che normali non esistono.
+    var selectedVariant by remember(card.id, variants) { mutableStateOf(variants.firstOrNull() ?: "Normal") }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(AppColors.surface.copy(alpha = 0.97f))
+            .background(ScannerPanelBackground)
             .padding(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -958,7 +1102,7 @@ private fun PendingCardConfirmation(
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
                         setName,
-                        color = AppColors.textSecondary,
+                        color = ScannerPanelTextSecondary,
                         fontSize = 13.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -975,7 +1119,7 @@ private fun PendingCardConfirmation(
                 ) {
                     CardMetaPill("#${card.number}", AppColors.blue)
                     card.rarity?.takeIf { it.isNotBlank() }?.let {
-                        CardMetaPill(it, AppColors.lavender)
+                        CardMetaPill(AppLocale.translateRarity(it), AppColors.lavender)
                     }
                     card.hp?.takeIf { it.isNotBlank() }?.let {
                         CardMetaPill("$it HP", AppColors.orange)
@@ -991,10 +1135,43 @@ private fun PendingCardConfirmation(
                 // prima e facile da dimenticare dopo dieci carte.
                 Text(
                     condition,
-                    color = AppColors.textMuted,
+                    color = ScannerPanelTextMuted,
                     fontSize = 11.sp,
                     maxLines = 1
                 )
+            }
+        }
+
+        // La scelta della stampa solo dove c'e' da scegliere: su una carta che
+        // esiste in una stampa sola sarebbe una riga in piu' da ignorare.
+        if (variants.size > 1) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(AppLocale.scannerPrint, color = ScannerPanelTextMuted, fontSize = 11.sp)
+            Spacer(modifier = Modifier.height(6.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                variants.forEach { variant ->
+                    val selected = variant == selectedVariant
+                    val accent = CardVariants.color(variant)
+                    Text(
+                        CardVariants.label(variant),
+                        color = if (selected) Color.White else ScannerPanelTextSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selected) accent.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.06f))
+                            .border(
+                                1.dp,
+                                if (selected) accent else Color.White.copy(alpha = 0.15f),
+                                RoundedCornerShape(10.dp)
+                            )
+                            .clickable { selectedVariant = variant }
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    )
+                }
             }
         }
 
@@ -1009,7 +1186,7 @@ private fun PendingCardConfirmation(
                 modifier = Modifier.height(46.dp),
                 shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(horizontal = 18.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textSecondary)
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = ScannerPanelTextSecondary)
             ) {
                 Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
@@ -1019,7 +1196,7 @@ private fun PendingCardConfirmation(
             // L'azione che si ripete decine di volte di fila prende piu' spazio
             // dell'altra: e' quella che il pollice deve trovare senza guardare.
             Button(
-                onClick = onConfirm,
+                onClick = { onConfirm(selectedVariant) },
                 modifier = Modifier
                     .weight(1f)
                     .height(46.dp),
@@ -1382,9 +1559,9 @@ private fun PermissionRequest(
     ) {
         Text(
             text = if (shouldShowRationale)
-                "La fotocamera serve per scansionare le carte Pokémon e aggiungerle alla collezione."
+                AppLocale.scannerPermissionRationale
             else
-                "Per usare lo scanner serve il permesso fotocamera.",
+                AppLocale.scannerPermissionNeeded,
             color = AppColors.textSecondary,
             textAlign = TextAlign.Center,
             fontSize = 16.sp
