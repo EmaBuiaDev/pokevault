@@ -1188,6 +1188,78 @@ object AppLocale {
     // Etichette di ordinamento e categoria della collezione. Prima erano
     // hardcoded in italiano nel foglio dei filtri, e nei chip dei filtri attivi
     // veniva mostrato direttamente il nome dell'enum ("Ordine: PRICE_DESC").
+    // Le mie carte. Prima parecchi di questi testi erano scritti a mano in
+    // italiano dentro la schermata, e in inglese restavano in italiano.
+    val errorPrefix: String get() = if (isItalian) "Errore" else "Error"
+    val unknownExpansion: String get() = if (isItalian) "Espansione sconosciuta" else "Unknown Expansion"
+    val cardDeleted: String get() = if (isItalian) "Carta eliminata" else "Card deleted"
+    fun cardsDeleted(count: Int): String = if (isItalian) {
+        if (count == 1) "1 carta eliminata" else "$count carte eliminate"
+    } else {
+        if (count == 1) "1 card deleted" else "$count cards deleted"
+    }
+    val collectionStatCards: String get() = if (isItalian) "Carte" else "Cards"
+    val collectionStatUnique: String get() = if (isItalian) "Uniche" else "Unique"
+    val collectionStatValue: String get() = if (isItalian) "Valore" else "Value"
+    val collectionLayoutByExpansion: String get() = if (isItalian) "Per espansione" else "By set"
+    val collectionLayoutAll: String get() = if (isItalian) "Tutte" else "All"
+    val sortMenuTitle: String get() = if (isItalian) "Ordina" else "Sort"
+    val sortSectionCards: String get() = if (isItalian) "Carte" else "Cards"
+    val sortSectionExpansions: String get() = if (isItalian) "Espansioni" else "Sets"
+    val sortNumber: String get() = if (isItalian) "Numero" else "Number"
+    val sortPriceHigh: String get() = if (isItalian) "Prezzo più alto" else "Highest price"
+    val sortPriceLow: String get() = if (isItalian) "Prezzo più basso" else "Lowest price"
+    val expansionOrderMostValue: String get() = if (isItalian) "Più valore" else "Most value"
+    val filterCategory: String get() = if (isItalian) "Categoria" else "Category"
+    val filterType: String get() = if (isItalian) "Tipo" else "Type"
+    val filterExpansion: String get() = if (isItalian) "Espansione" else "Set"
+    val filterVariant: String get() = if (isItalian) "Stampa" else "Print"
+    val filterValue: String get() = if (isItalian) "Valore per copia" else "Value per copy"
+    val filterLanguage: String get() = if (isItalian) "Lingua" else "Language"
+    val filterOnlyDuplicates: String get() = if (isItalian) "Solo doppioni" else "Duplicates only"
+    fun filterOnlyDuplicatesHint(count: Int): String = if (isItalian)
+        "$count carte di cui hai più di una copia"
+    else
+        "$count cards you own more than once"
+    val valueNoPrice: String get() = if (isItalian) "Senza prezzo" else "No price"
+    val valueUnder1: String get() = if (isItalian) "Meno di 1 €" else "Under €1"
+    val value1to10: String get() = "1 – 10 €"
+    val value10to50: String get() = "10 – 50 €"
+    val valueOver50: String get() = if (isItalian) "Oltre 50 €" else "Over €50"
+    val searchExpansionHint: String get() = if (isItalian) "Cerca un'espansione…" else "Search a set…"
+    fun filterShowAllExpansions(count: Int): String = if (isItalian) "Mostra tutte ($count)" else "Show all ($count)"
+    val showFewer: String get() = if (isItalian) "Mostra meno" else "Show less"
+    val filtersClear: String get() = if (isItalian) "Azzera" else "Clear"
+    fun showCardsButton(count: Int): String = if (isItalian) {
+        when (count) {
+            0 -> "Nessuna carta"
+            1 -> "Mostra 1 carta"
+            else -> "Mostra $count carte"
+        }
+    } else {
+        when (count) {
+            0 -> "No cards"
+            1 -> "Show 1 card"
+            else -> "Show $count cards"
+        }
+    }
+    fun collectionResults(shown: Int, total: Int): String = if (isItalian)
+        "$shown di $total carte"
+    else
+        "$shown of $total cards"
+    val noResultsTitle: String get() = if (isItalian)
+        "Nessuna carta con questi filtri"
+    else
+        "No cards match these filters"
+    val noResultsAction: String get() = if (isItalian) "Azzera filtri e ricerca" else "Clear filters and search"
+    val emptyCollectionHint: String get() = if (isItalian)
+        "Aggiungi la prima carta dallo scanner o dal Pokédex."
+    else
+        "Add your first card from the scanner or the Pokédex."
+    fun expansionCardsAndCopies(cards: Int, copies: Int): String = if (isItalian)
+        "$cards carte · $copies copie"
+    else
+        "$cards cards · $copies copies"
     val sortRecent: String get() = if (isItalian) "Recenti" else "Recent"
     val sortPriceAsc: String get() = if (isItalian) "€ Crescente" else "€ Ascending"
     val sortPriceDesc: String get() = if (isItalian) "€ Decrescente" else "€ Descending"
