@@ -217,6 +217,7 @@ fun SetDetailScreen(
     sourceMacro: String? = null,
     onBack: () -> Unit,
     onPremiumRequired: () -> Unit,
+    onIllustratorClick: ((String) -> Unit)? = null,
     viewModel: SetDetailViewModel = viewModel(),
     wishlistViewModel: WishlistViewModel = viewModel()
 ) {
@@ -367,7 +368,8 @@ fun SetDetailScreen(
             cardList = sortedCards,
             onCardChange = { selectedCard = it },
             // La scheda sa dire quali stampe si hanno gia', come la griglia.
-            ownedVariants = state.ownedVariants[sheetCard.id].orEmpty()
+            ownedVariants = state.ownedVariants[sheetCard.id].orEmpty(),
+            onIllustratorClick = onIllustratorClick
         )
     }
 

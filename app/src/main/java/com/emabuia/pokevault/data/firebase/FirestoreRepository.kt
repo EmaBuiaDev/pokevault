@@ -51,6 +51,9 @@ class FirestoreRepository {
     private val tournamentsCollection
         get() = userDoc.collection("tournaments")
 
+    private val followedIllustratorsCollection
+        get() = userDoc.collection("followed_illustrators")
+
     private val goalAlbumsCollection
         get() = userDoc.collection("goal_albums")
 
@@ -1138,6 +1141,48 @@ class FirestoreRepository {
                 goalAlbumsCollection.document(album.id)
             }
             Result.success(docRef.id)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+
+    // --- ILLUSTRATORI SEGUITI ---
+
+    /**
+     * Gli illustratori che l'utente segue, per tenerli in cima alla lista.
+     *
+     * L'id del documento **e' la chiave normalizzata** (`IllustratorNames.keyOf`),
+     * non il nome mostrato: e' l'unica cosa stabile. Il nome visualizzato lo
+     * sceglie il catalogo fra le grafie che usa, e puo' cambiare quando entra
+     * un set nuovo -- salvarlo qui vorrebbe dire perdere il "segui" al primo
+     * ingest che sposta l'equilibrio fra due grafie.
+     *
+     * Nessun campo obbligatorio oltre alla data: esistere e' il dato.
+     */
+    fun getFollowedIllustrators(): Flow<Set<String>> = callbackFlow {
+        val col = try { followedIllustratorsCollection } catch (e: Exception) {
+            trySend(emptySet()); close(); return@callbackFlow
+        }
+        val listener = col.addSnapshotListener { snapshot, error ->
+            if (error != null) { close(error); return@addSnapshotListener }
+            trySend(snapshot?.documents?.map { it.id }?.toSet() ?: emptySet())
+        }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun setIllustratorFollowed(key: String, followed: Boolean): Result<Unit> {
+        val id = key.trim()
+        if (id.isEmpty()) return Result.success(Unit)
+        return try {
+            if (followed) {
+                followedIllustratorsCollection.document(id).set(
+                    hashMapOf<String, Any?>(
+                        "followedAt" to com.google.firebase.Timestamp.now()
+                    )
+                ).await()
+            } else {
+                followedIllustratorsCollection.document(id).delete().await()
+            }
+            Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
 

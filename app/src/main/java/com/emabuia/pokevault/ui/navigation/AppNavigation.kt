@@ -61,6 +61,8 @@ import com.emabuia.pokevault.ui.graded.GradedCardsScreen
 import com.emabuia.pokevault.ui.scanner.ScannerScreen
 import com.emabuia.pokevault.ui.stats.StatsScreen
 import com.emabuia.pokevault.ui.album.AlbumDetailScreen
+import com.emabuia.pokevault.ui.illustrator.IllustratorDetailScreen
+import com.emabuia.pokevault.ui.illustrator.IllustratorListScreen
 import com.emabuia.pokevault.ui.album.AlbumListScreen
 import com.emabuia.pokevault.ui.album.AlbumCollectionListScreen
 import com.emabuia.pokevault.ui.album.ChaseListScreen
@@ -140,7 +142,17 @@ object Routes {
     const val CREATE_GOAL_ALBUM = "create_goal_album"
     const val GOAL_ALBUM_DETAIL = "goal_album_detail/{goalAlbumId}"
 
+    const val ILLUSTRATORS = "illustrators"
+    const val ILLUSTRATOR_DETAIL = "illustrator_detail/{illustratorKey}"
+
     fun goalAlbumDetail(goalAlbumId: String) = "goal_album_detail/$goalAlbumId"
+
+    /**
+     * La chiave dell'illustratore va encodata: contiene spazi, e i nomi da cui
+     * nasce anche punti e accenti. Senza, la rotta non combacia e si atterra
+     * su una pagina vuota.
+     */
+    fun illustratorDetail(key: String) = "illustrator_detail/" + URLEncoder.encode(key, "UTF-8")
 
     /** Pokedex aperto direttamente sulla ricerca carte, col campo gia' a fuoco. */
     fun pokedexSearch() = "pokedex?search=true"
@@ -399,7 +411,8 @@ fun AppNavigation(
                         CardDetailScreen(
                             cardId = cardId,
                             onBack = { navController.popBackStack() },
-                            onEdit = { navController.navigate(Routes.editCard(cardId)) }
+                            onEdit = { navController.navigate(Routes.editCard(cardId)) },
+                            onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) }
                         )
                     }
                 }
@@ -421,7 +434,8 @@ fun AppNavigation(
                             onSetClick = { setId, macro ->
                                 // Naviga al dettaglio set
                                 navController.navigate(Routes.setDetail(setId, setId, macro))
-                            }
+                            },
+                            onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) }
                         )
                     }
                 }
@@ -448,7 +462,8 @@ fun AppNavigation(
                         setName = setName,
                         sourceMacro = macroArg,
                         onBack = { navController.popBackStack() },
-                        onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
+                        onPremiumRequired = { navController.navigate(Routes.PREMIUM) },
+                        onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) }
                     )
                 }
 
@@ -600,6 +615,8 @@ fun AppNavigation(
                         onAlbumClick = { albumId -> navController.navigate(Routes.albumDetail(albumId)) },
                         onOpenAlbumList = { navController.navigate(Routes.ALBUM_COLLECTION_LIST) },
                         onOpenChaseList = { navController.navigate(Routes.CHASE_LIST) },
+                        onOpenIllustrators = { navController.navigate(Routes.ILLUSTRATORS) },
+                        onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) },
                         onCreateChase = { navController.navigate(Routes.CREATE_GOAL_ALBUM) },
                         onChaseClick = { goalAlbumId -> navController.navigate(Routes.goalAlbumDetail(goalAlbumId)) },
                         onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
@@ -672,6 +689,32 @@ fun AppNavigation(
                     val goalAlbumId = backStackEntry.arguments?.getString("goalAlbumId") ?: ""
                     GoalAlbumDetailScreen(
                         goalAlbumId = goalAlbumId,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                // ── Illustratori ──
+                composable(Routes.ILLUSTRATORS) {
+                    IllustratorListScreen(
+                        onBack = { navController.popBackStack() },
+                        onIllustratorClick = { key ->
+                            navController.navigate(Routes.illustratorDetail(key))
+                        }
+                    )
+                }
+
+                // ── Dettaglio illustratore ──
+                composable(
+                    route = Routes.ILLUSTRATOR_DETAIL,
+                    arguments = listOf(navArgument("illustratorKey") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    // La chiave viaggia encodata perche' contiene spazi: senza
+                    // il decode si cercherebbe "mitsuhiro%20arita", che non
+                    // esiste, e la pagina resterebbe vuota senza errori.
+                    val raw = backStackEntry.arguments?.getString("illustratorKey").orEmpty()
+                    val key = runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrDefault(raw)
+                    IllustratorDetailScreen(
+                        illustratorKey = key,
                         onBack = { navController.popBackStack() }
                     )
                 }

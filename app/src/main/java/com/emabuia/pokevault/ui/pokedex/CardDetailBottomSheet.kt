@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -42,6 +43,7 @@ import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.IllustratorNames
 import com.emabuia.pokevault.ui.components.CardVariants
 import com.emabuia.pokevault.ui.components.OwnedVariantBadges
 import com.emabuia.pokevault.ui.components.RaritySymbolIcon
@@ -78,7 +80,16 @@ fun CardDetailBottomSheet(
      * lo sa: li' le pastiglie non dicono nulla, invece di dire "non ce l'hai"
      * a chi ce l'ha.
      */
-    ownedVariants: Set<String> = emptySet()
+    ownedVariants: Set<String> = emptySet(),
+    /**
+     * Apre la pagina dell'illustratore, con la sua chiave normalizzata.
+     *
+     * Null dove non c'e' dove andare (dentro la pagina dell'illustratore
+     * stesso, o dove il chiamante non ha la navigazione): li' la pastiglia
+     * resta testo, com'era prima. La scheda si chiude da sola prima di
+     * navigare, altrimenti resterebbe appesa sopra la schermata nuova.
+     */
+    onIllustratorClick: ((String) -> Unit)? = null
 ) {
     val rarityInfo = getRarityInfo(card.rarity)
     val context = LocalContext.current
@@ -365,6 +376,15 @@ fun CardDetailBottomSheet(
                             InfoPill(icon = "💰", text = "${"%.2f".format(price)} €", color = AppColors.green)
                         }
                         if (illustrator != null) {
+                            val illustratorKey = remember(illustrator) {
+                                IllustratorNames.keysOf(illustrator).firstOrNull()
+                            }
+                            val openIllustrator = if (onIllustratorClick != null && illustratorKey != null) {
+                                {
+                                    onDismiss()
+                                    onIllustratorClick(illustratorKey)
+                                }
+                            } else null
                             InfoPill(
                                 icon = "",
                                 text = illustrator,
@@ -376,7 +396,21 @@ fun CardDetailBottomSheet(
                                         tint = AppColors.lavender,
                                         modifier = Modifier.size(12.dp)
                                     )
-                                }
+                                },
+                                // Il bordo e la freccia dicono che si tocca: una
+                                // pastiglia uguale alle altre non lo direbbe.
+                                trailing = if (openIllustrator != null) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = null,
+                                            tint = AppColors.lavender,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                } else null,
+                                bordered = openIllustrator != null,
+                                onClick = openIllustrator
                             )
                         }
 

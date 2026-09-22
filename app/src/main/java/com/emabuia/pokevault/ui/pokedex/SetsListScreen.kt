@@ -178,6 +178,7 @@ fun SetsListScreen(
     openCardSearch: Boolean = false,
     onBack: () -> Unit,
     onSetClick: (String, String) -> Unit,
+    onIllustratorClick: ((String) -> Unit)? = null,
     viewModel: SetsViewModel = viewModel()
 ) {
     val state = viewModel.uiState
@@ -257,6 +258,7 @@ fun SetsListScreen(
             onRemoveCard = {},
             onDismiss = { selectedCard = null },
             cardList = state.searchedCards,
+            onIllustratorClick = onIllustratorClick,
             onCardChange = { selectedCard = it }
         )
     }

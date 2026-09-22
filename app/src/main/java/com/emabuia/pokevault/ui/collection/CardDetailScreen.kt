@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -47,6 +48,7 @@ import com.emabuia.pokevault.ui.navigation.sharedCardImage
 import com.emabuia.pokevault.ui.pokedex.PriceSparkline
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.IllustratorNames
 import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.util.getTypeEmojiForCollection
 import kotlinx.coroutines.flow.first
@@ -143,7 +145,8 @@ private fun CollectionDetailImageFallback(card: PokemonCard) {
 fun CardDetailScreen(
     cardId: String,
     onBack: () -> Unit,
-    onEdit: (String) -> Unit
+    onEdit: (String) -> Unit,
+    onIllustratorClick: ((String) -> Unit)? = null
 ) {
     val repository = remember { FirestoreRepository() }
     val tcgRepository = remember { RepositoryProvider.tcgRepository }
@@ -643,7 +646,38 @@ fun CardDetailScreen(
                     // catalogo: dove manca la riga non c'e' affatto, invece di
                     // un trattino da riempire.
                     illustratorByApiId[currentCard.apiCardId]?.let { illustrator ->
-                        DetailRow(AppLocale.illustrator, illustrator)
+                        val key = IllustratorNames.keysOf(illustrator).firstOrNull()
+                        if (onIllustratorClick != null && key != null) {
+                            // Toccabile: porta alla collezione di chi l'ha
+                            // disegnata. Il colore e la freccia lo dicono,
+                            // altrimenti sarebbe una riga uguale alle altre.
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onIllustratorClick(key) }
+                                    .padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = AppLocale.illustrator, color = AppColors.textMuted, fontSize = 14.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = illustrator,
+                                        color = AppColors.lavender,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = AppColors.lavender,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            DetailRow(AppLocale.illustrator, illustrator)
+                        }
                     }
                     if (currentCard.notes.isNotBlank()) {
                         Spacer(modifier = Modifier.height(8.dp))

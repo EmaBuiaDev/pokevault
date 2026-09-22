@@ -1219,7 +1219,7 @@ object AppLocale {
     val criteriaSupertype: String get() = if (isItalian) "Categoria" else "Category"
     val criteriaType: String get() = if (isItalian) "Tipo" else "Type"
     val criteriaCustom: String get() = if (isItalian) "Personalizzato" else "Custom"
-    val albumSubtitle: String get() = if (isItalian) "Album e Chase." else "Albums and Chases."
+    val albumSubtitle: String get() = if (isItalian) "Album, chase e illustratori." else "Albums, chases and illustrators."
     val collectorAlbumTitle: String get() = "Album"
     val collectorAlbumSubtitle: String get() = if (isItalian)
         "Raccogli le tue carte in album personalizzati"
@@ -1859,6 +1859,68 @@ object AppLocale {
     else
         "Create a goal album to complete a set or rarity"
 
+
+    // Sezione illustratori
+    val illustratorsTitle: String get() = if (isItalian) "Illustratori" else "Illustrators"
+    val illustratorsSubtitle: String get() = if (isItalian)
+        "Colleziona per artista"
+    else
+        "Collect by artist"
+    fun illustratorsCount(artists: Int): String =
+        if (isItalian) "$artists artisti" else "$artists artists"
+    fun illustratorsSets(sets: Int): String =
+        if (isItalian) "$sets espansioni" else "$sets sets"
+    fun illustratorsStarted(started: Int): String =
+        if (isItalian) "$started iniziati" else "$started started"
+    val illustratorsFollowed: String get() = if (isItalian) "Seguiti" else "Following"
+    val illustratorsAll: String get() = if (isItalian) "Tutti" else "All"
+    val illustratorFollow: String get() = if (isItalian) "Segui" else "Follow"
+    val illustratorUnfollow: String get() = if (isItalian) "Smetti di seguire" else "Unfollow"
+    val illustratorSearchHint: String get() = if (isItalian)
+        "Cerca un illustratore..."
+    else
+        "Search an illustrator..."
+    val illustratorSortClosest: String get() = if (isItalian) "Quasi fatti" else "Closest"
+    val illustratorSortCards: String get() = if (isItalian) "Più carte" else "Most cards"
+    val illustratorSortName: String get() = if (isItalian) "A-Z" else "A-Z"
+    val illustratorFilterMissing: String get() = if (isItalian) "Mancanti" else "Missing"
+    val illustratorFilterOwned: String get() = if (isItalian) "Possedute" else "Owned"
+    fun illustratorCardsAndSets(cards: Int, sets: Int): String =
+        if (isItalian) "$cards carte · $sets espansioni" else "$cards cards · $sets sets"
+    val illustratorsEmptyTitle: String get() = if (isItalian)
+        "Nessun illustratore"
+    else
+        "No illustrators"
+    val illustratorsEmptySubtitle: String get() = if (isItalian)
+        "Il catalogo non è raggiungibile in questo momento."
+    else
+        "The catalog isn't reachable right now."
+    val illustratorsNoMatch: String get() = if (isItalian)
+        "Nessun illustratore con questo nome"
+    else
+        "No illustrator by that name"
+    /**
+     * Le due righe oneste in fondo alla lista. Il ~2% di catalogo senza
+     * illustratore e le carte in collezione che non vengono dal catalogo
+     * italiano non si nascondono: senza dirlo, i totali sembrano sbagliati.
+     */
+    fun illustratorsCatalogGap(cards: Int): String = if (isItalian)
+        "$cards carte del catalogo non dicono chi le ha disegnate e non compaiono qui."
+    else
+        "$cards catalog cards don't say who drew them and aren't listed here."
+    fun illustratorsCollectionGap(cards: Int): String = if (isItalian)
+        "$cards carte della tua collezione non sono collegate al catalogo italiano e non contano nei progressi."
+    else
+        "$cards cards in your collection aren't linked to the Italian catalog and don't count towards progress."
+    val illustratorCompleteTitle: String get() = if (isItalian)
+        "Collezione completa!"
+    else
+        "Collection complete!"
+    fun illustratorCompleteSubtitle(name: String): String = if (isItalian)
+        "Hai tutte le carte disegnate da $name."
+    else
+        "You own every card drawn by $name."
+
     // CreateGoalAlbumScreen
     val createChaseTitle: String get() = if (isItalian) "Nuovo Chase" else "New Chase"
     val chaseNameLabel: String get() = if (isItalian) "Nome Chase" else "Chase Name"
@@ -1896,10 +1958,52 @@ object AppLocale {
 
     // Hub
     val collectorLabSubtitle: String get() = if (isItalian)
-        "Album, raccoglitori e set da chiudere"
+        "Album, chase e illustratori"
     else
-        "Albums, binders and sets to close"
+        "Albums, chases and illustrators"
     val collectorStatAlbums: String get() = if (isItalian) "Album" else "Albums"
+    // Collector Lab: una riga per strumento, la stessa nelle intestazioni e
+    // nell'introduzione, cosi' la pagina spiega ogni cosa con le stesse parole.
+    val collectorAlbumHint: String get() = if (isItalian)
+        "Le tue carte, pagina per pagina"
+    else
+        "Your cards, page by page"
+    val collectorChaseHint: String get() = if (isItalian)
+        "Un set da chiudere, carta per carta"
+    else
+        "A set to finish, card by card"
+    val collectorIllustratorsHint: String get() = if (isItalian)
+        "Tutte le carte di un artista"
+    else
+        "Every card by one artist"
+    val collectorNewAlbum: String get() = if (isItalian) "Nuovo album" else "New album"
+    val collectorNewChase: String get() = if (isItalian) "Nuovo chase" else "New chase"
+    val collectorAlbumEmptyHint: String get() = if (isItalian)
+        "Metti in pagina le carte che hai, come in un raccoglitore vero."
+    else
+        "Lay out the cards you own, like a real binder."
+    val collectorChaseEmptyHint: String get() = if (isItalian)
+        "Scegli un set e guarda quali carte ti mancano per chiuderlo."
+    else
+        "Pick a set and see which cards you still need."
+    val collectorIllustratorsEmptyHint: String get() = if (isItalian)
+        "Scegli un artista e colleziona tutte le carte che ha disegnato."
+    else
+        "Pick an artist and collect every card they drew."
+    fun collectorDiscoverIllustrators(count: Int): String = if (isItalian)
+        "Tutti i $count artisti"
+    else
+        "All $count artists"
+    val collectorNextStep: String get() = if (isItalian) "Il prossimo passo" else "Next up"
+    fun collectorMissingToFinish(count: Int): String = if (isItalian) {
+        if (count == 1) "Manca 1 carta per chiudere" else "Mancano $count carte per chiudere"
+    } else {
+        if (count == 1) "1 card to go" else "$count cards to go"
+    }
+    val collectorIntroTitle: String get() = if (isItalian)
+        "Tre modi di collezionare"
+    else
+        "Three ways to collect"
     val collectorStatCards: String get() = if (isItalian) "Carte inserite" else "Cards placed"
     val collectorStatValue: String get() = if (isItalian) "Valore" else "Value"
     val collectorStatChaseAvg: String get() = if (isItalian) "Media chase" else "Chase average"
