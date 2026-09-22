@@ -13,6 +13,8 @@ PokeWallet ai soli prezzi. Storia ed evoluzione complete in
 | `GET /v1/expansions` | D1 | Solo espansioni con `published=1` (copertura IT ≥ soglia) |
 | `GET /v1/expansions/{id}/cards` | D1 | Carte di una singola espansione |
 | `GET /v1/cards/{cardId}` | D1 | Record singola carta |
+| `GET /v1/illustrators` | D1 | Indice degli illustratori: `{illustrators:[{name,cardCount,expansionCount,cardIds}],cardsWithoutIllustrator:N}`. Nomi **grezzi**: normalizzazione e fusione delle grafie stanno nell'app |
+| `GET /v1/illustrators/{nome}/cards` | D1 | Carte di un illustratore, stesso shape di `/v1/expansions/{id}/cards`. Nome percent-encoded, match esatto sul valore grezzo |
 | `GET /ita/catalog.json` | D1 (fallback: blob R2) | Legacy, usato dal client per il full-catalog e la ricerca |
 | `GET /ita/prices.json` | KV (snapshot bulk PokeWallet) | Prezzi ITA→ENG pre-uniti |
 | `GET /images/it/{set}/{numero}` | R2 (`pokevault-images`) | Prova `.webp` prima di `.png`, più varianti di chiave per i set con prefissi letterali (Shiny Vault, Trainer Gallery) e per i promo (`SVP`, `mep`, ...) |
