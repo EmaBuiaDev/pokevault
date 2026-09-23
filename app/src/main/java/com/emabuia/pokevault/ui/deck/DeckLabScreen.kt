@@ -52,7 +52,10 @@ fun DeckLabScreen(
     val deckScope = rememberCoroutineScope()
 
     // Una volta per processo: i segnaposto di import vecchi tornano carte vere.
-    LaunchedEffect(Unit) { viewModel.repairImportPlaceholders(context) }
+    LaunchedEffect(Unit) {
+        viewModel.repairImportPlaceholders(context)
+        viewModel.tidyDeckOnlyCards()
+    }
 
     // Saveable: tornando dal dettaglio di un deck il filtro resta quello scelto.
     var deckListFilter by rememberSaveable { mutableStateOf(DeckListFilter.ALL) }

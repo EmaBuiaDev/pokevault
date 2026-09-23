@@ -40,6 +40,10 @@ class DeckLabViewModel : ViewModel() {
         private val legacyClassificationBackfillStarted = java.util.concurrent.atomic.AtomicBoolean(false)
         private val cardStageBackfillStarted = java.util.concurrent.atomic.AtomicBoolean(false)
         private val placeholderRepairStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+        private val deckOnlyTidyStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /** Un orfano piu' giovane di cosi' potrebbe essere di un deck ancora in costruzione. */
+        private const val ORPHAN_MIN_AGE_MS = 24L * 60 * 60 * 1000
 
         /** Prefisso di apiCardId per le carte che vengono dal catalogo italiano. */
         private const val ITALIAN_CARD_ID_PREFIX = "ita:"
@@ -1163,6 +1167,22 @@ class DeckLabViewModel : ViewModel() {
                 )
                 repository.replacePlaceholderIdentity(placeholder.id, repaired)
             }
+        }
+    }
+
+    /**
+     * Una volta per avvio: via le carte solo-deck orfane, quantita' gonfiate
+     * riportate a quelle che i deck usano. Le regole di prudenza stanno in
+     * [FirestoreRepository.tidyDeckOnlyCards]; qui si aggiunge solo cosa non
+     * toccare, cioe' il deck che si sta costruendo in questo momento.
+     */
+    fun tidyDeckOnlyCards() {
+        if (!deckOnlyTidyStarted.compareAndSet(false, true)) return
+        viewModelScope.launch {
+            val keep = sessionDeckOnlyCardIds + selectedCardsIds
+            repository.tidyDeckOnlyCards(minOrphanAgeMs = ORPHAN_MIN_AGE_MS, keepIds = keep)
+                // Offline o server irraggiungibile: si riprova alla prossima apertura.
+                .onFailure { deckOnlyTidyStarted.set(false) }
         }
     }
 

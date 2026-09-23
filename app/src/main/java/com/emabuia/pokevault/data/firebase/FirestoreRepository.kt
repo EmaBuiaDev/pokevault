@@ -14,6 +14,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
 import kotlin.math.abs
 import kotlinx.coroutines.channels.awaitClose
@@ -32,6 +33,32 @@ class FirestoreRepository {
 
     private val userDoc
         get() = firestore.collection("users").document(userId)
+
+    /**
+     * Segna nel documento dell'utente che l'app e' stata aperta, e con quale
+     * versione. Serve a sapere dalla console chi la usa ancora: l'ultimo
+     * accesso di Firebase Auth cambia solo al login, e chi resta collegato
+     * sembrava sparito da mesi.
+     *
+     * merge e non set: il documento tiene anche i totali della collezione, e
+     * sovrascriverlo li azzererebbe. Nessun errore risale: senza rete la
+     * scrittura resta in coda nella cache di Firestore, e senza utente non
+     * c'e' niente da segnare.
+     */
+    suspend fun touchLastSeen(appVersion: String) {
+        val uid = auth.currentUser?.uid ?: return
+        try {
+            firestore.collection("users").document(uid).set(
+                mapOf(
+                    "lastSeen" to FieldValue.serverTimestamp(),
+                    "appVersion" to appVersion
+                ),
+                SetOptions.merge()
+            ).await()
+        } catch (_: Exception) {
+            // Solo un'informazione per la console: non deve mai disturbare l'app.
+        }
+    }
 
     private val cardsCollection
         get() = userDoc.collection("cards")
@@ -276,7 +303,12 @@ class FirestoreRepository {
                 // Una carta solo-deck e una posseduta non si fondono mai, anche
                 // a parita' di stampa: sommarle vorrebbe dire far crescere la
                 // collezione per una carta che l'utente non ha comprato.
-                val existingForLanguage = existing?.documents?.firstOrNull { doc ->
+                //
+                // E due carte solo-deck non si fondono fra loro: ognuna appartiene
+                // al suo deck di prova. Fondendole, un import finiva dentro la copia
+                // di un altro deck -- o di un import abbandonato -- e la quantita'
+                // saliva a ogni tentativo (x17 visti in staging).
+                val existingForLanguage = if (card.deckOnly) null else existing?.documents?.firstOrNull { doc ->
                     normalizeLanguageKey(doc.getString("language")) == normalizeLanguageKey(canonicalLanguage) &&
                         (doc.getBoolean("deckOnly") ?: false) == card.deckOnly
                 }
@@ -429,6 +461,69 @@ class FirestoreRepository {
         return try {
             cardsCollection.document(cardId).update("subtypes", subtypes).await()
             Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Mette in ordine le carte solo-deck: cancella quelle che nessun deck
+     * salvato usa e riporta le quantita' gonfiate a quelle che servono.
+     *
+     * Gli orfani nascono da un import abbandonato senza passare dal tasto di
+     * chiusura -- app chiusa, telefono spento -- e nessuna schermata li mostra.
+     * Le quantita' gonfiate vengono dalla vecchia fusione fra carte solo-deck
+     * (vedi addCard): x17 su una carta di cui il deck ne usa tre.
+     *
+     * Prudente per costruzione, perche' qui si cancella:
+     * - deck e carte si leggono SOLO dal server. Una lettura dalla cache
+     *   potrebbe non avere tutti i deck, e le carte di quelli mancanti
+     *   sembrerebbero orfane.
+     * - un orfano si cancella solo se ha piu' di [minOrphanAgeMs]: un deck in
+     *   costruzione, anche su un altro telefono, ha carte non ancora
+     *   referenziate da nessun deck salvato.
+     * - [keepIds] sono le carte della sessione di modifica in corso.
+     *
+     * Le carte solo-deck non entrano nei totali della collezione, quindi
+     * cancellarle o ridurle non tocca valore e conteggi. Restituisce quanti
+     * documenti ha cambiato.
+     */
+    suspend fun tidyDeckOnlyCards(minOrphanAgeMs: Long, keepIds: Set<String>): Result<Int> {
+        return try {
+            val decks = decksCollection.get(Source.SERVER).await()
+            val deckOnlyCards = cardsCollection
+                .whereEqualTo("deckOnly", true)
+                .get(Source.SERVER)
+                .await()
+
+            // Per ogni carta, il massimo di copie che un singolo deck ne usa.
+            val copiesNeeded = HashMap<String, Int>()
+            for (deckDoc in decks.documents) {
+                val ids = (deckDoc.get("cards") as? List<*>)?.filterIsInstance<String>() ?: continue
+                ids.groupingBy { it }.eachCount().forEach { (id, count) ->
+                    copiesNeeded[id] = maxOf(copiesNeeded[id] ?: 0, count)
+                }
+            }
+
+            val now = System.currentTimeMillis()
+            var changed = 0
+            for (doc in deckOnlyCards.documents) {
+                if (doc.id in keepIds) continue
+                val needed = copiesNeeded[doc.id]
+                if (needed == null) {
+                    val addedAtMs = doc.getTimestamp("addedAt")?.toDate()?.time ?: continue
+                    if (now - addedAtMs < minOrphanAgeMs) continue
+                    doc.reference.delete().await()
+                    changed++
+                } else {
+                    val quantity = doc.getLong("quantity")?.toInt() ?: continue
+                    if (quantity > needed) {
+                        doc.reference.update("quantity", needed).await()
+                        changed++
+                    }
+                }
+            }
+            Result.success(changed)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -600,8 +695,9 @@ class FirestoreRepository {
                     }
 
                     // Stessa regola di addCard: le copie solo-deck sono un
-                    // insieme a parte e non assorbono quantita' di collezione.
-                    val existingForLanguage = existing?.documents?.firstOrNull { doc ->
+                    // insieme a parte e non assorbono quantita' di collezione, ne'
+                    // si fondono fra loro.
+                    val existingForLanguage = if (card.deckOnly) null else existing?.documents?.firstOrNull { doc ->
                         normalizeLanguageKey(doc.getString("language")) == normalizeLanguageKey(canonicalLanguage) &&
                             (doc.getBoolean("deckOnly") ?: false) == card.deckOnly
                     }
