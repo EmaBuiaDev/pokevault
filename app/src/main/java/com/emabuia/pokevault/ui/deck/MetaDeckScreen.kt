@@ -33,6 +33,8 @@ import com.emabuia.pokevault.data.model.MetaDeck
 import com.emabuia.pokevault.data.model.MetaDeckCard
 import com.emabuia.pokevault.data.model.TournamentKind
 import com.emabuia.pokevault.data.model.TournamentResult
+import com.emabuia.pokevault.ui.components.ArchetypeSpriteRow
+import com.emabuia.pokevault.ui.components.DeckSpriteCompact
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
@@ -1138,13 +1140,17 @@ fun Top3PlacementRow(
     rank: Int,
     onClick: () -> Unit
 ) {
-    val medalEmoji = when (rank) {
+    // Il piazzamento vero, non la posizione nella lista: quando un torneo non
+    // ha la decklist dei primi tre, la lista si riempie con i successivi, e il
+    // quarto classificato compariva con la medaglia d'oro.
+    val place = deck.placement?.takeIf { it > 0 } ?: rank
+    val medalEmoji = when (place) {
         1 -> "\uD83E\uDD47" // 🥇
         2 -> "\uD83E\uDD48" // 🥈
         3 -> "\uD83E\uDD49" // 🥉
-        else -> "#$rank"
+        else -> "#$place"
     }
-    val accentColor = when (rank) {
+    val accentColor = when (place) {
         1 -> AppColors.yellow
         2 -> Color(0xFFC0C0C0)
         3 -> Color(0xFFCD7F32)
@@ -1162,8 +1168,18 @@ fun Top3PlacementRow(
         // Medal
         Text(
             text = medalEmoji,
-            fontSize = 22.sp,
+            fontSize = if (place <= 3) 22.sp else 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = accentColor,
             modifier = Modifier.width(36.dp)
+        )
+
+        // I Pokemon del mazzo: un archetipo si riconosce prima dalla figura
+        // che dal nome, come nell'elenco dei propri deck e nel Match Log.
+        ArchetypeSpriteRow(
+            archetype = deck.archetype.orEmpty(),
+            size = DeckSpriteCompact,
+            modifier = Modifier.padding(end = 8.dp)
         )
 
         // Archetype + player

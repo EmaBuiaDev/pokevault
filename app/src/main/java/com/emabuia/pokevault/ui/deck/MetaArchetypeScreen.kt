@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.emabuia.pokevault.data.model.MetaArchetype
 import com.emabuia.pokevault.data.model.MetaDeck
+import com.emabuia.pokevault.ui.components.ArchetypeSpriteRow
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
@@ -80,7 +81,10 @@ fun MetaArchetypeSection(
         when (sortMode) {
             ArchetypeSortMode.META_SHARE    -> viewModel.archetypes
             ArchetypeSortMode.WIN_RATE      -> viewModel.archetypes.sortedByDescending { it.avgWinrate }
-            ArchetypeSortMode.BEST_PLACEMENT -> viewModel.archetypes.sortedBy { it.topPlacement }
+            // Senza piazzamento (0) in fondo, non in testa: vedi LimitlessPlacing.
+            ArchetypeSortMode.BEST_PLACEMENT -> viewModel.archetypes.sortedWith(
+                compareBy<MetaArchetype> { if (it.topPlacement > 0) 0 else 1 }.thenBy { it.topPlacement }
+            )
         }
     }
 
@@ -423,7 +427,15 @@ private fun ArchetypeCard(
                     Text("#$rank", color = rankColor, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // I Pokemon che danno il nome all'archetipo: in una classifica
+                // di nomi inglesi, la figura si riconosce prima della scritta.
+                ArchetypeSpriteRow(
+                    archetype = archetype.name,
+                    size = 40.dp,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
 
                 // Nome + tier badge + info secondaria
                 Column(modifier = Modifier.weight(1f)) {
@@ -458,7 +470,7 @@ private fun ArchetypeCard(
                     ) {
                         Text(AppLocale.deckCountLabel(archetype.count), color = AppColors.textMuted, fontSize = 11.sp)
 
-                        if (archetype.topPlacement <= 3) {
+                        if (archetype.topPlacement in 1..3) {
                             val trophyColor = when (archetype.topPlacement) {
                                 1    -> Color(0xFFFFD700)
                                 2    -> Color(0xFFC0C0C0)
@@ -544,7 +556,7 @@ private fun ArchetypeCard(
                 )
                 ArchetypeStat(
                     label = if (AppLocale.isItalian) "Piazzamento" else "Best Place",
-                    value = "#${archetype.topPlacement}",
+                    value = if (archetype.topPlacement > 0) "#${archetype.topPlacement}" else "—",
                     color = AppColors.blue,
                     modifier = Modifier.weight(1f)
                 )
@@ -602,7 +614,7 @@ private fun ArchetypeStat(
             verticalArrangement = Arrangement.Center
         ) {
             Text(text = value, color = color, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(text = label, color = color.copy(alpha = 0.7f), fontSize = 8.5.sp)
+            Text(text = label, color = color.copy(alpha = 0.75f), fontSize = 10.sp, maxLines = 1)
         }
     }
 }

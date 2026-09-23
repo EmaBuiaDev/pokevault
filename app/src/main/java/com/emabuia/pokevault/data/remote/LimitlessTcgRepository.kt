@@ -136,9 +136,9 @@ class LimitlessTcgRepository {
          */
         fun lastCacheTimestamp(format: String): Long? {
             val inMemory = listOfNotNull(
-                archetypeCache["archetypes_$format"]?.timestamp,
+                archetypeCache[archetypesKey(format)]?.timestamp,
                 tournamentResultsCache.entries
-                    .filter { it.key.startsWith("results_${format}_") }
+                    .filter { it.key.startsWith("results_v2_${format}_") }
                     .maxOfOrNull { it.value.timestamp }
             ).maxOrNull()
 
@@ -148,7 +148,10 @@ class LimitlessTcgRepository {
             return listOfNotNull(inMemory, onDisk).maxOrNull()
         }
 
-        private fun archetypesKey(format: String) = "archetypes_$format"
+        // v2: le voci salvate prima contano i ritirati come piazzamento 0 (vedi
+        // LimitlessPlacing). Con la chiave vecchia la cache su disco le avrebbe
+        // rimostrate fino alla scadenza.
+        private fun archetypesKey(format: String) = "archetypes_v2_$format"
     }
 
     /**
@@ -214,9 +217,9 @@ class LimitlessTcgRepository {
                         try {
                             val standings = standingsOf(tournament.id)
                             // Prendi top 32 (o tutti quelli con decklist)
-                            val withDeck = standings
-                                .filter { it.deck?.name != null || it.decklist != null }
-                                .sortedBy { it.placing }
+                            val withDeck = LimitlessPlacing.ranked(
+                                standings.filter { it.deck?.name != null || it.decklist != null }
+                            ) { it.placing }
                                 .take(32)
 
                             withDeck.mapNotNull { standing ->
@@ -259,10 +262,13 @@ class LimitlessTcgRepository {
                 val metaShare = (count.toDouble() / totalDecks) * 100.0
                 val winrates = entries.mapNotNull { it.winrate }
                 val avgWr = if (winrates.isNotEmpty()) winrates.average() else 0.0
-                val topPlace = entries.minOf { it.placement }
-                val recent = entries.sortedBy { it.placement }.take(5).map { it.placement }
+                val topPlace = LimitlessPlacing.best(entries.map { it.placement })
+                val recent = LimitlessPlacing.ranked(entries) { it.placement }
+                    .map { it.placement }
+                    .filter(LimitlessPlacing::isKnown)
+                    .take(5)
                 // Usa il deck con miglior piazzamento come sample
-                val bestDeck = entries.minByOrNull { it.placement }?.metaDeck
+                val bestDeck = LimitlessPlacing.ranked(entries) { it.placement }.firstOrNull()?.metaDeck
 
                 MetaArchetype(
                     name = displayName,
@@ -540,7 +546,7 @@ class LimitlessTcgRepository {
         limit: Int,
         kind: TournamentKind
     ): Result<List<TournamentResult>> {
-        val cacheKey = "results_${format}_${limit}_${kind.name}"
+        val cacheKey = "results_v2_${format}_${limit}_${kind.name}"
         tournamentResultsCache[cacheKey]?.let { cached ->
             if (System.currentTimeMillis() - cached.timestamp < CACHE_DURATION) {
                 return Result.success(cached.results)
@@ -620,9 +626,9 @@ class LimitlessTcgRepository {
                             val standings = standingsOf(tournament.id)
 
                             // Prendi i top piazzati con decklist, filtrando placement 1-3
-                            val withDecklist = standings
-                                .filter { it.decklist != null }
-                                .sortedBy { it.placing }
+                            val withDecklist = LimitlessPlacing.ranked(
+                                standings.filter { it.decklist != null }
+                            ) { it.placing }
 
                             // Prima tenta esattamente top 3 (placing 1, 2, 3)
                             val top3Exact = withDecklist.filter { it.placing in 1..3 }.take(3)
