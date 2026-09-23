@@ -50,6 +50,22 @@ class PokemonSpriteResolverTest {
         assertEquals(6, dex("Dark Charizard"))
     }
 
+    /**
+     * I nomi delle carte italiane, cosi' come arrivano dal catalogo: la specie
+     * sta davanti, e i Paradosso hanno un nome tutto loro. Prima nessuno di
+     * questi aveva uno sprite, e un deck importato restava senza copertina.
+     */
+    @Test
+    fun testNomiItaliani() {
+        assertEquals(1017, dex("Ogerpon Maschera Turchese-ex"))
+        assertEquals(35, dex("Clefairy-ex di Lylia"))
+        assertEquals(23, dex("Ekans del Team Rocket"))
+        assertEquals(52, dex("Meowth di Galar"))
+        assertEquals(1021, dex("Furiatonante-ex"))
+        assertEquals(992, dex("Manoferrea-ex"))
+        assertEquals(151, dex("Mew-ex"))
+    }
+
     /** Le carte vecchie intestate a un personaggio: "Brock's Onix". */
     @Test
     fun testCarteDiUnPersonaggio() {
