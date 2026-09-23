@@ -1557,6 +1557,8 @@ object AppLocale {
     val loginTab: String get() = if (isItalian) "Accedi" else "Login"
     val registerTab: String get() = if (isItalian) "Unisciti" else "Join"
     val or: String get() = if (isItalian) " oppure " else " or "
+    val showPassword: String get() = if (isItalian) "Mostra password" else "Show password"
+    val hidePassword: String get() = if (isItalian) "Nascondi password" else "Hide password"
 
     // ══════════════════════════════════════
     // LEGAL & COMPLIANCE
