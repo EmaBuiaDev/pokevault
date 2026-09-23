@@ -43,6 +43,14 @@ object SetCodeMapper {
         // MEP, che e' un altro Pokemon.
         "MEP" to "mep",
         "ME2PT5" to "asc",
+        // Le due uscite dopo Caos Nascente. Senza alias il codice delle
+        // decklist (PBL, 30C) non portava a nessuna espansione italiana, e
+        // ogni carta di questi set diventava un segnaposto senza immagine.
+        // Verificati sul catalogo per numero e nome: PBL 65 e' Mega
+        // Excadrill-ex di me05, 30C 66 e' Mew-ex di 30th.
+        "PBL" to "me05",
+        "ME05" to "me05",
+        "30C" to "30th",
         // Black Bolt e White Flare sono due set diversi usciti insieme, e sono
         // questi i loro id veri: "sv11" non esiste, e mandandoceli entrambi si
         // rendevano indistinguibili esattamente come MEG e MEP.
@@ -70,6 +78,8 @@ object SetCodeMapper {
     )
 
     private val apiIdRegex = Regex("^[a-z0-9]+$")
+
+    private val canonicalIds: Map<String, String> = aliasToApiId.values.associateBy { it.lowercase() }
 
     private val setNameToApiId: Map<String, String> = mapOf(
         "scarlet violet" to "sv1",
@@ -111,6 +121,10 @@ object SetCodeMapper {
         val cleaned = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
         val upper = cleaned.uppercase()
         aliasToApiId[upper]?.let { return it }
+        // Un id gia' canonico resta com'e'. Senza, "dcr" (quello che CRI
+        // diventa) tornava "DCR" a una seconda normalizzazione: il parser
+        // normalizza, e chi riceve la carta normalizza di nuovo.
+        canonicalIds[cleaned.lowercase()]?.let { return it }
 
         val normalizedName = normalizeSetName(cleaned)
         setNameToApiId[normalizedName]?.let { return it }

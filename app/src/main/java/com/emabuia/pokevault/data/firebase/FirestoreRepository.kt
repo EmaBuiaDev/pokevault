@@ -434,6 +434,36 @@ class FirestoreRepository {
         }
     }
 
+    /**
+     * Da segnaposto di import a carta vera, sullo stesso documento.
+     *
+     * Scrive solo i campi che dicono QUALE carta e': nome, immagine, set,
+     * numero, id catalogo, tipo. Quantita', valore, variante e il flag
+     * solo-deck restano quelli che erano, quindi i totali della collezione non
+     * cambiano, e i deck che puntano a questo id continuano a trovarlo.
+     */
+    suspend fun replacePlaceholderIdentity(cardId: String, card: PokemonCard): Result<Unit> {
+        return try {
+            cardsCollection.document(cardId).update(
+                mapOf(
+                    "name" to card.name,
+                    "imageUrl" to card.imageUrl,
+                    "set" to card.set,
+                    "rarity" to card.rarity,
+                    "type" to card.type,
+                    "hp" to card.hp,
+                    "supertype" to card.supertype,
+                    "subtypes" to card.subtypes,
+                    "apiCardId" to card.apiCardId,
+                    "cardNumber" to card.cardNumber
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteCard(cardId: String): Result<Unit> {
         return try {
             // Leggiamo quantità e valore dalla cache locale (istantaneo) per

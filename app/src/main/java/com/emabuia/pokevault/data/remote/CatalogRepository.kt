@@ -1224,6 +1224,7 @@ class CatalogRepository {
         // si arriva in fondo solo quando il nome non si trova, che e' il caso
         // in cui serve davvero sapere se esisteva un'alternativa.
         var fallback: ItalianCardRecord? = null
+        var sameSpecies: ItalianCardRecord? = null
         var chosen: ItalianCardRecord? = null
 
         for (rec in catalog.cards) {
@@ -1243,9 +1244,15 @@ class CatalogRepository {
                 break
             }
             if (fallback == null) fallback = rec
+            if (sameSpecies == null && PokemonNameMatcher.sameSpecies(expectedName, rec.nome)) sameSpecies = rec
         }
 
+        // Sui Pokemon il nome intero non basta come veto: forme e Pokemon "di"
+        // un allenatore si traducono ("Lillie's Clefairy ex" -> "Clefairy-ex
+        // di Lylia"). Si accetta la carta se la specie e' la stessa, che e'
+        // quanto serve a scartare un Treecko al posto di un Kadabra.
         val record = chosen
+            ?: sameSpecies
             ?: if (requireNameMatch) return null else (fallback ?: return null)
 
         val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)

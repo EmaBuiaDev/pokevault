@@ -28,6 +28,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 class DeckLabViewModel : ViewModel() {
@@ -38,6 +39,7 @@ class DeckLabViewModel : ViewModel() {
     companion object {
         private val legacyClassificationBackfillStarted = java.util.concurrent.atomic.AtomicBoolean(false)
         private val cardStageBackfillStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+        private val placeholderRepairStarted = java.util.concurrent.atomic.AtomicBoolean(false)
 
         /** Prefisso di apiCardId per le carte che vengono dal catalogo italiano. */
         private const val ITALIAN_CARD_ID_PREFIX = "ita:"
@@ -1042,28 +1044,7 @@ class DeckLabViewModel : ViewModel() {
         context: Context,
         deckOnly: Boolean
     ): PokemonCard {
-        // Tre tentativi prima di arrendersi a una carta senza immagine.
-        // Prima ce n'era uno solo, e bastava un codice di set che il catalogo
-        // italiano non conosce — SVE per le energie, o un'espansione appena
-        // uscita — perche' la carta entrasse in collezione come un rettangolo
-        // vuoto col nome sopra.
-        // Il nome viene passato insieme a set e numero: due espansioni diverse
-        // possono rispondere allo stesso codice, e senza il nome si prendeva la
-        // prima del catalogo -- e' cosi' che un "Kadabra MEG 55" tornava un
-        // Treecko. Sui Pokemon il nome e' anche un veto, perche' in italiano si
-        // chiamano come in inglese: se non combacia, meglio cercare per nome
-        // che tenersi la carta sbagliata. Su Allenatori ed Energie no, li' i
-        // nomi sono tradotti e il confronto fallirebbe sempre.
-        val isPokemon = card.type.equals("pokemon", ignoreCase = true)
-        val tcgCard = pokeTcgRepository.findExactItalianCard(
-            setCode = card.set,
-            number = card.number,
-            context = context,
-            expectedName = card.name,
-            requireNameMatch = isPokemon
-        )
-            ?: resolveBasicEnergyCard(card, context)
-            ?: resolveByNameOnly(card, context)
+        val tcgCard = resolveCatalogCard(card, context)
 
         return if (tcgCard != null) {
             // Una carta solo-deck non vale niente perche' non e' posseduta:
@@ -1077,27 +1058,7 @@ class DeckLabViewModel : ViewModel() {
                 context = context
             )
 
-            PokemonCard(
-                name = tcgCard.name,
-                imageUrl = tcgCard.images.small,
-                set = tcgCard.set?.name ?: card.set ?: "",
-                rarity = tcgCard.rarity.orEmpty(),
-                type = tcgCard.types?.firstOrNull() ?: "Colorless",
-                hp = tcgCard.hp?.toIntOrNull() ?: 0,
-                supertype = tcgCard.supertype.ifBlank {
-                    when (card.type.lowercase()) {
-                        "pokemon" -> "Pokémon"; "trainer" -> "Trainer"; "energy" -> "Energy"; else -> "Pokémon"
-                    }
-                },
-                subtypes = tcgCard.subtypes ?: emptyList(),
-                apiCardId = tcgCard.id,
-                cardNumber = tcgCard.number,
-                estimatedValue = price,
-                quantity = card.qty,
-                condition = "Near Mint",
-                variant = "Normal",
-                deckOnly = deckOnly
-            )
+            tcgCard.toDeckCard(card, quantity = card.qty, price = price, deckOnly = deckOnly)
         } else {
             // Fallback: dati minimi dal MetaDeckCard
             val supertype = when (card.type.lowercase()) {
@@ -1116,6 +1077,125 @@ class DeckLabViewModel : ViewModel() {
                 deckOnly = deckOnly
             )
         }
+    }
+
+    private fun TcgCard.toDeckCard(
+        requested: MetaDeckCard,
+        quantity: Int,
+        price: Double,
+        deckOnly: Boolean
+    ): PokemonCard = PokemonCard(
+        name = name,
+        imageUrl = images.small,
+        set = set?.name ?: requested.set ?: "",
+        rarity = rarity.orEmpty(),
+        type = types?.firstOrNull() ?: "Colorless",
+        hp = hp?.toIntOrNull() ?: 0,
+        // Senza PS il catalogo tira a indovinare: tutto cio' che non si chiama
+        // "Energia" diventa Allenatore. Succede sui set appena usciti, prima
+        // dei backfill (30th li aveva vuoti su tutte le 154 carte), e cosi'
+        // Mew-ex finiva fra gli Allenatori del mazzo. Li' decide la decklist,
+        // che la sezione la dice.
+        supertype = requested.supertypeLabel()
+            ?.takeIf { hp.isNullOrBlank() && types.isNullOrEmpty() }
+            ?: supertype.ifBlank { requested.supertypeLabel() ?: "Pokémon" },
+        subtypes = subtypes ?: emptyList(),
+        apiCardId = id,
+        cardNumber = number,
+        estimatedValue = price,
+        quantity = quantity,
+        condition = "Near Mint",
+        variant = "Normal",
+        deckOnly = deckOnly
+    )
+
+    private fun MetaDeckCard.supertypeLabel(): String? = when (type.lowercase()) {
+        "pokemon" -> "Pokémon"
+        "trainer" -> "Trainer"
+        "energy" -> "Energy"
+        else -> null
+    }
+
+    /**
+     * I segnaposto gia' salvati, riparati sul posto.
+     *
+     * Le regole di ricerca sono migliorate (specie tradotte, Paradosso, i
+     * codici PBL e 30C), ma le carte importate prima restano in Firestore
+     * col solo nome. Cancellarle e reimportare il mazzo non e' una risposta:
+     * qui si rifa' la stessa ricerca dell'import sui documenti senza immagine
+     * e senza id catalogo, e dove la carta ora si trova la si scrive sullo
+     * stesso documento. Id, quantita' e deck restano quelli.
+     */
+    fun repairImportPlaceholders(context: Context) {
+        if (!placeholderRepairStarted.compareAndSet(false, true)) return
+        val appContext = context.applicationContext
+        viewModelScope.launch {
+            val cards = withTimeoutOrNull(STAGE_BACKFILL_WAIT_MS) {
+                snapshotFlow { allCards }.first { it.isNotEmpty() }
+            } ?: run {
+                placeholderRepairStarted.set(false)
+                return@launch
+            }
+
+            val placeholders = cards.filter { it.imageUrl.isBlank() && it.apiCardId.isBlank() }
+            if (placeholders.isEmpty()) return@launch
+
+            for (placeholder in placeholders) {
+                val requested = MetaDeckCard(
+                    name = placeholder.name,
+                    set = placeholder.set.takeIf { it.isNotBlank() },
+                    number = placeholder.cardNumber.takeIf { it.isNotBlank() },
+                    qty = placeholder.quantity,
+                    type = when (CardClassifier.classify(placeholder)) {
+                        CardClassifier.POKEMON -> "pokemon"
+                        CardClassifier.TRAINER -> "trainer"
+                        CardClassifier.ENERGY -> "energy"
+                        else -> "pokemon"
+                    }
+                )
+                val found = withContext(Dispatchers.IO) { resolveCatalogCard(requested, appContext) }
+                    ?: continue
+                val repaired = found.toDeckCard(
+                    requested = requested,
+                    quantity = placeholder.quantity,
+                    price = placeholder.estimatedValue,
+                    deckOnly = placeholder.deckOnly
+                )
+                repository.replacePlaceholderIdentity(placeholder.id, repaired)
+            }
+        }
+    }
+
+    /**
+     * La carta del catalogo italiano che una riga di decklist indica, o null.
+     * La stessa ricerca per l'import e per la riparazione dei segnaposto.
+     */
+    private suspend fun resolveCatalogCard(card: MetaDeckCard, context: Context): TcgCard? {
+        // Tre tentativi prima di arrendersi a una carta senza immagine.
+        // Prima ce n'era uno solo, e bastava un codice di set che il catalogo
+        // italiano non conosce — SVE per le energie, o un'espansione appena
+        // uscita — perche' la carta entrasse in collezione come un rettangolo
+        // vuoto col nome sopra.
+        // Il nome viene passato insieme a set e numero: due espansioni diverse
+        // possono rispondere allo stesso codice, e senza il nome si prendeva la
+        // prima del catalogo -- e' cosi' che un "Kadabra MEG 55" tornava un
+        // Treecko. Sui Pokemon il nome e' anche un veto, ma sulla specie e non
+        // sul nome intero: la specie resta uguale in italiano, forme e
+        // possessivi no ("Lillie's Clefairy ex" e' "Clefairy-ex di Lylia"), e
+        // col nome intero quelle carte finivano segnaposto senza immagine. Su
+        // Allenatori ed Energie niente veto, li' i nomi sono tradotti del tutto.
+        val isPokemon = card.type.equals("pokemon", ignoreCase = true)
+        val tcgCard = pokeTcgRepository.findExactItalianCard(
+            setCode = card.set,
+            number = card.number,
+            context = context,
+            expectedName = card.name,
+            requireNameMatch = isPokemon
+        )
+            ?: resolveBasicEnergyCard(card, context)
+            ?: resolveByNameOnly(card, context)
+
+        return tcgCard
     }
 
     /**
@@ -1225,6 +1305,17 @@ class DeckLabViewModel : ViewModel() {
      */
     fun addTcgCardToDeck(card: TcgCard, qty: Int, context: Context, onComplete: () -> Unit = {}) {
         val deckOnly = deckCardSource == DeckCardSource.DECK_ONLY
+        // Il tetto va controllato prima di scrivere, non dopo. Prima la carta
+        // entrava in collezione e poi il take(60) la tagliava fuori dal deck:
+        // a mazzo pieno "aggiungi" non aggiungeva niente al deck, ma
+        // dichiarava posseduta una carta che l'utente voleva solo provare.
+        val room = 60 - selectedCardsIds.size
+        if (room <= 0) {
+            validationError = "Limite massimo di 60 carte raggiunto."
+            onComplete()
+            return
+        }
+        val qtyToAdd = qty.coerceAtMost(room)
         viewModelScope.launch {
             val price = if (deckOnly) 0.0 else resolveBestPrice(
                 card = card,
@@ -1245,7 +1336,7 @@ class DeckLabViewModel : ViewModel() {
                 apiCardId = card.id,
                 cardNumber = card.number,
                 estimatedValue = price,
-                quantity = qty,
+                quantity = qtyToAdd,
                 condition = "Near Mint",
                 variant = "Normal",
                 deckOnly = deckOnly
@@ -1253,7 +1344,7 @@ class DeckLabViewModel : ViewModel() {
             val result = repository.addCard(pokemonCard)
             result.onSuccess { docId ->
                 if (deckOnly) sessionDeckOnlyCardIds = sessionDeckOnlyCardIds + docId
-                val newIds = List(qty) { docId }
+                val newIds = List(qtyToAdd) { docId }
                 selectedCardsIds = (selectedCardsIds + newIds).take(60)
                 analyzeDeck()
             }
