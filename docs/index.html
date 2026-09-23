@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PokeVault</title>
+    <link rel="icon" type="image/svg+xml" href="/pokevault/icon.svg">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -21,16 +22,13 @@
             text-align: center;
         }
         .logo {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #3F51B5, #283593);
-            border-radius: 20px;
+            display: block;
+            width: 96px;
+            height: 96px;
+            border-radius: 26px;
             margin: 0 auto 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 40px rgba(139, 92, 246, 0.35);
         }
-        .logo svg { width: 48px; height: 48px; }
         h1 {
             color: #FFFFFF;
             font-size: 32px;
@@ -70,14 +68,7 @@
 </head>
 <body>
 <div class="container">
-    <div class="logo">
-        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="10" y="8" width="18" height="26" rx="2" transform="rotate(15 19 21)" fill="#C5CAE9" opacity="0.4"/>
-            <rect x="10" y="8" width="18" height="26" rx="2" transform="rotate(-10 19 21)" fill="#C5CAE9" opacity="0.6"/>
-            <rect x="10" y="8" width="18" height="26" rx="2" fill="#C5CAE9"/>
-            <polygon points="19,17 25,24 19,31 13,24" fill="#F5B800"/>
-        </svg>
-    </div>
+    <img class="logo" src="/pokevault/icon.svg" alt="PokeVault">
 
     <h1>PokeVault</h1>
     <p class="tagline">La tua collezione di carte, al sicuro.</p>
