@@ -22,13 +22,45 @@ android {
         applicationId = "com.emabuia.pokevault"
         minSdk = 26
         targetSdk = 36
-        versionCode = 31
-        versionName = "3.1.0"
+        versionCode = 36
+        versionName = "3.1.3"
 
         buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
         buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "${localProperties.getProperty("POKEWALLET_PROXY_ENABLED", "false")}")
         buildConfigField("String", "POKEWALLET_PROXY_URL", "\"${localProperties.getProperty("POKEWALLET_PROXY_URL", "")}\"")
         buildConfigField("String", "ITALIAN_CATALOG_URL", "\"${localProperties.getProperty("ITALIAN_CATALOG_URL", "")}\"")
+    }
+
+    // ── Ambienti ────────────────────────────────────────────────────────────
+    //
+    // Due progetti Firebase distinti, cosi' provare l'app sul telefono non
+    // significa piu' scrivere nei dati veri. Lo staging ha un applicationId
+    // suo, quindi le due app convivono sullo stesso dispositivo e si passa
+    // dall'una all'altra senza disinstallare niente.
+    //
+    // Cosa NON e' separato, e perche':
+    //   - il Worker Cloudflare resta condiviso: catalogo, prezzi e immagini
+    //     sono dati di riferimento, non dati dell'utente, e duplicarli
+    //     vorrebbe dire tenerli allineati a mano;
+    //   - le rotte autenticate del Worker (/billing, /gift) rifiutano pero'
+    //     gli utenti di staging: verificano l'ID token contro un solo
+    //     FIREBASE_PROJECT_ID, quello di produzione (src/billing.ts);
+    //   - gli acquisti Play non funzionano in staging, perche' Play riconosce
+    //     solo il package pubblicato. Gli abbonamenti si provano in
+    //     produzione con i license tester, come prima.
+    flavorDimensions += "environment"
+    productFlavors {
+        create("prod") {
+            dimension = "environment"
+            // Nessun suffisso, e va lasciato cosi': l'app su Play deve restare
+            // esattamente com.emabuia.pokevault, altrimenti saltano insieme
+            // billing, firma di Play e Google Sign-In.
+        }
+        create("staging") {
+            dimension = "environment"
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+        }
     }
 
     signingConfigs {
@@ -52,6 +84,12 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            // Niente `ndk { debugSymbolLevel = ... }` per l'avviso di Play sui
+            // simboli di debug nativi: non c'e' niente da estrarre. Tutte le
+            // .so dell'APK arrivano da AAR di Google (OCR di ML Kit, JNI di
+            // CameraX, graphics.path) e sono gia' spogliate all'origine --
+            // hanno .dynsym ma non .symtab ne' .debug_info. Codice nativo
+            // nostro non ne esiste. Attivarlo produce solo una cartella vuota.
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -70,6 +108,20 @@ android {
             // falling back to a direct call if POKEWALLET_PROXY_URL is left unconfigured.
             buildConfigField("String", "POKEWALLET_API_KEY", "\"\"")
             buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "true")
+        }
+
+        // Serve solo a provare la release sul telefono, non si pubblica.
+        //
+        // Stesse regole R8, stesso shrinking e stessi BuildConfig della
+        // release, ma firmata con la chiave di debug. La ragione e' il login:
+        // Play rifirma l'app con la propria chiave, quindi in
+        // google-services.json sono registrati il certificato di debug e
+        // quello di Play, non quello di upload. Un APK firmato con la chiave
+        // di upload non supera Google Sign-In, e siccome l'app parte dalla
+        // schermata di accesso non si arriverebbe a provare nient'altro.
+        create("releaseSmoke") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -90,8 +142,21 @@ android {
         compose = true
         buildConfig = true
     }
-    // Escludi le architetture x86/x86_64 e non tentare strip su librerie terze parti
-    // che arrivano gia' non strip-pabili (evita warning ripetuti in fase assemble).
+    // Due scelte consapevoli, entrambe con un avviso di Play attaccato.
+    //
+    // 1. x86/x86_64 esclusi. Gli AAR di Google (ML Kit, CameraX, graphics-path)
+    //    spedirebbero anche quelle architetture, quindi l'esclusione e' nostra:
+    //    costa il supporto a Chromebook e tablet Intel. Deciso di tenerla.
+    //    Play lo ripete a ogni caricamento come "non supporti piu' N
+    //    dispositivi": e' atteso, ed e' cosi' dal versionCode 19.
+    //    Per recuperarli basta togliere la riga `excludes` qui sotto: con
+    //    l'AAB, chi e' su ARM scarica comunque solo il proprio split.
+    //
+    // 2. keepDebugSymbols. Non conserva nessun simbolo: quelle .so arrivano
+    //    gia' spogliate da Google (hanno .dynsym ma non .symtab). Serve solo a
+    //    evitare che AGP tenti lo strip e riempia la build di warning, visto
+    //    che l'NDK non e' installato. Per lo stesso motivo l'avviso di Play sui
+    //    simboli di debug nativi non e' soddisfabile: non c'e' niente da dargli.
     packaging {
         resources {
             // I jar di JUnit 5 arrivano transitivamente nell'APK di test e ognuno
@@ -222,17 +287,23 @@ jacoco {
 }
 
 /**
- * Report di coverage per la variante debug.
+ * Report di coverage per la variante prodDebug.
  *
  * Il plugin jacoco era applicato ma nessun task JacocoReport era registrato:
  * AGP non li crea da solo per variante. Di conseguenza
  * `jacocoTestDebugUnitTestReport`, invocato da android-advanced-tests.yml,
  * non esisteva e quel workflow falliva prima ancora di eseguire i test.
+ *
+ * Dall'introduzione dei flavor `prod`/`staging` la variante si chiama
+ * prodDebug: `testDebugUnitTest` non esiste piu' (AGP genera un task per
+ * combinazione flavor+buildType) e anche le cartelle delle classi hanno il
+ * flavor nel nome. Si misura prod perche' e' la variante che viene
+ * pubblicata; il codice e' lo stesso, cambia solo a quale Firebase punta.
  */
-tasks.register<JacocoReport>("jacocoTestDebugUnitTestReport") {
-    dependsOn("testDebugUnitTest")
+tasks.register<JacocoReport>("jacocoTestProdDebugUnitTestReport") {
+    dependsOn("testProdDebugUnitTest")
     group = "verification"
-    description = "Genera il report Jacoco per i test unitari della variante debug."
+    description = "Genera il report Jacoco per i test unitari della variante prodDebug."
 
     reports {
         xml.required.set(true)
@@ -251,12 +322,23 @@ tasks.register<JacocoReport>("jacocoTestDebugUnitTestReport") {
 
     classDirectories.setFrom(
         files(
-            fileTree("${layout.buildDirectory.get()}/tmp/kotlin-classes/debug") { exclude(excludes) },
-            fileTree("${layout.buildDirectory.get()}/intermediates/javac/debug/classes") { exclude(excludes) }
+            fileTree("${layout.buildDirectory.get()}/tmp/kotlin-classes/prodDebug") { exclude(excludes) },
+            fileTree("${layout.buildDirectory.get()}/intermediates/javac/prodDebug/classes") { exclude(excludes) }
         )
     )
     sourceDirectories.setFrom(files("$projectDir/src/main/java"))
+
+    // Un file preciso, non un fileTree su tutta la build dir. Quello pescava
+    // qualunque .exec ci fosse rimasto -- compresi quelli di varianti diverse,
+    // che dall'arrivo dei flavor esistono davvero -- e mescolava coverage di
+    // build che non c'entravano niente. Gradle lo segnalava anche come
+    // dipendenza implicita dagli output di altri task, e il report falliva
+    // quando girava nella stessa invocazione di una compilazione release.
     executionData.setFrom(
-        fileTree(layout.buildDirectory) { include("**/*.exec", "**/*.ec") }
+        files(
+            layout.buildDirectory.file(
+                "outputs/unit_test_code_coverage/prodDebugUnitTest/testProdDebugUnitTest.exec"
+            )
+        )
     )
 }

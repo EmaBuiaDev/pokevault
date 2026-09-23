@@ -31,6 +31,35 @@ const CONCURRENCY = 6;
 
 const wranglerBin = path.join(workerRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler');
 
+// Undici espansioni non hanno logo su TCGdex (promo, sotto-collezioni e
+// qualche set recente): senza ripiego restavano col placeholder in app, ed e'
+// quello che l'utente vedeva il 15/09/2026. Il ripiego e' il set INGLESE
+// corrispondente su PokeWallet, chiesto al Worker per codice.
+//
+// Il codice va scelto a mano e verificato guardando l'immagine, perche' quella
+// che PokeWallet serve per un codice e' nella lingua in cui quel prodotto e'
+// uscito: chiedendo "XY10" si ottiene il logo giapponese (めざめる超王), mentre
+// il set inglese "XY - Fates Collide" sta sotto "FCO". Tutti quelli qui sotto
+// sono stati aperti e controllati uno per uno.
+const WORKER_BASE = 'https://pokevault-proxy.pokevault-emanu.workers.dev';
+const LOGO_FALLBACK_POKEWALLET_CODE = {
+  sm35: 'SHL',             // Shining Legends
+  sm75: 'DRM',             // Dragon Majesty
+  sma: 'HIF:SV',           // Hidden Fates: Shiny Vault
+  xy10: 'FCO',             // XY - Fates Collide
+  cel25c: 'CCC',           // Celebrations: Classic Collection
+  swsh12tg: 'SWSH12: TG',  // Silver Tempest Trainer Gallery
+  swsh12pt5gg: 'CRZ:GG',   // Crown Zenith: Galarian Gallery
+  sv05: 'TEF',             // Temporal Forces
+  mep: 'MEP',              // Mega Evolution Promos
+  svp: 'SVP',              // Scarlet & Violet Promos
+  // "Carta Alternatica A Gialla": sei carte alternative dell'era XY, senza un
+  // logo proprio. PokeWallet sotto XYA ha un mazzo giapponese (メガバトルデッキ60)
+  // e il codice "XY" da solo non risolve (409), quindi si riusa il marchio XY
+  // che abbiamo gia' su R2 per il set base.
+  xya: `${WORKER_BASE}/sets/XY1/image?source=ita`,
+};
+
 // Mirrors PokeTcgRepository.kt's preferredBaseSetCodeForItalianExpansion --
 // keep in sync if that map changes.
 const CLIENT_SET_CODE_OVERRIDES = {
@@ -137,19 +166,42 @@ async function main() {
     const tcgdexId = TCGDEX_ID_OVERRIDES[row.id] ?? row.id;
     try {
       const setSummary = await fetch(`https://api.tcgdex.net/v2/en/sets/${tcgdexId}`).then((r) => (r.ok ? r.json() : null));
-      if (!setSummary?.logo) {
-        console.warn(`[${row.id}] nessun logo su TCGdex (${tcgdexId}) -- salto`);
+      const fallbackCode = LOGO_FALLBACK_POKEWALLET_CODE[row.id];
+      const fallbackUrl = !fallbackCode
+        ? null
+        : (fallbackCode.startsWith('http')
+          ? fallbackCode
+          : `${WORKER_BASE}/sets/${encodeURIComponent(fallbackCode)}/image?v=logo-backfill`);
+      // TCGdex per primo; il ripiego vale sia quando il logo non c'e' sia
+      // quando c'e' nei metadati ma l'asset risponde 404 (capita: xy10).
+      const candidati = [
+        setSummary?.logo ? { url: `${setSummary.logo}.png`, label: `TCGdex ${tcgdexId}` } : null,
+        fallbackUrl ? { url: fallbackUrl, label: `ripiego ${fallbackCode}` } : null,
+      ].filter(Boolean);
+      if (candidati.length === 0) {
+        console.warn(`[${row.id}] nessun logo su TCGdex (${tcgdexId}) e nessun ripiego -- salto`);
         return { id: row.id, ok: false, error: 'no-logo' };
       }
 
-      const imgRes = await fetch(`${setSummary.logo}.png`);
-      if (!imgRes.ok) {
-        console.warn(`[${row.id}] download logo fallito (HTTP ${imgRes.status}) -- salto`);
-        return { id: row.id, ok: false, error: `http-${imgRes.status}` };
+      let buf = null;
+      let sourceLabel = null;
+      let lastStatus = null;
+      for (const candidato of candidati) {
+        const imgRes = await fetch(candidato.url);
+        if (!imgRes.ok) {
+          lastStatus = imgRes.status;
+          console.warn(`[${row.id}] ${candidato.label} -> HTTP ${imgRes.status}`);
+          continue;
+        }
+        buf = Buffer.from(await imgRes.arrayBuffer());
+        sourceLabel = candidato.label;
+        break;
       }
-      const buf = Buffer.from(await imgRes.arrayBuffer());
+      if (!buf) {
+        return { id: row.id, ok: false, error: `http-${lastStatus}` };
+      }
 
-      console.log(`[${row.id}] setCode=${setCode} <- TCGdex ${tcgdexId} (${buf.length} byte)`);
+      console.log(`[${row.id}] setCode=${setCode} <- ${sourceLabel} (${buf.length} byte)`);
 
       if (apply) {
         const localFile = path.join(tmpDir, `${row.id}.png`);

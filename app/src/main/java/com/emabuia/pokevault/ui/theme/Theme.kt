@@ -153,6 +153,8 @@ fun PokeVaultTheme(
     val colors = if (darkTheme) DarkPokeVaultColors else LightPokeVaultColors
     val motion = rememberAppMotion()
 
+    SystemBarsFollowTheme(lightAppTheme = colors.isLight)
+
     CompositionLocalProvider(
         LocalPokeVaultColors provides colors,
         LocalPokeVaultMotion provides motion

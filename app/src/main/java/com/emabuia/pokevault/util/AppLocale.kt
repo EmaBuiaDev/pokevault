@@ -63,6 +63,7 @@ object AppLocale {
         "double rare" to "Doppia Rara",
         "illustration rare" to "Illustrazione Rara",
         "special illustration rare" to "Illustrazione Rara Speciale",
+        "futuristic rare" to "Rara Futuristica",
         "hyper rare" to "Iper Rara",
         "shiny rare" to "Rara Shiny",
         "shiny ultra rare" to "Ultra Rara Shiny",
@@ -75,7 +76,23 @@ object AppLocale {
         "radiant rare" to "Rara Radiante",
         "rare prime" to "Rara Prime",
         "legend" to "LEGEND",
-        "black white rare" to "Rara B/W"
+        "black white rare" to "Rara B/W",
+        // Le forme con le parole invertite ("Holo Rare V" da TCGdex contro
+        // "Rare Holo V" da PokeWallet) vivono tutte e due nel catalogo, e
+        // senza la loro riga qui il chip del filtro resta in inglese in meta'
+        // dei set SWSH.
+        "holo rare v" to "Rara Holo V",
+        "holo rare vmax" to "Rara Holo VMAX",
+        "holo rare vstar" to "Rara Holo VSTAR",
+        "shiny rare v" to "Rara Shiny V",
+        "shiny rare vmax" to "Rara Shiny VMAX",
+        "rare holo lv.x" to "Rara Holo LV.X",
+        "mega hyper rare" to "Mega Iper Rara",
+        "full art trainer" to "Allenatore Full Art",
+        "classic collection" to "Collezione Classica",
+        "pikachu rare" to "Rara Pikachu",
+        // Le carte dei mazzi introduttivi la rarita' stampata non ce l'hanno.
+        "none" to "Nessuna"
     )
 
     fun translateRarity(rarity: String): String {
@@ -139,6 +156,13 @@ object AppLocale {
         "stadium" to "Stadio",
         "basic" to "Base",
         "stage 1" to "Livello 1",
+        // La grafia senza spazio e' quella con cui lo stadio arriva dal nostro
+        // catalogo (schema/009, canonicalStage): stessa carta, stessa etichetta.
+        "stage1" to "Livello 1",
+        "stage2" to "Livello 2",
+        "mega" to "MEGA",
+        "break" to "BREAK",
+        "level-up" to "Livello X",
         "stage 2" to "Livello 2",
         "vmax" to "VMAX",
         "vstar" to "VSTAR",
@@ -277,6 +301,16 @@ object AppLocale {
     val editCard: String get() = if (isItalian) "Modifica carta" else "Edit Card"
     val myCards: String get() = if (isItalian) "Le mie\ncarte" else "My\nCards"
     val myCardsSingleLine: String get() = if (isItalian) "Le mie carte" else "My Cards"
+    // Home: aggiunte di recente
+    val homeRecentTitle: String get() = if (isItalian) "Aggiunte di recente" else "Recently added"
+    val addedToday: String get() = if (isItalian) "Oggi" else "Today"
+    val addedYesterday: String get() = if (isItalian) "Ieri" else "Yesterday"
+    fun addedDaysAgo(days: Int): String = if (isItalian) "$days giorni fa" else "$days days ago"
+    val homeEmptyTitle: String get() = if (isItalian) "La tua collezione è vuota" else "Your collection is empty"
+    val homeEmptyHint: String get() = if (isItalian)
+        "Scansiona la prima carta per iniziare."
+    else
+        "Scan your first card to get started."
     val collection: String get() = if (isItalian) "Collezione" else "Collection"
     val cards: String get() = if (isItalian) "Carte" else "Cards"
     fun cardsCount(count: Int) = if (isItalian) "$count carte" else "$count cards"
@@ -333,11 +367,77 @@ object AppLocale {
     val minPrice: String get() = if (isItalian) "Prezzo minimo" else "Minimum price"
     val livePricesUnavailable: String get() = if (isItalian) "Prezzi live non disponibili per questa carta" else "Live prices not available for this card"
     val inCollection: String get() = if (isItalian) "Nella tua collezione" else "In your collection"
-    val tapToAddCopy: String get() = if (isItalian) "Tocca per aggiungere un'altra copia" else "Tap to add another copy"
     val addCopy: String get() = if (isItalian) "Aggiungi copia" else "Add copy"
-    val version: String get() = if (isItalian) "Versione" else "Version"
     val pricesByVariant: String get() = if (isItalian) "Prezzi per variante" else "Prices by variant"
+    /** Chi ha disegnato la carta. Il nome resta com'e': non si traduce. */
+    val illustrator: String get() = if (isItalian) "Illustratore" else "Illustrator"
+    val addToCollection: String get() = if (isItalian) "Aggiungi alla collezione" else "Add to collection"
+    /**
+     * L'etichetta del campo che sceglie normale/reverse/holo.
+     *
+     * Si chiamava "Versione", che nel gergo delle carte non vuol dire niente:
+     * la parola che si usa e' "stampa".
+     */
+    val printLabel: String get() = if (isItalian) "Stampa" else "Print"
+    val alreadyOwnedPrint: String get() = if (isItalian) "Già in collezione" else "Already owned"
+    val removeFromCollection: String get() = if (isItalian) "Rimuovi" else "Remove"
+    /** Il testo del tasto quando si stanno aggiungendo piu' copie in un colpo solo. */
+    fun addCopies(quantity: Int): String =
+        if (isItalian) "Aggiungi $quantity copie" else "Add $quantity copies"
+    val previousCard: String get() = if (isItalian) "Carta precedente" else "Previous card"
+    val nextCard: String get() = if (isItalian) "Carta successiva" else "Next card"
     val noImage: String get() = if (isItalian) "Nessuna immagine" else "No image"
+    // Scanner. Prima questi testi erano scritti a mano in italiano, anche con
+    // l'app in inglese.
+    val scannerHintMissingId: String get() = if (isItalian)
+        "Non leggo il numero in basso a sinistra: avvicina la carta e riempi la cornice."
+    else
+        "I can't read the number at the bottom left: move closer and fill the frame."
+    val scannerAlreadyAdded: String get() = if (isItalian)
+        "Già aggiunta: passa alla carta successiva."
+    else
+        "Already added: move on to the next card."
+    fun scannerSearchError(message: String): String = if (isItalian) "Errore ricerca: $message" else "Search error: $message"
+    fun scannerSaveError(message: String): String = if (isItalian) "Errore salvataggio: $message" else "Save error: $message"
+    fun scannerUndoFailed(message: String): String = if (isItalian) "Non riesco ad annullare: $message" else "Couldn't undo: $message"
+    val scannerAllRejected: String get() = if (isItalian)
+        "Le hai scartate tutte per questo numero."
+    else
+        "You've discarded every card for this number."
+    fun scannerMissingTotal(number: String): String = if (isItalian)
+        "Numero $number letto, ma non il totale del set. Avvicina la carta."
+    else
+        "Read number $number, but not the set total. Move closer."
+    fun scannerNotInCatalog(number: String, total: String): String = if (isItalian)
+        "Nessuna carta $number/$total nel catalogo italiano."
+    else
+        "No card $number/$total in the Italian catalog."
+    fun scannerAddUndone(name: String): String = if (isItalian) "$name tolta dalla collezione." else "$name removed from your collection."
+    val scannerFillFrame: String get() = if (isItalian) "Riempi la cornice con la carta" else "Fill the frame with the card"
+    val scannerSearching: String get() = if (isItalian) "Cerco la carta…" else "Looking up the card…"
+    val scannerAddedTitle: String get() = if (isItalian) "Aggiunta!" else "Added!"
+    val scannerWhichOne: String get() = if (isItalian) "Quale di queste?" else "Which one?"
+    val scannerSameNumberHint: String get() = if (isItalian)
+        "Hanno lo stesso numero: cambia l'espansione."
+    else
+        "Same number, different set."
+    val scannerModeContinuous: String get() = if (isItalian) "Continuo" else "Continuous"
+    val scannerModeConfirm: String get() = if (isItalian) "A conferma" else "Confirm each"
+    val scannerManualSearch: String get() = if (isItalian) "Cercala a mano" else "Search by hand"
+    val scannerCantFind: String get() = if (isItalian) "Non è tra queste?" else "Not listed?"
+    val scannerRetryRejected: String get() = if (isItalian) "Riproponi tutte" else "Show them again"
+    val scannerDismissedLabel: String get() = if (isItalian) "Carta scartata" else "Card discarded"
+    fun scannerAddedLabel(name: String): String = if (isItalian) "Aggiunta: $name" else "Added: $name"
+    val scannerPrint: String get() = if (isItalian) "Stampa" else "Print"
+    val scannerPermissionRationale: String get() = if (isItalian)
+        "La fotocamera serve per scansionare le carte Pokémon e aggiungerle alla collezione."
+    else
+        "The camera is used to scan Pokémon cards and add them to your collection."
+    val scannerPermissionNeeded: String get() = if (isItalian)
+        "Per usare lo scanner serve il permesso fotocamera."
+    else
+        "The scanner needs camera permission."
+    val scannerUnknownExpansion: String get() = if (isItalian) "Espansione sconosciuta" else "Unknown set"
     val noneOfThese: String get() = if (isItalian) "Nessuna di queste" else "None of these"
     val discard: String get() = if (isItalian) "Scarta" else "Discard"
     val grantPermission: String get() = if (isItalian) "Concedi permesso" else "Grant permission"
@@ -376,7 +476,7 @@ object AppLocale {
     fun deckCover(index: Int): String = if (isItalian) "Copertina deck $index" else "Deck cover $index"
     fun selectCover(cardName: String): String = if (isItalian) "Seleziona copertina $cardName" else "Select cover $cardName"
     val selectedCover: String get() = if (isItalian) "Copertina selezionata" else "Selected cover"
-    val onlyDeckCardsCanBeCover: String get() = if (isItalian) "Solo le carte gia presenti nel deck possono diventare copertina." else "Only cards already in the deck can become a cover."
+    val onlyDeckCardsCanBeCover: String get() = if (isItalian) "Solo i Pokémon già presenti nel deck possono diventare copertina." else "Only Pokémon already in the deck can become a cover."
 
     // ── Editor del deck: due passi ─────────────────────────────────────────
     val deckStepCards: String get() = if (isItalian) "Carte" else "Cards"
@@ -384,9 +484,9 @@ object AppLocale {
     val deckNameLabel: String get() = if (isItalian) "Nome del deck" else "Deck name"
     val deckCoverTitle: String get() = if (isItalian) "Copertina" else "Cover"
     val deckCoverHint: String get() = if (isItalian)
-        "Fino a 2 carte del deck. Sono quelle che vedrai sulla card del deck nell'elenco."
+        "Fino a 2 Pokémon del deck. Sono quelli che rappresentano il mazzo nell’elenco e in cima al dettaglio. Se non scegli niente, ci pensa l’app."
     else
-        "Up to 2 cards from the deck. They are what you see on the deck card in the list."
+        "Up to 2 Pokémon from the deck. They stand for the deck in the list and at the top of its detail. Pick none and the app decides."
     val deckCoverEmpty: String get() = if (isItalian)
         "Nessuna copertina scelta"
     else
@@ -397,9 +497,9 @@ object AppLocale {
     else
         if (count == 1) "1 card of 2" else "$count cards of 2"
     val deckNoCardsYet: String get() = if (isItalian)
-        "Aggiungi prima qualche carta: la copertina si sceglie fra quelle del deck."
+        "Aggiungi prima qualche Pokémon: la copertina si sceglie fra quelli del deck."
     else
-        "Add some cards first: the cover is picked from the ones in the deck."
+        "Add some Pokémon first: the cover is picked from the ones in the deck."
     val deckImportedTitle: String get() = if (isItalian) "Deck importato" else "Deck imported"
     fun deckImportedBody(count: Int): String = if (isItalian)
         "$count carte riconosciute. Controlla il nome, scegli la copertina e salva."
@@ -409,6 +509,23 @@ object AppLocale {
     val deckSearchOnline: String get() = if (isItalian) "Cerca nei set online" else "Search online sets"
     val deckOnlineResults: String get() = if (isItalian) "Risultati online" else "Online results"
     val deckInYourCollection: String get() = if (isItalian) "Nella tua collezione" else "In your collection"
+    val deckCardsInDeck: String get() = if (isItalian) "Nel deck" else "In the deck"
+    val deckRemoveOneCopy: String get() = if (isItalian) "Togli una copia" else "Remove one copy"
+    fun deckCardRemoved(name: String): String = if (isItalian)
+        "$name tolta dal deck"
+    else
+        "$name removed from the deck"
+
+    // Cancellazione di un deck: prima non chiedeva niente
+    val deckDeleteTitle: String get() = if (isItalian) "Eliminare il deck?" else "Delete the deck?"
+    fun deckDeleteBody(name: String): String = if (isItalian)
+        "\"$name\" verra' eliminato. L'operazione non si puo' annullare."
+    else
+        "\"$name\" will be deleted. This cannot be undone."
+    val deckDeleteBodyTestDeck: String get() = if (isItalian)
+        "Le carte che tieni solo in questo deck di prova, e che nessun altro deck usa, verranno eliminate con lui."
+    else
+        "The cards you keep only in this test deck, and that no other deck uses, will be deleted with it."
     val deckNoCardsInCategory: String get() = if (isItalian)
         "Nessuna carta in questa categoria."
     else
@@ -421,7 +538,6 @@ object AppLocale {
         "Aggiungi $count"
     else
         "Add $count"
-    val deckAddButton: String get() = if (isItalian) "Aggiungi" else "Add"
     val deckImportReviewTitle: String get() = if (isItalian) "Revisione import" else "Import review"
     val deckImportReviewBody: String get() = if (isItalian)
         "Vedi solo le carte appena importate"
@@ -833,6 +949,38 @@ object AppLocale {
     val importAddingCards: String get() = if (isItalian) "Aggiunta carte in corso..." else "Adding cards..."
     val importAndMore: String get() = if (isItalian) "e altre" else "and more"
 
+    // Deck Import - dove finiscono le carte che l'utente non possiede
+    val deckSourceTitle: String get() = if (isItalian) "Dove mettiamo le carte?" else "Where do the cards go?"
+    fun deckSourceQuestion(missing: Int): String = if (isItalian)
+        "$missing carte del deck non sono nella tua collezione."
+    else
+        "$missing cards in this deck are not in your collection."
+    val deckSourceCollection: String get() = if (isItalian) "Aggiungile alla collezione" else "Add them to my collection"
+    val deckSourceCollectionDesc: String get() = if (isItalian)
+        "Le carte entrano fra le tue e contano nel valore della collezione."
+    else
+        "The cards join your collection and count towards its value."
+    val deckSourceDeckOnly: String get() = if (isItalian) "Solo in questo deck" else "Only in this deck"
+    val deckSourceDeckOnlyDesc: String get() = if (isItalian)
+        "Deck di prova: il mazzo e' completo, ma la collezione non cambia."
+    else
+        "Test deck: the deck is complete, but your collection stays untouched."
+    val deckSourceSkip: String get() = if (isItalian) "Lascia il deck incompleto" else "Leave the deck incomplete"
+    val deckSourceNewDeckQuestion: String get() = if (isItalian)
+        "Mentre costruisci il mazzo puoi aggiungere carte che non possiedi."
+    else
+        "While building the deck you can add cards you don’t own."
+    val importLeftOutMessage: String get() = if (isItalian)
+        "Queste carte sono rimaste fuori dal deck. Puoi aggiungerle a mano dal passo Carte."
+    else
+        "These cards were left out of the deck. You can add them by hand from the Cards step."
+
+    val deckTestBadge: String get() = if (isItalian) "Deck di prova" else "Test deck"
+    val deckTestBadgeExplain: String get() = if (isItalian)
+        "Contiene carte che non possiedi: non sono nella tua collezione."
+    else
+        "Contains cards you don't own: they are not in your collection."
+
     // Meta Archetype
     val metaShare: String get() = "Meta Share"
     val metaAvgWinrate: String get() = if (isItalian) "Win Rate medio" else "Avg Win Rate"
@@ -876,6 +1024,69 @@ object AppLocale {
     val metaInfoAction: String get() = if (isItalian) "Da dove arrivano i dati" else "Where the data comes from"
 
     // Rate limit dell'API Limitless (50 richieste ogni 5 minuti)
+    // ── Match Log: statistiche e matchup ───────────────────────────────────
+    val matchLogTabTournaments: String get() = if (isItalian) "Tornei" else "Tournaments"
+    val matchLogTabStats: String get() = if (isItalian) "Statistiche" else "Stats"
+    val matchStatsWinRateLabel: String get() = if (isItalian) "Vittorie" else "Win rate"
+    fun matchStatsPlayed(count: Int): String = if (isItalian)
+        if (count == 1) "1 partita giocata" else "$count partite giocate"
+    else
+        if (count == 1) "1 match played" else "$count matches played"
+    val matchStatsFormTitle: String get() = if (isItalian) "Ultime partite" else "Recent matches"
+    val matchStatsFormHint: String get() = if (isItalian)
+        "Dalla piu' recente"
+    else
+        "Most recent first"
+    val matchStatsMatchupsTitle: String get() = if (isItalian) "Matchup" else "Matchups"
+    val matchStatsMatchupsHint: String get() = if (isItalian)
+        "Come vai contro ogni archetipo che hai incontrato."
+    else
+        "How you do against every archetype you have faced."
+    val matchStatsBestMatchup: String get() = if (isItalian) "Il tuo migliore" else "Your best"
+    val matchStatsWorstMatchup: String get() = if (isItalian) "Il tuo peggiore" else "Your worst"
+    val matchStatsDecksTitle: String get() = if (isItalian) "I tuoi mazzi" else "Your decks"
+    val matchStatsDecksHint: String get() = if (isItalian)
+        "Il bilancio di ogni mazzo che hai portato a un torneo."
+    else
+        "The record of every deck you have taken to a tournament."
+    fun matchStatsDeckTournaments(count: Int): String = if (isItalian)
+        if (count == 1) "1 torneo" else "$count tornei"
+    else
+        if (count == 1) "1 tournament" else "$count tournaments"
+    val matchStatsEmptyTitle: String get() = if (isItalian)
+        "Ancora nessuna partita"
+    else
+        "No matches yet"
+    val matchStatsEmptyBody: String get() = if (isItalian)
+        "Registra le partite di un torneo: da li' nascono i matchup, il bilancio dei tuoi mazzi e l'andamento."
+    else
+        "Log the matches of a tournament: matchups, deck records and form all come from there."
+    val matchStatsNoMatchupsTitle: String get() = if (isItalian)
+        "Nessun mazzo avversario registrato"
+    else
+        "No opponent decks logged"
+    val matchStatsNoMatchupsBody: String get() = if (isItalian)
+        "Il matchup si costruisce dal campo \"mazzo avversario\": compilalo quando registri una partita e questa tabella si riempie da sola."
+    else
+        "Matchups are built from the \"opponent deck\" field: fill it in when logging a match and this table fills itself."
+    fun matchStatsMissingOpponentDeck(count: Int): String = if (isItalian)
+        if (count == 1) "1 partita senza mazzo avversario" else "$count partite senza mazzo avversario"
+    else
+        if (count == 1) "1 match without opponent deck" else "$count matches without opponent deck"
+    fun matchStatsFewGames(min: Int): String = if (isItalian)
+        "Serve almeno $min partite per un giudizio"
+    else
+        "At least $min matches needed for a verdict"
+    val matchStatsNoWinRate: String get() = if (isItalian) "solo pari" else "ties only"
+    val matchOpponentDeckSuggestions: String get() = if (isItalian)
+        "Gia' incontrati"
+    else
+        "Already faced"
+    val matchOpponentDeckFromMeta: String get() = if (isItalian)
+        "Dal meta"
+    else
+        "From the meta"
+
     val metaRateLimitedTitle: String get() = if (isItalian)
         "LimitlessTCG in pausa"
     else
@@ -948,7 +1159,6 @@ object AppLocale {
     val matchDeleteTitle: String get() = if (isItalian) "Eliminare partita?" else "Delete match?"
     val matchDeleteMessage: String get() = if (isItalian) "Questa azione è irreversibile." else "This action is irreversible."
     fun matchRecord(wins: Int, losses: Int, ties: Int) = "$wins W - $losses L - $ties T"
-    val matchRecordLabel: String get() = if (isItalian) "Record" else "Record"
     val matchWinRate: String get() = if (isItalian) "Win Rate" else "Win Rate"
     val selectDate: String get() = if (isItalian) "Seleziona data" else "Select date"
     val today: String get() = if (isItalian) "Oggi" else "Today"
@@ -978,6 +1188,57 @@ object AppLocale {
         "Acquisto non riuscito: $reason"
     else
         "Purchase failed: $reason"
+    val premiumPurchaseNotAcknowledged: String get() = if (isItalian)
+        "Acquisto non confermato. Riapri l'app quando torni online."
+    else
+        "Purchase not confirmed. Reopen the app once you are back online."
+
+    // ── Disponibilità del servizio di fatturazione ──
+    // Messaggi di stato, non di errore: descrivono perché non si può comprare
+    // adesso. Sostituiscono il debugMessage inglese di Google, che arrivava
+    // all'utente non tradotto e senza dirgli cosa fare.
+    val billingUnavailableTitle: String get() = if (isItalian)
+        "Acquisti non disponibili"
+    else
+        "Purchases unavailable"
+    val billingProblemDisconnected: String get() = if (isItalian)
+        "Non riesco a collegarmi a Google Play. Di solito si risolve da sé: riprova fra poco."
+    else
+        "Cannot reach Google Play right now. It usually sorts itself out: try again shortly."
+    val billingProblemNetwork: String get() = if (isItalian)
+        "Serve una connessione per acquistare. Controlla la rete e riprova."
+    else
+        "A connection is needed to purchase. Check your network and try again."
+    val billingProblemUnavailable: String get() = if (isItalian)
+        "Il Play Store non è disponibile su questo dispositivo, o l'account non può fare acquisti."
+    else
+        "The Play Store is unavailable on this device, or this account cannot make purchases."
+    val billingProblemMisconfigured: String get() = if (isItalian)
+        "Gli abbonamenti non risultano disponibili per questa versione dell'app."
+    else
+        "Subscriptions are not available for this build of the app."
+    val billingProblemOther: String get() = if (isItalian)
+        "Gli acquisti non sono disponibili in questo momento."
+    else
+        "Purchases are not available at the moment."
+    val billingRetry: String get() = if (isItalian) "Riprova" else "Try again"
+
+    /**
+     * L'abbonamento del telefono e' gia' di un altro account PokeVault.
+     *
+     * Senza questo messaggio l'utente vedrebbe "non sei premium" pur avendo un
+     * abbonamento attivo sul Play Store, e non avrebbe modo di capire perche'.
+     */
+    val billingClaimedTitle: String get() = if (isItalian)
+        "Abbonamento su un altro account"
+    else
+        "Subscription on another account"
+    val billingClaimedBody: String get() = if (isItalian)
+        "L'abbonamento attivo su questo telefono è già collegato a un altro account PokeVault. " +
+        "Accedi con quell'account per usarlo, oppure scrivici e lo sblocchiamo."
+    else
+        "The subscription on this phone is already linked to another PokeVault account. " +
+        "Sign in with that account to use it, or contact us and we will unlink it."
     val themeLabel: String get() = if (isItalian) "Tema" else "Theme"
     fun themeSubtitle(mode: String): String = when (mode) {
         "light" -> if (isItalian) "Chiaro" else "Light"
@@ -988,6 +1249,78 @@ object AppLocale {
     // Etichette di ordinamento e categoria della collezione. Prima erano
     // hardcoded in italiano nel foglio dei filtri, e nei chip dei filtri attivi
     // veniva mostrato direttamente il nome dell'enum ("Ordine: PRICE_DESC").
+    // Le mie carte. Prima parecchi di questi testi erano scritti a mano in
+    // italiano dentro la schermata, e in inglese restavano in italiano.
+    val errorPrefix: String get() = if (isItalian) "Errore" else "Error"
+    val unknownExpansion: String get() = if (isItalian) "Espansione sconosciuta" else "Unknown Expansion"
+    val cardDeleted: String get() = if (isItalian) "Carta eliminata" else "Card deleted"
+    fun cardsDeleted(count: Int): String = if (isItalian) {
+        if (count == 1) "1 carta eliminata" else "$count carte eliminate"
+    } else {
+        if (count == 1) "1 card deleted" else "$count cards deleted"
+    }
+    val collectionStatCards: String get() = if (isItalian) "Carte" else "Cards"
+    val collectionStatUnique: String get() = if (isItalian) "Uniche" else "Unique"
+    val collectionStatValue: String get() = if (isItalian) "Valore" else "Value"
+    val collectionLayoutByExpansion: String get() = if (isItalian) "Per espansione" else "By set"
+    val collectionLayoutAll: String get() = if (isItalian) "Tutte" else "All"
+    val sortMenuTitle: String get() = if (isItalian) "Ordina" else "Sort"
+    val sortSectionCards: String get() = if (isItalian) "Carte" else "Cards"
+    val sortSectionExpansions: String get() = if (isItalian) "Espansioni" else "Sets"
+    val sortNumber: String get() = if (isItalian) "Numero" else "Number"
+    val sortPriceHigh: String get() = if (isItalian) "Prezzo più alto" else "Highest price"
+    val sortPriceLow: String get() = if (isItalian) "Prezzo più basso" else "Lowest price"
+    val expansionOrderMostValue: String get() = if (isItalian) "Più valore" else "Most value"
+    val filterCategory: String get() = if (isItalian) "Categoria" else "Category"
+    val filterType: String get() = if (isItalian) "Tipo" else "Type"
+    val filterExpansion: String get() = if (isItalian) "Espansione" else "Set"
+    val filterVariant: String get() = if (isItalian) "Stampa" else "Print"
+    val filterValue: String get() = if (isItalian) "Valore per copia" else "Value per copy"
+    val filterLanguage: String get() = if (isItalian) "Lingua" else "Language"
+    val filterOnlyDuplicates: String get() = if (isItalian) "Solo doppioni" else "Duplicates only"
+    fun filterOnlyDuplicatesHint(count: Int): String = if (isItalian)
+        "$count carte di cui hai più di una copia"
+    else
+        "$count cards you own more than once"
+    val valueNoPrice: String get() = if (isItalian) "Senza prezzo" else "No price"
+    val valueUnder1: String get() = if (isItalian) "Meno di 1 €" else "Under €1"
+    val value1to10: String get() = "1 – 10 €"
+    val value10to50: String get() = "10 – 50 €"
+    val valueOver50: String get() = if (isItalian) "Oltre 50 €" else "Over €50"
+    val searchExpansionHint: String get() = if (isItalian) "Cerca un'espansione…" else "Search a set…"
+    fun filterShowAllExpansions(count: Int): String = if (isItalian) "Mostra tutte ($count)" else "Show all ($count)"
+    val showFewer: String get() = if (isItalian) "Mostra meno" else "Show less"
+    val filtersClear: String get() = if (isItalian) "Azzera" else "Clear"
+    fun showCardsButton(count: Int): String = if (isItalian) {
+        when (count) {
+            0 -> "Nessuna carta"
+            1 -> "Mostra 1 carta"
+            else -> "Mostra $count carte"
+        }
+    } else {
+        when (count) {
+            0 -> "No cards"
+            1 -> "Show 1 card"
+            else -> "Show $count cards"
+        }
+    }
+    fun collectionResults(shown: Int, total: Int): String = if (isItalian)
+        "$shown di $total carte"
+    else
+        "$shown of $total cards"
+    val noResultsTitle: String get() = if (isItalian)
+        "Nessuna carta con questi filtri"
+    else
+        "No cards match these filters"
+    val noResultsAction: String get() = if (isItalian) "Azzera filtri e ricerca" else "Clear filters and search"
+    val emptyCollectionHint: String get() = if (isItalian)
+        "Aggiungi la prima carta dallo scanner o dal Pokédex."
+    else
+        "Add your first card from the scanner or the Pokédex."
+    fun expansionCardsAndCopies(cards: Int, copies: Int): String = if (isItalian)
+        "$cards carte · $copies copie"
+    else
+        "$cards cards · $copies copies"
     val sortRecent: String get() = if (isItalian) "Recenti" else "Recent"
     val sortPriceAsc: String get() = if (isItalian) "€ Crescente" else "€ Ascending"
     val sortPriceDesc: String get() = if (isItalian) "€ Decrescente" else "€ Descending"
@@ -1019,7 +1352,7 @@ object AppLocale {
     val criteriaSupertype: String get() = if (isItalian) "Categoria" else "Category"
     val criteriaType: String get() = if (isItalian) "Tipo" else "Type"
     val criteriaCustom: String get() = if (isItalian) "Personalizzato" else "Custom"
-    val albumSubtitle: String get() = if (isItalian) "Album e Chase." else "Albums and Chases."
+    val albumSubtitle: String get() = if (isItalian) "Album, chase e illustratori." else "Albums, chases and illustrators."
     val collectorAlbumTitle: String get() = "Album"
     val collectorAlbumSubtitle: String get() = if (isItalian)
         "Raccogli le tue carte in album personalizzati"
@@ -1084,9 +1417,9 @@ object AppLocale {
     val wishlistEdit: String get() = if (isItalian) "Modifica Wishlist" else "Edit Wishlist"
     val wishlistName: String get() = if (isItalian) "Nome lista" else "List name"
     val wishlistNamePlaceholder: String get() = if (isItalian) "Es. Chase cards Kanto" else "E.g. Kanto chase cards"
-    val wishlistChooseIcon: String get() = if (isItalian) "Scegli un'icona" else "Choose an icon"
+    val wishlistChooseIcon: String get() = if (isItalian) "A cosa serve questa lista" else "What this list is for"
+    val wishlistChooseColor: String get() = if (isItalian) "Colore" else "Colour"
     val wishlistAddToList: String get() = if (isItalian) "Aggiungi alla wishlist" else "Add to wishlist"
-    val wishlistChooseList: String get() = if (isItalian) "Scegli una lista" else "Choose a list"
     val wishlistCreateNewList: String get() = if (isItalian) "Nuova lista" else "New list"
     val wishlistEmpty: String get() = if (isItalian) "Nessuna wishlist" else "No wishlists yet"
     val wishlistEmptySubtitle: String get() = if (isItalian) "Crea la tua prima lista dei desideri" else "Create your first wishlist"
@@ -1099,6 +1432,116 @@ object AppLocale {
     val wishlistUpdated: String get() = if (isItalian) "Wishlist aggiornata" else "Wishlist updated"
     val wishlistUpdateFailed: String get() = if (isItalian) "Impossibile aggiornare la wishlist" else "Could not update wishlist"
     fun wishlistCardsCount(count: Int) = if (isItalian) "$count carte" else "$count cards"
+
+    // Wishlist — icone: dicono a cosa serve la lista, non che Pokémon piace
+    val wishlistIconPokeBall: String get() = if (isItalian) "Da prendere" else "To get"
+    val wishlistIconGreatBall: String get() = if (isItalian) "Priorità" else "Priority"
+    val wishlistIconUltraBall: String get() = if (isItalian) "Costose" else "Pricey"
+    val wishlistIconMasterBall: String get() = if (isItalian) "Carta della vita" else "Grail"
+    val wishlistIconBudget: String get() = if (isItalian) "Occasioni" else "Bargains"
+    val wishlistIconTrade: String get() = if (isItalian) "Da scambiare" else "To trade"
+    val wishlistIconGift: String get() = if (isItalian) "Regalo" else "Gift"
+    val wishlistIconGraded: String get() = if (isItalian) "Da gradare" else "To grade"
+    val wishlistIconDeck: String get() = if (isItalian) "Per il deck" else "For the deck"
+    val wishlistIconSet: String get() = if (isItalian) "Completa set" else "Set completion"
+
+    // Wishlist — budget
+    val wishlistBudget: String get() = if (isItalian) "Budget" else "Budget"
+    val wishlistBudgetOptional: String get() = if (isItalian) "Facoltativo" else "Optional"
+    val wishlistBudgetHint: String get() = if (isItalian)
+        "Il tetto che ti dai per questa lista"
+    else
+        "The cap you set for this list"
+    val wishlistOverBudget: String get() = if (isItalian) "Fuori budget" else "Over budget"
+    fun wishlistBudgetLeft(amount: String) = if (isItalian) "Restano $amount" else "$amount left"
+    fun wishlistBudgetOver(amount: String) = if (isItalian) "$amount oltre" else "$amount over"
+    fun wishlistAffordable(count: Int) = if (isItalian) {
+        if (count == 1) "1 carta dentro il budget" else "$count carte dentro il budget"
+    } else {
+        if (count == 1) "1 card within budget" else "$count cards within budget"
+    }
+
+    // Wishlist — riassunto e righe
+    val wishlistStatLists: String get() = if (isItalian) "Liste" else "Lists"
+    val wishlistStatCards: String get() = if (isItalian) "Carte" else "Cards"
+    val wishlistStatCost: String get() = if (isItalian) "Ti manca" else "Still to buy"
+    val wishlistStatTaken: String get() = if (isItalian) "Già prese" else "Already got"
+    val wishlistCompleteBadge: String get() = if (isItalian) "Tutte prese" else "All got"
+    val wishlistOwnedBadge: String get() = if (isItalian) "Presa" else "Got"
+    val wishlistSearchHint: String get() = if (isItalian) "Cerca una lista" else "Search a list"
+    val wishlistCardSearchHint: String get() = if (isItalian) "Cerca carta, set o rarità" else "Search card, set or rarity"
+    val wishlistNoResults: String get() = if (isItalian) "Nessuna lista trovata" else "No list found"
+    val wishlistNoCardResults: String get() = if (isItalian) "Nessuna carta con questi filtri" else "No card matches these filters"
+    fun wishlistTakenCount(owned: Int, total: Int) = if (isItalian) {
+        "$owned di $total già prese"
+    } else {
+        "$owned of $total already got"
+    }
+    fun wishlistMissingCount(count: Int) = if (isItalian) {
+        if (count == 1) "1 da comprare" else "$count da comprare"
+    } else {
+        if (count == 1) "1 to buy" else "$count to buy"
+    }
+    fun wishlistUnpricedNote(count: Int) = if (isItalian) {
+        if (count == 1) "1 senza prezzo" else "$count senza prezzo"
+    } else {
+        if (count == 1) "1 without a price" else "$count without a price"
+    }
+    val wishlistPartialTotal: String get() = if (isItalian)
+        "Totale parziale: alcune carte stanno ancora arrivando"
+    else
+        "Partial total: some cards are still loading"
+
+    // Wishlist — ordinamenti e filtri
+    val wishlistSortClosest: String get() = if (isItalian) "Quasi fatte" else "Almost done"
+    val wishlistSortRecent: String get() = if (isItalian) "Recenti" else "Recent"
+    val wishlistSortName: String get() = if (isItalian) "Nome" else "Name"
+    val wishlistSortCost: String get() = if (isItalian) "Costo" else "Cost"
+    val wishlistSortCards: String get() = if (isItalian) "Carte" else "Cards"
+    val wishlistCardSortNumber: String get() = if (isItalian) "Numero" else "Number"
+    val wishlistCardSortName: String get() = if (isItalian) "Nome" else "Name"
+    val wishlistCardSortPriceDesc: String get() = if (isItalian) "Più care" else "Priciest"
+    val wishlistCardSortPriceAsc: String get() = if (isItalian) "Più economiche" else "Cheapest"
+    val wishlistCardSortSet: String get() = if (isItalian) "Set" else "Set"
+    val wishlistFilterAll: String get() = if (isItalian) "Tutte" else "All"
+    val wishlistFilterMissing: String get() = if (isItalian) "Da comprare" else "To buy"
+    val wishlistFilterOwned: String get() = if (isItalian) "Già prese" else "Already got"
+
+    // Wishlist — carte già prese
+    val wishlistCheapest: String get() = if (isItalian) "La più economica" else "Cheapest"
+    val wishlistMostExpensive: String get() = if (isItalian) "La più cara" else "Priciest"
+    val wishlistCleanupTitle: String get() = if (isItalian) "Togliere le carte già prese?" else "Remove the cards you already got?"
+    fun wishlistCleanupMessage(count: Int) = if (isItalian) {
+        if (count == 1) {
+            "1 carta di questa lista è già nella tua collezione."
+        } else {
+            "$count carte di questa lista sono già nella tua collezione."
+        }
+    } else {
+        if (count == 1) {
+            "1 card in this list is already in your collection."
+        } else {
+            "$count cards in this list are already in your collection."
+        }
+    }
+    val wishlistCleanupAction: String get() = if (isItalian) "Togli dalla lista" else "Remove from list"
+    fun wishlistCleanupDone(count: Int) = if (isItalian) {
+        if (count == 1) "1 carta tolta dalla lista" else "$count carte tolte dalla lista"
+    } else {
+        if (count == 1) "1 card removed from the list" else "$count cards removed from the list"
+    }
+    val wishlistAllTakenTitle: String get() = if (isItalian) "Lista completata" else "List complete"
+    val wishlistAllTakenSubtitle: String get() = if (isItalian)
+        "Hai tutte le carte di questa lista"
+    else
+        "You own every card in this list"
+
+    // Wishlist — selezione delle liste
+    val wishlistAlreadyIn: String get() = if (isItalian) "Già dentro" else "Already in"
+    val wishlistPickerSubtitle: String get() = if (isItalian)
+        "Una carta può stare in più liste"
+    else
+        "A card can live in more than one list"
 
     // Auth
     val welcomeTrainer: String get() = if (isItalian) "Benvenuto, Allenatore!" else "Welcome, Trainer!"
@@ -1114,6 +1557,8 @@ object AppLocale {
     val loginTab: String get() = if (isItalian) "Accedi" else "Login"
     val registerTab: String get() = if (isItalian) "Unisciti" else "Join"
     val or: String get() = if (isItalian) " oppure " else " or "
+    val showPassword: String get() = if (isItalian) "Mostra password" else "Show password"
+    val hidePassword: String get() = if (isItalian) "Nascondi password" else "Hide password"
 
     // ══════════════════════════════════════
     // LEGAL & COMPLIANCE
@@ -1139,7 +1584,6 @@ object AppLocale {
         "proprietà di Nintendo, The Pokémon Company e The Pokémon Company International. " +
         "Questa app non è affiliata, sponsorizzata o approvata da Nintendo, " +
         "The Pokémon Company o The Pokémon Company International.\n\n" +
-        "I dati e le immagini del catalogo italiano sono ospitati sulla nostra infrastruttura Cloudflare. " +
         "Prezzi di mercato e catalogo carte in altre lingue sono recuperati da Pokewallet.io (api.pokewallet.io) " +
         "tramite i nostri server, mai direttamente dal tuo dispositivo. Sono utilizzati esclusivamente a scopo " +
         "informativo e di gestione della collezione personale. Per segnalazioni relative al copyright: " +
@@ -1150,7 +1594,6 @@ object AppLocale {
         "of Nintendo, The Pokémon Company, and The Pokémon Company International. " +
         "This app is not affiliated with, sponsored by, or endorsed by Nintendo, " +
         "The Pokémon Company, or The Pokémon Company International.\n\n" +
-        "Italian catalog data and images are hosted on our own Cloudflare infrastructure. " +
         "Market prices and the card catalog in other languages are fetched from Pokewallet.io (api.pokewallet.io) " +
         "through our servers, never directly from your device. All of it is used solely for informational and " +
         "personal collection management purposes. For copyright takedown requests: " +
@@ -1166,16 +1609,19 @@ object AppLocale {
 
     val ratingPromptTitle: String get() = if (isItalian) "Un Poké-messaggio per te" else "A Poké message for you"
     val ratingPromptTagline: String get() = if (isItalian)
-        "Se PokeVault ti piace, una recensione ci dà energia per continuare."
+        "PokeVault lo porto avanti da solo, nel tempo libero."
     else
-        "If you're enjoying PokeVault, a review gives us energy to keep building."
+        "I build PokeVault on my own, in my spare time."
     val ratingPromptBody: String get() = if (isItalian)
-        "Nella recensione puoi scriverci anche idee e feedback: leggiamo tutto e " +
-        "ci aiuta a far evolvere il progetto con nuove funzionalità utili."
+        "Una recensione sul Play Store è il modo più veloce per farlo conoscere — " +
+        "e se ci scrivi cosa cambieresti, lo leggo davvero: metà di quello che " +
+        "trovi nell'app è nato da un messaggio di qualcuno."
     else
-        "In your review, you can also share ideas and feedback: we read everything and " +
-        "it helps this project evolve with useful new features."
-    val ratingPromptReviewCta: String get() = if (isItalian) "Vai alla recensione" else "Go to review"
+        "A Play Store review is the fastest way to help it get found — and if you " +
+        "write what you'd change, I actually read it: half of what's in the app " +
+        "started as somebody's message."
+    val ratingPromptReviewCta: String get() = if (isItalian) "Scrivi una recensione" else "Write a review"
+    val ratingPromptLaterCta: String get() = if (isItalian) "Più tardi" else "Maybe later"
 
     val privacyConsentTitle: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
     val privacyConsentSummary: String get() = if (isItalian)
@@ -1212,15 +1658,23 @@ object AppLocale {
         "Se questa app ti è utile, ti fa sorridere o ti semplifica un po' la giornata, ecco come puoi darmi una mano a portarla avanti:\n\n" +
         "👑 Passa alla versione Premium: Un piccolo abbonamento per te, un supporto vitale per me! Oltre a sbloccare tutte le funzionalità esclusive, mi darai una mano concreta a coprire i costi di gestione e mi permetterai di dedicare sempre più tempo per aggiungere nuove fantastiche novità.\n\n" +
         "⭐️ Lascia una recensione a 5 stelle: Non costa nulla, ma per un dev indipendente come me vale oro. Aiuta l'app a crescere e a farsi conoscere negli store!\n\n" +
+        "🎁 Regala un mese: Se sei Premium hai un codice AMICO nelle impostazioni. Regalarlo non ti costa nulla e fa provare l'app per bene a chi ci tieni.\n\n" +
         "📢 Parlane in giro: Consigliala ai tuoi amici, parenti o sui social. Il passaparola è la pubblicità più bella del mondo.\n\n" +
         "Qualsiasi cosa tu decida di fare, anche solo continuare a usare l'app nella sua versione base, grazie di cuore. È grazie a persone come te che questo progetto ha senso di esistere.\n\n" +
-        "Per qualsiasi informazione, proposta Buona navigazione!\n\n" +
+        "Per qualsiasi cosa — un'idea, una segnalazione, due chiacchiere — mi trovi su TikTok, qui sopra. Buona navigazione!\n\n" +
         "Emanuele 👨🏻‍💻"
     else
-        "👋 Hi! I'm Emanuele, the creator of this app.\n\n" +
-        "There is no big company behind it, just me. I designed and built it from scratch with passion, lots of spare-time hours and a lot of coffee. ☕\n\n" +
-        "If the app is useful for you, going Premium, leaving a 5-star review, or sharing it with friends helps a lot.\n\n" +
-        "Thank you for using it!\n\n" +
+        "👋 Hi! I'm Emanuele, the creator of this app.\n" +
+        "If you're reading this you went digging through the settings... and I'm glad you did!\n\n" +
+        "There is no big company behind this app, it's just me. I thought it up, designed it and coded it from scratch, with a lot of passion, countless spare-time hours and an embarrassing amount of coffee. ☕\n\n" +
+        "My goal is to keep making it better, but being an independent developer is a challenge. Servers cost money, bugs always find somewhere to hide, and new ideas take time.\n\n" +
+        "If the app is useful to you, here is how you can help me keep it going:\n\n" +
+        "👑 Go Premium: A small subscription for you, a lifeline for me. It unlocks every feature and it covers the running costs, so I can spend more time adding new things.\n\n" +
+        "⭐️ Leave a 5-star review: It costs nothing, and for an indie dev it's worth its weight in gold. It helps the app get found.\n\n" +
+        "🎁 Gift a month: If you're Premium you have a friend code in the settings. Giving it away costs you nothing and lets someone you care about try the app properly.\n\n" +
+        "📢 Spread the word: Tell your friends, your family, your timeline. Word of mouth is the best advertising there is.\n\n" +
+        "Whatever you decide to do — even just keeping on using the free version — thank you, sincerely. It's people like you that make this project worth doing.\n\n" +
+        "For anything at all — an idea, a bug, a chat — you'll find me on TikTok, right up there. Enjoy!\n\n" +
         "Emanuele 👨🏻‍💻"
     val privacyPolicyLabel: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
     val privacyPolicySubtitle: String get() = if (isItalian) "Come gestiamo i tuoi dati" else "How we handle your data"
@@ -1261,6 +1715,8 @@ object AppLocale {
     else
         "You have unlimited access to all features."
     val premiumFeaturesTitle: String get() = if (isItalian) "Confronto funzionalità" else "Feature comparison"
+    val premiumFreeColumn: String get() = if (isItalian) "Gratis" else "Free"
+    val premiumPremiumColumn: String get() = if (isItalian) "Premium" else "Premium"
     val premiumFeatureAlbumFree: String get() = if (isItalian) "1 Album gratuito" else "1 Free Album"
     val premiumFeatureAlbumPremium: String get() = if (isItalian) "Album illimitati" else "Unlimited Albums"
     val premiumFeatureDeckFree: String get() = if (isItalian) "1 Deck gratuito" else "1 Free Deck"
@@ -1288,22 +1744,145 @@ object AppLocale {
         "Subscription auto-renews. You can cancel anytime from Google Play Store. " +
         "Payment is charged to your Google Play account."
     val premiumSettingsLabel: String get() = if (isItalian) "PokeVault Premium" else "PokeVault Premium"
+
+    /**
+     * Sottotitolo Premium nelle impostazioni.
+     *
+     * Prima era una frase fissa che nominava tre funzioni su nove, rimasta
+     * indietro di parecchi rilasci: chi la leggeva credeva che Premium servisse
+     * solo a quelle. Ora conta quello che il gate blocca davvero, e l'elenco
+     * completo sta nella schermata Premium, che è il posto giusto per un
+     * confronto riga per riga.
+     */
     val premiumSettingsSubtitleFree: String get() = if (isItalian)
-        "Sblocca Wishlist illimitate, Export decklist e Home Sprite a scelta"
+        "Album, deck, wishlist e tornei senza limiti, più export ed extra"
     else
-        "Unlock unlimited wishlists, decklist export and custom Home Sprite"
+        "Unlimited albums, decks, wishlists and tournaments, plus export and extras"
     val premiumSettingsSubtitleActive: String get() = if (isItalian)
-        "Abbonamento attivo — Export, Home Sprite a scelta e Wishlist illimitate"
+        "Abbonamento attivo — grazie, davvero"
     else
-        "Active subscription — Export, custom Home Sprite and unlimited wishlists"
-    val premiumSettingsExtraTitle: String get() = if (isItalian) "Con Premium sblocchi:" else "With Premium you unlock:"
-    val premiumSettingsExtraExport: String get() = if (isItalian) "• Export decklist PTCG standard" else "• Standard PTCG decklist export"
-    val premiumSettingsExtraHomeSprite: String get() = if (isItalian) "• Home Sprite fisso a scelta" else "• Fixed Home Sprite selection"
-    val premiumSettingsExtraWishlist: String get() = if (isItalian) "• Wishlist illimitate" else "• Unlimited wishlists"
+        "Subscription active — thank you, really"
+    fun premiumSettingsSubtitleGift(expiry: String): String = if (isItalian)
+        "Mese regalo attivo fino al $expiry"
+    else
+        "Gift month active until $expiry"
+    val premiumFeatureWishlistFree: String get() = if (isItalian) "1 Wishlist gratuita" else "1 Free Wishlist"
     val premiumFeatureWishlistPremium: String get() = if (isItalian) "Wishlist illimitate" else "Unlimited wishlists"
+    val premiumFeatureGoalAlbumFree: String get() = if (isItalian) "1 Album obiettivo" else "1 Goal Album"
+    val premiumFeatureGoalAlbumPremium: String get() = if (isItalian) "Album obiettivo illimitati" else "Unlimited Goal Albums"
+    val premiumFeatureHandSimFree: String get() = if (isItalian)
+        "1 simulazione di mano per deck"
+    else
+        "1 hand simulation per deck"
+    val premiumFeatureHandSimPremium: String get() = if (isItalian)
+        "Hand-Simulator senza limiti"
+    else
+        "Unlimited Hand-Simulator"
     val premiumFeatureExportPremium: String get() = if (isItalian) "Export decklist PTCG standard" else "Standard PTCG decklist export"
     val premiumFeatureHomeSpritePremium: String get() = if (isItalian) "Home Sprite fisso a scelta" else "Fixed Home Sprite selection"
-    val premiumManage: String get() = if (isItalian) "Gestisci abbonamento" else "Manage subscription"
+
+    // ══════════════════════════════════════
+    // CODICI REGALO
+    // ══════════════════════════════════════
+
+    val giftSettingsLabel: String get() = if (isItalian) "Codici regalo" else "Gift codes"
+    val giftSettingsSubtitle: String get() = if (isItalian)
+        "Regala un mese Premium a un amico, o riscatta un codice"
+    else
+        "Gift a Premium month to a friend, or redeem a code"
+    val giftTitle: String get() = if (isItalian) "Codici regalo" else "Gift codes"
+    val giftHeadline: String get() = if (isItalian)
+        "Un mese Premium, offerto da te"
+    else
+        "One Premium month, on you"
+    val giftHeadlineBody: String get() = if (isItalian)
+        "Il tuo codice AMICO regala 30 giorni di Premium a chi non l'ha mai avuto. " +
+        "A te non costa nulla e non scade."
+    else
+        "Your friend code gives 30 days of Premium to someone who has never had it. " +
+        "It costs you nothing and it does not expire."
+
+    val giftMyCodeTitle: String get() = if (isItalian) "Il tuo codice AMICO" else "Your friend code"
+    fun giftInvitesUsed(used: Int, max: Int): String = if (isItalian)
+        "Usato da $used amici su $max"
+    else
+        "Redeemed by $used of $max friends"
+    val giftInvitesExhausted: String get() = if (isItalian)
+        "Hai regalato tutti i mesi disponibili. Grazie!"
+    else
+        "You have given away every available month. Thank you!"
+    val giftCopyCta: String get() = if (isItalian) "Copia" else "Copy"
+    val giftCopiedToast: String get() = if (isItalian) "Codice copiato" else "Code copied"
+    val giftShareCta: String get() = if (isItalian) "Condividi" else "Share"
+    fun giftShareMessage(code: String): String = if (isItalian)
+        "Ti regalo un mese di PokeVault Premium 🎁\n\n" +
+        "Scarica l'app, vai in Impostazioni → Codici regalo e inserisci:\n$code"
+    else
+        "Here is a free month of PokeVault Premium 🎁\n\n" +
+        "Download the app, open Settings → Gift codes and enter:\n$code"
+    val giftShareChooserTitle: String get() = if (isItalian) "Regala un mese Premium" else "Gift a Premium month"
+
+    val giftRedeemTitle: String get() = if (isItalian) "Hai ricevuto un codice?" else "Got a code?"
+    val giftRedeemHint: String get() = if (isItalian) "Es. AMICOK7P2QX4M" else "e.g. AMICOK7P2QX4M"
+    val giftRedeemCta: String get() = if (isItalian) "Riscatta" else "Redeem"
+    fun giftRedeemSuccess(days: Int): String = if (isItalian)
+        "Fatto! $days giorni di Premium sono tuoi 🎉"
+    else
+        "Done! $days days of Premium are yours 🎉"
+    fun giftActiveUntil(expiry: String): String = if (isItalian)
+        "Premium regalo attivo fino al $expiry"
+    else
+        "Gift Premium active until $expiry"
+
+    /**
+     * Regola del riscatto, detta prima e non dopo il rifiuto.
+     *
+     * È il vincolo che sorprende di più — un solo codice per account e per
+     * dispositivo, per sempre — e leggerlo solo come messaggio di errore
+     * sembrerebbe un bug.
+     */
+    val giftRedeemRule: String get() = if (isItalian)
+        "Un codice per account e per dispositivo, una volta sola."
+    else
+        "One code per account and per device, once only."
+
+    val giftErrorNotFound: String get() = if (isItalian)
+        "Questo codice non esiste. Controlla che sia scritto giusto."
+    else
+        "This code does not exist. Check the spelling."
+    val giftErrorDisabled: String get() = if (isItalian)
+        "Questo codice è stato disattivato."
+    else
+        "This code has been deactivated."
+    val giftErrorExpired: String get() = if (isItalian)
+        "Questo codice è scaduto."
+    else
+        "This code has expired."
+    val giftErrorExhausted: String get() = if (isItalian)
+        "Questo codice è già stato usato da tutti gli amici che poteva invitare."
+    else
+        "This code has already been used by everyone it could invite."
+    val giftErrorOwnCode: String get() = if (isItalian)
+        "Questo è il tuo codice: serve a regalare un mese a qualcun altro."
+    else
+        "That is your own code: it is for giving a month to someone else."
+    val giftErrorAlreadyRedeemed: String get() = if (isItalian)
+        "Hai già riscattato un codice regalo con questo account."
+    else
+        "You have already redeemed a gift code with this account."
+    val giftErrorDeviceUsed: String get() = if (isItalian)
+        "Da questo dispositivo è già stato riscattato un codice."
+    else
+        "A code has already been redeemed from this device."
+    val giftErrorRateLimited: String get() = if (isItalian)
+        "Troppi tentativi. Riprova più tardi."
+    else
+        "Too many attempts. Try again later."
+    val giftErrorUnavailable: String get() = if (isItalian)
+        "Non riesco a contattare il server. Controlla la connessione e riprova."
+    else
+        "Cannot reach the server. Check your connection and try again."
+    val giftErrorEmpty: String get() = if (isItalian) "Scrivi un codice." else "Enter a code."
 
     // Premium gates
     val premiumAlbumLimitTitle: String get() = if (isItalian)
@@ -1415,6 +1994,68 @@ object AppLocale {
     else
         "Create a goal album to complete a set or rarity"
 
+
+    // Sezione illustratori
+    val illustratorsTitle: String get() = if (isItalian) "Illustratori" else "Illustrators"
+    val illustratorsSubtitle: String get() = if (isItalian)
+        "Colleziona per artista"
+    else
+        "Collect by artist"
+    fun illustratorsCount(artists: Int): String =
+        if (isItalian) "$artists artisti" else "$artists artists"
+    fun illustratorsSets(sets: Int): String =
+        if (isItalian) "$sets espansioni" else "$sets sets"
+    fun illustratorsStarted(started: Int): String =
+        if (isItalian) "$started iniziati" else "$started started"
+    val illustratorsFollowed: String get() = if (isItalian) "Seguiti" else "Following"
+    val illustratorsAll: String get() = if (isItalian) "Tutti" else "All"
+    val illustratorFollow: String get() = if (isItalian) "Segui" else "Follow"
+    val illustratorUnfollow: String get() = if (isItalian) "Smetti di seguire" else "Unfollow"
+    val illustratorSearchHint: String get() = if (isItalian)
+        "Cerca un illustratore..."
+    else
+        "Search an illustrator..."
+    val illustratorSortClosest: String get() = if (isItalian) "Quasi fatti" else "Closest"
+    val illustratorSortCards: String get() = if (isItalian) "Più carte" else "Most cards"
+    val illustratorSortName: String get() = if (isItalian) "A-Z" else "A-Z"
+    val illustratorFilterMissing: String get() = if (isItalian) "Mancanti" else "Missing"
+    val illustratorFilterOwned: String get() = if (isItalian) "Possedute" else "Owned"
+    fun illustratorCardsAndSets(cards: Int, sets: Int): String =
+        if (isItalian) "$cards carte · $sets espansioni" else "$cards cards · $sets sets"
+    val illustratorsEmptyTitle: String get() = if (isItalian)
+        "Nessun illustratore"
+    else
+        "No illustrators"
+    val illustratorsEmptySubtitle: String get() = if (isItalian)
+        "Il catalogo non è raggiungibile in questo momento."
+    else
+        "The catalog isn't reachable right now."
+    val illustratorsNoMatch: String get() = if (isItalian)
+        "Nessun illustratore con questo nome"
+    else
+        "No illustrator by that name"
+    /**
+     * Le due righe oneste in fondo alla lista. Il ~2% di catalogo senza
+     * illustratore e le carte in collezione che non vengono dal catalogo
+     * italiano non si nascondono: senza dirlo, i totali sembrano sbagliati.
+     */
+    fun illustratorsCatalogGap(cards: Int): String = if (isItalian)
+        "$cards carte del catalogo non dicono chi le ha disegnate e non compaiono qui."
+    else
+        "$cards catalog cards don't say who drew them and aren't listed here."
+    fun illustratorsCollectionGap(cards: Int): String = if (isItalian)
+        "$cards carte della tua collezione non sono collegate al catalogo italiano e non contano nei progressi."
+    else
+        "$cards cards in your collection aren't linked to the Italian catalog and don't count towards progress."
+    val illustratorCompleteTitle: String get() = if (isItalian)
+        "Collezione completa!"
+    else
+        "Collection complete!"
+    fun illustratorCompleteSubtitle(name: String): String = if (isItalian)
+        "Hai tutte le carte disegnate da $name."
+    else
+        "You own every card drawn by $name."
+
     // CreateGoalAlbumScreen
     val createChaseTitle: String get() = if (isItalian) "Nuovo Chase" else "New Chase"
     val chaseNameLabel: String get() = if (isItalian) "Nome Chase" else "Chase Name"
@@ -1445,5 +2086,330 @@ object AppLocale {
         "Hai raggiunto il limite di 1 Chase gratuito.\n\nPassa a Premium per creare Chase illimitati!"
     else
         "You've reached the 1 free Chase limit.\n\nGo Premium to create unlimited Chases!"
-}
 
+    // ══════════════════════════════════════
+    // COLLECTOR LAB
+    // ══════════════════════════════════════
+
+    // Hub
+    val collectorLabSubtitle: String get() = if (isItalian)
+        "Album, chase e illustratori"
+    else
+        "Albums, chases and illustrators"
+    val collectorStatAlbums: String get() = if (isItalian) "Album" else "Albums"
+    // Collector Lab: una riga per strumento, la stessa nelle intestazioni e
+    // nell'introduzione, cosi' la pagina spiega ogni cosa con le stesse parole.
+    val collectorAlbumHint: String get() = if (isItalian)
+        "Le tue carte, pagina per pagina"
+    else
+        "Your cards, page by page"
+    val collectorChaseHint: String get() = if (isItalian)
+        "Un set da chiudere, carta per carta"
+    else
+        "A set to finish, card by card"
+    val collectorIllustratorsHint: String get() = if (isItalian)
+        "Tutte le carte di un artista"
+    else
+        "Every card by one artist"
+    val collectorNewAlbum: String get() = if (isItalian) "Nuovo album" else "New album"
+    val collectorNewChase: String get() = if (isItalian) "Nuovo chase" else "New chase"
+    val collectorAlbumEmptyHint: String get() = if (isItalian)
+        "Metti in pagina le carte che hai, come in un raccoglitore vero."
+    else
+        "Lay out the cards you own, like a real binder."
+    val collectorChaseEmptyHint: String get() = if (isItalian)
+        "Scegli un set e guarda quali carte ti mancano per chiuderlo."
+    else
+        "Pick a set and see which cards you still need."
+    val collectorIllustratorsEmptyHint: String get() = if (isItalian)
+        "Scegli un artista e colleziona tutte le carte che ha disegnato."
+    else
+        "Pick an artist and collect every card they drew."
+    fun collectorDiscoverIllustrators(count: Int): String = if (isItalian)
+        "Tutti i $count artisti"
+    else
+        "All $count artists"
+    val collectorNextStep: String get() = if (isItalian) "Il prossimo passo" else "Next up"
+    fun collectorMissingToFinish(count: Int): String = if (isItalian) {
+        if (count == 1) "Manca 1 carta per chiudere" else "Mancano $count carte per chiudere"
+    } else {
+        if (count == 1) "1 card to go" else "$count cards to go"
+    }
+    val collectorIntroTitle: String get() = if (isItalian)
+        "Tre modi di collezionare"
+    else
+        "Three ways to collect"
+    val collectorStatCards: String get() = if (isItalian) "Carte inserite" else "Cards placed"
+    val collectorStatValue: String get() = if (isItalian) "Valore" else "Value"
+    val collectorStatChaseAvg: String get() = if (isItalian) "Media chase" else "Chase average"
+    val collectorSpotlightTitle: String get() = if (isItalian) "Quasi fatto" else "Almost there"
+    val collectorRecentAlbums: String get() = if (isItalian) "Album recenti" else "Recent albums"
+    val collectorSeeAll: String get() = if (isItalian) "Vedi tutti" else "See all"
+    val collectorEmptyTitle: String get() = if (isItalian)
+        "Il laboratorio è vuoto"
+    else
+        "The lab is empty"
+    val collectorEmptySubtitle: String get() = if (isItalian)
+        "Un album raccoglie le carte che hai; un chase segna quelle che ti mancano."
+    else
+        "An album holds the cards you own; a chase tracks the ones you are missing."
+    fun collectorMissingCards(count: Int): String = if (isItalian) {
+        if (count == 1) "1 carta mancante" else "$count carte mancanti"
+    } else {
+        if (count == 1) "1 missing card" else "$count missing cards"
+    }
+    fun collectorChasesDone(done: Int, total: Int): String = if (isItalian)
+        "$done di $total completati"
+    else
+        "$done of $total completed"
+
+    // Lista album
+    val albumSortRecent: String get() = if (isItalian) "Recenti" else "Recent"
+    val albumSortName: String get() = if (isItalian) "Nome" else "Name"
+    val albumSortFill: String get() = if (isItalian) "Riempimento" else "Filled"
+    val albumSortValue: String get() = if (isItalian) "Valore" else "Value"
+    val albumSearchHint: String get() = if (isItalian) "Cerca un album" else "Search an album"
+    val albumNoResults: String get() = if (isItalian)
+        "Nessun album corrisponde alla ricerca"
+    else
+        "No album matches your search"
+    val albumCreateCta: String get() = if (isItalian) "Crea un album" else "Create an album"
+    fun albumsSummary(albums: Int, cards: Int): String = if (isItalian)
+        "$albums album · $cards carte"
+    else
+        "$albums albums · $cards cards"
+
+    // Dettaglio album
+    val albumViewGrid: String get() = if (isItalian) "Griglia" else "Grid"
+    val albumViewBinder: String get() = if (isItalian) "Raccoglitore" else "Binder"
+    fun albumBinderPage(current: Int, total: Int): String = if (isItalian)
+        "Pagina $current di $total"
+    else
+        "Page $current of $total"
+    val albumCardActions: String get() = if (isItalian) "Azioni carta" else "Card actions"
+    val albumOpenCard: String get() = if (isItalian) "Apri dettaglio" else "Open details"
+    val albumSetCover: String get() = if (isItalian) "Imposta come copertina" else "Set as cover"
+    val albumCoverUpdated: String get() = if (isItalian) "Copertina aggiornata" else "Cover updated"
+    val albumMoveFirst: String get() = if (isItalian) "Porta all'inizio" else "Move to start"
+    val albumMoveBack: String get() = if (isItalian) "Sposta indietro" else "Move back"
+    val albumMoveForward: String get() = if (isItalian) "Sposta avanti" else "Move forward"
+    val albumRemoveCard: String get() = if (isItalian) "Rimuovi dall'album" else "Remove from album"
+    val albumValueLabel: String get() = if (isItalian) "Valore album" else "Album value"
+    val albumExpansionsLabel: String get() = if (isItalian) "Espansioni" else "Expansions"
+    val albumFilledLabel: String get() = if (isItalian) "Riempimento" else "Filled"
+    fun albumSlotsLeft(count: Int): String = if (isItalian) {
+        if (count == 1) "1 slot libero" else "$count slot liberi"
+    } else {
+        if (count == 1) "1 free slot" else "$count free slots"
+    }
+    fun albumAddSelected(count: Int): String = if (isItalian)
+        "Aggiungi $count carte"
+    else
+        "Add $count cards"
+    fun albumCardsAdded(count: Int): String = if (isItalian) {
+        if (count == 1) "1 carta aggiunta all'album" else "$count carte aggiunte all'album"
+    } else {
+        if (count == 1) "1 card added to the album" else "$count cards added to the album"
+    }
+    val undo: String get() = if (isItalian) "Annulla" else "Undo"
+
+    // Lista chase
+    val chaseSortClosest: String get() = if (isItalian) "Quasi fatti" else "Almost there"
+    val chaseSortName: String get() = if (isItalian) "Nome" else "Name"
+    val chaseSortRecent: String get() = if (isItalian) "Recenti" else "Recent"
+    val chaseSearchHint: String get() = if (isItalian) "Cerca un chase" else "Search a chase"
+    val chaseNoResults: String get() = if (isItalian)
+        "Nessun chase corrisponde alla ricerca"
+    else
+        "No chase matches your search"
+    val chaseCreateCta: String get() = if (isItalian) "Crea un chase" else "Create a chase"
+    val chaseCompleteBadge: String get() = if (isItalian) "Completo" else "Complete"
+    fun chaseMissingCount(count: Int): String = if (isItalian) {
+        if (count == 1) "1 mancante" else "$count mancanti"
+    } else {
+        if (count == 1) "1 missing" else "$count missing"
+    }
+
+    // Dettaglio chase
+    fun chaseTabAll(count: Int): String = if (isItalian) "Tutte ($count)" else "All ($count)"
+    fun chaseTabOwned(count: Int): String = if (isItalian) "Possedute ($count)" else "Owned ($count)"
+    fun chaseTabMissing(count: Int): String = if (isItalian) "Mancanti ($count)" else "Missing ($count)"
+    fun chaseTabDuplicates(count: Int): String = if (isItalian) "Doppie ($count)" else "Duplicates ($count)"
+    val chaseEmptyAll: String get() = if (isItalian) "Nessuna carta disponibile" else "No cards available"
+    val chaseEmptyOwned: String get() = if (isItalian)
+        "Non possiedi ancora nessuna carta di questo chase"
+    else
+        "You do not own any card of this chase yet"
+    val chaseEmptyMissing: String get() = if (isItalian)
+        "🎉 Hai completato questo chase!"
+    else
+        "🎉 You completed this chase!"
+    val chaseEmptyDuplicates: String get() = if (isItalian) "Nessun duplicato" else "No duplicates"
+    val chaseCardAdded: String get() = if (isItalian)
+        "Carta aggiunta alla collezione"
+    else
+        "Card added to collection"
+    val chaseCardAddError: String get() = if (isItalian)
+        "Errore durante l'aggiunta"
+    else
+        "Error while adding card"
+    val chaseLoadError: String get() = if (isItalian)
+        "Impossibile caricare le carte di questo chase"
+    else
+        "Could not load the cards of this chase"
+    val chaseSearchCards: String get() = if (isItalian) "Cerca fra le carte" else "Search the cards"
+    val chaseCardsNoResults: String get() = if (isItalian)
+        "Nessuna carta trovata"
+    else
+        "No card found"
+    val chaseSortCardsLabel: String get() = if (isItalian) "Ordina carte" else "Sort cards"
+    val chaseSortNumber: String get() = if (isItalian) "Numero" else "Number"
+    val chaseSortCardName: String get() = if (isItalian) "Nome" else "Name"
+    val chaseSortPriceDesc: String get() = if (isItalian) "Prezzo ↓" else "Price ↓"
+    val chaseSortPriceAsc: String get() = if (isItalian) "Prezzo ↑" else "Price ↑"
+    val chaseDensityToggle: String get() = if (isItalian) "Cambia densità" else "Change density"
+    val chaseCompletionCost: String get() = if (isItalian) "Costo per completare" else "Cost to complete"
+    fun chaseCompletionCostNote(priced: Int, total: Int): String = if (isItalian)
+        "stima su $priced mancanti di $total con prezzo noto"
+    else
+        "estimate over $priced of $total missing cards with a known price"
+    val chaseNextCheapest: String get() = if (isItalian)
+        "La mancante più economica"
+    else
+        "Cheapest missing card"
+    val chaseBiggestHurdle: String get() = if (isItalian)
+        "La mancante più cara"
+    else
+        "Priciest missing card"
+    val chaseCompletedTitle: String get() = if (isItalian)
+        "Chase completato"
+    else
+        "Chase completed"
+    val chaseCompletedSubtitle: String get() = if (isItalian)
+        "Hai tutte le carte di questo obiettivo."
+    else
+        "You own every card of this goal."
+    val chaseOwnedBadge: String get() = if (isItalian) "In collezione" else "In collection"
+    val chaseAddMissingToWishlist: String get() = if (isItalian)
+        "Mancanti nella wishlist"
+    else
+        "Missing to wishlist"
+    fun chaseWishlistAdded(count: Int): String = if (isItalian) {
+        if (count == 1) "1 carta aggiunta alla wishlist" else "$count carte aggiunte alla wishlist"
+    } else {
+        if (count == 1) "1 card added to the wishlist" else "$count cards added to the wishlist"
+    }
+    val chaseWishlistError: String get() = if (isItalian)
+        "Impossibile aggiornare la wishlist"
+    else
+        "Could not update the wishlist"
+    val chaseWishlistNoList: String get() = if (isItalian)
+        "Crea prima una wishlist dal menu Wishlist"
+    else
+        "Create a wishlist first from the Wishlist menu"
+
+    // ══════════════════════════════════════
+    // GRADATE
+    // ══════════════════════════════════════
+
+    /**
+     * Titolo su una riga sola.
+     *
+     * [gradedCardsTitle] ha un ritorno a capo perche' vive in una tessera del
+     * menu larga mezzo schermo; la TopAppBar della sezione lo cancellava con una
+     * `replace`, che e' un modo di dire che serviva un'altra stringa.
+     */
+    val gradedTitle: String get() = if (isItalian) "Carte gradate" else "Graded cards"
+
+    fun gradedSlabsCount(count: Int): String = if (isItalian) {
+        if (count == 1) "1 slab" else "$count slab"
+    } else {
+        if (count == 1) "1 slab" else "$count slabs"
+    }
+
+    val gradedStatSlabs: String get() = if (isItalian) "Slab" else "Slabs"
+    val gradedStatAverage: String get() = if (isItalian) "Voto medio" else "Avg grade"
+    val gradedStatValue: String get() = if (isItalian) "Valore" else "Value"
+
+    val gradedSearchHint: String get() = if (isItalian)
+        "Cerca fra le gradate"
+    else
+        "Search your slabs"
+
+    val gradedSpread: String get() = if (isItalian) "Distribuzione voti" else "Grade spread"
+
+    /** "Gem Mint 10" e' il nome che l'ente stampa: non si traduce. */
+    fun gradedGemCount(count: Int): String = "$count Gem Mint 10"
+
+    val gradedAllCompanies: String get() = if (isItalian) "Tutti gli enti" else "All graders"
+    val gradedNoCompany: String get() = if (isItalian) "Senza ente" else "No grader"
+    val gradedAllGrades: String get() = if (isItalian) "Tutti i voti" else "All grades"
+
+    // Le fasce di voto. I numeri sono uguali nelle due lingue: sono etichette
+    // stampate sui blocchi, non testo.
+    val gradedTierGem: String get() = "Gem Mint 10"
+    val gradedTierMint: String get() = "Mint 9 – 9.5"
+    val gradedTierNearMint: String get() = "8 – 8.5"
+    val gradedTierExcellent: String get() = "6 – 7.5"
+    val gradedTierPlayed: String get() = if (isItalian) "Sotto 6" else "Below 6"
+    val gradedTierUngraded: String get() = if (isItalian) "Senza voto" else "No grade"
+
+    val gradedSort: String get() = if (isItalian) "Ordina" else "Sort"
+    val gradedSortGrade: String get() = if (isItalian) "Voto più alto" else "Highest grade"
+    val gradedSortValue: String get() = if (isItalian) "Valore" else "Value"
+    val gradedSortName: String get() = if (isItalian) "Nome" else "Name"
+    val gradedSortRecent: String get() = if (isItalian) "Aggiunte di recente" else "Recently added"
+
+    val gradedEmptyTitle: String get() = if (isItalian)
+        "Nessuna carta gradata"
+    else
+        "No graded cards yet"
+    val gradedEmptySubtitle: String get() = if (isItalian)
+        "Apri una carta della collezione e segnala come gradata: ente, voto e valore finiscono qui."
+    else
+        "Open a card in your collection and mark it graded: grader, grade and value land here."
+
+    val gradedNoResults: String get() = if (isItalian)
+        "Nessuna slab con questi filtri"
+    else
+        "No slab matches these filters"
+
+    /** Quanto fidarsi del totale in cima: sopra lo zero e' una stima al ribasso. */
+    fun gradedUnpricedNote(count: Int): String = if (isItalian) {
+        if (count == 1) "1 slab senza valore stimato: il totale è al ribasso."
+        else "$count slab senza valore stimato: il totale è al ribasso."
+    } else {
+        if (count == 1) "1 slab has no estimated value: the total is a floor."
+        else "$count slabs have no estimated value: the total is a floor."
+    }
+
+    fun gradedUngradedNote(count: Int): String = if (isItalian) {
+        if (count == 1) "1 slab senza voto" else "$count slab senza voto"
+    } else {
+        if (count == 1) "1 slab without a grade" else "$count slabs without a grade"
+    }
+
+    val gradedLoadError: String get() = if (isItalian)
+        "Impossibile caricare le carte gradate"
+    else
+        "Could not load your graded cards"
+
+    // ══════════════════════════════════════
+    // DETTAGLIO CARTA
+    // ══════════════════════════════════════
+
+    val detailFlipHint: String get() = if (isItalian) "Trascina per girarla" else "Drag to flip"
+    val detailCertification: String get() = if (isItalian) "Certificazione" else "Certification"
+    val detailGradeShort: String get() = if (isItalian) "Voto" else "Grade"
+    val detailTotalCopies: String get() = if (isItalian) "Copie totali" else "Total copies"
+    val detailDeleteVariant: String get() = if (isItalian)
+        "Questa variante verrà rimossa"
+    else
+        "This variant will be removed"
+
+    fun detailPendingChanges(count: Int): String = if (isItalian) {
+        if (count == 1) "1 modifica da salvare" else "$count modifiche da salvare"
+    } else {
+        if (count == 1) "1 change to save" else "$count changes to save"
+    }
+}

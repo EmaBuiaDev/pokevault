@@ -8,7 +8,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
+import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.model.ScanRejections
 import com.emabuia.pokevault.data.model.ScannerMatcher
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.SetCodeMapper
@@ -19,6 +21,7 @@ import com.emabuia.pokevault.ocr.CardReading
 import com.emabuia.pokevault.ocr.ScanAggregator
 import com.emabuia.pokevault.ocr.ScanConsensus
 import com.emabuia.pokevault.ocr.ScannedFrame
+import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -54,6 +57,30 @@ enum class ScanState {
     RESULT
 }
 
+/**
+ * L'ultima azione che si puo' annullare.
+ *
+ * Una sola alla volta, la piu' recente: due "Annulla" sullo schermo insieme
+ * farebbero chiedere quale dei due tocca cosa.
+ */
+sealed interface ScannerUndo {
+    val id: Long
+
+    /** Carta o rosa scartata: si rimette sullo schermo com'era. */
+    data class Dismissed(
+        override val id: Long,
+        val pendingCard: TcgCard?,
+        val candidates: List<TcgCard>
+    ) : ScannerUndo
+
+    /** Carta aggiunta: se ne toglie la copia appena entrata. */
+    data class Added(
+        override val id: Long,
+        val card: TcgCard,
+        val docId: String
+    ) : ScannerUndo
+}
+
 data class ScannerUiState(
     val isSearching: Boolean = false,
     /** Carta trovata in attesa di conferma dall'utente */
@@ -73,7 +100,16 @@ data class ScannerUiState(
     val continuousMode: Boolean = false,
     val detectedName: String = "",
     /** ID letto in basso a sinistra, nella forma "67/87" */
-    val detectedNumber: String = ""
+    val detectedNumber: String = "",
+    /** L'ultima azione annullabile, finche' e' ancora in tempo. */
+    val undo: ScannerUndo? = null,
+    /**
+     * La ricerca non ha trovato niente da proporre: e' il momento di offrire la
+     * ricerca a mano, invece di lasciare l'utente davanti a un messaggio.
+     */
+    val notFound: Boolean = false,
+    /** Si sono scartate tutte le carte proponibili: si possono riproporre. */
+    val canRetryRejected: Boolean = false
 ) {
     /**
      * Il tempo in cui si trova lo scanner adesso.
@@ -94,9 +130,10 @@ data class ScannerUiState(
  * Orchestratore dello scanner: riceve i frame, decide quando i dati sono
  * abbastanza solidi per cercare, e porta in collezione la carta scelta.
  *
- * Le due parti delicate vivono fuori da qui, per poter essere messe sotto test
+ * Le parti delicate vivono fuori da qui, per poter essere messe sotto test
  * senza una camera e senza Firestore: [ScanAggregator] decide quando i frame
- * concordano, [ScannerMatcher] decide quale carta del catalogo corrisponde.
+ * concordano, [ScannerMatcher] decide quale carta del catalogo corrisponde,
+ * [ScanRejections] ricorda cosa e' stato scartato e per quanto.
  */
 class ScannerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -104,18 +141,15 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private val firestoreRepository = FirestoreRepository()
     private val appContext: Application get() = getApplication()
     private var searchJob: Job? = null
+    private var undoJob: Job? = null
+    private var undoCounter = 0L
 
     /**
-     * Carte scartate dall'utente per il numero che sta inquadrando adesso.
-     *
-     * Serve a "nessuna di queste", che deve proporre le tre successive. E' legato
-     * al numero inquadrato, non alla sessione: uno scarto non puo' rendere una
-     * carta introvabile per sempre. Per lo stesso motivo non esiste un elenco
-     * delle carte aggiunte: di una carta si possono avere due copie e si
-     * scansionano una dopo l'altra.
+     * Carte scartate dall'utente per la carta che sta inquadrando adesso. Non
+     * esiste un elenco delle carte aggiunte: di una carta si possono avere due
+     * copie e si scansionano una dopo l'altra.
      */
-    private val rejectedIds = mutableSetOf<String>()
-    private var rejectionScope = ""
+    private val rejections = ScanRejections()
     private val recentSearchAttempts = mutableMapOf<String, Long>()
     private var lastSearchTimestamp = 0L
 
@@ -181,6 +215,9 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
      * per riconoscere che una seconda copia della stessa carta e' una carta
      * nuova: il numero letto sarebbe identico, quindi nessun altro segnale
      * potrebbe distinguerle.
+     *
+     * Per la stessa ragione qui si dimenticano gli scarti: rimettere davanti la
+     * carta dopo averla scartata per sbaglio deve bastare a ritrovarla.
      */
     private fun onEmptyFrame() {
         emptyFrames++
@@ -190,8 +227,18 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         Timber.d("Obiettivo libero: scanner riarmato")
         lastAutoAddedNumber = ""
         lastAutoAddedAt = 0L
+        rejections.onCardRemoved()
         resetStability()
-        uiState = uiState.copy(detectedName = "", detectedNumber = "", hintMessage = null)
+        // Anche l'errore della carta di prima: restava sotto la cornice mentre
+        // si inquadrava gia' la successiva.
+        uiState = uiState.copy(
+            detectedName = "",
+            detectedNumber = "",
+            hintMessage = null,
+            errorMessage = null,
+            notFound = false,
+            canRetryRejected = false
+        )
     }
 
     private fun onCardRead(ocrResult: CardOCRResult) {
@@ -214,7 +261,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
         val consensus = aggregator.consensus(now) ?: return
         publishReadout(consensus = consensus, nowMs = now)
-        syncRejectionScope(consensus.number)
+        rejections.onNumberRead(consensus.number)
         if (!consensus.isReady) return
 
         val searchKey = consensus.searchKey
@@ -235,21 +282,6 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Gli scarti valgono per la carta inquadrata: appena il numero cambia,
-     * ricominciano da zero. Senza questo, scartare una carta la rendeva
-     * introvabile per tutto il resto della sessione.
-     */
-    private fun syncRejectionScope(number: String?) {
-        // Un numero che non si legge per un frame non e' un cambio di carta: senza
-        // questa guardia, dopo "nessuna di queste" gli scarti sparivano al primo
-        // frame sporco e tornavano in scena gli stessi tre candidati.
-        val scope = number?.takeIf { it.isNotBlank() } ?: return
-        if (scope == rejectionScope) return
-        rejectedIds.clear()
-        rejectionScope = scope
-    }
-
-    /**
      * Mostra il consenso, non la lettura del singolo frame: e' il motivo per cui
      * il nome non cambia a ogni fotogramma sotto la cornice. Se l'ID non si
      * legge per qualche secondo, dice anche come rimediare.
@@ -263,8 +295,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
         val hint = when {
             nowMs < stickyHintUntil -> stickyHint
-            missingId && nowMs - firstFrameWithoutIdAt >= HINT_AFTER_MS ->
-                "Non leggo il numero in basso a sinistra: avvicina la carta e riempi la cornice."
+            missingId && nowMs - firstFrameWithoutIdAt >= HINT_AFTER_MS -> AppLocale.scannerHintMissingId
             else -> null
         }
 
@@ -289,7 +320,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
      * da solo, in ogni altro caso si mostrano le tre carte piu' probabili.
      */
     private suspend fun searchCard(consensus: ScanConsensus) {
-        uiState = uiState.copy(isSearching = true, errorMessage = null)
+        uiState = uiState.copy(isSearching = true, errorMessage = null, notFound = false, canRetryRejected = false)
 
         try {
             val normalizedSetHint = consensus.setHint
@@ -310,13 +341,16 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 limit = CANDIDATE_POOL_SIZE
             ).getOrDefault(emptyList())
 
-            val viable = candidates.filterNot { it.id in rejectedIds }
+            val viable = rejections.viable(candidates) { it.id }
             if (viable.isEmpty()) {
+                val allRejected = candidates.isNotEmpty()
                 uiState = uiState.copy(
                     isSearching = false,
                     pendingCard = null,
                     candidateCards = emptyList(),
-                    errorMessage = emptyResultMessage(consensus, hadCandidates = candidates.isNotEmpty())
+                    errorMessage = emptyResultMessage(consensus, hadCandidates = allRejected),
+                    notFound = true,
+                    canRetryRejected = allRejected
                 )
                 activeSearchKey = ""
                 return
@@ -358,7 +392,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     // La carta e' ancora davanti all'obiettivo. Non la conto due
                     // volte, ma non interrompo nemmeno la scansione con una proposta
                     // che l'utente dovrebbe scartare a mano: basta dirglielo.
-                    showStickyHint("Già aggiunta: passa alla carta successiva.")
+                    showStickyHint(AppLocale.scannerAlreadyAdded)
                     uiState = uiState.copy(
                         isSearching = false,
                         pendingCard = null,
@@ -379,7 +413,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     errorMessage = null,
                     hintMessage = null
                 )
-                addToFirestore(top.card)
+                addToFirestore(top.card, defaultVariant(top.card))
                 return
             }
 
@@ -404,7 +438,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             Timber.w("Search failed: ${e.message}")
             uiState = uiState.copy(
                 isSearching = false,
-                errorMessage = "Errore ricerca: ${e.message}"
+                errorMessage = AppLocale.scannerSearchError(e.message.orEmpty()),
+                notFound = true
             )
             activeSearchKey = ""
         }
@@ -413,21 +448,41 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     /** Messaggio che dice cosa manca, non solo che non ha trovato niente. */
     private fun emptyResultMessage(consensus: ScanConsensus, hadCandidates: Boolean): String {
         return when {
-            hadCandidates -> "Ho finito le carte da proporre per questo numero."
-            consensus.number == null -> "Non riesco a leggere il numero in basso a sinistra. Avvicina la carta."
-            consensus.setTotal == null -> "Numero ${consensus.number} letto, ma non il totale del set. Avvicina la carta."
-            else -> "Nessuna carta ${consensus.number}/${consensus.setTotal} nel catalogo italiano."
+            hadCandidates -> AppLocale.scannerAllRejected
+            consensus.number == null -> AppLocale.scannerHintMissingId
+            consensus.setTotal == null -> AppLocale.scannerMissingTotal(consensus.number)
+            else -> AppLocale.scannerNotInCatalog(consensus.number, consensus.setTotal)
         }
     }
 
     // ═══════════════════════════════════════════
-    // CONFERMA / SCARTA
+    // CONFERMA / SCARTA / ANNULLA
     // ═══════════════════════════════════════════
 
-    fun confirmAdd() {
+    /**
+     * Le stampe di una carta, nell'ordine in cui proporle. La prima e' quella
+     * che si usa quando non si sceglie: per una rara holo e' la Holo.
+     *
+     * Prima lo scanner non impostava mai la stampa, e ogni carta entrava come
+     * "Normale" -- anche un'Illustrazione Rara, che normale non esiste.
+     */
+    fun variantsFor(card: TcgCard): List<String> {
+        val priceKeys = card.tcgplayer?.prices?.keys ?: emptySet()
+        // Senza rarita' e senza prezzi, CardOptions risponde "Holo": per una
+        // carta di cui non sappiamo niente e' una stampa inventata. Qui si
+        // resta su "Normale", che e' quello che lo scanner salvava da sempre.
+        if (card.rarity.isNullOrBlank() && priceKeys.isEmpty()) return listOf(FALLBACK_VARIANT)
+        return CardOptions.getVariantsForCard(priceKeys, card.rarity, card.set?.releaseDate)
+            .ifEmpty { listOf(FALLBACK_VARIANT) }
+    }
+
+    private fun defaultVariant(card: TcgCard): String = variantsFor(card).first()
+
+    fun confirmAdd(variant: String? = null) {
         val card = uiState.pendingCard ?: return
+        val chosen = variant?.takeIf { it.isNotBlank() } ?: defaultVariant(card)
         uiState = uiState.copy(pendingCard = null, candidateCards = emptyList(), isSearching = true)
-        viewModelScope.launch { addToFirestore(card) }
+        viewModelScope.launch { addToFirestore(card, chosen) }
     }
 
     fun selectCandidate(card: TcgCard) {
@@ -439,13 +494,17 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * "Nessuna di queste": le carte mostrate escono di scena per il numero
-     * inquadrato e la stessa inquadratura viene ricercata di nuovo, cosi' la
-     * rosa successiva propone le tre carte che vengono dopo.
+     * "Scarta" e "Nessuna di queste": le carte mostrate escono di scena finche'
+     * la carta resta inquadrata, e la stessa inquadratura viene ricercata di
+     * nuovo, cosi' la rosa successiva propone le carte che vengono dopo.
+     *
+     * Lo scarto si puo' annullare per qualche secondo: un tocco sbagliato non
+     * deve costare la carta.
      */
     fun dismissCard() {
-        rejectedIds += uiState.candidateCards.map { it.id }
-        uiState.pendingCard?.let { rejectedIds += it.id }
+        val pending = uiState.pendingCard
+        val candidates = uiState.candidateCards
+        rejections.reject(candidates.map { it.id } + listOfNotNull(pending?.id))
 
         uiState = uiState.copy(
             pendingCard = null,
@@ -455,14 +514,89 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             errorMessage = null,
             hintMessage = null
         )
+        if (pending != null || candidates.isNotEmpty()) {
+            offerUndo(ScannerUndo.Dismissed(nextUndoId(), pending, candidates))
+        }
         resetStability()
+    }
+
+    /** Rimette sullo schermo quello che era stato scartato, e lo rende di nuovo proponibile. */
+    fun undoDismiss() {
+        val undo = uiState.undo as? ScannerUndo.Dismissed ?: return
+        rejections.undoLast()
+        searchJob?.cancel()
+        undoJob?.cancel()
+        resetStability()
+        uiState = uiState.copy(
+            isSearching = false,
+            pendingCard = undo.pendingCard,
+            candidateCards = if (undo.pendingCard == null) undo.candidates else emptyList(),
+            lastAddedCard = null,
+            errorMessage = null,
+            hintMessage = null,
+            notFound = false,
+            canRetryRejected = false,
+            undo = null
+        )
+    }
+
+    /**
+     * Toglie la copia appena aggiunta.
+     *
+     * La carta viene anche scartata finche' resta inquadrata: in modalita'
+     * continua, annullare una carta entrata per errore mentre e' ancora davanti
+     * all'obiettivo la farebbe rientrare da sola tre secondi dopo.
+     */
+    fun undoLastAdd() {
+        val undo = uiState.undo as? ScannerUndo.Added ?: return
+        undoJob?.cancel()
+        uiState = uiState.copy(undo = null)
+        viewModelScope.launch {
+            firestoreRepository.removeOneCopy(undo.docId)
+                .onSuccess {
+                    rejections.reject(listOf(undo.card.id))
+                    showStickyHint(AppLocale.scannerAddUndone(undo.card.name))
+                    uiState = uiState.copy(
+                        addedCount = (uiState.addedCount - 1).coerceAtLeast(0),
+                        lastAddedCard = if (uiState.lastAddedCard?.id == undo.card.id) null else uiState.lastAddedCard,
+                        hintMessage = stickyHint
+                    )
+                    resetStability()
+                }
+                .onFailure { error ->
+                    uiState = uiState.copy(errorMessage = AppLocale.scannerUndoFailed(error.message.orEmpty()))
+                }
+        }
+    }
+
+    /** "Riproponi tutte": dopo averle scartate tutte, si ricomincia da capo. */
+    fun retryRejected() {
+        rejections.clear()
+        resetStability()
+        uiState = uiState.copy(errorMessage = null, notFound = false, canRetryRejected = false)
+    }
+
+    private fun nextUndoId(): Long = ++undoCounter
+
+    private fun offerUndo(undo: ScannerUndo) {
+        undoJob?.cancel()
+        uiState = uiState.copy(undo = undo)
+        undoJob = viewModelScope.launch {
+            delay(UNDO_WINDOW_MS)
+            if (uiState.undo?.id == undo.id) uiState = uiState.copy(undo = null)
+        }
+    }
+
+    fun dismissUndo() {
+        undoJob?.cancel()
+        uiState = uiState.copy(undo = null)
     }
 
     // ═══════════════════════════════════════════
     // SALVATAGGIO
     // ═══════════════════════════════════════════
 
-    private suspend fun addToFirestore(tcgCard: TcgCard) {
+    private suspend fun addToFirestore(tcgCard: TcgCard, variant: String) {
         val resolvedCard = repository.getCard(tcgCard.id, preferNetwork = true).getOrNull() ?: tcgCard
         val price = resolvedCard.cardmarket?.prices.minimumEurPriceOrZero()
 
@@ -483,22 +617,25 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             quantity = 1,
             condition = uiState.condition,
             apiCardId = resolvedCard.id,
-            cardNumber = resolvedCard.number
+            cardNumber = resolvedCard.number,
+            variant = variant
         )
 
         // La quantita' non si somma qui: addCard riconosce la carta gia' in
         // collezione (stesso apiCardId, variante e lingua) e incrementa la riga.
         firestoreRepository.addCard(pokemonCard)
-            .onSuccess {
+            .onSuccess { docId ->
                 uiState = uiState.copy(
                     isSearching = false,
                     lastAddedCard = tcgCard,
                     addedCount = uiState.addedCount + 1,
                     errorMessage = null
                 )
+                offerUndo(ScannerUndo.Added(nextUndoId(), tcgCard, docId))
                 val addedCardId = tcgCard.id
                 // In continuo il banner e' solo un riscontro di passaggio: tenerlo
-                // 2,5 secondi vorrebbe dire una carta ogni tre secondi.
+                // 2,5 secondi vorrebbe dire una carta ogni tre secondi. L'"Annulla"
+                // invece resta di piu', in alto, dove non copre la carta dopo.
                 val bannerMs = if (uiState.continuousMode) CONTINUOUS_BANNER_MS else ADDED_BANNER_MS
                 viewModelScope.launch {
                     delay(bannerMs)
@@ -515,7 +652,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             .onFailure { error ->
                 uiState = uiState.copy(
                     isSearching = false,
-                    errorMessage = "Errore salvataggio: ${error.message}"
+                    errorMessage = AppLocale.scannerSaveError(error.message.orEmpty())
                 )
                 resetStability()
             }
@@ -561,9 +698,9 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun resetScanner() {
-        rejectedIds.clear()
-        rejectionScope = ""
+        rejections.clear()
         searchJob?.cancel()
+        undoJob?.cancel()
         resetStability()
         lastAutoAddedNumber = ""
         lastAutoAddedAt = 0L
@@ -598,6 +735,12 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
         private const val ADDED_BANNER_MS = 2_500L
         private const val CONTINUOUS_BANNER_MS = 1_100L
+
+        /** Quanto resta disponibile "Annulla". */
+        private const val UNDO_WINDOW_MS = 6_000L
+
+        /** La stampa di prima, quando non se ne conosce nessuna. */
+        private const val FALLBACK_VARIANT = "Normal"
 
         private const val SEARCH_MIN_INTERVAL_MS = 1_200L
         private const val SEARCH_KEY_COOLDOWN_MS = 6_000L

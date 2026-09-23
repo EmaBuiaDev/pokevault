@@ -1,0 +1,25 @@
+-- Indice su cards.illustratore, per le rotte /v1/illustrators.
+--
+-- Perche' serve: /v1/illustrators raggruppa l'intera tabella cards per
+-- illustratore (~15.400 righe) e /v1/illustrators/{nome}/cards ci filtra sopra
+-- per valore esatto. Senza indice quest'ultima e' una scansione completa della
+-- tabella a ogni apertura della pagina di un artista.
+--
+-- ATTENZIONE, la colonna e' arrivata senza migration: `cards.illustratore` e'
+-- stata aggiunta direttamente in produzione con un ALTER a mano al tempo del
+-- backfill da TCGdex (scripts/backfill-illustratore-tcgdex.mjs), e nessun file
+-- in schema/ la dichiara. In produzione c'e' gia'; su un database ricostruito
+-- da zero applicando questi file in ordine, NO -- e questo indice fallirebbe.
+--
+-- L'ALTER non sta in questo file di proposito: SQLite non ha
+-- ADD COLUMN IF NOT EXISTS, quindi in produzione fallirebbe con "duplicate
+-- column name" abortendo l'intero file e lasciando l'indice non creato.
+-- Chi ricostruisce da zero lo lancia prima, una volta sola:
+--
+--   wrangler d1 execute pokevault-catalog --remote \
+--     --command "ALTER TABLE cards ADD COLUMN illustratore TEXT;"
+--
+-- Senza --remote wrangler lavora sul database locale e non lo dice: si crede
+-- fatto quello che non e' stato fatto.
+
+CREATE INDEX IF NOT EXISTS idx_cards_illustratore ON cards(illustratore);

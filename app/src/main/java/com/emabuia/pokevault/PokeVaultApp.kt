@@ -87,6 +87,12 @@ class PokeVaultApp : Application(), ImageLoaderFactory {
 
         return ImageLoader.Builder(this)
             .okHttpClient(client)
+            // Una dissolvenza breve invece dello scatto secco: nella griglia di
+            // un'espansione le immagini arrivano una alla volta, e senza questa
+            // ognuna compare di colpo sopra il proprio fondo -- si legge come
+            // lentezza anche quando la rete e' veloce. Sugli hit in cache di
+            // memoria Coil la salta, quindi lo scorrimento resta immediato.
+            .crossfade(180)
             .diskCachePolicy(CachePolicy.ENABLED)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .memoryCache {

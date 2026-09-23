@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One-time backfill of cards.rarity in D1, sourced from TCGdex (MIT-licensed,
+// Backfill di cards.rarity in D1, sourced from TCGdex (MIT-licensed,
 // api.tcgdex.net). TCGdex is touched only here, at backfill time -- never by
 // the Worker or the app at runtime. Once written, rarity is ours in D1 like
 // the rest of the catalog. See MIGRATION_PLAN.md M4.6 for the source
@@ -9,6 +9,15 @@
 //   node scripts/backfill-rarity-tcgdex.mjs <expansionId>              (dry-run: report only)
 //   node scripts/backfill-rarity-tcgdex.mjs <expansionId> --apply       (write to D1)
 //   node scripts/backfill-rarity-tcgdex.mjs --all [--apply]             (every expansion in D1)
+//   ... --only-missing                                                  (solo le carte con rarity vuota)
+//
+// `--only-missing` esiste perche' questo non e' piu' un backfill unico: ogni
+// import nuovo (topup, set storici, promo) entra senza rarita' e va ripreso.
+// Senza il flag il giro riscarica da TCGdex *tutte* le carte del set per
+// riscrivere valori che gia' abbiamo -- con --all sono 18.815 chiamate per
+// coprirne 3.050 -- e ogni riscrittura e' un'occasione in piu' di sovrascrivere
+// un valore giusto con uno sbagliato. Col flag si leggono da D1 solo le carte
+// bucate, e con --all si visitano solo le espansioni che ne hanno.
 
 import { writeFile, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -117,21 +126,31 @@ async function runD1Query(sql) {
   return JSON.parse(jsonStart >= 0 ? out.slice(jsonStart) : out);
 }
 
-async function fetchD1CardNumbers(expansionId) {
-  const parsed = await runD1Query(`SELECT card_id, card_number FROM cards WHERE expansion_id = ${sqlString(expansionId)}`);
+// Una rarita' vuota e una NULL sono lo stesso buco: l'app le manda tutte e due
+// nel ramo "Altro" di RarityUtils, quello con le due stelle verdi.
+const MISSING_RARITY_SQL = "(rarity IS NULL OR TRIM(rarity) = '')";
+
+async function fetchD1CardNumbers(expansionId, onlyMissing) {
+  const where = onlyMissing
+    ? `expansion_id = ${sqlString(expansionId)} AND ${MISSING_RARITY_SQL}`
+    : `expansion_id = ${sqlString(expansionId)}`;
+  const parsed = await runD1Query(`SELECT card_id, card_number FROM cards WHERE ${where}`);
   return parsed[0]?.results ?? [];
 }
 
-async function fetchAllExpansionIds() {
-  const parsed = await runD1Query('SELECT id FROM expansions ORDER BY id');
+async function fetchAllExpansionIds(onlyMissing) {
+  const sql = onlyMissing
+    ? `SELECT DISTINCT expansion_id AS id FROM cards WHERE ${MISSING_RARITY_SQL} ORDER BY id`
+    : 'SELECT id FROM expansions ORDER BY id';
+  const parsed = await runD1Query(sql);
   return (parsed[0]?.results ?? []).map((r) => r.id);
 }
 
-async function backfillExpansion(expansionId, apply) {
+async function backfillExpansion(expansionId, apply, onlyMissing) {
   const tcgdexId = TCGDEX_ID_OVERRIDES[expansionId] ?? expansionId;
-  const rows = await fetchD1CardNumbers(expansionId);
+  const rows = await fetchD1CardNumbers(expansionId, onlyMissing);
   if (rows.length === 0) {
-    console.log(`[${expansionId}] nessuna carta in D1, salto`);
+    console.log(`[${expansionId}] ${onlyMissing ? "nessuna carta senza rarita'" : 'nessuna carta in D1'}, salto`);
     return { expansionId, matched: 0, total: 0 };
   }
 
@@ -154,7 +173,16 @@ async function backfillExpansion(expansionId, apply) {
   });
 
   const withRarity = results.filter((r) => r.rarity);
-  console.log(`[${expansionId}] ${withRarity.length}/${rows.length} carte con rarita' trovata (TCGdex: ${tcgdexId})`);
+  // I numeri rimasti scoperti sono il dato che serve per scegliere la seconda
+  // fonte: senza stamparli il riepilogo dice solo "ne mancano 11" e tocca
+  // ricercarseli a mano.
+  const unmatched = results.filter((r) => !r.rarity).map((r) => r.row.card_number);
+  console.log(
+    `[${expansionId}] ${withRarity.length}/${rows.length} carte con rarita' trovata (TCGdex: ${tcgdexId})` +
+      (unmatched.length > 0
+        ? ` -- scoperte: ${unmatched.slice(0, 15).join(', ')}${unmatched.length > 15 ? ` ...+${unmatched.length - 15}` : ''}`
+        : '')
+  );
 
   if (apply && withRarity.length > 0) {
     await mkdir(tmpDir, { recursive: true });
@@ -174,18 +202,20 @@ async function main() {
   const args = process.argv.slice(2);
   const apply = args.includes('--apply');
   const all = args.includes('--all');
-  const targets = all ? await fetchAllExpansionIds() : args.filter((a) => a !== '--apply' && a !== '--all');
+  const onlyMissing = args.includes('--only-missing');
+  const flags = new Set(['--apply', '--all', '--only-missing']);
+  const targets = all ? await fetchAllExpansionIds(onlyMissing) : args.filter((a) => !flags.has(a));
 
   if (targets.length === 0) {
     throw new Error('Usage: node backfill-rarity-tcgdex.mjs <expansionId> [--apply]  OR  --all [--apply]');
   }
 
-  console.log(`${apply ? 'APPLY' : 'DRY RUN'} su ${targets.length} espansione/i\n`);
+  console.log(`${apply ? 'APPLY' : 'DRY RUN'}${onlyMissing ? " (solo carte senza rarita')" : ''} su ${targets.length} espansione/i\n`);
 
   const summary = [];
   for (const expansionId of targets) {
     try {
-      summary.push(await backfillExpansion(expansionId, apply));
+      summary.push(await backfillExpansion(expansionId, apply, onlyMissing));
     } catch (err) {
       console.error(`[${expansionId}] errore fatale:`, err.message);
       summary.push({ expansionId, matched: 0, total: 0, error: err.message });

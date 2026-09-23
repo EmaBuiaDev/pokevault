@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.emabuia.pokevault.ui.competitive
 
 import androidx.compose.foundation.background
@@ -21,8 +23,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.MatchLog
 import com.emabuia.pokevault.data.model.Tournament
+import com.emabuia.pokevault.ui.components.DeckSpriteCompact
+import com.emabuia.pokevault.ui.components.DeckSpriteRow
+import com.emabuia.pokevault.ui.components.hasChosenSprites
+import com.emabuia.pokevault.ui.components.ArchetypeSpriteRow
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.CompetitiveLogViewModel
@@ -83,21 +90,32 @@ fun TournamentDetailScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            // Tournament info card
+            // Una scheda sola invece di tre impilate.
+            //
+            // Prima c'erano l'anagrafica del torneo, due riquadri con record e
+            // percentuale, e un terzo con l'andamento: tre schede identiche per
+            // colore e forma, che occupavano mezzo schermo e non dicevano quale
+            // fosse l'informazione importante. Qui l'esito sta in cima e in
+            // grande, il resto gli fa da contorno.
             if (tournament != null) {
-                item { TournamentInfoCard(tournament) }
-            }
-
-            // Stats
-            if (viewModel.tournamentMatches.isNotEmpty()) {
                 item {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        StatCard(AppLocale.matchRecordLabel, AppLocale.matchRecord(viewModel.wins, viewModel.losses, viewModel.ties), Modifier.weight(1f))
-                        StatCard(AppLocale.matchWinRate, "${viewModel.winRate.toInt()}%", Modifier.weight(0.5f))
+                    // Il mazzo serve solo per le sue copertine: si cerca qui,
+                    // dove il ViewModel c'e', e si passa alla scheda.
+                    val deck = remember(tournament.deckId, viewModel.userDecks) {
+                        viewModel.userDecks.firstOrNull { it.id == tournament.deckId }
                     }
+                    val results = remember(viewModel.tournamentMatches) {
+                        viewModel.tournamentMatches.sortedBy { it.round }.map { it.result }
+                    }
+                    TournamentInfoCard(
+                        tournament = tournament,
+                        deck = deck,
+                        wins = viewModel.wins,
+                        losses = viewModel.losses,
+                        ties = viewModel.ties,
+                        winRate = viewModel.winRate,
+                        results = results
+                    )
                 }
             }
 
@@ -162,7 +180,15 @@ fun TournamentDetailScreen(
 }
 
 @Composable
-private fun TournamentInfoCard(tournament: Tournament) {
+private fun TournamentInfoCard(
+    tournament: Tournament,
+    deck: Deck?,
+    wins: Int,
+    losses: Int,
+    ties: Int,
+    winRate: Float,
+    results: List<String>
+) {
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     val dateStr = tournament.date?.toDate()?.let { dateFormat.format(it) } ?: ""
 
@@ -171,6 +197,15 @@ private fun TournamentInfoCard(tournament: Tournament) {
         "Challenge" -> AppColors.blue
         "Local" -> AppColors.green
         else -> AppColors.textMuted
+    }
+
+    // Com'e' andata, in un colore. E' la prima cosa che si vuole sapere
+    // riaprendo un torneo, e finora bisognava leggere tre numeri per dedurla.
+    val outcomeColor = when {
+        results.isEmpty() -> AppColors.textMuted
+        wins > losses -> AppColors.green
+        losses > wins -> AppColors.red
+        else -> AppColors.yellow
     }
 
     Card(
@@ -192,45 +227,68 @@ private fun TournamentInfoCard(tournament: Tournament) {
                 }
             }
 
+            // L'esito, in grande. Il bilancio e' il numero che conta, la
+            // percentuale gli sta accanto piu' piccola, e la striscia dei
+            // turni sotto racconta come ci si e' arrivati.
+            if (results.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = AppLocale.matchRecord(wins, losses, ties),
+                        color = outcomeColor,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 34.sp
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.padding(bottom = 4.dp)) {
+                        Text(
+                            text = "${winRate.toInt()}%",
+                            color = AppColors.textPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = AppLocale.matchWinRate,
+                            color = AppColors.textMuted,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+                ResultStrip(results = results, square = 24.dp)
+            }
+
             if (tournament.deckName.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Layers, null, tint = AppColors.orange, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
+                    // Gli sprite al posto dell'icona a strati quando il mazzo
+                    // ne ha: dicono quale mazzo era, non che c'era un mazzo.
+                    if (deck.hasChosenSprites()) {
+                        DeckSpriteRow(deck = deck, size = DeckSpriteCompact)
+                        Spacer(Modifier.width(6.dp))
+                    } else {
+                        Icon(Icons.Default.Layers, null, tint = AppColors.orange, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                    }
                     Text(tournament.deckName, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Data, luogo, partecipanti e quota su una riga sola che va a capo
+            // da se'. Erano due righe fisse, spesso mezze vuote, e occupavano
+            // quanto l'informazione principale pur essendo il contorno.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 if (dateStr.isNotBlank()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CalendarToday, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(dateStr, color = AppColors.textSecondary, fontSize = 12.sp)
-                    }
+                    MetaItem(Icons.Default.CalendarToday, dateStr)
                 }
                 if (tournament.location.isNotBlank()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.LocationOn, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(tournament.location, color = AppColors.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+                    MetaItem(Icons.Default.LocationOn, tournament.location)
                 }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (tournament.participants > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Group, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("${tournament.participants}", color = AppColors.textSecondary, fontSize = 12.sp)
-                    }
+                    MetaItem(Icons.Default.Group, "${tournament.participants}")
                 }
                 if (tournament.registrationFee > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Euro, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("${"%.2f".format(tournament.registrationFee)} €", color = AppColors.textSecondary, fontSize = 12.sp)
-                    }
+                    MetaItem(Icons.Default.Euro, "${"%.2f".format(tournament.registrationFee)} €")
                 }
             }
         }
@@ -250,25 +308,47 @@ private fun MatchCard(
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = AppColors.card)
+        // Le sconfitte hanno un fondo appena tinto: scorrendo i turni si vede
+        // subito dove si e' perso, senza leggere la lettera dentro al cerchio.
+        colors = CardDefaults.cardColors(
+            containerColor = if (match.result == "L") {
+                AppColors.red.copy(alpha = 0.07f)
+            } else {
+                AppColors.card
+            }
+        )
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(14.dp),
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // La banda colorata sul bordo: e' quella che rende la colonna dei
+            // risultati leggibile di scorcio.
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(resultColor)
+            )
+
+            // Il respiro verticale sta qui e non sul cerchio: e' la colonna di
+            // destra a poter crescere fino a tre righe -- turno, avversario,
+            // note -- e con il padding sul cerchio toccherebbe i bordi.
+            Spacer(Modifier.width(10.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
                     .clip(CircleShape)
                     .background(resultColor.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(match.result, color = resultColor, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                Text(match.result, color = resultColor, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
 
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (match.round > 0) {
                         Text(
@@ -290,7 +370,17 @@ private fun MatchCard(
                             if (match.opponentName.isNotBlank()) append(")")
                         }
                     }
-                    Text(vsText, color = AppColors.textSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Il mazzo dell'avversario e' scritto a mano, quindi
+                        // gli sprite si ricavano dal nome dell'archetipo:
+                        // scorrendo i turni si riconosce contro cosa hai
+                        // giocato senza rileggere ogni riga.
+                        if (match.opponentDeck.isNotBlank()) {
+                            ArchetypeSpriteRow(archetype = match.opponentDeck, size = 26.dp)
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(vsText, color = AppColors.textSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
 
                 if (match.notes.isNotBlank()) {
@@ -305,13 +395,12 @@ private fun MatchCard(
     }
 }
 
+/** Un dato di contorno del torneo: icona piccola e testo smorzato. */
 @Composable
-private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = AppColors.card)) {
-        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, color = AppColors.textMuted, fontSize = 11.sp)
-            Spacer(Modifier.height(4.dp))
-            Text(value, color = AppColors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        }
+private fun MetaItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(text, color = AppColors.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

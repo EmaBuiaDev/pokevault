@@ -2,6 +2,7 @@ package com.emabuia.pokevault.viewmodel
 
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -9,16 +10,20 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.Wishlist
+import com.emabuia.pokevault.data.model.WishlistAccents
+import com.emabuia.pokevault.data.model.WishlistDraft
 import com.emabuia.pokevault.data.model.WishlistIcons
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.WishlistLab
+import com.emabuia.pokevault.util.WishlistRow
+import com.emabuia.pokevault.util.WishlistSummary
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.supervisorScope
 
 class WishlistViewModel : ViewModel() {
@@ -33,17 +38,44 @@ class WishlistViewModel : ViewModel() {
          */
         const val FREE_WISHLIST_LIMIT = PremiumManager.FREE_WISHLIST_LIMIT
 
+        /**
+         * Quante carte si chiedono insieme al catalogo.
+         *
+         * Una wishlist puo' pescare da venti espansioni diverse: lanciare una
+         * `async` per ogni id vorrebbe dire aprire duecento richieste in un
+         * colpo e far scattare il rate limit del Worker. A blocchi il tempo di
+         * attesa e' quasi lo stesso e le richieste restano contate.
+         */
+        private const val CARD_FETCH_BATCH = 8
+
         fun isValidWishlistName(name: String): Boolean {
             val normalized = name.trim()
             return normalized.isNotEmpty() && normalized.length <= 40
         }
 
-        fun normalizeIconKey(iconKey: String): String {
-            return if (iconKey in WishlistIcons.all) iconKey else WishlistIcons.POKEBALL
-        }
+        fun normalizeIconKey(iconKey: String): String = WishlistIcons.normalize(iconKey)
 
         fun canCreateWishlistCount(isPremium: Boolean, currentCount: Int): Boolean {
             return isPremium || currentCount < FREE_WISHLIST_LIMIT
+        }
+
+        /** Il budget scritto a mano: accetta sia "12,50" sia "12.50", zero se vuoto. */
+        fun parseBudget(raw: String): Double {
+            val normalized = raw.trim().replace(',', '.').replace("€", "").trim()
+            if (normalized.isEmpty()) return 0.0
+            return normalized.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+        }
+
+        fun normalizeDraft(draft: WishlistDraft): WishlistDraft {
+            // L'accento si risolve sulla chiave *originale*: cosi' una lista creata
+            // col vecchio catalogo, modificata senza toccare il colore, tiene il
+            // colore che aveva.
+            return draft.copy(
+                name = draft.name.trim(),
+                iconKey = WishlistIcons.normalize(draft.iconKey),
+                accentKey = WishlistAccents.normalize(draft.accentKey, draft.iconKey),
+                budgetEur = draft.budgetEur.coerceAtLeast(0.0)
+            )
         }
     }
 
@@ -65,8 +97,32 @@ class WishlistViewModel : ViewModel() {
     var successMessage by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * Le carte delle wishlist, man mano che arrivano dal catalogo.
+     *
+     * Senza questa cache la lista delle wishlist non poteva dire niente di piu'
+     * di "12 carte": nessun prezzo, nessuna copertina, nessun modo di sapere
+     * quali erano gia' in collezione. E' una mappa di stato perche' la riga si
+     * deve completare da sola quando la carta arriva.
+     */
+    private val cardCache = mutableStateMapOf<String, TcgCard>()
+
+    /** Gli id che il catalogo non sa risolvere: non si richiedono all'infinito. */
+    private val unresolvedCardIds = mutableSetOf<String>()
+    private val pendingCardIds = mutableSetOf<String>()
+
+    var isLoadingCards by mutableStateOf(false)
+        private set
+
+    /** Gli id delle carte gia' in collezione, per sapere cosa e' gia' stato preso. */
+    var ownedCardIds by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    val cardsById: Map<String, TcgCard> get() = cardCache
+
     init {
         loadWishlists()
+        loadOwnedCards()
     }
 
     private fun loadWishlists() {
@@ -80,6 +136,17 @@ class WishlistViewModel : ViewModel() {
                 .collectLatest { list ->
                     wishlists = list
                     isLoading = false
+                    ensureCardsLoaded(list.flatMap { it.cardIds })
+                }
+        }
+    }
+
+    private fun loadOwnedCards() {
+        viewModelScope.launch {
+            repository.getCards()
+                .catch { }
+                .collectLatest { cards ->
+                    ownedCardIds = WishlistLab.ownedCardIds(cards)
                 }
         }
     }
@@ -114,6 +181,60 @@ class WishlistViewModel : ViewModel() {
             .toSet()
     }
 
+    // ── Carte ─────────────────────────────────────────────────────────────
+
+    /**
+     * Chiede al catalogo le carte che non sono gia' in cache.
+     *
+     * Gli id gia' in arrivo e quelli che il catalogo ha gia' dichiarato
+     * sconosciuti non si richiedono: la lista delle wishlist si ricompone a ogni
+     * snapshot di Firestore, e senza questi due filtri ogni ricomposizione
+     * rilancerebbe tutte le richieste da capo.
+     */
+    private fun ensureCardsLoaded(cardIds: List<String>) {
+        val toLoad = cardIds.asSequence()
+            .distinct()
+            .filter { it.isNotBlank() && it !in cardCache && it !in pendingCardIds && it !in unresolvedCardIds }
+            .toList()
+        if (toLoad.isEmpty()) return
+
+        pendingCardIds += toLoad
+        isLoadingCards = true
+
+        viewModelScope.launch {
+            toLoad.chunked(CARD_FETCH_BATCH).forEach { batch ->
+                val results = supervisorScope {
+                    batch.map { id ->
+                        async { id to tcgRepository.getCard(id).getOrNull() }
+                    }.awaitAll()
+                }
+                results.forEach { (id, card) ->
+                    if (card != null) cardCache[id] = card else unresolvedCardIds += id
+                    pendingCardIds -= id
+                }
+            }
+            isLoadingCards = pendingCardIds.isNotEmpty()
+        }
+    }
+
+    /** Le carte di una lista, quelle gia' arrivate. */
+    fun cardsOf(wishlistId: String): List<TcgCard> {
+        val wishlist = getWishlistById(wishlistId) ?: return emptyList()
+        return wishlist.cardIds.mapNotNull { cardCache[it] }
+    }
+
+    /** true quando di quella lista manca ancora qualche carta da caricare. */
+    fun isLoadingCardsOf(wishlistId: String): Boolean {
+        val wishlist = getWishlistById(wishlistId) ?: return false
+        return wishlist.cardIds.any { it in pendingCardIds }
+    }
+
+    fun rows(): List<WishlistRow> = WishlistLab.rows(wishlists, cardCache, ownedCardIds)
+
+    fun summary(): WishlistSummary = WishlistLab.summary(wishlists, cardCache, ownedCardIds)
+
+    // ── Carte dentro le liste ─────────────────────────────────────────────
+
     fun removeCardFromWishlist(wishlistId: String, cardId: String, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             repository.removeCardFromWishlist(wishlistId, cardId)
@@ -128,18 +249,35 @@ class WishlistViewModel : ViewModel() {
         }
     }
 
-    suspend fun loadCardsForWishlist(wishlist: Wishlist): List<TcgCard> {
-        if (wishlist.cardIds.isEmpty()) return emptyList()
-
-        val cards = coroutineScope {
-            wishlist.cardIds.map { cardId ->
-                async {
-                    tcgRepository.getCard(cardId).getOrNull()
-                }
-            }.awaitAll().filterNotNull()
+    /**
+     * Toglie dalla lista le carte che nel frattempo sono entrate in collezione.
+     *
+     * E' il gesto che chiude il giro: una wishlist che non si svuota mai smette
+     * di essere una lista della spesa e diventa un archivio di cose gia' fatte.
+     */
+    fun removeOwnedCards(wishlistId: String, onResult: (Boolean) -> Unit = {}) {
+        val wishlist = getWishlistById(wishlistId)
+        if (wishlist == null) {
+            errorMessage = AppLocale.wishlistNotFound
+            onResult(false)
+            return
         }
-
-        return cards.sortedBy { it.number.replace(Regex("[^0-9]"), "").toIntOrNull() ?: Int.MAX_VALUE }
+        val owned = wishlist.cardIds.filter { it in ownedCardIds }
+        if (owned.isEmpty()) {
+            onResult(true)
+            return
+        }
+        viewModelScope.launch {
+            repository.removeCardsFromWishlist(wishlistId, owned)
+                .onSuccess {
+                    successMessage = AppLocale.wishlistCleanupDone(owned.size)
+                    onResult(true)
+                }
+                .onFailure {
+                    errorMessage = if (AppLocale.isItalian) "Impossibile rimuovere le carte" else "Could not remove the cards"
+                    onResult(false)
+                }
+        }
     }
 
     fun addCardToWishlist(wishlistId: String, cardId: String, onResult: (Boolean) -> Unit = {}) {
@@ -153,6 +291,38 @@ class WishlistViewModel : ViewModel() {
                     errorMessage = if (AppLocale.isItalian) "Impossibile aggiungere la carta" else "Could not add the card"
                     onResult(false)
                 }
+        }
+    }
+
+    /**
+     * Aggiunge lo stesso blocco di carte a piu' liste.
+     *
+     * Una scrittura per lista, non per carta: e' quello che serve al Chase per
+     * spedire in wishlist tutte le mancanti di un set.
+     */
+    fun addCardsToWishlists(
+        wishlistIds: Set<String>,
+        cardIds: List<String>,
+        onResult: (Boolean) -> Unit = {}
+    ) {
+        if (wishlistIds.isEmpty() || cardIds.isEmpty()) {
+            onResult(false)
+            return
+        }
+        viewModelScope.launch {
+            val failed = supervisorScope {
+                wishlistIds
+                    .map { id -> async { repository.addCardsToWishlist(id, cardIds).isFailure } }
+                    .awaitAll()
+                    .any { it }
+            }
+            if (failed) {
+                errorMessage = AppLocale.chaseWishlistError
+                onResult(false)
+            } else {
+                successMessage = AppLocale.chaseWishlistAdded(cardIds.size)
+                onResult(true)
+            }
         }
     }
 
@@ -205,34 +375,19 @@ class WishlistViewModel : ViewModel() {
         }
     }
 
+    // ── Liste ─────────────────────────────────────────────────────────────
+
     fun createWishlistAndAddCard(
-        name: String,
-        iconKey: String,
+        draft: WishlistDraft,
         cardId: String,
         isPremium: Boolean,
         onResult: (Boolean) -> Unit = {}
     ) {
-        if (!canCreateWishlistCount(isPremium, wishlists.size)) {
-            errorMessage = AppLocale.premiumWishlistLimitMessage
-            onResult(false)
-            return
-        }
-
-        val normalizedName = name.trim()
-        if (!isValidWishlistName(normalizedName)) {
-            errorMessage = if (AppLocale.isItalian) "Nome lista non valido" else "Invalid list name"
-            onResult(false)
-            return
-        }
+        val normalized = validatedDraft(draft, isPremium) ?: run { onResult(false); return }
 
         viewModelScope.launch {
             isSaving = true
-            val wishlist = Wishlist(
-                name = normalizedName,
-                iconKey = normalizeIconKey(iconKey)
-            )
-
-            repository.saveWishlist(wishlist)
+            repository.saveWishlist(normalized.toWishlist())
                 .onSuccess { wishlistId ->
                     repository.addCardToWishlist(wishlistId, cardId)
                         .onSuccess {
@@ -253,27 +408,12 @@ class WishlistViewModel : ViewModel() {
         }
     }
 
-    fun createWishlist(name: String, iconKey: String, isPremium: Boolean, onResult: (Boolean) -> Unit = {}) {
-        if (!canCreateWishlistCount(isPremium, wishlists.size)) {
-            errorMessage = AppLocale.premiumWishlistLimitMessage
-            onResult(false)
-            return
-        }
-
-        val normalizedName = name.trim()
-        if (!isValidWishlistName(normalizedName)) {
-            errorMessage = if (AppLocale.isItalian) "Nome lista non valido" else "Invalid list name"
-            onResult(false)
-            return
-        }
+    fun createWishlist(draft: WishlistDraft, isPremium: Boolean, onResult: (Boolean) -> Unit = {}) {
+        val normalized = validatedDraft(draft, isPremium) ?: run { onResult(false); return }
 
         viewModelScope.launch {
             isSaving = true
-            val wishlist = Wishlist(
-                name = normalizedName,
-                iconKey = normalizeIconKey(iconKey)
-            )
-            repository.saveWishlist(wishlist)
+            repository.saveWishlist(normalized.toWishlist())
                 .onSuccess {
                     successMessage = if (AppLocale.isItalian) "Wishlist creata" else "Wishlist created"
                     onResult(true)
@@ -288,12 +428,11 @@ class WishlistViewModel : ViewModel() {
 
     fun updateWishlistDetails(
         wishlistId: String,
-        name: String,
-        iconKey: String,
+        draft: WishlistDraft,
         onResult: (Boolean) -> Unit = {}
     ) {
-        val normalizedName = name.trim()
-        if (!isValidWishlistName(normalizedName)) {
+        val normalized = normalizeDraft(draft)
+        if (!isValidWishlistName(normalized.name)) {
             errorMessage = if (AppLocale.isItalian) "Nome lista non valido" else "Invalid list name"
             onResult(false)
             return
@@ -309,8 +448,10 @@ class WishlistViewModel : ViewModel() {
         viewModelScope.launch {
             isSaving = true
             val updated = existing.copy(
-                name = normalizedName,
-                iconKey = normalizeIconKey(iconKey)
+                name = normalized.name,
+                iconKey = normalized.iconKey,
+                accentKey = normalized.accentKey,
+                budgetEur = normalized.budgetEur
             )
             repository.saveWishlist(updated)
                 .onSuccess {
@@ -338,4 +479,25 @@ class WishlistViewModel : ViewModel() {
         errorMessage = null
         successMessage = null
     }
+
+    /** Normalizza e controlla limite free e nome; null se non si puo' procedere. */
+    private fun validatedDraft(draft: WishlistDraft, isPremium: Boolean): WishlistDraft? {
+        if (!canCreateWishlistCount(isPremium, wishlists.size)) {
+            errorMessage = AppLocale.premiumWishlistLimitMessage
+            return null
+        }
+        val normalized = normalizeDraft(draft)
+        if (!isValidWishlistName(normalized.name)) {
+            errorMessage = if (AppLocale.isItalian) "Nome lista non valido" else "Invalid list name"
+            return null
+        }
+        return normalized
+    }
+
+    private fun WishlistDraft.toWishlist() = Wishlist(
+        name = name,
+        iconKey = iconKey,
+        accentKey = accentKey,
+        budgetEur = budgetEur
+    )
 }

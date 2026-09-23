@@ -1,12 +1,10 @@
 package com.emabuia.pokevault.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
@@ -86,6 +84,9 @@ fun Modifier.pressSlide(
         )
 }
 
+/** Di quanto l'elemento parte piu' in basso del posto che gia' occupa. */
+private val CascadeSlide = 40.dp
+
 /**
  * Ingresso a cascata: l'elemento in posizione [index] entra dal basso con un
  * ritardo proporzionale alla sua posizione.
@@ -93,6 +94,14 @@ fun Modifier.pressSlide(
  * [visible] va tenuto da chi chiama e messo a true una volta sola (di solito da
  * un flag nel ViewModel): rigiocare la cascata a ogni ricomposizione o a ogni
  * ritorno sulla schermata la trasforma da benvenuto in inciampo.
+ *
+ * Il contenuto e' sempre composto e misurato, anche mentre e' ancora invisibile,
+ * e il movimento vive tutto dentro `graphicsLayer`: alpha e traslazione girano
+ * in fase di disegno e non toccano il layout. Con `AnimatedVisibility` cio' che
+ * non era ancora entrato era alto zero, quindi la pagina si apriva schiacciata e
+ * tutto quello che stava sotto la cascata — sulla Home, la riga della collezione
+ * — compariva a meta' schermo e scendeva mano a mano che gli elementi entravano.
+ * La cascata si vede uguale; sotto di lei non si muove piu' niente.
  */
 @Composable
 fun CascadeIn(
@@ -102,22 +111,21 @@ fun CascadeIn(
     content: @Composable () -> Unit
 ) {
     val motion = AppMotion.current
-    val spec = tween<Float>(
-        durationMillis = motion.content,
-        delayMillis = motion.cascade(index),
-        easing = AppMotion.standardEasing
+    val progress by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = motion.content,
+            delayMillis = motion.cascade(index),
+            easing = AppMotion.standardEasing
+        ),
+        label = "cascadeIn"
     )
 
-    AnimatedVisibility(
-        visible = visible,
-        modifier = modifier,
-        enter = fadeIn(spec) + slideInVertically(
-            animationSpec = tween(
-                durationMillis = motion.content,
-                delayMillis = motion.cascade(index),
-                easing = AppMotion.standardEasing
-            )
-        ) { 40 }
+    Box(
+        modifier = modifier.graphicsLayer {
+            alpha = progress
+            translationY = (1f - progress) * CascadeSlide.toPx()
+        }
     ) {
         content()
     }

@@ -86,6 +86,7 @@
         <li><strong>Dati della collezione</strong> — carte, mazzi (deck), valutazioni, note e metadati associati alla tua collezione personale.</li>
         <li><strong>Dati della fotocamera</strong> — immagini acquisite dalla fotocamera esclusivamente per la funzione di scansione OCR delle carte. Le immagini vengono elaborate localmente sul dispositivo e <strong>non vengono inviate a server esterni</strong>.</li>
         <li><strong>Dati di acquisto</strong> — le transazioni relative all'abbonamento Premium sono gestite interamente da Google Play. PokeVault memorizza solo lo stato dell'abbonamento (attivo/non attivo), senza accedere ai dati di pagamento.</li>
+        <li><strong>Identificatore del dispositivo</strong> — <strong>solo se riscatti un codice regalo</strong>, l'app invia ai nostri server l'identificatore di installazione Android (<code>ANDROID_ID</code>), un valore che Android assegna alla singola coppia app-dispositivo e che non identifica il telefono presso altre app. I nostri server non lo conservano mai in chiaro: lo trasformano subito in un codice non reversibile e archiviano solo quello. Serve a un'unica cosa, impedire che dallo stesso dispositivo si riscattino piu codici creando account diversi. Non viene usato per profilazione, non viene collegato alla tua attivita nell'app e non viene condiviso con nessuno. Se non riscatti codici regalo, questo dato non lascia mai il tuo dispositivo.</li>
     </ul>
 
     <h2>2-bis. Permessi richiesti dall'app</h2>
@@ -101,6 +102,7 @@
         <li>Memorizzazione e sincronizzazione della collezione personale.</li>
         <li>Funzionamento delle funzionalita dell'app (Deck Lab, scanner, statistiche).</li>
         <li>Gestione degli abbonamenti Premium.</li>
+        <li>Verifica dei codici regalo e prevenzione dei riscatti multipli dallo stesso dispositivo.</li>
     </ul>
 
     <h2>4. Base giuridica</h2>
@@ -117,7 +119,7 @@
     <ul>
         <li><strong>Google Firebase</strong> — per l'archiviazione e l'autenticazione.</li>
         <li><strong>Google Play Billing</strong> — per la gestione degli acquisti in-app.</li>
-        <li><strong>Cloudflare (R2, D1, Workers)</strong> — infrastruttura di nostra proprietà che ospita il catalogo italiano delle carte (dati e immagini) e fa da intermediario verso i fornitori terzi sotto, cosi che nessuna richiesta parta mai direttamente dal tuo dispositivo verso di loro.</li>
+        <li><strong>Cloudflare (Workers)</strong> — infrastruttura di nostra proprieta che fa da intermediario verso i fornitori terzi elencati sotto, cosi che nessuna richiesta parta mai direttamente dal tuo dispositivo verso di loro. E anche il servizio che verifica i codici regalo: in quel caso soltanto riceve l'identificatore di installazione descritto al punto 2, che trasforma subito in un codice non reversibile.</li>
         <li><strong>Pokewallet.io (api.pokewallet.io)</strong> — per il recupero di prezzi di mercato e del catalogo carte in altre lingue, contattato solo dalla nostra infrastruttura Cloudflare, mai direttamente dal tuo dispositivo. Nessun dato utente viene inviato.</li>
         <li><strong>TCGdex (tcgdex/cards-database, licenza MIT)</strong> — fonte dati per l'aggiornamento automatico del catalogo italiano con le nuove espansioni; nessun dato utente e coinvolto, l'importazione avviene una tantum lato server.</li>
     </ul>

@@ -1,10 +1,15 @@
 name: Android CI/CD Tests
 
+# I test unitari sono veloci: girano su tutti i branch su cui si lavora
+# davvero. `main` e `develop` non sono mai esistiti in questo repo -- il
+# default e' `master` -- quindi quei due filtri non facevano partire niente,
+# e i branch di versione (R3.1.3 e simili) non combaciavano con nessun
+# pattern: si e' lavorato a lungo senza che la CI girasse mai.
 on:
   push:
-    branches: [ main, develop, 'release/**', 'feature/**', 'fix/**', 'claude/**' ]
+    branches: [ master, 'R*', 'release/**', 'feature/**', 'fix/**', 'claude/**' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ master, 'release/**' ]
 
 jobs:
   test:
@@ -37,18 +42,18 @@ jobs:
           echo "POKEWALLET_PROXY_URL=" >> local.properties
 
       - name: Run Unit Tests
-        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+        run: ./gradlew testProdDebugUnitTest --no-daemon --stacktrace
 
       - name: Upload Test Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-reports
-          path: app/build/reports/tests/testDebugUnitTest/
+          path: app/build/reports/tests/testProdDebugUnitTest/
 
       - name: Publish Test Results
         if: always()
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          files: app/build/test-results/testDebugUnitTest/**/*.xml
+          files: app/build/test-results/testProdDebugUnitTest/**/*.xml
           check_name: Unit Test Results

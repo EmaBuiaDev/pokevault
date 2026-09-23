@@ -1,0 +1,774 @@
+[
+ {
+  "numero": "1",
+  "nome": "Exeggcute",
+  "fonte": "carta"
+ },
+ {
+  "numero": "2",
+  "nome": "Exeggutor di Alola",
+  "fonte": "carta"
+ },
+ {
+  "numero": "3",
+  "nome": "Volbeat",
+  "fonte": "carta"
+ },
+ {
+  "numero": "4",
+  "nome": "Illumise",
+  "fonte": "carta"
+ },
+ {
+  "numero": "5",
+  "nome": "Tropius",
+  "fonte": "carta"
+ },
+ {
+  "numero": "6",
+  "nome": "Cherubi",
+  "fonte": "carta"
+ },
+ {
+  "numero": "7",
+  "nome": "Cherrim",
+  "fonte": "carta"
+ },
+ {
+  "numero": "8",
+  "nome": "Vivillon",
+  "fonte": "carta"
+ },
+ {
+  "numero": "9",
+  "nome": "Vulpix",
+  "fonte": "carta"
+ },
+ {
+  "numero": "10",
+  "nome": "Ninetales",
+  "fonte": "carta"
+ },
+ {
+  "numero": "11",
+  "nome": "Moltres",
+  "fonte": "carta"
+ },
+ {
+  "numero": "12",
+  "nome": "Ho-Oh",
+  "fonte": "carta"
+ },
+ {
+  "numero": "13",
+  "nome": "Victini",
+  "fonte": "carta"
+ },
+ {
+  "numero": "14",
+  "nome": "Reshiram",
+  "fonte": "carta"
+ },
+ {
+  "numero": "15",
+  "nome": "Fuecoco-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "16",
+  "nome": "Slowpoke",
+  "fonte": "carta"
+ },
+ {
+  "numero": "17",
+  "nome": "Lapras",
+  "fonte": "carta"
+ },
+ {
+  "numero": "18",
+  "nome": "Articuno",
+  "fonte": "carta"
+ },
+ {
+  "numero": "19",
+  "nome": "Kyogre",
+  "fonte": "carta"
+ },
+ {
+  "numero": "20",
+  "nome": "Palkia",
+  "fonte": "carta"
+ },
+ {
+  "numero": "21",
+  "nome": "Greninja-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "22",
+  "nome": "Wishiwashi",
+  "fonte": "carta"
+ },
+ {
+  "numero": "23",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "24",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "25",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "26",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "27",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "28",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "29",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "30",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "31",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "32",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "33",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "34",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "35",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "36",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "37",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "38",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "39",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "40",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "41",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "42",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "43",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "44",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "45",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "46",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "47",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "48",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "49",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "50",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "51",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "52",
+  "nome": "Pikachu",
+  "fonte": "carta"
+ },
+ {
+  "numero": "53",
+  "nome": "Pikachu-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "54",
+  "nome": "Pikachu-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "55",
+  "nome": "Zapdos",
+  "fonte": "carta"
+ },
+ {
+  "numero": "56",
+  "nome": "Zekrom",
+  "fonte": "carta"
+ },
+ {
+  "numero": "57",
+  "nome": "Zeraora",
+  "fonte": "carta"
+ },
+ {
+  "numero": "58",
+  "nome": "Toxel",
+  "fonte": "carta"
+ },
+ {
+  "numero": "59",
+  "nome": "Toxtricity",
+  "fonte": "carta"
+ },
+ {
+  "numero": "60",
+  "nome": "Toxtricity",
+  "fonte": "carta"
+ },
+ {
+  "numero": "61",
+  "nome": "Morpeko",
+  "fonte": "carta"
+ },
+ {
+  "numero": "62",
+  "nome": "Miraidon",
+  "fonte": "carta"
+ },
+ {
+  "numero": "63",
+  "nome": "Mewtwo",
+  "fonte": "carta"
+ },
+ {
+  "numero": "64",
+  "nome": "Mewtwo-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "65",
+  "nome": "Mew",
+  "fonte": "carta"
+ },
+ {
+  "numero": "66",
+  "nome": "Mew-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "67",
+  "nome": "Marill",
+  "fonte": "carta"
+ },
+ {
+  "numero": "68",
+  "nome": "Azumarill",
+  "fonte": "carta"
+ },
+ {
+  "numero": "69",
+  "nome": "Espeon",
+  "fonte": "carta"
+ },
+ {
+  "numero": "70",
+  "nome": "Espeon-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "71",
+  "nome": "Sylveon-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "72",
+  "nome": "Unown",
+  "fonte": "carta"
+ },
+ {
+  "numero": "73",
+  "nome": "Drifloon",
+  "fonte": "carta"
+ },
+ {
+  "numero": "74",
+  "nome": "Cresselia",
+  "fonte": "carta"
+ },
+ {
+  "numero": "75",
+  "nome": "Chandelure",
+  "fonte": "carta"
+ },
+ {
+  "numero": "76",
+  "nome": "Xerneas",
+  "fonte": "carta"
+ },
+ {
+  "numero": "77",
+  "nome": "Comfey",
+  "fonte": "carta"
+ },
+ {
+  "numero": "78",
+  "nome": "Cosmog",
+  "fonte": "carta"
+ },
+ {
+  "numero": "79",
+  "nome": "Cosmoem",
+  "fonte": "carta"
+ },
+ {
+  "numero": "80",
+  "nome": "Lunala",
+  "fonte": "carta"
+ },
+ {
+  "numero": "81",
+  "nome": "Gimmighoul",
+  "fonte": "carta"
+ },
+ {
+  "numero": "82",
+  "nome": "Groudon",
+  "fonte": "carta"
+ },
+ {
+  "numero": "83",
+  "nome": "Lucario",
+  "fonte": "carta"
+ },
+ {
+  "numero": "84",
+  "nome": "Seismitoad",
+  "fonte": "carta"
+ },
+ {
+  "numero": "85",
+  "nome": "Lycanroc",
+  "fonte": "carta"
+ },
+ {
+  "numero": "86",
+  "nome": "Koraidon",
+  "fonte": "carta"
+ },
+ {
+  "numero": "87",
+  "nome": "Nidoran♀",
+  "fonte": "carta"
+ },
+ {
+  "numero": "88",
+  "nome": "Nidorina",
+  "fonte": "carta"
+ },
+ {
+  "numero": "89",
+  "nome": "Meowth di Alola",
+  "fonte": "carta"
+ },
+ {
+  "numero": "90",
+  "nome": "Gengar-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "91",
+  "nome": "Umbreon",
+  "fonte": "carta"
+ },
+ {
+  "numero": "92",
+  "nome": "Umbreon-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "93",
+  "nome": "Murkrow",
+  "fonte": "carta"
+ },
+ {
+  "numero": "94",
+  "nome": "Scraggy",
+  "fonte": "carta"
+ },
+ {
+  "numero": "95",
+  "nome": "Zorua",
+  "fonte": "carta"
+ },
+ {
+  "numero": "96",
+  "nome": "Zoroark",
+  "fonte": "carta"
+ },
+ {
+  "numero": "97",
+  "nome": "Deino",
+  "fonte": "carta"
+ },
+ {
+  "numero": "98",
+  "nome": "Zweilous",
+  "fonte": "carta"
+ },
+ {
+  "numero": "99",
+  "nome": "Hydreigon",
+  "fonte": "carta"
+ },
+ {
+  "numero": "100",
+  "nome": "Yveltal",
+  "fonte": "carta"
+ },
+ {
+  "numero": "101",
+  "nome": "Meowth di Galar",
+  "fonte": "carta"
+ },
+ {
+  "numero": "102",
+  "nome": "Jirachi-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "103",
+  "nome": "Dialga",
+  "fonte": "carta"
+ },
+ {
+  "numero": "104",
+  "nome": "Ferrothorn",
+  "fonte": "carta"
+ },
+ {
+  "numero": "105",
+  "nome": "Solgaleo",
+  "fonte": "carta"
+ },
+ {
+  "numero": "106",
+  "nome": "Zacian",
+  "fonte": "carta"
+ },
+ {
+  "numero": "107",
+  "nome": "Zamazenta",
+  "fonte": "carta"
+ },
+ {
+  "numero": "108",
+  "nome": "Gholdengo",
+  "fonte": "carta"
+ },
+ {
+  "numero": "109",
+  "nome": "Salamence-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "110",
+  "nome": "Jangmo-o",
+  "fonte": "carta"
+ },
+ {
+  "numero": "111",
+  "nome": "Hakamo-o",
+  "fonte": "carta"
+ },
+ {
+  "numero": "112",
+  "nome": "Kommo-o",
+  "fonte": "carta"
+ },
+ {
+  "numero": "113",
+  "nome": "Meowth",
+  "fonte": "carta"
+ },
+ {
+  "numero": "114",
+  "nome": "Kangaskhan",
+  "fonte": "carta"
+ },
+ {
+  "numero": "115",
+  "nome": "Ditto",
+  "fonte": "carta"
+ },
+ {
+  "numero": "116",
+  "nome": "Eevee",
+  "fonte": "carta"
+ },
+ {
+  "numero": "117",
+  "nome": "Eevee",
+  "fonte": "carta"
+ },
+ {
+  "numero": "118",
+  "nome": "Eevee",
+  "fonte": "carta"
+ },
+ {
+  "numero": "119",
+  "nome": "Snorlax",
+  "fonte": "carta"
+ },
+ {
+  "numero": "120",
+  "nome": "Igglybuff",
+  "fonte": "carta"
+ },
+ {
+  "numero": "121",
+  "nome": "Lugia",
+  "fonte": "carta"
+ },
+ {
+  "numero": "122",
+  "nome": "Zorua di Hisui",
+  "fonte": "carta"
+ },
+ {
+  "numero": "123",
+  "nome": "Zoroark di Hisui",
+  "fonte": "carta"
+ },
+ {
+  "numero": "124",
+  "nome": "Minior",
+  "fonte": "carta"
+ },
+ {
+  "numero": "125",
+  "nome": "Maushold",
+  "fonte": "carta"
+ },
+ {
+  "numero": "126",
+  "nome": "Poké Pad",
+  "fonte": "carta"
+ },
+ {
+  "numero": "127",
+  "nome": "Scambio",
+  "fonte": "carta"
+ },
+ {
+  "numero": "128",
+  "nome": "Ultra Ball",
+  "fonte": "carta"
+ },
+ {
+  "numero": "129",
+  "nome": "Exeggutor di Alola",
+  "fonte": "carta"
+ },
+ {
+  "numero": "130",
+  "nome": "Moltres",
+  "fonte": "carta"
+ },
+ {
+  "numero": "131",
+  "nome": "Lapras",
+  "fonte": "carta"
+ },
+ {
+  "numero": "132",
+  "nome": "Articuno",
+  "fonte": "carta"
+ },
+ {
+  "numero": "133",
+  "nome": "Zapdos",
+  "fonte": "carta"
+ },
+ {
+  "numero": "134",
+  "nome": "Toxtricity",
+  "fonte": "carta"
+ },
+ {
+  "numero": "135",
+  "nome": "Morpeko",
+  "fonte": "carta"
+ },
+ {
+  "numero": "136",
+  "nome": "Drifloon",
+  "fonte": "carta"
+ },
+ {
+  "numero": "137",
+  "nome": "Chandelure",
+  "fonte": "carta"
+ },
+ {
+  "numero": "138",
+  "nome": "Lycanroc",
+  "fonte": "carta"
+ },
+ {
+  "numero": "139",
+  "nome": "Meowth di Alola",
+  "fonte": "carta"
+ },
+ {
+  "numero": "140",
+  "nome": "Scraggy",
+  "fonte": "carta"
+ },
+ {
+  "numero": "141",
+  "nome": "Meowth di Galar",
+  "fonte": "carta"
+ },
+ {
+  "numero": "142",
+  "nome": "Gholdengo",
+  "fonte": "carta"
+ },
+ {
+  "numero": "144",
+  "nome": "Meowth",
+  "fonte": "carta"
+ },
+ {
+  "numero": "145",
+  "nome": "Zorua di Hisui",
+  "fonte": "carta"
+ },
+ {
+  "numero": "146",
+  "nome": "Maushold",
+  "fonte": "carta"
+ },
+ {
+  "numero": "147",
+  "nome": "Fuecoco-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "148",
+  "nome": "Greninja-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "149",
+  "nome": "Pikachu-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "150",
+  "nome": "Pikachu-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "153",
+  "nome": "Sylveon-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "155",
+  "nome": "Jirachi-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "156",
+  "nome": "Salamence-ex",
+  "fonte": "carta"
+ },
+ {
+  "numero": "157",
+  "nome": "Mewtwo-ex",
+  "fonte": "carta",
+  "rarita": "Futuristic rare"
+ },
+ {
+  "numero": "158",
+  "nome": "Mew-ex",
+  "fonte": "carta",
+  "rarita": "Futuristic rare"
+ }
+]

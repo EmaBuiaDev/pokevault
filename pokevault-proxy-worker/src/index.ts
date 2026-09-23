@@ -8,6 +8,7 @@
  */
 
 import { handleBillingRequest } from './billing';
+import { handleGiftRequest } from './gift';
 
 interface Env {
   CACHE: KVNamespace;
@@ -29,6 +30,12 @@ interface Env {
   PLAY_PACKAGE_NAME?: string;
   FIREBASE_PROJECT_ID?: string;
   RTDN_SHARED_SECRET?: string;
+
+  // Codici regalo da 1 mese (vedi src/gift.ts e GIFT.md). Anche questi sono
+  // secret: GIFT_CODE_SECRET deriva i codici AMICO e anonimizza i device id,
+  // quindi cambiarlo cambia il codice di tutti.
+  GIFT_CODE_SECRET?: string;
+  GIFT_ADMIN_SECRET?: string;
 }
 
 interface CachedResponse {
@@ -815,12 +822,14 @@ type D1CardRow = {
   regola_speciale: string | null;
   attacchi_json: string;
   rarity: string | null;
+  stage: string | null;
+  illustratore: string | null;
 };
 
 // Shared row -> payload mapping, used by both /ita/catalog.json (buildCatalogJsonFromD1)
 // and /v1/expansions/{id}/cards, so the two endpoints can never drift apart on field
 // names -- both must match ItalianCardRecord on the Android side (cardId, espansioneId,
-// nome, tipo, ps, attacchi, regolaSpeciale, rarity).
+// nome, tipo, ps, attacchi, regolaSpeciale, rarity, stage).
 function mapCardRow(r: D1CardRow) {
   return {
     cardId: r.card_id,
@@ -831,6 +840,13 @@ function mapCardRow(r: D1CardRow) {
     attacchi: JSON.parse(r.attacchi_json || '[]'),
     regolaSpeciale: r.regola_speciale,
     rarity: r.rarity,
+    // Lo stadio evolutivo (schema/009): e' il campo con cui l'app distingue un
+    // Pokemon che si puo' calare in campo dalla mano da uno che va evoluto.
+    stage: r.stage,
+    // Omesso quando manca invece di serializzare null: lo ha solo il catalogo
+    // storico preso dal wiki, e /ita/catalog.json porta sedicimila carte --
+    // una chiave nulla per ognuna sarebbe peso puro per ogni client.
+    ...(r.illustratore ? { illustratore: r.illustratore } : {}),
   };
 }
 
@@ -838,7 +854,7 @@ async function buildCatalogJsonFromD1(db: D1Database): Promise<string | null> {
   try {
     const { results } = await db
       .prepare(
-        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity
+        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage, c.illustratore
          FROM cards c JOIN expansions e ON e.id = c.expansion_id
          WHERE e.published = 1`
       )
@@ -1996,7 +2012,7 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
     // /v1/expansions listing.
     const { results } = await db
       .prepare(
-        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity
+        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage, c.illustratore
          FROM cards c JOIN expansions e ON e.id = c.expansion_id
          WHERE c.expansion_id = ?1 AND e.published = 1
            AND NOT EXISTS (
@@ -2011,6 +2027,128 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
       return jsonResponse({ error: 'expansion not found or has no cards' }, 404);
     }
     return jsonResponse({ expansionId, cards: results.map(mapCardRow) }, 200, V1_CATALOG_CACHE_CONTROL);
+  }
+
+  if (pathname === '/v1/illustrators') {
+    // L'indice degli illustratori: chi ha disegnato cosa, per la sezione
+    // "Collezione per illustratore" dell'app.
+    //
+    // Perche' i cardId e non i soli conteggi: la lista mostra l'avanzamento
+    // ("38/412") di ogni artista, e l'app puo' calcolarlo solo incrociando le
+    // carte possedute con quelle dell'illustratore. Senza gli id la lista non
+    // avrebbe barre di progresso, che sono il punto della sezione.
+    //
+    // Sedicimila id corti contro i 10,4 MB del catalogo intero, che e'
+    // l'alternativa che questa rotta esiste per evitare: l'app prendeva
+    // /ita/catalog.json e raggruppava da sola, e quel blob si riscarica ogni
+    // cinque minuti di uso attivo.
+    const { results } = await db
+      .prepare(
+        `SELECT c.illustratore AS name, c.card_id, c.expansion_id
+         FROM cards c JOIN expansions e ON e.id = c.expansion_id
+         WHERE e.published = 1
+           AND c.illustratore IS NOT NULL AND TRIM(c.illustratore) <> ''
+           AND NOT EXISTS (
+             SELECT 1 FROM takedowns t
+             WHERE (t.target_type = 'card' AND t.target_id = c.card_id)
+                OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id)
+           )
+         ORDER BY c.illustratore`
+      )
+      .all<{ name: string; card_id: string; expansion_id: string }>();
+
+    const byName = new Map<string, { cardIds: string[]; expansions: Set<string> }>();
+    for (const row of results) {
+      const name = row.name.trim();
+      if (!name) continue;
+      let entry = byName.get(name);
+      if (!entry) {
+        entry = { cardIds: [], expansions: new Set() };
+        byName.set(name, entry);
+      }
+      entry.cardIds.push(row.card_id);
+      entry.expansions.add(row.expansion_id);
+    }
+
+    // I nomi escono GREZZI, come stanno in D1. La normalizzazione (accenti,
+    // grafie diverse della stessa persona, collaborazioni "A & B" che valgono
+    // per entrambi) sta nell'app: SQLite non sa ripiegare i diacritici, e farla
+    // a meta' qui e meta' li' vorrebbe dire due verita' diverse sullo stesso
+    // dato. L'app unisce, e si ricorda da quali nomi grezzi e' nata ogni voce
+    // per poter poi chiamare /v1/illustrators/{nome}/cards.
+    const illustrators = Array.from(byName.entries())
+      .map(([name, entry]) => ({
+        name,
+        cardCount: entry.cardIds.length,
+        expansionCount: entry.expansions.size,
+        cardIds: entry.cardIds,
+      }))
+      .sort((a, b) => b.cardCount - a.cardCount || a.name.localeCompare(b.name));
+
+    // Le carte senza illustratore non spariscono in silenzio: l'app dichiara
+    // quante sono, invece di far credere che il catalogo sia coperto al 100%.
+    // Il backfill TCGdex copre circa il 98%.
+    const missingRow = await db
+      .prepare(
+        `SELECT COUNT(*) AS n
+         FROM cards c JOIN expansions e ON e.id = c.expansion_id
+         WHERE e.published = 1
+           AND (c.illustratore IS NULL OR TRIM(c.illustratore) = '')
+           AND NOT EXISTS (
+             SELECT 1 FROM takedowns t
+             WHERE (t.target_type = 'card' AND t.target_id = c.card_id)
+                OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id)
+           )`
+      )
+      .first<{ n: number }>();
+
+    return jsonResponse(
+      { illustrators, cardsWithoutIllustrator: missingRow?.n ?? 0 },
+      200,
+      V1_CATALOG_CACHE_CONTROL
+    );
+  }
+
+  // La regex non puo' essere quella delle altre rotte ([A-Za-z0-9._-]+): i nomi
+  // degli illustratori hanno spazi, punti e accenti, e arrivano percent-encoded.
+  // `pathname` conserva il %20, quindi il decode va fatto qui.
+  const illustratorCardsMatch = pathname.match(/^\/v1\/illustrators\/(.+)\/cards$/);
+  if (illustratorCardsMatch) {
+    let illustrator: string;
+    try {
+      illustrator = decodeURIComponent(illustratorCardsMatch[1]).trim();
+    } catch {
+      return jsonResponse({ error: 'illustrator name is not valid percent-encoding' }, 400);
+    }
+    if (!illustrator) return jsonResponse({ error: 'illustrator name is empty' }, 400);
+
+    // Match sul nome grezzo, esatto: e' l'app a sapere quali nomi grezzi
+    // compongono una voce unita, e a chiamare questa rotta una volta per
+    // ciascuno. Un confronto approssimato qui renderebbe impossibile all'app
+    // sapere quali carte ha gia' ricevuto da un'altra chiamata.
+    //
+    // Stessa SELECT e stesso mapCardRow di /v1/expansions/{id}/cards: le due
+    // rotte devono restare indistinguibili per il client, che le parsa con lo
+    // stesso ItalianCardRecord.
+    const { results } = await db
+      .prepare(
+        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage, c.illustratore
+         FROM cards c JOIN expansions e ON e.id = c.expansion_id
+         WHERE c.illustratore = ?1 AND e.published = 1
+           AND NOT EXISTS (
+             SELECT 1 FROM takedowns t
+             WHERE (t.target_type = 'card' AND t.target_id = c.card_id)
+                OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id)
+           )
+         ORDER BY c.expansion_id, CAST(c.card_number AS INTEGER), c.card_number`
+      )
+      .bind(illustrator)
+      .all<D1CardRow>();
+
+    if (results.length === 0) {
+      return jsonResponse({ error: 'illustrator not found or has no cards' }, 404);
+    }
+    return jsonResponse({ illustrator, cards: results.map(mapCardRow) }, 200, V1_CATALOG_CACHE_CONTROL);
   }
 
   const cardMatch = pathname.match(/^\/v1\/cards\/([A-Za-z0-9._-]+)$/);
@@ -2042,9 +2180,13 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestUrl = new URL(request.url);
 
-    // Le rotte di billing usano POST: vanno risolte PRIMA del filtro sui GET.
+    // Le rotte di billing e regalo usano POST: vanno risolte PRIMA del filtro
+    // sui GET, e non passano mai dalla cache.
     const billingResponse = await handleBillingRequest(request, requestUrl.pathname, env);
     if (billingResponse) return billingResponse;
+
+    const giftResponse = await handleGiftRequest(request, requestUrl.pathname, env);
+    if (giftResponse) return giftResponse;
 
     // Only cache GET requests
     if (request.method !== 'GET') {

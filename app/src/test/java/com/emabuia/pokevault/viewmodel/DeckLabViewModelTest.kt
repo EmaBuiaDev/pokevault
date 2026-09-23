@@ -3,6 +3,7 @@ package com.emabuia.pokevault.viewmodel
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.DeckAnalysis
 import com.emabuia.pokevault.data.model.DeckImportParser
+import com.emabuia.pokevault.data.model.PokemonCard
 import org.junit.Test
 import org.junit.Assert.*
 
@@ -23,6 +24,59 @@ class DeckLabViewModelTest {
         assertTrue(deck.cards.isEmpty())
         assertEquals(0, deck.totalCards)
         assertEquals("", deck.name)
+    }
+
+    /**
+     * Il default di deckOnly decide cosa succede a tutti i documenti scritti
+     * prima che il campo esistesse: Firestore li deserializza con questo
+     * valore. Se diventasse true, l'intera collezione degli utenti sparirebbe
+     * dalle schermate in un colpo solo.
+     */
+    @Test
+    fun testDeckIsNotDeckOnlyByDefault() {
+        assertFalse(Deck().deckOnly)
+    }
+
+    @Test
+    fun testCardIsNotDeckOnlyByDefault() {
+        assertFalse(PokemonCard().deckOnly)
+    }
+
+    // ── Copertine: sprite nuovi contro copertine vecchie ────────────────────
+
+    private val sprite6 = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png"
+    private val sprite25 = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png"
+
+    @Test
+    fun testCopertineSprite() {
+        val deck = Deck(coverImageUrls = listOf(sprite6, sprite25))
+        assertEquals(listOf(sprite6, sprite25), deck.chosenSpriteCovers())
+    }
+
+    /**
+     * I deck salvati prima che le copertine diventassero sprite hanno qui
+     * dentro immagini di carte. Vanno scartate, o il mazzo tornerebbe a
+     * mostrare una carta stirata al posto del Pokemon -- e non c'e' nessuna
+     * migrazione su Firestore a proteggerci: quei documenti restano cosi'.
+     */
+    @Test
+    fun testLeCopertineVecchieVengonoIgnorate() {
+        val deck = Deck(
+            coverImageUrls = listOf(
+                "https://images.pokemontcg.io/sv3/125_hires.png",
+                "https://pokevault-proxy.workers.dev/it/SV3/125.png"
+            )
+        )
+        assertTrue(deck.chosenSpriteCovers().isEmpty())
+    }
+
+    @Test
+    fun testUnMistoTieneSoloGliSprite() {
+        val deck = Deck(
+            coverImageUrl = "https://images.pokemontcg.io/sv3/125_hires.png",
+            coverImageUrls = listOf(sprite6)
+        )
+        assertEquals(listOf(sprite6), deck.chosenSpriteCovers())
     }
 
     @Test

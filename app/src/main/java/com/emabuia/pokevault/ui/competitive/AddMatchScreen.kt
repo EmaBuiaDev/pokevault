@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.emabuia.pokevault.ui.competitive
 
 import androidx.compose.foundation.background
@@ -19,11 +21,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalContext
+import com.emabuia.pokevault.ui.components.ArchetypeSpriteRow
+import com.emabuia.pokevault.ui.components.DeckSpriteCompact
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.emabuia.pokevault.viewmodel.CompetitiveLogViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,12 +95,12 @@ fun AddMatchScreen(
             // ── Risultato ──
             SectionLabel(AppLocale.matchResult)
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 ResultButton("W", AppLocale.matchWin, AppColors.green, viewModel.matchResult == "W", { viewModel.matchResult = "W" }, Modifier.weight(1f))
                 ResultButton("L", AppLocale.matchLoss, AppColors.red, viewModel.matchResult == "L", { viewModel.matchResult = "L" }, Modifier.weight(1f))
-                ResultButton("T", AppLocale.matchTie, AppColors.yellow, viewModel.matchResult == "T", { viewModel.matchResult = "T" }, Modifier.weight(1f))
+                ResultButton("T", AppLocale.matchTie, AppColors.orange, viewModel.matchResult == "T", { viewModel.matchResult = "T" }, Modifier.weight(1f))
             }
 
             // ── Turno ──
@@ -108,6 +115,17 @@ fun AddMatchScreen(
 
             // ── Avversario ──
             SectionLabel(AppLocale.matchOpponent)
+
+            // Risolti una volta: servono per decidere se il campo ha
+            // un'icona, e la stessa risposta la riusa la riga qui sotto.
+            val spriteContext = LocalContext.current
+            val opponentSprites = remember(
+                viewModel.matchOpponentDeck,
+                PokemonSpriteResolver.isReady
+            ) {
+                PokemonSpriteResolver.spriteUrlsForArchetype(spriteContext, viewModel.matchOpponentDeck)
+            }
+
             MatchTextField(
                 value = viewModel.matchOpponentName,
                 onValueChange = { viewModel.matchOpponentName = it },
@@ -118,7 +136,34 @@ fun AddMatchScreen(
                 value = viewModel.matchOpponentDeck,
                 onValueChange = { viewModel.matchOpponentDeck = it },
                 label = AppLocale.matchOpponentDeck,
-                placeholder = if (AppLocale.isItalian) "Es. Lugia VSTAR" else "E.g. Lugia VSTAR"
+                placeholder = if (AppLocale.isItalian) "Es. Lugia VSTAR" else "E.g. Lugia VSTAR",
+                // Gli sprite compaiono mentre si scrive, appena il nome viene
+                // riconosciuto: sono anche la conferma di aver scritto
+                // l'archetipo in un modo che l'app capisce.
+                //
+                // null e non un composable vuoto quando non si riconosce
+                // niente: lo slot dell'icona esiste comunque, e riempirlo di
+                // nulla lascerebbe uno scalino nel campo.
+                leadingIcon = if (opponentSprites.isEmpty()) null else {
+                    {
+                        ArchetypeSpriteRow(
+                            archetype = viewModel.matchOpponentDeck,
+                            size = DeckSpriteCompact,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+            )
+
+            // I mazzi gia' incontrati, da toccare invece che riscrivere.
+            // Questo campo alimenta la tabella dei matchup, e la tabella vale
+            // solo se lo stesso archetipo si chiama sempre allo stesso modo:
+            // "Charizard ex", "charizard" e "Zard" battuti in tre serate
+            // diverse diventerebbero tre avversari che non c'entrano niente.
+            OpponentDeckSuggestions(
+                suggestions = viewModel.knownOpponentDecks,
+                current = viewModel.matchOpponentDeck,
+                onPick = { viewModel.matchOpponentDeck = it }
             )
 
             // ── Note ──
@@ -158,6 +203,77 @@ fun AddMatchScreen(
     }
 }
 
+/**
+ * I mazzi avversari gia' incontrati, come chip da toccare.
+ *
+ * Si filtrano su quello che si sta scrivendo, cosi' il campo funziona come un
+ * completamento: due lettere e l'archetipo giusto e' li'. Il chip gia' scelto
+ * resta evidenziato per confermare che il nome coincide con quello storico e
+ * non e' una variante nuova.
+ */
+@Composable
+private fun OpponentDeckSuggestions(
+    suggestions: List<String>,
+    current: String,
+    onPick: (String) -> Unit
+) {
+    val typed = current.trim()
+    val visible = remember(suggestions, typed) {
+        if (typed.isBlank()) {
+            suggestions.take(8)
+        } else {
+            val matching = suggestions.filter { it.contains(typed, ignoreCase = true) }
+            // Se quello scritto e' gia' uno storico va mostrato lo stesso,
+            // altrimenti il chip selezionato sparirebbe appena lo si tocca.
+            (matching + suggestions.filter { it.equals(typed, ignoreCase = true) })
+                .distinct()
+                .take(8)
+        }
+    }
+
+    if (visible.isEmpty()) return
+
+    Column {
+        Text(
+            text = AppLocale.matchOpponentDeckSuggestions,
+            color = AppColors.textMuted,
+            fontSize = 11.sp
+        )
+        Spacer(Modifier.height(6.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            visible.forEach { deck ->
+                val selected = deck.equals(typed, ignoreCase = true)
+                Surface(
+                    color = if (selected) AppColors.orange.copy(alpha = 0.18f) else AppColors.card,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.clickable { onPick(deck) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Su una fila di archetipi scritti in fretta, la figura
+                        // si riconosce prima del nome.
+                        ArchetypeSpriteRow(archetype = deck, size = 24.dp)
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = deck,
+                            color = if (selected) AppColors.orange else AppColors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ResultButton(
     code: String,
@@ -169,7 +285,7 @@ private fun ResultButton(
 ) {
     Box(
         modifier = modifier
-            .height(56.dp)
+            .height(48.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(if (isSelected) color.copy(alpha = 0.2f) else AppColors.card)
             .border(
@@ -180,9 +296,29 @@ private fun ResultButton(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(code, color = if (isSelected) color else AppColors.textSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-            Text(label, color = if (isSelected) color else AppColors.textMuted, fontSize = 10.sp)
+        // lineHeight esplicito e spacedBy(1.dp): coi default le due righe si
+        // allontanano abbastanza da far sembrare il bottone sbilanciato.
+        // "Sconfitta" e' la parola piu' lunga e su un terzo di larghezza sta
+        // al limite: una riga sola, e se non entra si accorcia.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
+            Text(
+                code,
+                color = if (isSelected) color else AppColors.textSecondary,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 14.sp,
+                lineHeight = 16.sp
+            )
+            Text(
+                label,
+                color = if (isSelected) color else AppColors.textMuted,
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -199,12 +335,14 @@ private fun MatchTextField(
     label: String,
     placeholder: String = "",
     keyboardType: KeyboardType = KeyboardType.Text,
-    maxLines: Int = 1
+    maxLines: Int = 1,
+    leadingIcon: (@Composable () -> Unit)? = null
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
+        leadingIcon = leadingIcon,
         placeholder = if (placeholder.isNotBlank()) {{ Text(placeholder) }} else null,
         maxLines = maxLines,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),

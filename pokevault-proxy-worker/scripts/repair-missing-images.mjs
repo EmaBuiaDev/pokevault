@@ -100,31 +100,42 @@ async function main() {
     // "ME05_IT_042.webp" -> "ME05", la stessa estrazione che fa il Worker con
     // ITALIAN_CARD_ID_PREFIX_REGEX.
     const setCode = (card.card_id.match(/^([A-Za-z0-9]+)_IT_/)?.[1] ?? '').toUpperCase();
-    if (!setCode || !/^\d+$/.test(String(card.card_number))) {
+    const rawNumber = String(card.card_number ?? '').trim();
+    if (!setCode || rawNumber === '') {
       unavailable.push({ ...card, reason: 'card_id o numero non interpretabile' });
       continue;
     }
 
-    const url = `${OFFICIAL_BASE}/${setCode}/${setCode}_IT_${unpad(card.card_number)}.png`;
+    // I promo non numerano a cifre ("SM01", "SWSH026"): li' il pad/unpad non
+    // si applica, e la stringa va usata tale e quale -- e' anche quella che
+    // usa l'archivio ufficiale (SMP_IT_SM01.png; SMP_IT_SM1.png da' 404).
+    // Scartarli come "non interpretabili" lasciava 111 carte di smp senza
+    // immagine per sempre, di cui 64 pubblicate regolarmente a monte
+    // (verificato il 15/09/2026).
+    const isNumeric = /^\d+$/.test(rawNumber);
+    const officialNumber = isNumeric ? unpad(rawNumber) : rawNumber;
+    const keyNumber = isNumeric ? pad(rawNumber) : rawNumber;
+
+    const url = `${OFFICIAL_BASE}/${setCode}/${setCode}_IT_${officialNumber}.png`;
     const res = await fetch(url);
     if (!res.ok) {
       unavailable.push({ ...card, reason: `archivio ufficiale HTTP ${res.status}` });
-      console.log(`  ${setCode}/${pad(card.card_number)} ${card.nome} -- non disponibile a monte (HTTP ${res.status})`);
+      console.log(`  ${setCode}/${keyNumber} ${card.nome} -- non disponibile a monte (HTTP ${res.status})`);
       continue;
     }
 
     const png = Buffer.from(await res.arrayBuffer());
     const webp = await sharp(png).webp({ quality: WEBP_QUALITY }).toBuffer();
-    const localFile = path.join(tmpDir, `${setCode}_${pad(card.card_number)}.webp`);
+    const localFile = path.join(tmpDir, `${setCode}_${keyNumber}.webp`);
     await writeFile(localFile, webp);
     prepared.push({
       setCode,
-      number: card.card_number,
+      number: rawNumber,
       cardId: card.card_id,
-      key: `it/${setCode}/${setCode}_IT_${pad(card.card_number)}.webp`,
+      key: `it/${setCode}/${setCode}_IT_${keyNumber}.webp`,
       localFile,
     });
-    console.log(`  ${setCode}/${pad(card.card_number)} ${card.nome}  png ${(png.length / 1024).toFixed(0)} KB -> webp ${(webp.length / 1024).toFixed(0)} KB`);
+    console.log(`  ${setCode}/${keyNumber} ${card.nome}  png ${(png.length / 1024).toFixed(0)} KB -> webp ${(webp.length / 1024).toFixed(0)} KB`);
   }
 
   console.log(`\nRiparabili: ${prepared.length}, non disponibili a monte: ${unavailable.length}`);
@@ -168,9 +179,16 @@ async function main() {
 
 async function purgeKvCache(prepared) {
   const bySet = new Map();
+  // Confronto per stringa normalizzata e non per intero: "SM01" non e' un
+  // numero, e parseInt lo ridurrebbe a NaN facendo saltare la purga proprio
+  // alle carte dei set promo.
+  const numberKey = (value) => {
+    const raw = String(value).trim();
+    return /^\d+$/.test(raw) ? String(parseInt(raw, 10)) : raw.toUpperCase();
+  };
   for (const item of prepared) {
     if (!bySet.has(item.setCode)) bySet.set(item.setCode, new Set());
-    bySet.get(item.setCode).add(parseInt(item.number, 10));
+    bySet.get(item.setCode).add(numberKey(item.number));
   }
 
   const toDelete = [];
@@ -185,8 +203,8 @@ async function purgeKvCache(prepared) {
       // a pescare quella vecchia.
       const seg = entry.name.match(new RegExp(`^pokewallet:/images/it/${setCode}/([^?]+)`, 'i'))?.[1];
       if (!seg) continue;
-      const digits = seg.replace(/\.(webp|png|jpe?g)$/i, '');
-      if (/^\d+$/.test(digits) && numbers.has(parseInt(digits, 10))) toDelete.push(entry.name);
+      const bare = seg.replace(/\.(webp|png|jpe?g)$/i, '');
+      if (numbers.has(numberKey(bare))) toDelete.push(entry.name);
     }
   }
 

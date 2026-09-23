@@ -37,6 +37,15 @@ data class SetDetailUiState(
     val set: TcgSet? = null,
     val cards: List<TcgCard> = emptyList(),
     val ownedCardIds: Set<String> = emptySet(),
+    /**
+     * Le varianti possedute di ogni carta (id carta -> "Normal", "Reverse"...).
+     *
+     * `ownedCardIds` dice solo che la carta c'e': per sapere *quale* stampa si
+     * ha bisognava aprire il dettaglio. La griglia la usa per i badge sulla
+     * miniatura. Arriva dalla stessa lista di `ownedCardIds`, in una passata
+     * sola, quindi non costa una lettura in piu'.
+     */
+    val ownedVariants: Map<String, Set<String>> = emptyMap(),
     val isLoading: Boolean = true,
     val isLoadingCards: Boolean = true,
     val isAddingCard: String? = null,
@@ -153,11 +162,18 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             avg7 = priceData.eurAvg7,
             avg30 = priceData.eurAvg30
         )
+        // Il prezzo in dollari va sotto CardOptions.USD_ONLY_PRICE_KEY, non
+        // sotto "normal". Qui c'era "normal", che e' anche il nome di una
+        // stampa: getVariantsForCard legge queste chiavi per sapere quali
+        // stampe esistono e, trovandone una, smette di guardare la rarita'.
+        // Su un set di sole Holo si finiva a offrire "Normale" -- e la
+        // pastiglia del prezzo, che cerca la chiave della stampa scelta, ci
+        // pescava dentro un numero in dollari e lo stampava con la €.
         val tcgPlayer = if (priceData.usdMarket != null || priceData.usdLow != null) {
             TcgPlayer(
                 url = priceData.tcgPlayerUrl ?: card.tcgplayer?.url.orEmpty(),
                 prices = mapOf(
-                    "normal" to TcgPriceInfo(
+                    CardOptions.USD_ONLY_PRICE_KEY to TcgPriceInfo(
                         low = priceData.usdLow,
                         market = priceData.usdMarket
                     )
@@ -436,7 +452,18 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                         .filter { it.isNotBlank() && it in currentCardIds }
                         .toSet()
 
-                    uiState = uiState.copy(ownedCardIds = ownedIds)
+                    // Stessa lista, stessa passata: raggruppa le varianti per
+                    // carta cosi' la griglia puo' mostrarle senza aprire il
+                    // dettaglio. Le copie doppie della stessa variante
+                    // collassano, al badge interessa esserci o no.
+                    val ownedVariants = ownedCards
+                        .asSequence()
+                        .filter { it.apiCardId.isNotBlank() && it.apiCardId in currentCardIds }
+                        .filter { it.variant.isNotBlank() }
+                        .groupBy({ it.apiCardId }, { it.variant })
+                        .mapValues { (_, variants) -> variants.toSet() }
+
+                    uiState = uiState.copy(ownedCardIds = ownedIds, ownedVariants = ownedVariants)
                 }
         }
     }
@@ -485,13 +512,13 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {
         viewModelScope.launch {
             uiState = uiState.copy(isAddingCard = tcgCard.id)
-            val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero()
+            val price = priced(tcgCard).cardmarket?.prices.minimumEurPriceOrZero()
             val resolvedLanguage = language.ifBlank { defaultCollectionLanguage() }
 
             val card = PokemonCard(
                 name = tcgCard.name, imageUrl = tcgCard.images.small,
                 set = tcgCard.set?.name ?: uiState.set?.name ?: "", 
-                rarity = tcgCard.rarity ?: "Unknown",
+                rarity = tcgCard.rarity.orEmpty(),
                 type = tcgCard.types?.firstOrNull() ?: "Colorless",
                 hp = tcgCard.hp?.toIntOrNull() ?: 0,
                 supertype = tcgCard.supertype.ifBlank { "Pokémon" },
@@ -504,7 +531,11 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 .onSuccess {
                     uiState = uiState.copy(
                         successMessage = "${tcgCard.name} aggiunta!",
-                        ownedCardIds = uiState.ownedCardIds + tcgCard.id
+                        ownedCardIds = uiState.ownedCardIds + tcgCard.id,
+                        // Il badge della variante deve comparire subito: il
+                        // flusso Firestore arriva un attimo dopo e riscrive lo
+                        // stesso valore.
+                        ownedVariants = uiState.ownedVariants.withVariant(tcgCard.id, variant)
                     )
                     // Keep highlight visible briefly so feedback is noticeable.
                     delay(350)
@@ -522,16 +553,16 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             val preparedCards = cards.map { tcgCard ->
                 val availableVariants = CardOptions.getVariantsForCard(
-                    tcgCard.tcgplayer?.prices?.keys ?: emptySet(), tcgCard.rarity
+                    tcgCard.tcgplayer?.prices?.keys ?: emptySet(), tcgCard.rarity, tcgCard.set?.releaseDate
                 )
                 val actualVariant = if (preferredVariant in availableVariants) preferredVariant
                     else availableVariants.firstOrNull() ?: "Holo"
-                val price = tcgCard.cardmarket?.prices.minimumEurPriceOrZero()
+                val price = priced(tcgCard).cardmarket?.prices.minimumEurPriceOrZero()
 
                 PokemonCard(
                     name = tcgCard.name, imageUrl = tcgCard.images.small,
                     set = tcgCard.set?.name ?: uiState.set?.name ?: "",
-                    rarity = tcgCard.rarity ?: "Unknown",
+                    rarity = tcgCard.rarity.orEmpty(),
                     type = tcgCard.types?.firstOrNull() ?: "Colorless",
                     hp = tcgCard.hp?.toIntOrNull() ?: 0,
                     supertype = tcgCard.supertype.ifBlank { "Pokémon" },
@@ -544,7 +575,15 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
             val addedIds = preparedCards.map { it.apiCardId }.toSet()
             val originalOwnedIds = uiState.ownedCardIds
-            uiState = uiState.copy(ownedCardIds = originalOwnedIds + addedIds)
+            val originalOwnedVariants = uiState.ownedVariants
+            var optimisticVariants = originalOwnedVariants
+            for (prepared in preparedCards) {
+                optimisticVariants = optimisticVariants.withVariant(prepared.apiCardId, prepared.variant)
+            }
+            uiState = uiState.copy(
+                ownedCardIds = originalOwnedIds + addedIds,
+                ownedVariants = optimisticVariants
+            )
 
             firestoreRepository.addCards(preparedCards)
                 .onSuccess {
@@ -555,6 +594,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 .onFailure {
                     uiState = uiState.copy(
                         ownedCardIds = originalOwnedIds,
+                        ownedVariants = originalOwnedVariants,
                         errorMessage = "Errore"
                     )
                 }
@@ -622,6 +662,23 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         uiState = uiState.copy(selectedCardPokeWalletPrices = null, isLoadingPokeWalletPrices = false)
     }
 
+    /**
+     * La stessa carta, ma col prezzo se nel frattempo e' arrivato.
+     *
+     * I prezzi non stanno dentro `uiState.cards`: arrivano carta per carta
+     * mentre la griglia scorre ([ensureCardPrice]) e si depositano in
+     * [pricedCards]. La griglia lo sa e sostituisce la carta prima di
+     * disegnarla, cosi' il prezzo si vede; la selezione multipla no, e mandava
+     * in collezione gli originali. Le carte entravano con estimatedValue a
+     * zero -- e siccome addCards somma proprio quello nel totale dell'utente,
+     * aggiungerne venti non muoveva il valore della collezione di un centesimo.
+     *
+     * Il prezzo si prende da qui, la stampa no: [withPriceData] puo' rifare il
+     * campo `tcgplayer`, e quello e' il campo da cui si ricavano le stampe
+     * disponibili. Le varianti si leggono sempre dalla carta com'e' a catalogo.
+     */
+    private fun priced(card: TcgCard): TcgCard = pricedCards[card.id] ?: card
+
     fun ensureCardPrice(card: TcgCard) {
         val current = pricedCards[card.id] ?: card
         if (!requestedCardPriceIds.add(card.id)) return
@@ -666,4 +723,16 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
     }
+}
+
+/**
+ * Aggiunge una variante alla mappa delle possedute senza toccare le altre.
+ *
+ * Serve all'aggiornamento ottimistico: la carta appena aggiunta deve mostrare
+ * subito il suo badge, e una carta puo' averne piu' d'una (Normale *e*
+ * Reverse), quindi non basta sostituire la voce.
+ */
+private fun Map<String, Set<String>>.withVariant(cardId: String, variant: String): Map<String, Set<String>> {
+    if (cardId.isBlank() || variant.isBlank()) return this
+    return this + (cardId to ((this[cardId] ?: emptySet()) + variant))
 }

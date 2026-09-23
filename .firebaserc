@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "prod": "pokevault-32d28",
+    "staging": "pokevault-staging"
+  }
+}

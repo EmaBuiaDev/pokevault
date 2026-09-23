@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.Album
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.util.AlbumRow
 import com.emabuia.pokevault.util.AppLocale
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
@@ -87,6 +88,79 @@ class AlbumViewModel : ViewModel() {
     fun getCardsForAlbum(album: Album): List<PokemonCard> {
         val byId = ownedCardsById
         return album.cardIds.mapNotNull { byId[it] }
+    }
+
+    /**
+     * Le righe della lista album, con copertina, riempimento e valore.
+     *
+     * Derivate una volta per ogni cambio di album o collezione: prima la lista
+     * rifaceva questi conti dentro `items { }`, cioe' per ogni album visibile a
+     * ogni frame dello scroll.
+     */
+    val albumRows: List<AlbumRow> by derivedStateOf {
+        val byId = ownedCardsById
+        albums.map { album ->
+            val cards = album.cardIds.mapNotNull { byId[it] }
+            AlbumRow(
+                id = album.id,
+                name = album.name,
+                description = album.description,
+                theme = album.theme,
+                pokemonType = album.pokemonType,
+                coverUrl = album.coverImageUrl.ifBlank { cards.firstOrNull()?.imageUrl ?: "" },
+                previewUrls = cards.take(3).map { it.imageUrl }.filter { it.isNotBlank() },
+                used = album.cardIds.size,
+                size = album.size,
+                // Una copia per slot, quindi senza `* quantity` come fa
+                // StatsViewModel sul totale della collezione: nell'album entra
+                // la carta, non la pila di doppie. E gli id di carte non piu'
+                // in collezione non valgono niente: si sommano solo le trovate.
+                value = cards.sumOf { it.estimatedValue },
+                createdAtSeconds = album.createdAt?.seconds ?: 0L
+            )
+        }
+    }
+
+    fun getAlbumValue(album: Album): Double =
+        getCardsForAlbum(album).sumOf { it.estimatedValue }
+
+    fun addCardsToAlbum(albumId: String, cardIds: List<String>) {
+        if (cardIds.isEmpty()) return
+        viewModelScope.launch {
+            repository.addCardsToAlbum(albumId, cardIds)
+        }
+    }
+
+    /** La copertina la sceglie l'utente fra le carte che ha messo nell'album. */
+    fun setAlbumCover(albumId: String, coverImageUrl: String) {
+        viewModelScope.launch {
+            repository.updateAlbumCover(albumId, coverImageUrl)
+        }
+    }
+
+    /**
+     * Sposta una carta di [delta] posizioni. Ai bordi non fa niente: uno
+     * spostamento che non puo' avvenire non deve diventare una riscrittura.
+     */
+    fun moveCardInAlbum(albumId: String, cardId: String, delta: Int) {
+        val album = getAlbumById(albumId) ?: return
+        val ids = album.cardIds.toMutableList()
+        val from = ids.indexOf(cardId)
+        if (from < 0) return
+        val to = (from + delta).coerceIn(0, ids.lastIndex)
+        if (to == from) return
+        ids.removeAt(from)
+        ids.add(to, cardId)
+        viewModelScope.launch { repository.setAlbumCardIds(albumId, ids) }
+    }
+
+    /** Rimette una carta dove stava: e' l'annulla dello snackbar di rimozione. */
+    fun restoreCardToAlbum(albumId: String, cardId: String, index: Int) {
+        val album = getAlbumById(albumId) ?: return
+        if (cardId in album.cardIds) return
+        val ids = album.cardIds.toMutableList()
+        ids.add(index.coerceIn(0, ids.size), cardId)
+        viewModelScope.launch { repository.setAlbumCardIds(albumId, ids) }
     }
 
     fun getFilteredCardsForAlbum(album: Album): List<PokemonCard> {

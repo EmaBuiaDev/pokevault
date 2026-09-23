@@ -1,11 +1,5 @@
 package com.emabuia.pokevault.ui.deck
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,7 +16,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -34,33 +27,14 @@ import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 @Composable
 fun DeckItem(
     deck: Deck,
     onClick: () -> Unit,
     ownedById: Map<String, PokemonCard>
 ) {
-    val deckCardAnimation = rememberInfiniteTransition(label = "deckCardBackgroundAnimation")
-    val sheenOffset by deckCardAnimation.animateFloat(
-        initialValue = -220f,
-        targetValue = 420f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "deckCardSheenOffset"
-    )
-    val glowAlpha by deckCardAnimation.animateFloat(
-        initialValue = 0.06f,
-        targetValue = 0.14f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2200),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "deckCardGlowAlpha"
-    )
-
-    val coverUrls = remember(deck) { deck.displayCoverImageUrls() }
     val cardCounts = remember(deck.cards) { deck.cards.groupingBy { it }.eachCount() }
     // Indice precalcolato dal chiamante: prima ogni riga della lista filtrava
     // l'intera collezione posseduta, quindi il costo cresceva con
@@ -142,8 +116,27 @@ fun DeckItem(
     val trainerCount = remember(uniqueDeckCards, cardCounts) { 
         uniqueDeckCards.filter { classifyForDeckSections(it) == "Trainer" }.sumOf { cardCounts[it.id] ?: 0 } 
     }
-    val energyCount = remember(uniqueDeckCards, cardCounts) { 
-        uniqueDeckCards.filter { classifyForDeckSections(it) == "Energy" }.sumOf { cardCounts[it.id] ?: 0 } 
+    val energyCount = remember(uniqueDeckCards, cardCounts) {
+        uniqueDeckCards.filter { classifyForDeckSections(it) == "Energy" }.sumOf { cardCounts[it.id] ?: 0 }
+    }
+
+    // I due Pokemon che danno il nome al mazzo, come si usa fare altrove. Il
+    // criterio e' headlineScore, non il numero di copie: vedi il commento li'
+    // sopra, contare le copie mostrava lo sprite della carta base.
+    val context = LocalContext.current
+    // isReady fra le chiavi: la tabella arriva da un thread di I/O, e senza
+    // questa dipendenza le righe gia' composte resterebbero senza sprite.
+    val spriteUrls = remember(uniqueDeckCards, cardCounts, deck.coverImageUrls, PokemonSpriteResolver.isReady) {
+        // Tutti gli sprite che questo mazzo puo' mostrare. Serve intero anche
+        // quando la scelta e' manuale: una copertina che punta a un Pokemon
+        // tolto dal mazzo va ignorata, non disegnata.
+        val available = uniqueDeckCards
+            .filter { classifyForDeckSections(it) == "Pokémon" }
+            .sortedByDescending { headlineScore(it, cardCounts[it.id] ?: 0) }
+            .mapNotNull { PokemonSpriteResolver.spriteUrlForCardName(context, it.name) }
+            .distinct()
+
+        deck.chosenSpriteCovers().filter { it in available }.ifEmpty { available }.take(2)
     }
 
     Card(
@@ -159,80 +152,52 @@ fun DeckItem(
                 .fillMaxWidth()
                 .height(140.dp)
         ) {
-            if (coverUrls.isNotEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.16f))
-                )
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(coverUrls.first())
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    Color(0xFF10151F),
-                                    Color(0xFF1C2D44),
-                                    AppColors.blue.copy(alpha = 0.28f)
-                                )
-                            )
-                        )
-                )
-            }
+            // Lo sfondo prende il colore del tipo principale del mazzo: fermo,
+            // ma non uguale per tutti. Prima qui c'erano una scia luminosa e
+            // un cerchio blu che traslavano in continuazione -- due animazioni
+            // infinite per ogni riga visibile, che ridisegnavano a ogni frame
+            // finche' l'elenco era a schermo, e in cambio davano un movimento
+            // che non raccontava niente del mazzo.
+            val accent = TypeColors.of(normalizeTypeKey(deck.mainTypes.firstOrNull().orEmpty()))
 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                Color(0xFF0E1A29).copy(alpha = 0.14f),
-                                AppColors.blue.copy(alpha = 0.08f),
-                                Color(0xFF0D131E).copy(alpha = 0.16f)
+                        Brush.linearGradient(
+                            listOf(
+                                Color(0xFF10151F),
+                                Color(0xFF1C2D44),
+                                accent.copy(alpha = 0.30f)
                             )
                         )
                     )
             )
 
+            // Il fondo si schiarisce verso destra, dove stanno gli sprite,
+            // cosi' si staccano invece di galleggiare. Gradiente orizzontale e
+            // non radiale: il radiale vuole centro e raggio in pixel, e qui
+            // servirebbe conoscere la dimensione per scriverli.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer(translationX = sheenOffset)
                     .background(
                         Brush.horizontalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.White.copy(alpha = 0.08f),
-                                Color.Transparent
-                            )
+                            0f to Color.Transparent,
+                            0.55f to accent.copy(alpha = 0.10f),
+                            1f to accent.copy(alpha = 0.26f)
                         )
                     )
             )
 
+            // Una banda sottile sul bordo sinistro nel colore del tipo: da'
+            // alla riga un punto fermo da cui inizia a leggersi.
             Box(
                 modifier = Modifier
-                    .size(130.dp)
-                    .align(Alignment.TopStart)
-                    .graphicsLayer(
-                        translationX = sheenOffset * 0.45f,
-                        translationY = 12f
-                    )
-                    .background(
-                        color = AppColors.blue.copy(alpha = glowAlpha),
-                        shape = CircleShape
-                    )
+                    .fillMaxHeight()
+                    .width(4.dp)
+                    .align(Alignment.CenterStart)
+                    .background(accent.copy(alpha = 0.85f))
             )
 
             Box(
@@ -249,14 +214,28 @@ fun DeckItem(
                     )
             )
 
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                deck.mainTypes.take(2).forEach { type ->
-                    TypeBadge(type, small = true)
+            // Gli sprite dei Pokemon piu' giocati, a destra e dietro al
+            // riquadro delle informazioni: sono l'identita' del mazzo, e
+            // devono farsi riconoscere prima di essere letti.
+            if (spriteUrls.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy((-12).dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    spriteUrls.forEach { url ->
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(url)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(70.dp)
+                        )
+                    }
                 }
             }
 
@@ -268,8 +247,8 @@ fun DeckItem(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.18f),
-                                Color.Black.copy(alpha = 0.46f)
+                                Color.Black.copy(alpha = 0.30f),
+                                Color.Black.copy(alpha = 0.62f)
                             )
                         )
                     )
@@ -279,73 +258,147 @@ fun DeckItem(
                     )
                     .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
-                if (coverUrls.isNotEmpty()) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    ) {
-                        coverUrls.forEach { coverUrl ->
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(coverUrl)
-                                    .size(120, 168)
-                                    .build(),
-                                contentDescription = null,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .size(30.dp, 42.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.65f)), RoundedCornerShape(4.dp))
+                // "Deck di prova" sta accanto al nome, non sospeso in un
+                // angolo: e' una cosa che si dice del mazzo, e si legge
+                // insieme a come si chiama.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = deck.name,
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (deck.deckOnly) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            color = AppColors.purple.copy(alpha = 0.9f),
+                            shape = RoundedCornerShape(5.dp)
+                        ) {
+                            Text(
+                                text = AppLocale.deckTestBadge,
+                                color = Color.White,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                             )
                         }
                     }
                 }
-                Text(
-                    text = deck.name,
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
                 Text(
                     text = "$pokemonCount Pokémon • $trainerCount Trainer • $energyCount Energy",
                     color = AppColors.blue,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
+
+                // Quante carte ha il mazzo rispetto alle 60 che ne fanno uno
+                // legale. Era un'informazione che l'elenco non dava affatto:
+                // per sapere se un deck era finito bisognava aprirlo.
+                Spacer(modifier = Modifier.height(6.dp))
+                DeckSizeBar(cardCount = deck.cards.size)
             }
         }
     }
 }
 
+/**
+ * Il riempimento del mazzo verso le 60 carte.
+ *
+ * Verde a 60 e non a "il piu' possibile": 60 non e' un massimo da avvicinare
+ * ma il numero esatto che rende un mazzo giocabile, e un deck da 59 e' rotto
+ * quanto uno da 61.
+ */
 @Composable
-fun TypeBadge(type: String, small: Boolean = false) {
-    val emoji = when (type.lowercase()) {
-        "fuoco", "fire" -> "🔥"
-        "acqua", "water" -> "💧"
-        "lampo", "elettro", "lightning" -> "⚡"
-        "psico", "psychic" -> "🔮"
-        "erba", "grass" -> "🌿"
-        "lotta", "fighting" -> "👊"
-        "oscurità", "darkness" -> "🌙"
-        "metallo", "metal" -> "⚙️"
-        "folletto", "fairy" -> "✨"
-        "drago", "dragon" -> "🐲"
-        "incolore", "normale", "colorless" -> "⚪"
-        else -> "🔘"
-    }
-    Surface(
-        color = Color.Black.copy(alpha = 0.5f),
-        shape = CircleShape,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
-    ) {
+private fun DeckSizeBar(cardCount: Int) {
+    val legal = cardCount == LEGAL_DECK_SIZE
+    val accent = if (legal) AppColors.green else AppColors.textMuted
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            modifier = Modifier.size(if (small) 24.dp else 28.dp),
-            contentAlignment = Alignment.Center
+            modifier = Modifier
+                .weight(1f)
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.16f))
         ) {
-            Text(text = emoji, fontSize = if (small) 12.sp else 14.sp)
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(
+                        (cardCount.toFloat() / LEGAL_DECK_SIZE).coerceIn(0f, 1f)
+                    )
+                    .clip(CircleShape)
+                    .background(accent)
+            )
         }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Text(
+            text = "$cardCount/$LEGAL_DECK_SIZE",
+            color = accent,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
+}
+
+/** Le carte di un mazzo legale. Vedi anche HandSimulatorDeckMapping. */
+private const val LEGAL_DECK_SIZE = 60
+
+/** Le carte con una "rule box": ex, V, VMAX, VSTAR, GX. */
+private val RULE_BOX = Regex("\\b(ex|v|vmax|vstar|gx)\\b", RegexOption.IGNORE_CASE)
+
+/**
+ * Quanto una carta rappresenta il mazzo.
+ *
+ * Non basta contare le copie: una linea evolutiva ne ha quattro di base e due
+ * o tre dello stadio finale, quindi ordinando per quantita' il mazzo
+ * "Charizard ex" si presentava con lo sprite di Charmander. Quello che da' il
+ * nome al deck e' la carta con la rule box, e a parita' lo stadio piu' alto --
+ * che e' anche il criterio con cui questi mazzi vengono chiamati in giro.
+ *
+ * Lo stadio arriva da `subtypes`, riempito dal catalogo: puo' essere in
+ * inglese o in italiano a seconda di quando la carta e' entrata in collezione,
+ * quindi si guardano tutte e due le forme.
+ */
+internal fun headlineScore(card: PokemonCard, copies: Int): Int {
+    var score = copies
+    if (RULE_BOX.containsMatchIn(card.name)) score += 100
+
+    val stage = card.subtypes.joinToString(" ").lowercase()
+    score += when {
+        "stage 2" in stage || "fase 2" in stage -> 30
+        "stage 1" in stage || "fase 1" in stage -> 15
+        else -> 0
+    }
+    return score
+}
+
+/**
+ * TypeColors ragiona in inglese, le carte non sempre.
+ *
+ * Una carta importata da una decklist inglese ha "Darkness", una presa dal
+ * catalogo italiano puo' avere "Oscurita'": senza questa traduzione la seconda
+ * cadeva sul colore di ripiego, cioe' grigio, e due mazzi diversi finivano con
+ * la stessa pastiglia.
+ */
+internal fun normalizeTypeKey(type: String): String = when (type.lowercase().trim()) {
+    "fuoco" -> "fire"
+    "acqua" -> "water"
+    "erba" -> "grass"
+    "lampo", "elettro" -> "lightning"
+    "psico" -> "psychic"
+    "lotta" -> "fighting"
+    "oscurità", "oscurita" -> "darkness"
+    "metallo" -> "metal"
+    "drago" -> "dragon"
+    "folletto" -> "fairy"
+    "incolore", "normale" -> "colorless"
+    else -> type.lowercase().trim()
 }
 

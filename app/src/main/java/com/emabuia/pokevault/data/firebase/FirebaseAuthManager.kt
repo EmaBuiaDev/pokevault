@@ -164,7 +164,8 @@ class FirebaseAuthManager {
                 "wishlists",
                 "match_logs",
                 "tournaments",
-                "goal_albums"
+                "goal_albums",
+                "followed_illustrators"
             )
 
             for (collectionName in subcollections) {

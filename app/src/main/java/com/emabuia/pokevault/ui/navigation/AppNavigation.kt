@@ -3,31 +3,31 @@ package com.emabuia.pokevault.ui.navigation
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -38,16 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -56,6 +47,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.ui.theme.AppMotion
 import com.emabuia.pokevault.ui.auth.AuthScreen
@@ -69,6 +61,8 @@ import com.emabuia.pokevault.ui.graded.GradedCardsScreen
 import com.emabuia.pokevault.ui.scanner.ScannerScreen
 import com.emabuia.pokevault.ui.stats.StatsScreen
 import com.emabuia.pokevault.ui.album.AlbumDetailScreen
+import com.emabuia.pokevault.ui.illustrator.IllustratorDetailScreen
+import com.emabuia.pokevault.ui.illustrator.IllustratorListScreen
 import com.emabuia.pokevault.ui.album.AlbumListScreen
 import com.emabuia.pokevault.ui.album.AlbumCollectionListScreen
 import com.emabuia.pokevault.ui.album.ChaseListScreen
@@ -81,7 +75,9 @@ import com.emabuia.pokevault.ui.competitive.CompetitiveHubScreen
 import com.emabuia.pokevault.ui.competitive.HandSimulatorScreen
 import com.emabuia.pokevault.ui.competitive.MatchLogScreen
 import com.emabuia.pokevault.ui.competitive.TournamentDetailScreen
+import com.emabuia.pokevault.ui.components.ReviewPromptBanner
 import com.emabuia.pokevault.ui.deck.DeckLabScreen
+import com.emabuia.pokevault.ui.premium.GiftCodeScreen
 import com.emabuia.pokevault.ui.premium.PremiumScreen
 import com.emabuia.pokevault.ui.settings.SettingsScreen
 import com.emabuia.pokevault.ui.wishlist.WishlistDetailScreen
@@ -90,7 +86,22 @@ import com.emabuia.pokevault.viewmodel.AuthViewModel
 import androidx.compose.ui.platform.LocalContext
 import java.net.URLDecoder
 import java.net.URLEncoder
-import kotlinx.coroutines.delay
+
+// ── Richiesta di recensione ─────────────────────────────────────────────────
+// Chiavi e soglie in un posto solo: erano letterali sparsi nel composable, e
+// "review_prompt_shown" veniva scritto prima che l'utente rispondesse.
+private const val KEY_REVIEW_PROMPT_DONE = "review_prompt_shown"
+private const val KEY_REVIEW_PROMPT_SNOOZE_UNTIL = "review_prompt_snooze_until"
+private const val KEY_REVIEW_PROMPT_REFUSALS = "review_prompt_refusals"
+
+/** Schermate diverse aperte prima di chiedere: chi ha appena installato non ha ancora un'opinione. */
+private const val REVIEW_PROMPT_NAVIGATIONS = 10
+
+/** Dopo un "più tardi" si riprova fra una settimana. */
+private const val REVIEW_PROMPT_SNOOZE_MS = 7L * 24 * 60 * 60 * 1000
+
+/** Al secondo rifiuto non si chiede più. */
+private const val REVIEW_PROMPT_MAX_REFUSALS = 2
 
 object Routes {
     const val AUTH = "auth"
@@ -120,6 +131,7 @@ object Routes {
     const val GRADED = "graded"
     const val SETTINGS = "settings"
     const val PREMIUM = "premium"
+    const val GIFT_CODES = "gift_codes"
     const val WISHLIST_LIST = "wishlist_list"
     const val WISHLIST_DETAIL = "wishlist_detail/{wishlistId}"
     const val ALBUM_LIST = "album_list"
@@ -130,7 +142,17 @@ object Routes {
     const val CREATE_GOAL_ALBUM = "create_goal_album"
     const val GOAL_ALBUM_DETAIL = "goal_album_detail/{goalAlbumId}"
 
+    const val ILLUSTRATORS = "illustrators"
+    const val ILLUSTRATOR_DETAIL = "illustrator_detail/{illustratorKey}"
+
     fun goalAlbumDetail(goalAlbumId: String) = "goal_album_detail/$goalAlbumId"
+
+    /**
+     * La chiave dell'illustratore va encodata: contiene spazi, e i nomi da cui
+     * nasce anche punti e accenti. Senza, la rotta non combacia e si atterra
+     * su una pagina vuota.
+     */
+    fun illustratorDetail(key: String) = "illustrator_detail/" + URLEncoder.encode(key, "UTF-8")
 
     /** Pokedex aperto direttamente sulla ricerca carte, col campo gia' a fuoco. */
     fun pokedexSearch() = "pokedex?search=true"
@@ -150,7 +172,7 @@ object Routes {
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun AppNavigation(
     navController: NavHostController,
@@ -170,7 +192,14 @@ fun AppNavigation(
 
     LaunchedEffect(currentRoute, authViewModel.uiState.isLoggedIn) {
         if (!authViewModel.uiState.isLoggedIn) return@LaunchedEffect
-        if (engagementPrefs.getBoolean("review_prompt_shown", false)) return@LaunchedEffect
+        // "Chiuso per sempre" lo decide l'utente: si scrive solo quando va
+        // davvero in recensione o quando dice di no due volte.
+        if (engagementPrefs.getBoolean(KEY_REVIEW_PROMPT_DONE, false)) return@LaunchedEffect
+
+        // Un "più tardi" è un rinvio, non un rifiuto: la richiesta torna dopo
+        // qualche giorno, non alla schermata successiva.
+        val snoozedUntil = engagementPrefs.getLong(KEY_REVIEW_PROMPT_SNOOZE_UNTIL, 0L)
+        if (System.currentTimeMillis() < snoozedUntil) return@LaunchedEffect
 
         val route = currentRoute ?: return@LaunchedEffect
         if (route == lastTrackedRoute || route == Routes.AUTH) return@LaunchedEffect
@@ -178,165 +207,55 @@ fun AppNavigation(
         lastTrackedRoute = route
         navigationCount += 1
 
-        if (navigationCount >= 10) {
-            engagementPrefs.edit().putBoolean("review_prompt_shown", true).apply()
-            showReviewPrompt = true
-        }
+        if (navigationCount >= REVIEW_PROMPT_NAVIGATIONS) showReviewPrompt = true
     }
 
-    if (showReviewPrompt) {
-        val transition = rememberInfiniteTransition(label = "reviewPromptAnimation")
-        val fullTagline = AppLocale.ratingPromptTagline
-        val fullBody = AppLocale.ratingPromptBody
-        var typedTagline by remember(fullTagline, showReviewPrompt) { mutableStateOf("") }
-        var typedBody by remember(fullBody, showReviewPrompt) { mutableStateOf("") }
+    /**
+     * Rinvia la richiesta, contando i rifiuti.
+     *
+     * Prima esisteva solo l'uscita definitiva, scritta per giunta PRIMA che
+     * l'utente decidesse: chi chiudeva il dialog toccando fuori non rivedeva il
+     * banner mai piu', e non aveva nemmeno un bottone per dire "non ora".
+     */
+    fun snoozeReviewPrompt() {
+        showReviewPrompt = false
+        navigationCount = 0
+        val refusals = engagementPrefs.getInt(KEY_REVIEW_PROMPT_REFUSALS, 0) + 1
+        engagementPrefs.edit().apply {
+            putInt(KEY_REVIEW_PROMPT_REFUSALS, refusals)
+            // Al secondo no si smette: insistere oltre e' molestia, non
+            // marketing.
+            if (refusals >= REVIEW_PROMPT_MAX_REFUSALS) {
+                putBoolean(KEY_REVIEW_PROMPT_DONE, true)
+            } else {
+                putLong(
+                    KEY_REVIEW_PROMPT_SNOOZE_UNTIL,
+                    System.currentTimeMillis() + REVIEW_PROMPT_SNOOZE_MS
+                )
+            }
+        }.apply()
+    }
 
-        LaunchedEffect(showReviewPrompt, fullTagline, fullBody) {
-            if (!showReviewPrompt) return@LaunchedEffect
-            typedTagline = ""
-            typedBody = ""
-            for (char in fullTagline) {
-                typedTagline += char
-                delay(14)
-            }
-            delay(90)
-            for (char in fullBody) {
-                typedBody += char
-                delay(9)
-            }
+    /** Porta alla scheda Play, con il fallback web se lo Store non c'e'. */
+    fun openStoreForReview() {
+        showReviewPrompt = false
+        engagementPrefs.edit().putBoolean(KEY_REVIEW_PROMPT_DONE, true).apply()
+
+        val packageName = context.packageName
+        val appStoreIntent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("market://details?id=$packageName")
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val webStoreIntent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        try {
+            context.startActivity(appStoreIntent)
+        } catch (_: ActivityNotFoundException) {
+            context.startActivity(webStoreIntent)
         }
-
-        val jumpScale by transition.animateFloat(
-            initialValue = 0.92f,
-            targetValue = 1.12f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 520),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "reviewPromptJumpScale"
-        )
-        val jumpY by transition.animateFloat(
-            initialValue = 3f,
-            targetValue = -10f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 520),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "reviewPromptJumpY"
-        )
-        val shakeX by transition.animateFloat(
-            initialValue = -3f,
-            targetValue = 3f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 120),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "reviewPromptShakeX"
-        )
-        val sparkAlpha by transition.animateFloat(
-            initialValue = 0.35f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 360),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "reviewPromptSparkAlpha"
-        )
-        val flashAlpha by transition.animateFloat(
-            initialValue = 0.08f,
-            targetValue = 0.24f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 240),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "reviewPromptFlash"
-        )
-
-        AlertDialog(
-            onDismissRequest = { showReviewPrompt = false },
-            title = { Text(AppLocale.ratingPromptTitle) },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = typedTagline,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                color = Color(0xFFFFE082).copy(alpha = flashAlpha),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
-                        ) {
-                            Text(
-                                text = "⚡",
-                                fontSize = 20.sp,
-                                modifier = Modifier.graphicsLayer(alpha = sparkAlpha),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "Pika!",
-                                fontSize = 24.sp,
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .graphicsLayer(
-                                        scaleX = jumpScale,
-                                        scaleY = jumpScale,
-                                        translationY = jumpY,
-                                        translationX = shakeX
-                                    ),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "✨",
-                                fontSize = 20.sp,
-                                modifier = Modifier.graphicsLayer(alpha = 1f - sparkAlpha),
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = typedBody,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showReviewPrompt = false
-                        val packageName = context.packageName
-                        val appStoreIntent = Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("market://details?id=$packageName")
-                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        val webStoreIntent = Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
-                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                        try {
-                            context.startActivity(appStoreIntent)
-                        } catch (_: ActivityNotFoundException) {
-                            context.startActivity(webStoreIntent)
-                        }
-                    }
-                ) {
-                    Text(AppLocale.ratingPromptReviewCta)
-                }
-            }
-        )
     }
 
     // Letti una volta qui: le lambda di transizione di NavHost non sono
@@ -346,49 +265,80 @@ fun AppNavigation(
     val selectedTab = BottomTab.forRoute(currentRoute)
     val showBottomBar = selectedTab != null
 
-    Column(
+    // La schermata che entra copre quella che esce invece di dissolversi sopra
+    // di lei. Il fade dura un terzo della corsa: quel tanto che basta a
+    // smussare il bordo, non abbastanza per vedere in trasparenza la pagina di
+    // prima per tutta la transizione. Lo scivolamento resta intero, ed e' lui a
+    // dire che si sta andando avanti.
+    val coverFade = (motion.screenEnter / 3).coerceAtLeast(0)
+
+    // ── Tastiera, una volta per tutta l'app ─────────────────────────────────
+    //
+    // enableEdgeToEdge() in MainActivity dice ad Android di non ridimensionare
+    // la finestra quando la tastiera si apre: l'IME arriva come inset, e sta a
+    // noi lasciargli lo spazio. Finche' l'ha fatto solo qualche schermata (due
+    // su diciotto con dei campi di testo), in tutte le altre la tastiera
+    // copriva il campo su cui si stava scrivendo.
+    //
+    // Farlo qui invece che in ogni schermata significa che il comportamento e'
+    // uno solo e che una schermata nuova lo eredita senza doversene ricordare.
+    val imeVisible = WindowInsets.isImeVisible
+    val focusManager = LocalFocusManager.current
+
+    // La tabella nome -> sprite si legge da un asset, fuori dal thread
+    // principale e una volta sola. Sta qui e non nelle singole schermate
+    // perche' i posti che la usano sono ormai piu' di uno -- l'elenco dei
+    // mazzi, il dettaglio, il Match Log -- e una schermata nuova che se ne
+    // dimenticasse mostrerebbe semplicemente il vuoto, senza errori.
+    val spriteContext = LocalContext.current
+    LaunchedEffect(Unit) {
+        PokemonSpriteResolver.preload(spriteContext)
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AppColors.background)
+            // Toccare fuori da un campo chiude la tastiera, come ci si aspetta
+            // ovunque. detectTapGestures lavora sul Main pass, quindi i figli
+            // che gestiscono il tocco (bottoni, liste) lo consumano prima e qui
+            // non arriva niente: reagisce solo al vuoto.
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { focusManager.clearFocus() })
+            }
     ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                // Quando la barra c'e' e' lei a scansare la navigation bar di
-                // sistema: senza consumare qui gli insets in basso le schermate li
-                // applicherebbero di nuovo, e sopra la barra si aprirebbe un vuoto.
-                .then(
-                    if (showBottomBar) {
-                        Modifier.consumeWindowInsets(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
-                        )
-                    } else {
-                        Modifier
-                    }
-                )
-        ) {
             // Un solo SharedTransitionLayout attorno a tutto il grafo: le
             // schermate che partecipano alla transizione della carta lo trovano
             // via CompositionLocal, le altre lo ignorano.
-            SharedTransitionLayout {
+            SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
             CompositionLocalProvider(LocalSharedTransitionScope provides this) {
             NavHost(
                 navController = navController,
                 startDestination = startDestination,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding(),
                 // Entrata e uscita non sono simmetriche di proposito: la schermata
                 // nuova arriva con un filo di scivolamento (un dodicesimo di larghezza,
-                // non una pagina intera), quella che esce si limita a spegnersi. Cosi'
-                // il movimento resta corto e non fa aspettare a ogni tocco.
+                // non una pagina intera), quella che esce scivola via dalla parte
+                // opposta della meta' di quello. Cosi' il movimento resta corto e non
+                // fa aspettare a ogni tocco.
                 enterTransition = {
-                    fadeIn(tween(motion.screenEnter)) +
+                    fadeIn(tween(coverFade)) +
                         slideInHorizontally(tween(motion.screenEnter, easing = easing)) { it / 12 }
                 },
-                exitTransition = { fadeOut(tween(motion.screenExit)) },
+                exitTransition = {
+                    fadeOut(tween(motion.screenExit)) +
+                        slideOutHorizontally(tween(motion.screenExit, easing = easing)) { -it / 24 }
+                },
                 popEnterTransition = {
-                    fadeIn(tween(motion.screenEnter)) +
+                    fadeIn(tween(coverFade)) +
                         slideInHorizontally(tween(motion.screenEnter, easing = easing)) { -it / 12 }
                 },
-                popExitTransition = { fadeOut(tween(motion.screenExit)) }
+                popExitTransition = {
+                    fadeOut(tween(motion.screenExit)) +
+                        slideOutHorizontally(tween(motion.screenExit, easing = easing)) { it / 24 }
+                }
             ) {
                 // ── Auth ──
                 composable(Routes.AUTH) {
@@ -413,20 +363,24 @@ fun AppNavigation(
 
                 // ── Home ──
                 composable(Routes.HOME) {
-                    HomeScreen(
-                        onNavigate = { route -> navController.navigate(route) },
-                        userName = authViewModel.uiState.userName
-                    )
+                    BottomBarSpacing {
+                        HomeScreen(
+                            onNavigate = { route -> navController.navigate(route) },
+                            userName = authViewModel.uiState.userName
+                        )
+                    }
                 }
 
                 // ── Collezione ──
                 composable(Routes.COLLECTION) {
                     CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
-                        CollectionScreen(
-                            onBack = { navController.popBackStack() },
-                            onAddCard = { navController.navigate(Routes.ADD_CARD) },
-                            onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
-                        )
+                        BottomBarSpacing {
+                            CollectionScreen(
+                                onBack = { navController.popBackStack() },
+                                onAddCard = { navController.navigate(Routes.ADD_CARD) },
+                                onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
+                            )
+                        }
                     }
                 }
 
@@ -457,7 +411,8 @@ fun AppNavigation(
                         CardDetailScreen(
                             cardId = cardId,
                             onBack = { navController.popBackStack() },
-                            onEdit = { navController.navigate(Routes.editCard(cardId)) }
+                            onEdit = { navController.navigate(Routes.editCard(cardId)) },
+                            onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) }
                         )
                     }
                 }
@@ -472,14 +427,17 @@ fun AppNavigation(
                         }
                     )
                 ) { backStackEntry ->
-                    SetsListScreen(
-                        openCardSearch = backStackEntry.arguments?.getBoolean("search") == true,
-                        onBack = { navController.popBackStack() },
-                        onSetClick = { setId, macro ->
-                            // Naviga al dettaglio set
-                            navController.navigate(Routes.setDetail(setId, setId, macro))
-                        }
-                    )
+                    BottomBarSpacing {
+                        SetsListScreen(
+                            openCardSearch = backStackEntry.arguments?.getBoolean("search") == true,
+                            onBack = { navController.popBackStack() },
+                            onSetClick = { setId, macro ->
+                                // Naviga al dettaglio set
+                                navController.navigate(Routes.setDetail(setId, setId, macro))
+                            },
+                            onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) }
+                        )
+                    }
                 }
 
                 // ── Dettaglio Set ──
@@ -504,21 +462,25 @@ fun AppNavigation(
                         setName = setName,
                         sourceMacro = macroArg,
                         onBack = { navController.popBackStack() },
-                        onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
+                        onPremiumRequired = { navController.navigate(Routes.PREMIUM) },
+                        onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) }
                     )
                 }
 
                 // ── Statistiche ──
                 composable(Routes.STATS) {
-                    StatsScreen(
-                        onBack = { navController.popBackStack() }
-                    )
+                    BottomBarSpacing {
+                        StatsScreen(
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
 
                 // ── Scanner ──
                 composable(Routes.SCANNER) {
                     ScannerScreen(
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onManualSearch = { navController.navigate(Routes.pokedexSearch()) }
                     )
                 }
 
@@ -546,10 +508,16 @@ fun AppNavigation(
 
                 // ── Carte Gradate ──
                 composable(Routes.GRADED) {
-                    GradedCardsScreen(
-                        onBack = { navController.popBackStack() },
-                        onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
-                    )
+                    // Come la collezione: la slab toccata e l'immagine grande del
+                    // dettaglio sono lo stesso oggetto che cambia posto. La chiave
+                    // e' l'id del documento, che e' anche quello che finisce nella
+                    // rotta di dettaglio.
+                    CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
+                        GradedCardsScreen(
+                            onBack = { navController.popBackStack() },
+                            onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
+                        )
+                    }
                 }
 
                 // ── Competitive Hub ──
@@ -648,6 +616,8 @@ fun AppNavigation(
                         onAlbumClick = { albumId -> navController.navigate(Routes.albumDetail(albumId)) },
                         onOpenAlbumList = { navController.navigate(Routes.ALBUM_COLLECTION_LIST) },
                         onOpenChaseList = { navController.navigate(Routes.CHASE_LIST) },
+                        onOpenIllustrators = { navController.navigate(Routes.ILLUSTRATORS) },
+                        onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) },
                         onCreateChase = { navController.navigate(Routes.CREATE_GOAL_ALBUM) },
                         onChaseClick = { goalAlbumId -> navController.navigate(Routes.goalAlbumDetail(goalAlbumId)) },
                         onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
@@ -724,10 +694,45 @@ fun AppNavigation(
                     )
                 }
 
+                // ── Illustratori ──
+                composable(Routes.ILLUSTRATORS) {
+                    IllustratorListScreen(
+                        onBack = { navController.popBackStack() },
+                        onIllustratorClick = { key ->
+                            navController.navigate(Routes.illustratorDetail(key))
+                        }
+                    )
+                }
+
+                // ── Dettaglio illustratore ──
+                composable(
+                    route = Routes.ILLUSTRATOR_DETAIL,
+                    arguments = listOf(navArgument("illustratorKey") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    // La chiave viaggia encodata perche' contiene spazi: senza
+                    // il decode si cercherebbe "mitsuhiro%20arita", che non
+                    // esiste, e la pagina resterebbe vuota senza errori.
+                    val raw = backStackEntry.arguments?.getString("illustratorKey").orEmpty()
+                    val key = runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrDefault(raw)
+                    IllustratorDetailScreen(
+                        illustratorKey = key,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
                 // ── Premium ──
                 composable(Routes.PREMIUM) {
                     PremiumScreen(
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onNavigateToGiftCodes = { navController.navigate(Routes.GIFT_CODES) }
+                    )
+                }
+
+                // ── Codici regalo ──
+                composable(Routes.GIFT_CODES) {
+                    GiftCodeScreen(
+                        onBack = { navController.popBackStack() },
+                        onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }
                     )
                 }
 
@@ -743,29 +748,86 @@ fun AppNavigation(
                             authViewModel.logout()
                             navController.navigate(Routes.AUTH) { popUpTo(0) { inclusive = true } }
                         },
-                        onNavigateToPremium = { navController.navigate(Routes.PREMIUM) }
+                        onNavigateToPremium = { navController.navigate(Routes.PREMIUM) },
+                        onNavigateToGiftCodes = { navController.navigate(Routes.GIFT_CODES) }
                     )
                 }
             }
             }
             }
 
-            if (showBottomBar) {
-                ScannerFab(
-                    onClick = { navController.navigate(Routes.SCANNER) },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 20.dp, bottom = 16.dp)
-                )
-            }
-        }
+        // Con la tastiera aperta la barra e il FAB si tolgono di mezzo: sono
+        // navigazione, e mentre si scrive non servono. Lasciarli vorrebbe dire
+        // vederli galleggiare sopra la tastiera, o spingere via il campo che si
+        // sta compilando.
+        if (showBottomBar && !imeVisible) {
+            ScannerFab(
+                onClick = { navController.navigate(Routes.SCANNER) },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    // L'IME resta fuori dal conto, come nella barra: qui nessuno
+                    // l'ha ancora consumato, e mentre la tastiera si chiude
+                    // spedirebbe il FAB a meta' schermo.
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing
+                            .only(WindowInsetsSides.Bottom)
+                            .exclude(WindowInsets.ime)
+                    )
+                    .padding(end = 20.dp, bottom = PokeVaultBottomBarHeight + 16.dp)
+            )
 
-        if (selectedTab != null) {
             PokeVaultBottomBar(
                 selected = selectedTab,
-                onSelect = { tab -> navController.navigateToBottomTab(tab) }
+                onSelect = { tab -> navController.navigateToBottomTab(tab) },
+                modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+
+        // Ultimo figlio del Box, quindi disegnato sopra bottom bar e FAB: e'
+        // una cosa appoggiata sull'app, non un pezzo della schermata. Non e'
+        // modale, percio' dietro si continua a scorrere e a toccare.
+        ReviewPromptBanner(
+            visible = showReviewPrompt,
+            onReview = { openStoreForReview() },
+            onLater = { snoozeReviewPrompt() },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(
+                    // Sopra la bottom bar quando c'e': coprirla nasconderebbe
+                    // la navigazione proprio mentre chiediamo un favore.
+                    bottom = if (showBottomBar) PokeVaultBottomBarHeight + 12.dp else 16.dp
+                )
+        )
+    }
+}
+
+/**
+ * Lo spazio che la bottom bar toglie alla schermata che la mostra.
+ *
+ * La barra sta sopra il NavHost, non in colonna con lui: il contenitore delle
+ * schermate e' sempre alto quanto lo schermo, e uscire verso una sezione senza
+ * barra — Gradate, Competitivo, Collector Lab, Wishlist — non lo fa piu'
+ * crescere di colpo. Prima cresceva, e la schermata che stava uscendo veniva
+ * rimisurata a meta' transizione: sulla Home, che e' scrollabile, il contenuto
+ * si riassestava e la riga della collezione risaliva mentre la sezione nuova
+ * arrivava. Era proprio quel guizzo.
+ *
+ * Il prezzo e' che lo spazio se lo devono togliere le quattro schermate della
+ * barra. E' un prezzo giusto: per loro la barra c'e' sempre, quindi il padding
+ * e' una costante e non cambia mai sotto i loro piedi.
+ */
+@Composable
+private fun BottomBarSpacing(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            // Applicati e consumati qui: sotto la barra ci pensa lei a scansare
+            // la navigation bar di sistema, le schermate non devono rifarlo.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+            .padding(bottom = PokeVaultBottomBarHeight)
+    ) {
+        content()
     }
 }
 

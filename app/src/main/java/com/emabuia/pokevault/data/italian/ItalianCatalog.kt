@@ -21,7 +21,23 @@ data class ItalianCardRecord(
     val ps: String? = null,
     val attacchi: List<ItalianAttackRecord> = emptyList(),
     val regolaSpeciale: String? = null,
-    val rarity: String? = null
+    val rarity: String? = null,
+    /**
+     * Stadio evolutivo canonico ("Basic", "Stage1", "Stage2", "VMAX"...),
+     * nostro in D1 dallo schema/009. E' il campo che dice se un Pokemon si
+     * puo' calare in campo dalla mano: null su Trainer ed Energie.
+     */
+    val stage: String? = null,
+    /**
+     * Chi ha disegnato la carta, nostro in D1 dal backfill TCGdex (copre il
+     * 98% del catalogo). Sempre in inglese perche' il nome di una persona non
+     * si traduce.
+     *
+     * Il worker OMETTE la chiave quando e' vuota invece di serializzarla a
+     * null -- /ita/catalog.json porta diciottomila carte a ogni client -- per
+     * questo qui il default e' null e non "".
+     */
+    val illustratore: String? = null
 ) {
     fun imageReference(): ItalianImageReference? = ItalianCatalogNormalizer.toImageReference(cardId)
 
@@ -116,8 +132,14 @@ object ItalianCatalogNormalizer {
     private val expansionCardsResponseType = object : TypeToken<ItalianExpansionCardsResponse>() {}.type
     private val expansionsResponseType = object : TypeToken<ItalianExpansionsResponse>() {}.type
     private const val UTF8_BOM = "\uFEFF"
+    // Il trattino nel codice set serve da "30TH-C" (30 Anniversario Collezione
+    // Classica), il primo set il cui codice non e' solo lettere e cifre: senza,
+    // `30TH-C_IT_1.png` non combacia, `toImageReference` torna null e da li' in
+    // poi va storto tutto in silenzio -- l'immagine finisce su un URL
+    // malformato e il numero carta diventa Int.MAX_VALUE, cioe' le carte del
+    // set si ordinano alfabeticamente (1, 10, 11, 2...).
     private val imageIdRegex = Regex(
-        "^([A-Za-z0-9]+)_IT_([A-Za-z0-9_]+)\\.(png|webp|jpe?g)$",
+        "^([A-Za-z0-9-]+)_IT_([A-Za-z0-9_]+)\\.(png|webp|jpe?g)$",
         RegexOption.IGNORE_CASE
     )
 

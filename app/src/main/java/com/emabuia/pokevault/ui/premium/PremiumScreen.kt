@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.ui.premium
 
 import android.app.Activity
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -33,11 +35,15 @@ import com.emabuia.pokevault.util.AppLocale
 
 @Composable
 fun PremiumScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToGiftCodes: () -> Unit = {}
 ) {
     val premiumManager = remember { PremiumManager.getInstance() }
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
+    val giftUntilMs by premiumManager.giftUntilMs.collectAsStateWithLifecycle()
     val purchaseState by premiumManager.purchaseState.collectAsStateWithLifecycle()
+    val billingProblem by premiumManager.billingProblem.collectAsStateWithLifecycle()
+    val subscriptionClaimed by premiumManager.subscriptionClaimedByOtherAccount.collectAsStateWithLifecycle()
     val products by premiumManager.products.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = context as? Activity
@@ -119,7 +125,13 @@ fun PremiumScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = AppLocale.premiumActiveSubtitle,
+                        // Un mese regalo e un abbonamento danno lo stesso
+                        // accesso ma non la stessa cosa: dire "attivo" e basta
+                        // a chi ha un regalo gli nasconde che ha una scadenza.
+                        text = if (giftUntilMs > System.currentTimeMillis())
+                            AppLocale.giftActiveUntil(formatGiftDate(giftUntilMs))
+                        else
+                            AppLocale.premiumActiveSubtitle,
                         fontSize = 14.sp,
                         color = AppColors.textSecondary,
                         textAlign = TextAlign.Center
@@ -202,9 +214,37 @@ fun PremiumScreen(
                     feature = AppLocale.premiumFeatureMetaPremium,
                     isFree = false
                 )
+                // Wishlist, album obiettivo e hand-simulator hanno un limite
+                // free come tutto il resto: la riga "premium" da sola faceva
+                // credere che nella versione gratuita non esistessero.
+                FeatureRow(
+                    icon = Icons.Default.FavoriteBorder,
+                    feature = AppLocale.premiumFeatureWishlistFree,
+                    isFree = true
+                )
                 FeatureRow(
                     icon = Icons.Default.Favorite,
                     feature = AppLocale.premiumFeatureWishlistPremium,
+                    isFree = false
+                )
+                FeatureRow(
+                    icon = Icons.Default.Flag,
+                    feature = AppLocale.premiumFeatureGoalAlbumFree,
+                    isFree = true
+                )
+                FeatureRow(
+                    icon = Icons.Default.EmojiFlags,
+                    feature = AppLocale.premiumFeatureGoalAlbumPremium,
+                    isFree = false
+                )
+                FeatureRow(
+                    icon = Icons.Default.BackHand,
+                    feature = AppLocale.premiumFeatureHandSimFree,
+                    isFree = true
+                )
+                FeatureRow(
+                    icon = Icons.Default.Casino,
+                    feature = AppLocale.premiumFeatureHandSimPremium,
                     isFree = false
                 )
                 FeatureRow(
@@ -216,6 +256,55 @@ fun PremiumScreen(
                     icon = Icons.Default.CatchingPokemon,
                     feature = AppLocale.premiumFeatureHomeSpritePremium,
                     isFree = false
+                )
+            }
+
+            // Chi arriva qui e non vuole pagare ha comunque una strada: un
+            // amico può regalargli un mese. Il collegamento sta dopo la lista,
+            // non prima, per non trasformare la schermata Premium in una
+            // caccia al codice.
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(AppColors.card)
+                    .border(
+                        1.dp,
+                        AppColors.gold.copy(alpha = 0.22f),
+                        RoundedCornerShape(16.dp)
+                    )
+                    .clickable(onClick = onNavigateToGiftCodes)
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.CardGiftcard,
+                    contentDescription = null,
+                    tint = AppColors.gold,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = AppLocale.giftSettingsLabel,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppColors.textPrimary
+                    )
+                    Text(
+                        text = AppLocale.giftSettingsSubtitle,
+                        fontSize = 12.sp,
+                        color = AppColors.textMuted
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = AppColors.textMuted,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
@@ -236,6 +325,73 @@ fun PremiumScreen(
                         color = AppColors.textPrimary
                     )
 
+                    // Ha un abbonamento sul telefono ma appartiene a un altro
+                    // account: senza dirlo, leggerebbe solo "non sei premium"
+                    // con un addebito attivo sul Play Store.
+                    if (subscriptionClaimed) {
+                        Surface(
+                            color = AppColors.gold.copy(alpha = 0.10f),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, AppColors.gold.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(
+                                    text = AppLocale.billingClaimedTitle,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppColors.textPrimary
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = AppLocale.billingClaimedBody,
+                                    fontSize = 12.sp,
+                                    color = AppColors.textSecondary,
+                                    lineHeight = 17.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // Il servizio non risponde: si dice qui, accanto ai piani
+                    // che non funzionano, invece di gridarlo con una snackbar
+                    // appena si apre la schermata.
+                    billingProblem?.let { problem ->
+                        Surface(
+                            color = AppColors.card,
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, AppColors.textMuted.copy(alpha = 0.25f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(
+                                    text = AppLocale.billingUnavailableTitle,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppColors.textSecondary
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = billingProblemMessage(problem),
+                                    fontSize = 12.sp,
+                                    color = AppColors.textMuted,
+                                    lineHeight = 17.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                TextButton(
+                                    onClick = { premiumManager.retryBillingConnection() },
+                                    contentPadding = PaddingValues(horizontal = 4.dp)
+                                ) {
+                                    Text(
+                                        text = AppLocale.billingRetry,
+                                        color = AppColors.blue,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Monthly plan
                     val monthlyProduct = premiumManager.getMonthlyProduct()
                     val monthlyPrice = premiumManager.getBasePlanFormattedPrice(monthlyProduct)
@@ -245,6 +401,7 @@ fun PremiumScreen(
                         title = AppLocale.premiumMonthly,
                         price = "${AppLocale.premiumPriceMonthly(monthlyPrice)}",
                         isHighlighted = false,
+                        enabled = monthlyProduct != null && billingProblem == null,
                         onClick = {
                             if (activity != null && monthlyProduct != null) {
                                 premiumManager.launchPurchaseFlow(activity, monthlyProduct)
@@ -262,6 +419,7 @@ fun PremiumScreen(
                         price = "${AppLocale.premiumPriceAnnual(annualPrice)}",
                         badge = AppLocale.premiumSaveBadge,
                         isHighlighted = true,
+                        enabled = annualProduct != null && billingProblem == null,
                         onClick = {
                             if (activity != null && annualProduct != null) {
                                 premiumManager.launchPurchaseFlow(activity, annualProduct)
@@ -337,10 +495,22 @@ fun PremiumScreen(
                     premiumManager.resetPurchaseState()
                 }
             }
-            is PremiumManager.PurchaseState.Error -> {
-                val error = (purchaseState as PremiumManager.PurchaseState.Error).message
-                LaunchedEffect(error) {
-                    snackbarHostState.showSnackbar(AppLocale.premiumPurchaseError(error))
+            is PremiumManager.PurchaseState.NotAcknowledged -> {
+                LaunchedEffect(Unit) {
+                    snackbarHostState.showSnackbar(AppLocale.premiumPurchaseNotAcknowledged)
+                    premiumManager.resetPurchaseState()
+                }
+            }
+            is PremiumManager.PurchaseState.Failed -> {
+                // Arriva qui SOLO un acquisto che l'utente ha avviato davvero.
+                // I guasti del servizio che capitano all'avvio non passano piu'
+                // di qui: stanno in billingProblem, e si vedono come riga
+                // spenta accanto ai piani invece che come snackbar allarmista.
+                val problem = (purchaseState as PremiumManager.PurchaseState.Failed).problem
+                LaunchedEffect(problem) {
+                    snackbarHostState.showSnackbar(
+                        AppLocale.premiumPurchaseError(billingProblemMessage(problem))
+                    )
                     premiumManager.resetPurchaseState()
                 }
             }
@@ -353,6 +523,20 @@ fun PremiumScreen(
         )
     }
 }
+
+/** Il guasto, nella lingua scelta dall'utente. */
+private fun billingProblemMessage(problem: PremiumManager.Companion.BillingProblem): String =
+    when (problem) {
+        PremiumManager.Companion.BillingProblem.DISCONNECTED -> AppLocale.billingProblemDisconnected
+        PremiumManager.Companion.BillingProblem.NETWORK -> AppLocale.billingProblemNetwork
+        PremiumManager.Companion.BillingProblem.UNAVAILABLE -> AppLocale.billingProblemUnavailable
+        PremiumManager.Companion.BillingProblem.MISCONFIGURED -> AppLocale.billingProblemMisconfigured
+        PremiumManager.Companion.BillingProblem.OTHER -> AppLocale.billingProblemOther
+    }
+
+private fun formatGiftDate(epochMs: Long): String =
+    java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
+        .format(java.util.Date(epochMs))
 
 @Composable
 private fun FeatureRow(
@@ -394,10 +578,17 @@ private fun PlanCard(
     price: String,
     badge: String? = null,
     isHighlighted: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    val borderColor = if (isHighlighted) AppColors.gold else AppColors.surface
-    val bgColor = if (isHighlighted) AppColors.gold.copy(alpha = 0.08f) else AppColors.card
+    // Un piano che non si puo' comprare deve sembrare non comprabile: prima il
+    // tocco partiva comunque e non succedeva niente, senza spiegazioni.
+    val borderColor = when {
+        !enabled -> AppColors.surface
+        isHighlighted -> AppColors.gold
+        else -> AppColors.surface
+    }
+    val bgColor = if (isHighlighted && enabled) AppColors.gold.copy(alpha = 0.08f) else AppColors.card
 
     Box(
         modifier = Modifier
@@ -405,7 +596,8 @@ private fun PlanCard(
             .clip(RoundedCornerShape(16.dp))
             .border(1.5.dp, borderColor, RoundedCornerShape(16.dp))
             .background(bgColor)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.45f)
             .padding(20.dp)
     ) {
         Row(

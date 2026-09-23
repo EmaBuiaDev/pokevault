@@ -13,7 +13,11 @@ import com.emabuia.pokevault.data.local.toEntity
 import com.emabuia.pokevault.data.local.toTcgCard
 import com.emabuia.pokevault.data.local.toTcgSet
 import com.emabuia.pokevault.data.local.ItalianTranslations
+import com.emabuia.pokevault.data.italian.ItalianCatalogNormalizer
+import com.emabuia.pokevault.data.italian.ItalianExpansionSummary
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.IllustratorEntry
+import com.emabuia.pokevault.util.IllustratorNames
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,7 +36,17 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
-enum class ItalianCardAttribute { RARITY, SUPERTYPE, TYPE }
+enum class ItalianCardAttribute { RARITY, SUPERTYPE, TYPE, ILLUSTRATOR }
+
+/**
+ * Quante carte al massimo si tirano per un singolo illustratore dal catalogo
+ * completo, sulla via di ripiego.
+ *
+ * Il limite di serie di searchItalianCardsByAttribute e' 300, ma il solo
+ * Mitsuhiro Arita ne ha 579: con quel valore la sua pagina ne perderebbe meta'
+ * in silenzio, perche' il take() taglia prima della mappatura.
+ */
+private const val ILLUSTRATOR_CARD_LIMIT = 5000
 
 class CatalogRepository {
 
@@ -1013,6 +1027,10 @@ class CatalogRepository {
         val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false)
             .getOrElse { return Result.success(emptyList()) }
 
+        // Il manifest si prende una volta sola, fuori dal ciclo: prima ogni
+        // carta risolveva il nome della propria espansione da sola.
+        val summaries = italianExpansionSummariesById()
+
         return runCatching {
             withContext(Dispatchers.Default) {
                 val matches = catalog.cards.asSequence()
@@ -1021,6 +1039,12 @@ class CatalogRepository {
                             ItalianCardAttribute.RARITY -> record.rarity?.equals(cleanValue, ignoreCase = true) == true
                             ItalianCardAttribute.SUPERTYPE -> deriveItalianSupertype(record).equals(cleanValue, ignoreCase = true)
                             ItalianCardAttribute.TYPE -> record.tipo?.equals(cleanValue, ignoreCase = true) == true
+                            // Si confronta sulla CHIAVE normalizzata, non con un
+                            // equals come gli altri attributi: qui `cleanValue` e' gia'
+                            // una chiave, e un confronto diretto sul nome grezzo
+                            // salterebbe accenti, grafie diverse e collaborazioni.
+                            ItalianCardAttribute.ILLUSTRATOR ->
+                                IllustratorNames.keysOf(record.illustratore).contains(cleanValue)
                         }
                     }
                     .take(limit)
@@ -1029,14 +1053,10 @@ class CatalogRepository {
                 if (matches.isEmpty()) return@withContext emptyList()
 
                 matches.map { record ->
-                    val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
-                    val setInfo = TcgSet(
-                        id = buildItalianSetId(expansionId),
-                        name = italianExpansionDisplayName(expansionId),
-                        series = deriveSeriesName(setCode = expansionId, language = "ITA", setName = expansionId),
-                        language = "ITA"
+                    toItalianTcgCard(
+                        record = record,
+                        setInfo = italianSyntheticSet(record.espansioneId, summaries)
                     )
-                    toItalianTcgCard(record = record, setInfo = setInfo)
                 }.distinctBy { it.id }
             }
         }
@@ -1161,10 +1181,27 @@ class CatalogRepository {
      * per decklist in inglese (es. import da PTCGL/Limitless) senza bisogno di matchare
      * il nome -- vedi MIGRATION_PLAN.md M4.6, lookupAndCreateCard in DeckLabViewModel.
      */
+    /**
+     * La carta italiana con quel set e quel numero.
+     *
+     * [expectedName], quando c'e', non e' un filtro ma un arbitro: fra piu'
+     * record che rispondono allo stesso set+numero vince quello che si chiama
+     * cosi'. Serve perche' due espansioni diverse possono rispondere allo
+     * stesso codice -- e' successo con MEG e MEP -- e senza un criterio si
+     * prendeva semplicemente la prima del catalogo.
+     *
+     * [requireNameMatch] trasforma l'arbitro in un veto: se nessuno combacia,
+     * meglio niente che la carta sbagliata. Va usato quando il nome e'
+     * confrontabile, cioe' sui Pokemon, che in italiano si chiamano come in
+     * inglese. Per Allenatori ed Energie i nomi sono tradotti e un confronto
+     * fallirebbe sempre, quindi li' resta solo la preferenza.
+     */
     suspend fun findExactItalianCard(
         setCode: String?,
         number: String?,
-        context: Context
+        context: Context,
+        expectedName: String? = null,
+        requireNameMatch: Boolean = false
     ): TcgCard? {
         val normalizedNumber = number?.trim()?.substringBefore('/')?.trim()?.trimStart('0')?.ifBlank { "0" }
             ?: return null
@@ -1176,14 +1213,40 @@ class CatalogRepository {
 
         val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false).getOrNull() ?: return null
 
-        val record = catalog.cards.firstOrNull { rec ->
-            matchesItalianExpansionHint(rec.espansioneId.trim().lowercase(Locale.ROOT), normalizedTargetSet) &&
-                run {
-                    val ref = rec.imageReference()
-                    val cardNum = (ref?.cardNumber ?: extractCardNumber(rec.cardId)).trimStart('0').ifBlank { "0" }
-                    cardNum.equals(normalizedNumber, ignoreCase = true)
-                }
-        } ?: return null
+        val wantedName = expectedName?.let(::normalizeCardNameForComparison)?.takeIf { it.isNotBlank() }
+
+        // Una passata sola, e si ferma appena trova la carta giusta.
+        //
+        // Il catalogo ha circa quindicimila record e per ognuno serve una
+        // regex per estrarre il numero: filtrarli tutti per poi scegliere
+        // voleva dire scandirlo per intero a ogni carta mancante di un import.
+        // Qui il primo record che combacia anche nel nome chiude la ricerca;
+        // si arriva in fondo solo quando il nome non si trova, che e' il caso
+        // in cui serve davvero sapere se esisteva un'alternativa.
+        var fallback: ItalianCardRecord? = null
+        var chosen: ItalianCardRecord? = null
+
+        for (rec in catalog.cards) {
+            if (!matchesItalianExpansionHint(rec.espansioneId.trim().lowercase(Locale.ROOT), normalizedTargetSet)) continue
+            val ref = rec.imageReference()
+            val cardNum = (ref?.cardNumber ?: extractCardNumber(rec.cardId)).trimStart('0').ifBlank { "0" }
+            if (!cardNum.equals(normalizedNumber, ignoreCase = true)) continue
+
+            if (wantedName == null) {
+                chosen = rec
+                break
+            }
+
+            val found = normalizeCardNameForComparison(rec.nome)
+            if (found == wantedName || found.startsWith(wantedName) || wantedName.startsWith(found)) {
+                chosen = rec
+                break
+            }
+            if (fallback == null) fallback = rec
+        }
+
+        val record = chosen
+            ?: if (requireNameMatch) return null else (fallback ?: return null)
 
         val expansionId = record.espansioneId.trim().lowercase(Locale.ROOT)
         val setInfo = TcgSet(
@@ -1193,6 +1256,265 @@ class CatalogRepository {
             language = "ITA"
         )
         return toItalianTcgCard(record = record, setInfo = setInfo)
+    }
+
+    /**
+     * Stadio evolutivo delle carte italiane richieste, per apiCardId.
+     *
+     * Una sola passata sul catalogo invece di una findExactItalianCard per
+     * carta: quella scorre tutti i ~15.000 record calcolando una
+     * imageReference() a regex per ognuno, e moltiplicarla per le carte di un
+     * mazzo intero si sente. Le chiavi sono gli stessi "ita:set:numero" che
+     * buildItalianCardId scrive in apiCardId quando la carta entra in
+     * collezione, quindi il chiamante puo' passare direttamente quelli.
+     *
+     * Mappa vuota se il catalogo non e' disponibile: lo stadio mancante e' un
+     * dato in meno, mai un errore da mostrare.
+     */
+    suspend fun italianStagesByCardId(context: Context, cardIds: Set<String>): Map<String, String> {
+        if (cardIds.isEmpty()) return emptyMap()
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false).getOrNull()
+            ?: return emptyMap()
+
+        val stages = HashMap<String, String>()
+        for (record in catalog.cards) {
+            val stage = record.stage?.trim()?.takeIf { it.isNotBlank() } ?: continue
+            val cardId = buildItalianCardId(record)
+            if (cardId in cardIds) stages[cardId] = stage
+        }
+        return stages
+    }
+
+    /**
+     * Illustratore delle carte italiane richieste, per apiCardId. Gemello di
+     * [italianStagesByCardId], stesse chiavi e stesso modo di fallire: mappa
+     * vuota se il catalogo non c'e', perche' un nome in meno non e' un errore.
+     *
+     * Passa dal catalogo intero e non da [getCard] perche' quello, sulle carte
+     * italiane, risolve solo da `memoryCards`/`memoryItalianCards` -- cache che
+     * si riempiono aprendo il set. Chi guarda una carta in collezione quel set
+     * puo' non averlo mai aperto, e li' getCard non trova niente. Il catalogo
+     * invece e' in SharedPreferences con cinque minuti di TTL: la prima carta
+     * paga il parse, le successive no.
+     */
+    suspend fun italianIllustratorsByCardId(context: Context, cardIds: Set<String>): Map<String, String> {
+        if (cardIds.isEmpty()) return emptyMap()
+        // Nessun id italiano fra quelli chiesti: si esce PRIMA di caricare il
+        // catalogo. Chi ha una collezione tutta inglese aprirebbe altrimenti
+        // il blob da diciottomila carte a ogni carta guardata, per poi non
+        // trovarci niente.
+        if (cardIds.none { isItalianOverlayCardId(it) }) return emptyMap()
+
+        val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false).getOrNull()
+            ?: return emptyMap()
+
+        val illustrators = HashMap<String, String>()
+        for (record in catalog.cards) {
+            val illustrator = record.illustratore?.trim()?.takeIf { it.isNotBlank() } ?: continue
+            val cardId = buildItalianCardId(record)
+            if (cardId in cardIds) illustrators[cardId] = illustrator
+        }
+        return illustrators
+    }
+
+
+    /**
+     * L'indice degli illustratori: chi ha disegnato cosa, gia' unito per
+     * persona e con gli apiCardId pronti da incrociare con la collezione.
+     *
+     * Passa dalla rotta `/v1/illustrators` -- una sessantina di KB compressi --
+     * e NON dal catalogo intero. Il raggruppamento per illustratore l'app lo
+     * saprebbe fare da sola, ma per farlo tirerebbe il blob da 10,4 MB che, col
+     * TTL da cinque minuti, si riscarica di continuo: la sezione illustratori
+     * sarebbe lenta proprio al suo ingresso principale.
+     *
+     * Il fallback sul catalogo resta, come per le carte di un set: la rotta e'
+     * nuova e un'app aggiornata puo' trovare davanti a se' un worker vecchio.
+     *
+     * Lista vuota se non si riesce a sapere niente: un indice mancante e' una
+     * schermata da spiegare, mai un errore da far esplodere.
+     */
+    suspend fun italianIllustratorIndex(
+        context: Context,
+        forceRefresh: Boolean = false
+    ): List<IllustratorEntry> {
+        val remote = italianCatalogRepository
+            .getIllustrators(context, PokeVaultApiClient.imageBaseUrl, forceRefresh)
+            .getOrNull()
+            ?.takeIf { it.illustrators.isNotEmpty() }
+
+        val rawEntries: List<Pair<String, List<String>>> = if (remote != null) {
+            remote.illustrators.map { it.name to it.cardIds }
+        } else {
+            // Ripiego: si rifa' il raggruppamento in casa, sul catalogo intero.
+            val catalog = italianCatalogRepository.getCatalog(context, forceRefresh = false).getOrNull()
+                ?: return emptyList()
+            catalog.cards
+                .mapNotNull { record ->
+                    val name = record.illustratore?.trim()?.takeIf { it.isNotBlank() }
+                    if (name == null) null else name to record.cardId
+                }
+                .groupBy({ it.first }, { it.second })
+                .map { (name, ids) -> name to ids }
+        }
+
+        return withContext(Dispatchers.Default) {
+            val buckets = LinkedHashMap<String, IllustratorBucket>()
+            for ((rawName, cardIds) in rawEntries) {
+                // Un credito a quattro mani vale per entrambi gli autori: le
+                // stesse carte finiscono in due bucket, ed e' voluto.
+                for (displayName in IllustratorNames.credits(rawName)) {
+                    val key = IllustratorNames.keyOf(displayName)
+                    if (key.isEmpty()) continue
+                    val bucket = buckets.getOrPut(key) { IllustratorBucket() }
+                    bucket.rawNames += rawName
+                    bucket.displayNames[displayName] =
+                        (bucket.displayNames[displayName] ?: 0) + cardIds.size
+                    bucket.cardIds += cardIds
+                }
+            }
+
+            buckets.map { (key, bucket) ->
+                val references = bucket.cardIds.mapNotNull { cardId ->
+                    ItalianCatalogNormalizer.toImageReference(cardId)
+                }
+                IllustratorEntry(
+                    key = key,
+                    displayName = IllustratorNames.bestDisplayName(bucket.displayNames),
+                    rawNames = bucket.rawNames.toList(),
+                    // La stessa chiave che PokemonCard.apiCardId porta in
+                    // collezione: e' cio' che rende l'incrocio una sola
+                    // intersezione di insiemi.
+                    cardApiIds = references.map { reference ->
+                        "ita:" + reference.setCode.lowercase(Locale.ROOT) + ":" + reference.cardNumber
+                    },
+                    // Il conteggio delle espansioni si ricava dai cardId e non
+                    // dall'expansionCount della rotta: quello e' per nome
+                    // grezzo, e sommarlo dopo aver unito due grafie conterebbe
+                    // due volte le espansioni che hanno in comune.
+                    expansionCount = references.map { it.setCode.lowercase(Locale.ROOT) }.distinct().size,
+                    previewUrls = references.take(3).map { reference ->
+                        PokeVaultApiClient.imageBaseUrl.trimEnd('/') +
+                            "/images/it/" + reference.folderName + "/" + reference.cardNumber + "?size=low"
+                    }
+                )
+            }
+        }
+    }
+
+    /**
+     * Quante carte pubblicate non dicono chi le ha disegnate (~2% del
+     * catalogo, 387 su 18.845 al momento in cui la sezione e' nata).
+     *
+     * Non e' una curiosita': senza dichiararlo, la somma dei totali di tutti
+     * gli illustratori non torna col catalogo e la sezione sembra sbagliare i
+     * conti. Zero quando il numero non si sa -- la via di ripiego sul catalogo
+     * completo non lo calcola -- e in quel caso la UI semplicemente non lo dice.
+     */
+    suspend fun italianCardsWithoutIllustrator(context: Context): Int =
+        italianCatalogRepository
+            .getIllustrators(context, PokeVaultApiClient.imageBaseUrl)
+            .getOrNull()
+            ?.cardsWithoutIllustrator
+            ?: 0
+
+    /** Accumulatore di [italianIllustratorIndex]: una persona, tutte le sue grafie. */
+    private class IllustratorBucket(
+        val rawNames: MutableSet<String> = linkedSetOf(),
+        val displayNames: MutableMap<String, Int> = linkedMapOf(),
+        val cardIds: MutableSet<String> = linkedSetOf()
+    )
+
+    /**
+     * Le carte di un illustratore, pronte per la griglia.
+     *
+     * Una chiamata alla rotta per ogni nome grezzo della voce: quasi sempre
+     * uno, due nei pochi casi in cui il catalogo scrive la stessa persona in
+     * due modi. Il match lato server e' esatto sul grezzo, quindi la chiave
+     * normalizzata qui non servirebbe a niente.
+     */
+    suspend fun italianCardsByIllustrator(
+        context: Context,
+        entry: IllustratorEntry,
+        forceRefresh: Boolean = false
+    ): List<TcgCard> {
+        val records = entry.rawNames.flatMap { rawName ->
+            italianCatalogRepository
+                .getIllustratorCards(PokeVaultApiClient.imageBaseUrl, rawName, forceRefresh)
+                .getOrElse { emptyList() }
+        }
+
+        if (records.isEmpty()) {
+            // Ripiego sul catalogo intero. Il limite va alzato di proposito:
+            // quello di serie e' 300, e il solo Mitsuhiro Arita ha 579 carte --
+            // con il valore di default la sua pagina ne perderebbe meta' senza
+            // dire niente.
+            return searchItalianCardsByAttribute(
+                attribute = ItalianCardAttribute.ILLUSTRATOR,
+                value = entry.key,
+                context = context,
+                limit = ILLUSTRATOR_CARD_LIMIT
+            ).getOrElse { emptyList() }
+        }
+
+        val summaries = italianExpansionSummariesById()
+        return withContext(Dispatchers.Default) {
+            records
+                .map { record ->
+                    toItalianTcgCard(
+                        record = record,
+                        setInfo = italianSyntheticSet(record.espansioneId, summaries)
+                    )
+                }
+                .distinctBy { it.id }
+        }
+    }
+
+    /**
+     * Mappa `id espansione minuscolo -> manifest`, dalla stessa fonte D1 del
+     * Pokedex. Vuota se il manifest non e' raggiungibile: i chiamanti devono
+     * trattare l'assenza come "non so", mai come "nessuna espansione".
+     */
+    suspend fun italianExpansionSummariesById(): Map<String, ItalianExpansionSummary> {
+        val summaries = italianCatalogRepository
+            .getExpansionsSummary(baseUrl = PokeVaultApiClient.imageBaseUrl)
+            .getOrNull()
+            .orEmpty()
+        return summaries.mapNotNull { summary ->
+            val id = summary.id.trim().lowercase(Locale.ROOT).takeIf { it.isNotBlank() }
+            if (id != null) id to summary else null
+        }.toMap()
+    }
+
+    /**
+     * Il TcgSet che si costruisce al volo per una carta italiana quando non si
+     * sta guardando un'espansione precisa (ricerca per attributo, pagina
+     * illustratore).
+     *
+     * Prima veniva su con id, nome, serie e lingua e **senza releaseDate**, e
+     * quel buco non e' cosmetico: la data del set e' cio' con cui
+     * `CardOptions.getVariantsForCard` decide se una stampa esiste. Il reverse
+     * holo nasce nel maggio 2002, e senza data si resta larghi -- veniva
+     * proposto anche sulle carte degli anni precedenti. Serve inoltre per
+     * ordinare cronologicamente i gruppi nella pagina di un illustratore, che
+     * attraversa vent'anni di set: in ordine alfabetico non raccontano niente.
+     */
+    private fun italianSyntheticSet(
+        expansionId: String,
+        summaries: Map<String, ItalianExpansionSummary>
+    ): TcgSet {
+        val id = expansionId.trim().lowercase(Locale.ROOT)
+        val summary = summaries[id]
+        return TcgSet(
+            id = buildItalianSetId(id),
+            name = summary?.name?.trim()?.takeIf { it.isNotBlank() } ?: id.uppercase(Locale.ROOT),
+            series = summary?.series?.trim()?.takeIf { it.isNotBlank() }
+                ?: deriveSeriesName(setCode = id, language = "ITA", setName = id),
+            language = "ITA",
+            printedTotal = summary?.officialCount ?: 0,
+            total = summary?.cardCount ?: 0,
+            releaseDate = summary?.releaseDate?.trim().orEmpty()
+        )
     }
 
     suspend fun findExactCardInCatalog(
@@ -2172,6 +2494,22 @@ class CatalogRepository {
         return matchesItalianExpansionHint(expansionId, expectedSetId)
     }
 
+    /**
+     * La forma con cui si confrontano due nomi di carta.
+     *
+     * Toglie accenti, punteggiatura e spazi: "Fezandipiti ex" e
+     * "Fezandipiti-ex" sono la stessa carta scritta da due fonti diverse.
+     */
+    internal fun normalizeCardNameForComparison(raw: String?): String {
+        val decomposed = java.text.Normalizer.normalize(
+            raw.orEmpty().lowercase(Locale.ROOT),
+            java.text.Normalizer.Form.NFD
+        )
+        return decomposed
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z0-9]+"), "")
+    }
+
     private fun matchesItalianExpansionHint(expansionId: String, expectedSetId: String): Boolean {
         val preferredBase = preferredBaseSetCodeForItalianExpansion(expansionId)
         val candidates = linkedSetOf<String>()
@@ -2204,8 +2542,20 @@ class CatalogRepository {
             "sv08" -> "SSP"
             "sv09" -> "JTG"
             "sv10" -> "DRI"
-                "zsv10pt5" -> "BLK"
-                "rsv10pt5" -> "WHT"
+            // ATTENZIONE: queste due sono scambiate rispetto alla verita', e
+            // vanno lasciate cosi'. zsv10pt5 e' "Fuoco Bianco" (White Flare) e
+            // rsv10pt5 e' "Luce Nera" (Black Bolt) -- lo conferma SetCodeMapper,
+            // dove l'accoppiamento giusto e' BLK->rsv10pt5 e WHT->zsv10pt5.
+            // Ma su R2 i due loghi sono caricati sotto la chiave sbagliata
+            // (it/BLK/logo.png contiene White Flare, it/WHT/logo.png Black
+            // Bolt), quindi le due inversioni si annullano e il logo mostrato
+            // e' quello giusto. Raddrizzare SOLO questa mappa rompe i loghi.
+            // Per sistemarle davvero bisogna scambiare i due oggetti su R2 e
+            // questa mappa nella stessa release: R2 e' condiviso da tutte le
+            // versioni installate, quindi cambiarlo da solo sbaglia il logo a
+            // chi non ha ancora aggiornato.
+            "zsv10pt5" -> "BLK"
+            "rsv10pt5" -> "WHT"
             "sv3pt5" -> "MEW"
             "sv4pt5" -> "PAF"
             "sv6pt5" -> "SFA"
@@ -2498,7 +2848,17 @@ class CatalogRepository {
                 language = "ITA",
                 setName = setName
             )
-        val setImages = linkedBase?.images ?: SetImages(
+        // Il logo di un'espansione italiana esce SEMPRE dal nostro R2, mai da
+        // linkedBase: quelle immagini puntano alla rotta senza `source=ita`,
+        // cioe' al logo che PokeWallet ha per quel codice, nella lingua in cui
+        // quel prodotto e' uscito. Su XY10 e' il logo giapponese (めざめる超王),
+        // su XYA un mazzo giapponese -- ed e' quello che l'utente vedeva nel
+        // Pokedex il 15/09/2026. La preferenza ENG di langPriority() non basta:
+        // ripiega su JAP/CHN quando un set inglese con quel codice non esiste.
+        // Su R2 ci sono tutte e 107 le espansioni, in inglese
+        // (backfill-set-logos-tcgdex.mjs), quindi qui non serve piu' nessun
+        // ripiego: se una chiave mancasse, il 404 porta al MissingSetLogoFallback.
+        val setImages = SetImages(
             symbol = buildSetImageUrl(baseRawSetCode, italianOnly = true),
             logo = buildSetImageUrl(baseRawSetCode, italianOnly = true)
         )
@@ -2645,14 +3005,22 @@ class CatalogRepository {
             id = setInfo.id,
             name = setInfo.name,
             series = setInfo.series,
-            printedTotal = setInfo.printedTotal
+            printedTotal = setInfo.printedTotal,
+            releaseDate = setInfo.releaseDate
         )
 
         return TcgCard(
             id = buildItalianCardId(record),
             name = record.nome.ifBlank { baseCard?.name.orEmpty() },
             supertype = baseCard?.supertype?.takeIf { it.isNotBlank() } ?: deriveItalianSupertype(record),
-            subtypes = baseCard?.subtypes ?: emptyList(),
+            // Lo stadio del nostro D1 (schema/009) viene PRIMA dei sottotipi della
+            // carta inglese di appoggio: quest'ultima manca quasi sempre, ed e' il
+            // motivo per cui ogni carta importata dal catalogo italiano arrivava
+            // senza stadio -- quindi contata come Base dall'Hand-Simulator, anche
+            // quando era una Fase 1.
+            subtypes = record.stage?.trim()?.takeIf { it.isNotBlank() }?.let { listOf(it) }
+                ?: baseCard?.subtypes
+                ?: emptyList(),
             hp = record.ps?.takeIf { it.isNotBlank() } ?: baseCard?.hp,
             // Le poche carte a doppio tipo arrivano da D1 come "Tipo1, Tipo2" in un unico
             // campo (vedi types.join(', ') in ingest/backfill-tipo-tcgdex.mjs): va risplittato
@@ -2676,7 +3044,12 @@ class CatalogRepository {
                 large = largeImageWithBust
             ),
             tcgplayer = baseCard?.tcgplayer,
-            cardmarket = baseCard?.cardmarket
+            cardmarket = baseCard?.cardmarket,
+            // L'illustratore e' nostro in D1 (98% del catalogo). La carta
+            // inglese di appoggio arriva da PokeWallet, che non lo espone:
+            // il fallback resta per simmetria con gli altri campi, ma in
+            // pratica non scatta mai.
+            artist = record.illustratore?.takeIf { it.isNotBlank() } ?: baseCard?.artist
         )
     }
 

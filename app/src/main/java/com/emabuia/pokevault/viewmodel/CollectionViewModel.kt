@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.viewmodel
 
+import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -8,11 +9,21 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.CollectionStats
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.model.collectionCardKey
 import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.data.remote.CatalogRepository
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.CardCategory
+import com.emabuia.pokevault.util.CardGroup
+import com.emabuia.pokevault.util.CollectionBrowser
+import com.emabuia.pokevault.util.CollectionFacets
+import com.emabuia.pokevault.util.CollectionFilter
+import com.emabuia.pokevault.util.CollectionLayout
+import com.emabuia.pokevault.util.CollectionSort
+import com.emabuia.pokevault.util.ExpansionGroupSection
+import com.emabuia.pokevault.util.ExpansionOrder
+import com.emabuia.pokevault.util.ValueBucket
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
-import com.emabuia.pokevault.data.model.CardClassifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -20,30 +31,30 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class SortOrder {
-    NEWEST, PRICE_ASC, PRICE_DESC, NAME_ASC, NUMBER
-}
-
-enum class SupertypeFilter {
-    ALL, POKEMON, TRAINER, ENERGY
-}
-
 data class CollectionUiState(
     val cards: List<PokemonCard> = emptyList(),
-    val filteredCards: List<PokemonCard> = emptyList(),
+    /** Tutte le carte, una per tessera. */
+    val groups: List<CardGroup> = emptyList(),
+    /** Quelle che passano i filtri, gia' ordinate. */
+    val visibleGroups: List<CardGroup> = emptyList(),
+    /** Le stesse, divise per espansione. */
+    val sections: List<ExpansionGroupSection> = emptyList(),
+    val facets: CollectionFacets = CollectionFacets(),
     val stats: CollectionStats = CollectionStats(),
     val isLoading: Boolean = true,
     val isGridView: Boolean = true,
     val gridColumns: Int = 4,
-    val searchQuery: String = "",
-    val selectedSet: String? = null,
-    val selectedType: String? = null,
-    val selectedRarity: String? = null,
-    val supertypeFilter: SupertypeFilter = SupertypeFilter.ALL,
-    val sortOrder: SortOrder = SortOrder.NUMBER,
+    val layout: CollectionLayout = CollectionLayout.BY_EXPANSION,
+    val filter: CollectionFilter = CollectionFilter(),
+    val sort: CollectionSort = CollectionSort.NUMBER,
+    val expansionOrder: ExpansionOrder = ExpansionOrder.NAME,
     val errorMessage: String? = null,
     val successMessage: String? = null
-)
+) {
+    val searchQuery: String get() = filter.query
+    val visibleQuantity: Int get() = visibleGroups.sumOf { it.totalQuantity }
+    val visibleValue: Double get() = visibleGroups.sumOf { it.totalValue }
+}
 
 class CollectionViewModel : ViewModel() {
 
@@ -61,12 +72,54 @@ class CollectionViewModel : ViewModel() {
     var uiState by mutableStateOf(CollectionUiState())
         private set
 
-    private var filterJob: Job? = null
+    private var recomputeJob: Job? = null
     private var hydrationJob: Job? = null
+    private var prefs: SharedPreferences? = null
 
     init {
         loadCards()
     }
+
+    // ── Preferenze di vista ────────────────────────────────────────────────
+
+    /**
+     * Vista, colonne e ordinamenti sopravvivono al riavvio. Prima si tornava
+     * ogni volta a quattro colonne e ordine per numero, e chi usa le tre
+     * colonne doveva riimpostarle a ogni apertura dell'app.
+     *
+     * I filtri invece NO: riaprire l'app e trovarsi meta' collezione nascosta
+     * da un filtro dimenticato sembra un bug.
+     */
+    fun attachPreferences(sharedPreferences: SharedPreferences) {
+        if (prefs != null) return
+        prefs = sharedPreferences
+        val restored = uiState.copy(
+            isGridView = sharedPreferences.getBoolean(PREF_GRID, uiState.isGridView),
+            gridColumns = sharedPreferences.getInt(PREF_COLUMNS, uiState.gridColumns).coerceIn(2, 6),
+            layout = enumOr(sharedPreferences.getString(PREF_LAYOUT, null), uiState.layout),
+            sort = enumOr(sharedPreferences.getString(PREF_SORT, null), uiState.sort),
+            expansionOrder = enumOr(sharedPreferences.getString(PREF_EXPANSION_ORDER, null), uiState.expansionOrder)
+        )
+        if (restored != uiState) {
+            uiState = restored
+            scheduleRecompute()
+        }
+    }
+
+    private inline fun <reified T : Enum<T>> enumOr(name: String?, fallback: T): T =
+        name?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: fallback
+
+    private fun savePreferences() {
+        prefs?.edit()
+            ?.putBoolean(PREF_GRID, uiState.isGridView)
+            ?.putInt(PREF_COLUMNS, uiState.gridColumns)
+            ?.putString(PREF_LAYOUT, uiState.layout.name)
+            ?.putString(PREF_SORT, uiState.sort.name)
+            ?.putString(PREF_EXPANSION_ORDER, uiState.expansionOrder.name)
+            ?.apply()
+    }
+
+    // ── Caricamento ────────────────────────────────────────────────────────
 
     private fun loadCards() {
         viewModelScope.launch {
@@ -74,7 +127,7 @@ class CollectionViewModel : ViewModel() {
                 .catch { error ->
                     uiState = uiState.copy(
                         isLoading = false,
-                        errorMessage = "Errore: ${error.message}"
+                        errorMessage = "${AppLocale.errorPrefix}: ${error.message}"
                     )
                 }
                 .collect { cards ->
@@ -86,25 +139,82 @@ class CollectionViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Un nuovo elenco di carte: si ricostruiscono le tessere e si riapplicano
+     * i filtri, tutto fuori dal thread principale.
+     *
+     * Se mentre si calcolava l'utente ha cambiato un filtro o scritto nella
+     * ricerca, il risultato e' gia' vecchio: si rifa' coi criteri nuovi invece
+     * di mostrarlo. Prima uno snapshot arrivato a meta' di una ricerca poteva
+     * rimettere a schermo i risultati della ricerca precedente.
+     */
     private suspend fun applyCardsSnapshot(cards: List<PokemonCard>) {
         val criteria = uiState
-        // Statistiche e filtro scorrono l'intera collezione: su Dispatchers.Default,
-        // non sul main thread come prima.
-        val (newStats, filtered) = withContext(Dispatchers.Default) {
+        val unknown = AppLocale.unknownExpansion
+        val computed = withContext(Dispatchers.Default) {
             val stats = CollectionStats(
                 totalCards = cards.sumOf { it.quantity },
-                uniqueCards = cards.map { it.collectionGroupKey() }.toSet().size,
+                // Carte diverse, non stampe diverse: la collezione mostra una
+                // tessera per carta, e contare separatamente Normale e Reverse
+                // faceva dire "2" dove sullo schermo se ne vede una. Stesso
+                // calcolo di FirestoreRepository.getStats(): vanno cambiati
+                // insieme, o Statistiche e Collezione dicono due numeri diversi.
+                uniqueCards = cards.map { it.collectionCardKey() }.toSet().size,
                 totalValue = cards.sumOf { it.estimatedValue * it.quantity }
             )
-            stats to applyFilters(cards, criteria)
+            val groups = CollectionBrowser.group(cards, unknown)
+            val visible = CollectionBrowser.sort(CollectionBrowser.filter(groups, criteria.filter), criteria.sort)
+            Computed(
+                stats = stats,
+                groups = groups,
+                facets = CollectionBrowser.facets(groups),
+                visible = visible,
+                sections = CollectionBrowser.sections(visible, criteria.expansionOrder)
+            )
         }
+
+        val criteriaChanged = uiState.filter != criteria.filter ||
+            uiState.sort != criteria.sort ||
+            uiState.expansionOrder != criteria.expansionOrder
 
         uiState = uiState.copy(
             cards = cards,
-            filteredCards = filtered,
-            stats = newStats,
+            groups = computed.groups,
+            facets = computed.facets,
+            stats = computed.stats,
+            visibleGroups = if (criteriaChanged) uiState.visibleGroups else computed.visible,
+            sections = if (criteriaChanged) uiState.sections else computed.sections,
             isLoading = false
         )
+        if (criteriaChanged) scheduleRecompute()
+    }
+
+    private class Computed(
+        val stats: CollectionStats,
+        val groups: List<CardGroup>,
+        val facets: CollectionFacets,
+        val visible: List<CardGroup>,
+        val sections: List<ExpansionGroupSection>
+    )
+
+    /**
+     * Riapplica filtri e ordinamenti alle tessere gia' costruite.
+     *
+     * Una modifica nuova annulla il calcolo in corso e riparte coi criteri
+     * aggiornati: a schermo arriva sempre il risultato dell'ultima scelta, mai
+     * quello di una intermedia.
+     */
+    private fun scheduleRecompute(debounceMs: Long = 0L) {
+        recomputeJob?.cancel()
+        recomputeJob = viewModelScope.launch {
+            if (debounceMs > 0L) delay(debounceMs)
+            val snapshot = uiState
+            val (visible, sections) = withContext(Dispatchers.Default) {
+                val v = CollectionBrowser.sort(CollectionBrowser.filter(snapshot.groups, snapshot.filter), snapshot.sort)
+                v to CollectionBrowser.sections(v, snapshot.expansionOrder)
+            }
+            uiState = uiState.copy(visibleGroups = visible, sections = sections)
+        }
     }
 
     /**
@@ -183,55 +293,81 @@ class CollectionViewModel : ViewModel() {
         }
     }
 
+    // ── Filtri ─────────────────────────────────────────────────────────────
+
+    private fun updateFilter(debounceMs: Long = 0L, change: (CollectionFilter) -> CollectionFilter) {
+        uiState = uiState.copy(filter = change(uiState.filter))
+        scheduleRecompute(debounceMs)
+    }
+
     fun updateSearchQuery(query: String) {
-        uiState = uiState.copy(searchQuery = query)
-        // Con debounce: prima ogni tasto premuto rifiltrava e riordinava l'intera
-        // collezione in modo sincrono sul main thread.
-        refreshFilteredCards(debounceMs = SEARCH_DEBOUNCE_MS)
+        // Con debounce: ogni tasto non deve rifiltrare l'intera collezione.
+        updateFilter(SEARCH_DEBOUNCE_MS) { it.copy(query = query) }
     }
 
-    fun filterBySet(setName: String?) {
-        uiState = uiState.copy(selectedSet = setName)
-        refreshFilteredCards()
+    fun setCategory(category: CardCategory) = updateFilter {
+        // I tipi (Fuoco/Acqua/...) esistono solo sui Pokemon: scegliendo
+        // Allenatori o Energie restavano attivi e svuotavano la lista.
+        val keepTypes = category == CardCategory.ALL || category == CardCategory.POKEMON
+        it.copy(category = category, types = if (keepTypes) it.types else emptySet())
     }
 
-    fun filterByType(type: String?) {
-        uiState = uiState.copy(selectedType = type)
-        refreshFilteredCards()
+    fun toggleType(type: String) = updateFilter { it.copy(types = it.types.toggle(type)) }
+    fun toggleRarity(rarity: String) = updateFilter { it.copy(rarities = it.rarities.toggle(rarity)) }
+    fun toggleExpansion(expansion: String) = updateFilter { it.copy(expansions = it.expansions.toggle(expansion)) }
+    fun toggleVariant(variant: String) = updateFilter { it.copy(variants = it.variants.toggle(variant)) }
+    fun toggleLanguage(language: String) = updateFilter { it.copy(languages = it.languages.toggle(language)) }
+    fun toggleValue(bucket: ValueBucket) = updateFilter { it.copy(values = it.values.toggle(bucket)) }
+    fun setOnlyDuplicates(only: Boolean) = updateFilter { it.copy(onlyDuplicates = only) }
+
+    /** Azzera i filtri, non la ricerca: quella si vede e si cancella da sola. */
+    fun clearFilters() = updateFilter { CollectionFilter(query = it.query) }
+
+    /** Tutto, ricerca compresa: dallo stato "nessun risultato". */
+    fun clearFiltersAndSearch() = updateFilter { CollectionFilter() }
+
+    private fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value
+
+    // ── Ordinamento e vista ────────────────────────────────────────────────
+
+    fun setSort(sort: CollectionSort) {
+        if (sort == uiState.sort) return
+        uiState = uiState.copy(sort = sort)
+        savePreferences()
+        scheduleRecompute()
     }
 
-    fun filterBySupertype(filter: SupertypeFilter) {
+    fun setExpansionOrder(order: ExpansionOrder) {
+        if (order == uiState.expansionOrder) return
+        uiState = uiState.copy(expansionOrder = order)
+        savePreferences()
+        scheduleRecompute()
+    }
+
+    fun setLayout(layout: CollectionLayout) {
+        if (layout == uiState.layout) return
+        uiState = uiState.copy(layout = layout)
+        savePreferences()
+    }
+
+    /**
+     * Dal "Vedi tutte" della Home: tutte le carte, le ultime aggiunte in cima.
+     * I filtri si azzerano, o un filtro dimenticato nasconderebbe proprio le
+     * carte che si e' venuti a vedere.
+     */
+    fun showRecentFirst() {
         uiState = uiState.copy(
-            supertypeFilter = filter,
-            // I tipi (Fuoco/Acqua/...) valgono solo per i Pokémon.
-            selectedType = if (filter == SupertypeFilter.POKEMON || filter == SupertypeFilter.ALL) uiState.selectedType else null
+            layout = CollectionLayout.ALL,
+            sort = CollectionSort.NEWEST,
+            filter = CollectionFilter()
         )
-        refreshFilteredCards()
-    }
-
-    fun filterByRarity(rarity: String?) {
-        uiState = uiState.copy(selectedRarity = rarity)
-        refreshFilteredCards()
-    }
-
-    fun updateSortOrder(order: SortOrder) {
-        uiState = uiState.copy(sortOrder = order)
-        refreshFilteredCards()
-    }
-
-    private fun refreshFilteredCards(debounceMs: Long = 0L) {
-        filterJob?.cancel()
-        filterJob = viewModelScope.launch {
-            if (debounceMs > 0L) delay(debounceMs)
-            val source = uiState.cards
-            val criteria = uiState
-            val filtered = withContext(Dispatchers.Default) { applyFilters(source, criteria) }
-            uiState = uiState.copy(filteredCards = filtered)
-        }
+        savePreferences()
+        scheduleRecompute()
     }
 
     fun toggleViewMode() {
         uiState = uiState.copy(isGridView = !uiState.isGridView)
+        savePreferences()
     }
 
     fun toggleGridColumns() {
@@ -243,25 +379,37 @@ class CollectionViewModel : ViewModel() {
             else -> 2
         }
         uiState = uiState.copy(gridColumns = nextColumns)
+        savePreferences()
     }
+
+    // ── Cancellazione ──────────────────────────────────────────────────────
 
     fun deleteCard(cardId: String) {
         viewModelScope.launch {
             repository.deleteCard(cardId)
                 .onSuccess {
-                    uiState = uiState.copy(successMessage = "Carta eliminata")
+                    uiState = uiState.copy(successMessage = AppLocale.cardDeleted)
                 }
                 .onFailure { error ->
-                    uiState = uiState.copy(errorMessage = "Errore: ${error.message}")
+                    uiState = uiState.copy(errorMessage = "${AppLocale.errorPrefix}: ${error.message}")
                 }
         }
     }
 
+    /**
+     * Cancella per chiave, accettando tutte e due le forme.
+     *
+     * La collezione raggruppa per carta ([collectionCardKey]) e non piu' per
+     * singola stampa, quindi le chiavi che arrivano da li' non contengono la
+     * variante: cancellare una tessera vuol dire togliere tutte le sue stampe.
+     * Le chiavi con la variante restano valide -- le usa chi vuole togliere
+     * una stampa sola.
+     */
     fun deleteMultipleGroups(groupKeys: Set<String>) {
         viewModelScope.launch {
             val originalCards = uiState.cards
             val cardsToDelete = originalCards.filter { card ->
-                card.collectionGroupKey() in groupKeys
+                card.collectionGroupKey() in groupKeys || card.collectionCardKey() in groupKeys
             }
             if (cardsToDelete.isEmpty()) return@launch
 
@@ -271,10 +419,10 @@ class CollectionViewModel : ViewModel() {
 
             repository.deleteCards(cardsToDelete)
                 .onSuccess {
-                    uiState = uiState.copy(successMessage = "${cardsToDelete.size} carte eliminate")
+                    uiState = uiState.copy(successMessage = AppLocale.cardsDeleted(cardsToDelete.size))
                 }
                 .onFailure { error ->
-                    uiState = uiState.copy(errorMessage = "Errore: ${error.message}")
+                    uiState = uiState.copy(errorMessage = "${AppLocale.errorPrefix}: ${error.message}")
                     applyCardsSnapshot(originalCards)
                 }
         }
@@ -284,100 +432,13 @@ class CollectionViewModel : ViewModel() {
         uiState = uiState.copy(errorMessage = null, successMessage = null)
     }
 
-    private fun normalizeSetForFilter(value: String?): String {
-        val displayed = AppLocale.displaySetName(value?.trim().orEmpty())
-        return displayed
-            .trim()
-            .lowercase()
-            .replace(Regex("\\s+"), " ")
-    }
-
-    /**
-     * Filtro e ordinamento della collezione.
-     *
-     * Prende i criteri come parametro invece di leggere uiState: viene eseguita
-     * su Dispatchers.Default, e leggere lo stato da un altro thread mentre
-     * l'utente continua a digitare avrebbe potuto mischiare criteri di due
-     * ricerche diverse a meta' calcolo.
-     */
-    private fun applyFilters(
-        cards: List<PokemonCard>,
-        criteria: CollectionUiState
-    ): List<PokemonCard> {
-        val query = criteria.searchQuery
-        val hasQuery = query.isNotBlank()
-        // Normalizzazioni e liste di marcatori sollevate fuori dal loop: prima
-        // venivano ricostruite per ogni carta a ogni tasto premuto.
-        val selectedSetNormalized = criteria.selectedSet?.let { normalizeSetForFilter(it) }
-        val unknownSetNormalized = normalizeSetForFilter("Espansione sconosciuta")
-
-        val filtered = cards.filter { card ->
-            val matchesQuery = !hasQuery ||
-                card.name.contains(query, ignoreCase = true) ||
-                card.set.contains(query, ignoreCase = true) ||
-                card.rarity.contains(query, ignoreCase = true)
-
-            val matchesSet = selectedSetNormalized == null ||
-                selectedSetNormalized == normalizeSetForFilter(card.set) ||
-                (selectedSetNormalized == unknownSetNormalized && card.set.isBlank())
-
-            // Il filtro tipo si applica solo nel contesto Pokemon.
-            val matchesType = when {
-                criteria.selectedType == null -> true
-                criteria.supertypeFilter == SupertypeFilter.TRAINER ||
-                    criteria.supertypeFilter == SupertypeFilter.ENERGY -> true
-                // Le poche carte a doppio tipo hanno type = "Tipo1, Tipo2" (una sola
-                // stringa): va confrontato ogni tipo separatamente, altrimenti nessuna
-                // chip le trova mai (translateType() cerca la stringa intera nella
-                // mappa e non trova nulla).
-                else -> card.type.split(",").any { singleType ->
-                    AppLocale.translateType(singleType.trim())
-                        .equals(criteria.selectedType, ignoreCase = true)
-                }
-            }
-
-            val matchesRarity = criteria.selectedRarity == null ||
-                card.rarity.equals(criteria.selectedRarity, ignoreCase = true)
-
-            val matchesSupertype = when (criteria.supertypeFilter) {
-                SupertypeFilter.ALL -> true
-                SupertypeFilter.POKEMON -> card.classify() == CardClassifier.POKEMON
-                SupertypeFilter.TRAINER -> card.classify() == CardClassifier.TRAINER
-                SupertypeFilter.ENERGY -> card.classify() == CardClassifier.ENERGY
-            }
-
-            matchesQuery && matchesSet && matchesType && matchesRarity && matchesSupertype
-        }
-
-        return when (criteria.sortOrder) {
-            // getCards() non ha un orderBy, quindi Firestore restituisce ordine di
-            // document-id: il precedente reversed() "assumendo che l'ordine sia
-            // cronologico" produceva un ordinamento di fatto arbitrario.
-            // L'ordinamento resta lato client di proposito: un orderBy("addedAt")
-            // su Firestore ESCLUDE i documenti che non hanno il campo, e i record
-            // storici possono non averlo. Qui invece finiscono in fondo.
-            SortOrder.NEWEST -> filtered.sortedByDescending { it.addedAt?.seconds ?: Long.MIN_VALUE }
-            SortOrder.PRICE_ASC -> filtered.sortedBy { it.estimatedValue }
-            SortOrder.PRICE_DESC -> filtered.sortedByDescending { it.estimatedValue }
-            SortOrder.NAME_ASC -> filtered.sortedBy { it.name }
-            SortOrder.NUMBER -> filtered.sortedWith(cardNumberComparator)
-        }
-    }
-
-    /**
-     * Ordinamento per numero di carta allineato a quello della vista raggruppata
-     * (CollectionScreen): la parte numerica si confronta come numero, il resto
-     * come testo. Il precedente sortedBy { cardNumber.toIntOrNull() ?: MAX_VALUE }
-     * ammassava insieme ogni numero non puramente numerico ("TG12", "025/198"),
-     * e dava un ordine diverso da quello mostrato nella vista per espansione.
-     */
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 250L
         const val PRICE_HYDRATION_BATCH_SIZE = 8
+        const val PREF_GRID = "collection_grid"
+        const val PREF_COLUMNS = "collection_columns"
+        const val PREF_LAYOUT = "collection_layout"
+        const val PREF_SORT = "collection_sort"
+        const val PREF_EXPANSION_ORDER = "collection_expansion_order"
     }
-
-    private val cardNumberComparator = compareBy<PokemonCard>(
-        { it.cardNumber.takeWhile { c -> c.isDigit() }.toIntOrNull() ?: Int.MAX_VALUE },
-        { it.cardNumber }
-    )
 }

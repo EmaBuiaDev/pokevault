@@ -17,11 +17,22 @@ class SetCodeMapperTest {
         assertEquals("dcr", SetCodeMapper.normalizeDecklistSetCode("CRI"))
         assertEquals("MEG", SetCodeMapper.normalizeDecklistSetCode("ME01"))
         assertEquals("PFL", SetCodeMapper.normalizeDecklistSetCode("ME02"))
-        assertEquals("MEG", SetCodeMapper.normalizeDecklistSetCode("MEP"))
         assertEquals("asc", SetCodeMapper.normalizeDecklistSetCode("ME2PT5"))
         assertEquals("me03", SetCodeMapper.normalizeDecklistSetCode("ME03"))
-        assertEquals("sv11", SetCodeMapper.normalizeDecklistSetCode("BLK"))
-        assertEquals("sv11", SetCodeMapper.normalizeDecklistSetCode("wht"))
+
+        // Questi tre prima puntavano al set sbagliato, e il test lo fissava:
+        // MEP valeva "MEG", BLK e WHT valevano tutti e due "sv11". Due set
+        // diversi con lo stesso codice normalizzato sono indistinguibili per
+        // chi cerca una carta per set+numero, che finiva per prendere la prima
+        // del catalogo: "Kadabra MEG 55" tornava una carta di MEP. Vedi
+        // SetCodeCollisionTest, che ora vieta la classe di errore invece dei
+        // singoli casi.
+        assertEquals("mep", SetCodeMapper.normalizeDecklistSetCode("MEP"))
+        // BLK e WHT erano stati tolti da "sv11" ma scambiati fra loro, e qui
+        // lo scambio era fissato: Black Bolt e' "Luce Nera" (rsv10pt5) e White
+        // Flare e' "Fuoco Bianco" (zsv10pt5).
+        assertEquals("rsv10pt5", SetCodeMapper.normalizeDecklistSetCode("BLK"))
+        assertEquals("zsv10pt5", SetCodeMapper.normalizeDecklistSetCode("wht"))
     }
 
     @Test

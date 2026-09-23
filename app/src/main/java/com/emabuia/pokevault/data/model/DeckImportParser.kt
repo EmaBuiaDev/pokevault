@@ -14,6 +14,9 @@ import com.emabuia.pokevault.data.remote.SetCodeMapper
  */
 object DeckImportParser {
 
+    /** Marcatore interno: la riga e' un totale, da saltare senza errori. */
+    private const val TOTAL_LINE = "__total__"
+
     data class ParsedCard(
         val name: String,
         val set: String?,
@@ -42,7 +45,9 @@ object DeckImportParser {
             // Controlla se è un header di sezione
             val sectionHeader = parseSectionHeader(line)
             if (sectionHeader != null) {
-                currentSection = sectionHeader
+                // Il totale chiude la lista: non e' una sezione, e lasciare
+                // quella aperta sarebbe piu' giusto che sovrascriverla.
+                if (sectionHeader != TOTAL_LINE) currentSection = sectionHeader
                 continue
             }
 
@@ -66,19 +71,26 @@ object DeckImportParser {
     private fun parseSectionHeader(line: String): String? {
         val lower = line.lowercase().removeSuffix(":").trim()
 
-        // "Pokémon: 12" or "Pokemon (12)" or just "Pokémon"
-        val headerRegex = Regex("""^(pok[eé]mon|trainer|energy|energia|allenatore)[:\s]*(\d*).*$""", RegexOption.IGNORE_CASE)
-        val match = headerRegex.find(lower)
+        // Le righe di totale non aprono nessuna sezione e non sono carte:
+        // riconoscerle qui evita che finiscano fra gli errori di import.
+        if (Regex("""^(totale|total)\b""").containsMatchIn(lower)) return TOTAL_LINE
 
-        if (match != null) {
-            return when {
-                match.groupValues[1].startsWith("pok") -> "pokemon"
-                match.groupValues[1] == "trainer" || match.groupValues[1] == "allenatore" -> "trainer"
-                match.groupValues[1] == "energy" || match.groupValues[1] == "energia" -> "energy"
-                else -> null
-            }
+        // "Pokémon: 12", "Pokemon (12)", "Pokémon", e le forme italiane che
+        // l'esportazione usa davvero: "Carte Allenatore: 13" ha una parola
+        // davanti, e senza accettarla l'intestazione non veniva riconosciuta.
+        // La sezione restava quella precedente, cioe' "pokemon", e ogni
+        // Allenatore del mazzo entrava come se fosse un Pokemon.
+        val headerRegex = Regex(
+            """^(?:carte\s+)?(pok[eé]mon|trainer|energy|energia|energie|allenatore|allenatori)\b[:\s]*(\d*).*$""",
+            RegexOption.IGNORE_CASE
+        )
+        val match = headerRegex.find(lower) ?: return null
+
+        return when (val kind = match.groupValues[1]) {
+            "trainer", "allenatore", "allenatori" -> "trainer"
+            "energy", "energia", "energie" -> "energy"
+            else -> if (kind.startsWith("pok")) "pokemon" else null
         }
-        return null
     }
 
     /**

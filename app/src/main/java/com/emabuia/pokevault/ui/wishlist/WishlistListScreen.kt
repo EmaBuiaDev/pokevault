@@ -1,13 +1,9 @@
 package com.emabuia.pokevault.ui.wishlist
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,30 +12,29 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.CatchingPokemon
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Pets
-import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.Style
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,16 +42,14 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,34 +58,31 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.model.WishlistIcons
+import com.emabuia.pokevault.ui.components.FillBar
+import com.emabuia.pokevault.ui.components.LabSearchField
+import com.emabuia.pokevault.ui.components.SkeletonBlock
+import com.emabuia.pokevault.ui.components.SortChipRow
+import com.emabuia.pokevault.ui.components.StatTile
+import com.emabuia.pokevault.ui.components.formatEurCompact
+import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.WishlistLab
+import com.emabuia.pokevault.util.WishlistRow
+import com.emabuia.pokevault.util.WishlistSort
 import com.emabuia.pokevault.viewmodel.WishlistViewModel
 
-private data class WishlistIconOption(
-    val key: String,
-    val label: String,
-    val icon: ImageVector,
-    val color: Color
-)
-
-// @Composable perche' i colori vengono dai token del tema, non piu' da
-// costanti fisse.
-@Composable
-private fun wishlistIconOptions(): List<WishlistIconOption> = listOf(
-    WishlistIconOption(WishlistIcons.POKEBALL, "Poke Ball", Icons.Default.CatchingPokemon, AppColors.red),
-    WishlistIconOption(WishlistIcons.MASTER_BALL, "Master Ball", Icons.Default.Stars, AppColors.purple),
-    WishlistIconOption(WishlistIcons.PIKACHU, "Pikachu", Icons.Default.Bolt, AppColors.gold),
-    WishlistIconOption(WishlistIcons.CHARIZARD, "Charizard", Icons.Default.LocalFireDepartment, Color(0xFFE87A35)),
-    WishlistIconOption(WishlistIcons.EEVEE, "Eevee", Icons.Default.Pets, AppColors.blue)
-)
-
-@Composable
-private fun iconForKey(iconKey: String): WishlistIconOption {
-    return wishlistIconOptions().firstOrNull { it.key == iconKey } ?: wishlistIconOptions().first()
-}
-
+/**
+ * Le wishlist.
+ *
+ * Prima era un elenco di nomi con un'icona a caso e il numero di carte: non
+ * diceva quanto costa quello che manca, non sapeva che meta' di quelle carte
+ * erano gia' in collezione, non si poteva cercare ne' ordinare. Adesso ogni
+ * riga risponde alle tre domande di chi tiene una lista della spesa — quanto
+ * manca, quanto costa, quanto ne ho gia' preso — e in cima c'e' lo stesso conto
+ * fatto su tutte le liste insieme.
+ */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun WishlistListScreen(
@@ -108,17 +98,43 @@ fun WishlistListScreen(
     var showPremiumDialog by remember { mutableStateOf(false) }
     var wishlistToDelete by remember { mutableStateOf<Wishlist?>(null) }
     var wishlistToEdit by remember { mutableStateOf<Wishlist?>(null) }
+    var query by remember { mutableStateOf("") }
+    var sort by remember { mutableStateOf(WishlistSort.CLOSEST) }
+
+    // derivedStateOf e non un calcolo nel corpo: le righe dipendono da tre stati
+    // (liste, carte arrivate, collezione) e si rifanno solo quando uno cambia,
+    // non a ogni ricomposizione dello schermo.
+    val rows by remember { derivedStateOf { viewModel.rows() } }
+    val summary by remember { derivedStateOf { viewModel.summary() } }
+    val visibleRows = remember(rows, query, sort) {
+        WishlistLab.sortWishlists(WishlistLab.filterWishlists(rows, query), sort)
+    }
+
+    fun requestCreate() {
+        if (viewModel.canCreateWishlist(isPremium)) showCreateDialog = true else showPremiumDialog = true
+    }
 
     Scaffold(
         containerColor = AppColors.background,
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = AppLocale.wishlistTitle,
-                        color = AppColors.textPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column {
+                        Text(
+                            text = AppLocale.wishlistTitle,
+                            color = AppColors.textPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (rows.isNotEmpty()) {
+                            Text(
+                                text = AppLocale.wishlistTakenCount(summary.owned, summary.cards),
+                                color = AppColors.textMuted,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -134,61 +150,44 @@ fun WishlistListScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = {
-                    if (viewModel.canCreateWishlist(isPremium)) {
-                        showCreateDialog = true
-                    } else {
-                        showPremiumDialog = true
-                    }
-                },
+                onClick = { requestCreate() },
                 containerColor = AppColors.purple,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = AppLocale.wishlistCreate, tint = AppColors.textPrimary)
+                Icon(Icons.Default.Add, contentDescription = AppLocale.wishlistCreate, tint = AppColors.onAccent)
             }
         }
     ) { padding ->
         when {
-            viewModel.isLoading -> {
-                Box(
+            viewModel.isLoading && rows.isEmpty() -> {
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(padding),
-                    contentAlignment = Alignment.Center
+                        .padding(padding)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    CircularProgressIndicator(color = AppColors.purple)
-                }
-            }
-
-            viewModel.wishlists.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.Favorite,
-                            contentDescription = null,
-                            tint = AppColors.textMuted,
-                            modifier = Modifier.size(52.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = AppLocale.wishlistEmpty,
-                            color = AppColors.textPrimary,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = AppLocale.wishlistEmptySubtitle,
-                            color = AppColors.textMuted,
-                            fontSize = 13.sp
+                    SkeletonBlock(
+                        modifier = Modifier.fillMaxWidth().height(86.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    repeat(3) { index ->
+                        SkeletonBlock(
+                            modifier = Modifier.fillMaxWidth().height(104.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            index = index + 1
                         )
                     }
                 }
+            }
+
+            rows.isEmpty() -> {
+                WishlistEmptyState(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    onCreate = { requestCreate() }
+                )
             }
 
             else -> {
@@ -198,14 +197,92 @@ fun WishlistListScreen(
                         .padding(padding)
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = 90.dp)
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)
                 ) {
-                    items(viewModel.wishlists, key = { it.id }) { wishlist ->
-                        WishlistRow(
-                            wishlist = wishlist,
-                            onClick = { onWishlistClick(wishlist.id) },
-                            onEdit = { wishlistToEdit = wishlist },
-                            onDelete = { wishlistToDelete = wishlist }
+                    item(key = "summary") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StatTile(
+                                label = AppLocale.wishlistStatCards,
+                                value = summary.cards.toString(),
+                                icon = Icons.Default.Style,
+                                accent = AppColors.purple,
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatTile(
+                                label = AppLocale.wishlistStatTaken,
+                                value = "${summary.owned}",
+                                icon = Icons.Default.ShoppingBag,
+                                accent = AppColors.green,
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatTile(
+                                label = AppLocale.wishlistStatCost,
+                                value = formatEurCompact(summary.cost),
+                                icon = Icons.Default.Savings,
+                                accent = AppColors.gold,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    // Il totale in cima e' una stima al ribasso finche' le carte stanno
+                    // arrivando, o finche' di qualcuna non si conosce il prezzo: e'
+                    // la cifra su cui si decide una spesa, non puo' fingersi esatta.
+                    val partialNote = when {
+                        viewModel.isLoadingCards -> AppLocale.wishlistPartialTotal
+                        summary.unpricedMissing > 0 -> AppLocale.wishlistUnpricedNote(summary.unpricedMissing)
+                        else -> null
+                    }
+                    if (partialNote != null) {
+                        item(key = "partial-note") {
+                            Text(
+                                text = partialNote,
+                                color = AppColors.textMuted,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    item(key = "controls") {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            LabSearchField(
+                                value = query,
+                                onValueChange = { query = it },
+                                hint = AppLocale.wishlistSearchHint,
+                                accent = AppColors.purple
+                            )
+                            SortChipRow(
+                                labels = listOf(
+                                    AppLocale.wishlistSortClosest,
+                                    AppLocale.wishlistSortRecent,
+                                    AppLocale.wishlistSortName,
+                                    AppLocale.wishlistSortCost,
+                                    AppLocale.wishlistSortCards
+                                ),
+                                selectedIndex = sort.ordinal,
+                                onSelect = { index -> sort = WishlistSort.entries[index] },
+                                accent = AppColors.purple
+                            )
+                        }
+                    }
+
+                    if (visibleRows.isEmpty()) {
+                        item(key = "no-results") {
+                            Text(
+                                text = AppLocale.wishlistNoResults,
+                                color = AppColors.textMuted,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(vertical = 24.dp)
+                            )
+                        }
+                    }
+
+                    items(visibleRows, key = { it.id }) { row ->
+                        WishlistCard(
+                            row = row,
+                            onClick = { onWishlistClick(row.id) },
+                            onEdit = { wishlistToEdit = viewModel.getWishlistById(row.id) },
+                            onDelete = { wishlistToDelete = viewModel.getWishlistById(row.id) }
                         )
                     }
                 }
@@ -214,10 +291,10 @@ fun WishlistListScreen(
     }
 
     if (showCreateDialog) {
-        CreateWishlistDialog(
+        WishlistEditorDialog(
             onDismiss = { showCreateDialog = false },
-            onConfirm = { name, iconKey ->
-                viewModel.createWishlist(name, iconKey, isPremium) { success ->
+            onConfirm = { draft ->
+                viewModel.createWishlist(draft, isPremium) { success ->
                     if (success) showCreateDialog = false
                 }
             },
@@ -226,16 +303,15 @@ fun WishlistListScreen(
     }
 
     wishlistToEdit?.let { wishlist ->
-        CreateWishlistDialog(
+        WishlistEditorDialog(
             onDismiss = { wishlistToEdit = null },
-            onConfirm = { name, iconKey ->
-                viewModel.updateWishlistDetails(wishlist.id, name, iconKey) { success ->
+            onConfirm = { draft ->
+                viewModel.updateWishlistDetails(wishlist.id, draft) { success ->
                     if (success) wishlistToEdit = null
                 }
             },
             isSaving = viewModel.isSaving,
-            initialName = wishlist.name,
-            initialIconKey = wishlist.iconKey,
+            initial = wishlist,
             titleText = AppLocale.wishlistEdit,
             confirmText = AppLocale.save
         )
@@ -246,7 +322,13 @@ fun WishlistListScreen(
             onDismissRequest = { wishlistToDelete = null },
             containerColor = AppColors.surface,
             title = { Text(AppLocale.wishlistDeleteTitle, color = AppColors.textPrimary) },
-            text = { Text(AppLocale.wishlistDeleteMessage, color = AppColors.textSecondary) },
+            text = {
+                Column {
+                    Text(wishlist.name, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(AppLocale.wishlistDeleteMessage, color = AppColors.textSecondary)
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -284,147 +366,197 @@ fun WishlistListScreen(
     }
 }
 
+/**
+ * La riga di una lista.
+ *
+ * L'icona sta nello slot grande perche' e' quello che distingue una lista
+ * dall'altra a colpo d'occhio; il prezzo sta a destra perche' e' il numero che
+ * si confronta fra righe diverse. Modifica ed elimina sono finite in un menu:
+ * due cestini per riga trasformavano una lista di desideri in una barra
+ * strumenti.
+ */
 @Composable
-private fun WishlistRow(
-    wishlist: Wishlist,
+private fun WishlistCard(
+    row: WishlistRow,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val option = iconForKey(wishlist.iconKey)
+    var menuOpen by remember { mutableStateOf(false) }
+    val accent = wishlistAccentColor(row.accentKey)
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppColors.card.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
-            .border(1.dp, AppColors.textMuted.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .background(AppColors.surface, RoundedCornerShape(16.dp))
+            .pressScale(onClick = onClick)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(option.color.copy(alpha = 0.2f), CircleShape)
-                .border(1.dp, option.color.copy(alpha = 0.5f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(option.icon, contentDescription = null, tint = option.color, modifier = Modifier.size(20.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            WishlistBadge(iconKey = row.iconKey, accentKey = row.accentKey, size = 46.dp)
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = row.name,
+                        color = AppColors.textPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (row.isComplete) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(AppColors.gold.copy(alpha = 0.2f), CircleShape)
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = AppLocale.wishlistCompleteBadge,
+                                color = AppColors.gold,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = "${wishlistIconLabel(row.iconKey)} · ${AppLocale.wishlistCardsCount(row.total)}",
+                    color = AppColors.textMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = formatEurCompact(row.cost),
+                    color = if (row.isOverBudget) AppColors.red else accent,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = AppLocale.wishlistMissingCount(row.missing),
+                    color = AppColors.textMuted,
+                    fontSize = 10.sp
+                )
+            }
+
+            Box {
+                IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = AppLocale.wishlistEdit,
+                        tint = AppColors.textMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(AppLocale.wishlistEdit, color = AppColors.textPrimary) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = AppColors.textMuted)
+                        },
+                        onClick = {
+                            menuOpen = false
+                            onEdit()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(AppLocale.delete, color = AppColors.red) },
+                        leadingIcon = {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = AppColors.red)
+                        },
+                        onClick = {
+                            menuOpen = false
+                            onDelete()
+                        }
+                    )
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.size(10.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = wishlist.name,
-                color = AppColors.textPrimary,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = AppLocale.wishlistCardsCount(wishlist.cardIds.size),
-                color = AppColors.textMuted,
-                fontSize = 12.sp
-            )
+        if (row.total > 0) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FillBar(percent = row.ownedPercent, modifier = Modifier.weight(1f), accent = accent)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${row.owned}/${row.total}",
+                    color = if (row.isComplete) AppColors.gold else AppColors.textMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
 
-        IconButton(onClick = onEdit) {
-            Icon(Icons.Default.Edit, contentDescription = AppLocale.wishlistEdit, tint = AppColors.textMuted)
-        }
-
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Default.DeleteOutline, contentDescription = AppLocale.delete, tint = AppColors.textMuted)
+        if (row.hasBudget) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FillBar(
+                    percent = row.budgetPercent.coerceAtMost(100f),
+                    modifier = Modifier.weight(1f),
+                    accent = if (row.isOverBudget) AppColors.red else AppColors.green
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (row.isOverBudget) {
+                        AppLocale.wishlistBudgetOver(formatEurCompact(row.cost - row.budgetEur))
+                    } else {
+                        AppLocale.wishlistBudgetLeft(formatEurCompact(row.budgetLeft))
+                    },
+                    color = if (row.isOverBudget) AppColors.red else AppColors.textMuted,
+                    fontSize = 11.sp
+                )
+            }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** Il vuoto: una ball vera, non un cuore generico, e il pulsante che serve. */
 @Composable
-fun CreateWishlistDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit,
-    isSaving: Boolean,
-    canDismiss: Boolean = true,
-    initialName: String = "",
-    initialIconKey: String = WishlistIcons.POKEBALL,
-    titleText: String = AppLocale.wishlistCreate,
-    confirmText: String = AppLocale.wishlistCreate
+private fun WishlistEmptyState(
+    modifier: Modifier = Modifier,
+    onCreate: () -> Unit
 ) {
-    var name by remember(initialName) { mutableStateOf(initialName) }
-    var selectedIconKey by remember(initialIconKey) { mutableStateOf(initialIconKey) }
-    val options = wishlistIconOptions()
-
-    AlertDialog(
-        onDismissRequest = { if (canDismiss && !isSaving) onDismiss() },
-        containerColor = AppColors.surface,
-        title = {
+    Column(
+        modifier = modifier.padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        WishlistGlyph(
+            iconKey = WishlistIcons.POKE_BALL,
+            accent = AppColors.red,
+            size = 64.dp
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = AppLocale.wishlistEmpty,
+            color = AppColors.textPrimary,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = AppLocale.wishlistEmptySubtitle,
+            color = AppColors.textMuted,
+            fontSize = 13.sp
+        )
+        Spacer(modifier = Modifier.height(18.dp))
+        Button(
+            onClick = onCreate,
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.purple),
+            shape = RoundedCornerShape(14.dp)
+        ) {
             Text(
-                text = titleText,
-                color = AppColors.textPrimary,
-                fontWeight = FontWeight.Bold
+                text = AppLocale.wishlistCreate,
+                color = AppColors.onAccent,
+                fontWeight = FontWeight.SemiBold
             )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { if (it.length <= 40) name = it },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    label = { Text(AppLocale.wishlistName, color = AppColors.textMuted) },
-                    placeholder = { Text(AppLocale.wishlistNamePlaceholder, color = AppColors.textMuted) }
-                )
-
-                Text(AppLocale.wishlistChooseIcon, color = AppColors.textSecondary, fontSize = 13.sp)
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    options.forEach { option ->
-                        val selected = selectedIconKey == option.key
-                        Row(
-                            modifier = Modifier
-                                .background(
-                                    if (selected) option.color.copy(alpha = 0.22f) else AppColors.card,
-                                    RoundedCornerShape(16.dp)
-                                )
-                                .border(
-                                    1.dp,
-                                    if (selected) option.color else AppColors.textMuted.copy(alpha = 0.25f),
-                                    RoundedCornerShape(16.dp)
-                                )
-                                .clickable { selectedIconKey = option.key }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(option.icon, contentDescription = null, tint = option.color, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.size(6.dp))
-                            Text(option.label, color = AppColors.textPrimary, fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(name.trim(), selectedIconKey) },
-                enabled = name.trim().isNotBlank() && !isSaving,
-                colors = ButtonDefaults.buttonColors(containerColor = AppColors.purple)
-            ) {
-                if (isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.6.dp, color = AppColors.textPrimary)
-                } else {
-                    Text(confirmText, color = AppColors.textPrimary)
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isSaving) {
-                Text(AppLocale.cancel, color = AppColors.textMuted)
-            }
         }
-    )
+    }
 }

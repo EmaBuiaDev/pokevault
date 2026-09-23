@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.ui.deck
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -98,17 +99,22 @@ fun DeckImportDialog(
     )
 }
 
+/**
+ * Il riepilogo di un import, e basta.
+ *
+ * La domanda "che ne facciamo delle carte che non hai?" ha una sua schermata,
+ * [DeckCardSourceDialog], e arriva prima di questa: qui non si decide piu'
+ * niente, si legge com'e' andata.
+ */
 @Composable
 fun ImportResultDialog(
     result: DeckLabViewModel.ImportResult,
-    isAddingMissingCards: Boolean = false,
-    onDismiss: () -> Unit,
-    onAddMissingCards: () -> Unit = {}
+    onDismiss: () -> Unit
 ) {
     val hasMissingCards = result.missingMetaDeckCards.isNotEmpty()
 
     AlertDialog(
-        onDismissRequest = { if (!isAddingMissingCards) onDismiss() },
+        onDismissRequest = onDismiss,
         containerColor = AppColors.surface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -193,14 +199,14 @@ fun ImportResultDialog(
                             verticalAlignment = Alignment.Top
                         ) {
                             Icon(
-                                Icons.Default.AddCircle,
+                                Icons.Default.Info,
                                 contentDescription = null,
                                 tint = AppColors.orange,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = AppLocale.importAddMissingMessage,
+                                text = AppLocale.importLeftOutMessage,
                                 color = AppColors.textPrimary,
                                 fontSize = 12.sp
                             )
@@ -222,15 +228,95 @@ fun ImportResultDialog(
                     )
                 }
 
-                if (isAddingMissingCards) {
-                    Spacer(modifier = Modifier.height(12.dp))
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(AppLocale.ok)
+            }
+        }
+    )
+}
+
+/**
+ * Dove finiscono le carte che l'utente non possiede.
+ *
+ * Una domanda sola per due momenti diversi: dopo un import, dove le carte
+ * mancanti si contano gia'; e prima di creare un deck da zero, dove la
+ * risposta vale per quelle che verranno. Farla qui, una volta, evita di
+ * tenere un selettore acceso in cima all'editor per tutto il tempo -- che era
+ * spazio occupato per ripetere una cosa gia' decisa.
+ *
+ * [onSkip] c'e' solo nel caso dell'import: "lascia il deck incompleto" ha
+ * senso quando le carte mancanti esistono gia'. Creando un mazzo vuoto non
+ * c'e' niente da saltare, e chiudere il dialog vuol dire rinunciare.
+ */
+@Composable
+fun DeckCardSourceDialog(
+    prompt: String,
+    isWorking: Boolean = false,
+    onChoose: (DeckLabViewModel.DeckCardSource) -> Unit,
+    onSkip: (() -> Unit)? = null,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!isWorking) (onSkip ?: onDismiss)() },
+        containerColor = AppColors.surface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Inventory2,
+                    contentDescription = null,
+                    tint = AppColors.purple,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(AppLocale.deckSourceTitle, color = AppColors.textPrimary, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    text = prompt,
+                    color = AppColors.textSecondary,
+                    fontSize = 13.sp
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                DeckImportSourceOption(
+                    icon = Icons.Default.Inventory2,
+                    accent = AppColors.green,
+                    title = AppLocale.deckSourceCollection,
+                    description = AppLocale.deckSourceCollectionDesc,
+                    enabled = !isWorking,
+                    onClick = { onChoose(DeckLabViewModel.DeckCardSource.COLLECTION) }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                DeckImportSourceOption(
+                    icon = Icons.Default.Science,
+                    accent = AppColors.purple,
+                    title = AppLocale.deckSourceDeckOnly,
+                    description = AppLocale.deckSourceDeckOnlyDesc,
+                    enabled = !isWorking,
+                    onClick = { onChoose(DeckLabViewModel.DeckCardSource.DECK_ONLY) }
+                )
+
+                if (isWorking) {
+                    Spacer(modifier = Modifier.height(14.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CircularProgressIndicator(
-                            color = AppColors.orange,
+                            color = AppColors.purple,
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp
                         )
@@ -244,34 +330,57 @@ fun ImportResultDialog(
                 }
             }
         },
-        confirmButton = {
-            if (hasMissingCards && !isAddingMissingCards) {
-                Button(
-                    onClick = onAddMissingCards,
-                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.orange),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(AppLocale.importAddMissingConfirm, fontSize = 13.sp)
-                }
-            } else if (!isAddingMissingCards) {
-                Button(
-                    onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(AppLocale.ok)
-                }
-            }
-        },
+        confirmButton = {},
         dismissButton = {
-            if (hasMissingCards && !isAddingMissingCards) {
-                TextButton(onClick = onDismiss) {
-                    Text(AppLocale.importAddMissingSkip, color = AppColors.textMuted)
+            // Solo dopo un import: senza carte mancanti non c'e' niente da
+            // lasciare incompleto.
+            if (!isWorking && onSkip != null) {
+                TextButton(onClick = onSkip) {
+                    Text(AppLocale.deckSourceSkip, color = AppColors.textMuted, fontSize = 12.sp)
                 }
             }
         }
     )
+}
+
+@Composable
+private fun DeckImportSourceOption(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color,
+    title: String,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = accent.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.5f)
+            .clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = title,
+                    color = AppColors.textPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    color = AppColors.textMuted,
+                    fontSize = 11.sp
+                )
+            }
+        }
+    }
 }
 

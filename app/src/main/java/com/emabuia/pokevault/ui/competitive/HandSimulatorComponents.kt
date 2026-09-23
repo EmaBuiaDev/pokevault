@@ -59,18 +59,33 @@ import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.ui.theme.AppMotion
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ImageUrlUtils
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sin
 
 /** Proporzioni di una carta Pokémon: 63 x 88 mm. */
 private const val CARD_ASPECT_RATIO = 63f / 88f
 
 /** Quanto una carta del ventaglio copre la precedente. */
-private const val FAN_OVERLAP = 0.38f
+private const val FAN_OVERLAP = 0.42f
 
 /** Larghezza massima di una carta nel ventaglio: oltre, sette carte sfondano. */
 private val FAN_MAX_CARD_WIDTH = 86.dp
 
 /** Gradi di rotazione fra una carta e la successiva. */
-private const val FAN_STEP_DEGREES = 4.5f
+private const val FAN_STEP_DEGREES = 4f
+
+/**
+ * Inclinazione massima della carta piu' esterna.
+ *
+ * Il passo fisso e' comodo finche' la mano resta di sette carte, ma in Prova si
+ * pesca a ogni turno: a dodici carte i bordi arriverebbero a 25 gradi, e il
+ * ventaglio si chiuderebbe su se stesso. Oltre questo tetto il passo si
+ * stringe invece di crescere.
+ */
+private const val FAN_MAX_TILT_DEGREES = 14f
 
 /**
  * Perno della rotazione, in unita' di altezza della carta.
@@ -79,7 +94,9 @@ private const val FAN_STEP_DEGREES = 4.5f
  * tenuta in mano davvero: cosi' il ventaglio si apre ad arco senza che serva
  * calcolare a mano lo scostamento verticale di ogni carta.
  */
-private val FAN_PIVOT = TransformOrigin(0.5f, 2.6f)
+private const val FAN_PIVOT_Y = 1.9f
+
+private val FAN_PIVOT = TransformOrigin(0.5f, FAN_PIVOT_Y)
 
 // ══════════════════════════════════════════════════════════════════════════
 // Carta
@@ -169,22 +186,43 @@ internal fun HandFan(
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val count = cards.size
-        val span = count - (count - 1) * FAN_OVERLAP
-        val cardWidth = minOf(FAN_MAX_CARD_WIDTH, maxWidth / span)
-        val cardHeight = cardWidth / CARD_ASPECT_RATIO
         val center = (count - 1) / 2f
 
-        // La rotazione attorno a un perno sotto la carta alza le carte esterne:
-        // senza questo margine il ventaglio verrebbe tagliato in alto.
-        val fanRise = cardHeight * 0.22f
+        // Il passo si stringe quando la mano cresce, cosi' l'inclinazione della
+        // carta piu' esterna non supera mai il tetto.
+        val step = if (center > 0f) min(FAN_STEP_DEGREES, FAN_MAX_TILT_DEGREES / center) else 0f
+        val tilt = (center * step) * (PI / 180f).toFloat()
+        val sinTilt = sin(tilt)
+        val cosTilt = cos(tilt)
+
+        // Quanto la carta piu' esterna deborda dal proprio riquadro una volta
+        // ruotata, misurato in larghezze di carta. Senza questi tre margini la
+        // larghezza si calcolava sulle carte dritte, e il ventaglio -- che
+        // ruota attorno a un perno lontano, quindi trasla di lato piu' di
+        // quanto si inclini -- usciva dallo schermo a destra e a sinistra.
+        val pivotToTop = FAN_PIVOT_Y / CARD_ASPECT_RATIO
+        val pivotToBottom = (FAN_PIVOT_Y - 1f) / CARD_ASPECT_RATIO
+        val sideBleed = max(0f, 0.5f * (cosTilt - 1f) + pivotToTop * sinTilt)
+        val topBleed = max(0f, pivotToTop * (cosTilt - 1f) + 0.5f * sinTilt)
+        val bottomBleed = max(0f, pivotToBottom * (1f - cosTilt) + 0.5f * sinTilt)
+
+        val span = count - (count - 1) * FAN_OVERLAP + 2f * sideBleed
+        val cardWidth = minOf(FAN_MAX_CARD_WIDTH, maxWidth / span)
+        val cardHeight = cardWidth / CARD_ASPECT_RATIO
+        val fanRise = cardWidth * topBleed
+        val fanDrop = cardWidth * bottomBleed
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(cardHeight + fanRise),
+                .height(cardHeight + fanRise + fanDrop),
             contentAlignment = Alignment.BottomCenter
         ) {
             Row(
+                // Le carte esterne scendono sotto la propria riga ruotando:
+                // questo e' lo spazio che tiene il ventaglio dentro il riquadro
+                // invece che sopra il testo che segue.
+                modifier = Modifier.padding(bottom = fanDrop),
                 horizontalArrangement = Arrangement.spacedBy(-(cardWidth * FAN_OVERLAP)),
                 verticalAlignment = Alignment.Bottom
             ) {
@@ -194,7 +232,7 @@ internal fun HandFan(
                         card = card,
                         isDrawn = index >= openingSize,
                         turnLabel = if (index >= openingSize) "T${index - openingSize + 1}" else null,
-                        angle = offsetFromCenter * FAN_STEP_DEGREES,
+                        angle = offsetFromCenter * step,
                         entryIndex = index,
                         dealKey = dealKey,
                         modifier = Modifier
@@ -425,10 +463,14 @@ internal fun scoreColor(score: Int): Color = when (scoreColorIndex(score)) {
 internal fun ConsistencyRing(
     score: Int,
     modifier: Modifier = Modifier,
-    diameter: Dp = 132.dp
+    diameter: Dp = 132.dp,
+    /** Cosa misura l'anello. Il Match Log lo riusa per il tasso di vittorie. */
+    label: String = AppLocale.handSimulatorScoreLabel,
+    /** Il colore del riempimento; di default segue le soglie del punteggio. */
+    ringColor: Color? = null
 ) {
     val motion = AppMotion.current
-    val color = scoreColor(score)
+    val color = ringColor ?: scoreColor(score)
     val trackColor = AppColors.textMuted.copy(alpha = 0.22f)
 
     val sweep by animateFloatAsState(
@@ -477,7 +519,7 @@ internal fun ConsistencyRing(
                 fontSize = 40.sp
             )
             Text(
-                text = AppLocale.handSimulatorScoreLabel.uppercase(),
+                text = label.uppercase(),
                 color = AppColors.textSecondary,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold

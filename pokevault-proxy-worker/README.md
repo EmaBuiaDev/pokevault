@@ -13,6 +13,8 @@ PokeWallet ai soli prezzi. Storia ed evoluzione complete in
 | `GET /v1/expansions` | D1 | Solo espansioni con `published=1` (copertura IT ≥ soglia) |
 | `GET /v1/expansions/{id}/cards` | D1 | Carte di una singola espansione |
 | `GET /v1/cards/{cardId}` | D1 | Record singola carta |
+| `GET /v1/illustrators` | D1 | Indice degli illustratori: `{illustrators:[{name,cardCount,expansionCount,cardIds}],cardsWithoutIllustrator:N}`. Nomi **grezzi**: normalizzazione e fusione delle grafie stanno nell'app |
+| `GET /v1/illustrators/{nome}/cards` | D1 | Carte di un illustratore, stesso shape di `/v1/expansions/{id}/cards`. Nome percent-encoded, match esatto sul valore grezzo |
 | `GET /ita/catalog.json` | D1 (fallback: blob R2) | Legacy, usato dal client per il full-catalog e la ricerca |
 | `GET /ita/prices.json` | KV (snapshot bulk PokeWallet) | Prezzi ITA→ENG pre-uniti |
 | `GET /images/it/{set}/{numero}` | R2 (`pokevault-images`) | Prova `.webp` prima di `.png`, più varianti di chiave per i set con prefissi letterali (Shiny Vault, Trainer Gallery) e per i promo (`SVP`, `mep`, ...) |
@@ -63,7 +65,10 @@ wrangler kv bulk delete <lista-chiavi> --namespace-id=<ID>
 
 | Script | Cosa fa |
 |---|---|
-| `ingest-tcgdex-set.mjs <setId> [--apply]` | Importa un set da TCGdex (MIT, gratuito) in D1+R2; dry-run di default |
+| `ingest-tcgdex-set.mjs <setId> [--apply]` | Importa un set **nuovo** da TCGdex (MIT, gratuito) in D1+R2; dry-run di default |
+| `ingest-pokemon-official-set.mjs <setCode> [--name N] [--release-date YYYY-MM-DD] [--series S] [--official-count N] [--apply]` | Importa un set **nuovo** che esiste solo su `assets.pokemon.com`, cioe' uscito prima che TCGdex lo pubblichi (caso `30th`). L'elenco carte viene da `scripts/manifests/<setCode>.json`, lo stesso formato di `topup-set-from-official.mjs`: i `numero` non sono un intervallo `1..N`, perche' l'archivio pubblica il set carta per carta (buchi) e le segrete vanno oltre il denominatore stampato. **I quattro flag di metadati sono la parte che conta**: per ogni altro set `name`, `series` e `release_date` arrivano dai backfill TCGdex, che qui non possono girare — senza `--name` il Pokedex mostra il codice grezzo, e senza `--release-date` l'`ORDER BY` di `/v1/expansions` manda il set appena uscito in fondo alla lista. `--official-count` e' il denominatore stampato sulle carte (128 per `30th`), che non deve finire in `card_count`. Nel manifest il campo `rarita` e' opzionale e si annota solo dove il simbolo stampato e' leggibile con certezza: dove manca la colonna resta com'e' in D1 (`COALESCE`), mai azzerata |
+| `topup-set-from-official.mjs <setId> [--apply]` | Completa un set **gia' in D1** con le carte che ha solo `assets.pokemon.com`, leggendo numeri e nomi da `scripts/manifests/<setId>.json`. Serve per i quattro set (`xyp`, `bwp`, `dp1`, `col1`) che su TCGdex in italiano tornano `cards: []`: le immagini ci sono, i testi no. Il manifest e' a mano perche' l'archivio HTML di pokemon.com risponde con un interstiziale; il campo `fonte` dice se il nome e' stato letto dalla carta o preso dall'inglese (lecito solo per le specie Pokemon, mai per Allenatori ed Energie) |
+| `topup-set-from-tcgdex.mjs <setId> [--apply]` | Completa un set **gia' in D1** con le sole carte che gli mancano su TCGdex. Da usare al posto di `ingest-tcgdex-set.mjs` su tutto quello che arriva dal catalogo storico: quei set hanno id senza padding e in `.png` (`MEP_IT_48.png`), l'ingest scrive paddato e in `.webp` (`MEP_IT_048.webp`), la `ON CONFLICT(card_id)` non fa match e il set si duplica invece di aggiornarsi. Lo script deduce padding, estensione e layout della chiave R2 dalle righe gia' presenti |
 | `discover-new-sets.mjs [--ingest]` | Confronta TCGdex vs D1, apre issue per i set genuinamente nuovi (usato dal cron) |
 | `import-catalog-to-d1.mjs` | Import one-shot del blob JSON storico in D1 (batch da 50 righe, oltre D1 rifiuta con `SQLITE_TOOBIG`) |
 | `recompress-webp.mjs` | Ricomprime le immagini PNG storiche in WebP, upload additivo accanto all'originale |

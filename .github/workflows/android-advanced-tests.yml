@@ -1,10 +1,21 @@
 name: Advanced Android Testing with Coverage
 
+# Questo workflow accende un emulatore per i test strumentati, quindi costa
+# molto piu' tempo di `android-tests.yml`: resta un cancello di integrazione,
+# non qualcosa che gira a ogni push su un branch di lavoro.
+#
+# `main` e `develop` non sono mai esistiti in questo repo: erano i due branch
+# del template di partenza, e con quei filtri il workflow viveva solo del cron
+# giornaliero. I branch di integrazione veri sono `master` e i `release/**`.
+#
+# Per farlo girare a mano su un branch qualsiasi c'e' `workflow_dispatch`:
+# tab Actions -> questo workflow -> Run workflow -> scegli il branch.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ master, 'release/**' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ master, 'release/**' ]
+  workflow_dispatch: {}
   schedule:
     # Esegui i test ogni giorno alle 2:00 UTC
     - cron: '0 2 * * *'
@@ -36,25 +47,25 @@ jobs:
           echo "POKEWALLET_PROXY_URL=" >> local.properties
 
       - name: Run Unit Tests with Coverage
-        run: ./gradlew testDebugUnitTest jacocoTestDebugUnitTestReport --stacktrace
+        run: ./gradlew testProdDebugUnitTest jacocoTestProdDebugUnitTestReport --stacktrace
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: ./app/build/reports/jacoco/jacocoTestDebugUnitTestReport/jacocoTestDebugUnitTestReport.xml
+          files: ./app/build/reports/jacoco/jacocoTestProdDebugUnitTestReport/jacocoTestProdDebugUnitTestReport.xml
           flags: unittests
           fail_ci_if_error: false
 
       - name: Generate Test Report
         if: always()
-        run: ./gradlew testDebugUnitTest -x jacocoTestDebugUnitTestReport --stacktrace
+        run: ./gradlew testProdDebugUnitTest -x jacocoTestProdDebugUnitTestReport --stacktrace
 
       - name: Upload Unit Test Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-reports
-          path: app/build/reports/tests/testDebugUnitTest/
+          path: app/build/reports/tests/testProdDebugUnitTest/
 
   instrumented-tests:
     name: Instrumented Tests
@@ -91,7 +102,7 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-load -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: ./gradlew connectedAndroidTest --stacktrace
+          script: ./gradlew connectedProdDebugAndroidTest --stacktrace
 
       - name: Upload Instrumented Test Reports
         if: always()
@@ -126,14 +137,14 @@ jobs:
           echo "POKEWALLET_PROXY_URL=" >> local.properties
 
       - name: Run Lint
-        run: ./gradlew lint
+        run: ./gradlew lintProdDebug
 
       - name: Upload Lint Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: lint-report
-          path: app/build/reports/lint-results-debug.html
+          path: app/build/reports/lint-results-prodDebug.html
 
   build:
     name: Build Debug APK
@@ -161,13 +172,13 @@ jobs:
           echo "POKEWALLET_PROXY_URL=" >> local.properties
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleProdDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/prod/debug/app-prod-debug.apk
 
   # Sommario finale
   test-summary:

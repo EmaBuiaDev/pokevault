@@ -23,8 +23,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.Tournament
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
+import com.emabuia.pokevault.ui.components.DeckSpriteRow
+import com.emabuia.pokevault.ui.components.hasChosenSprites
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.CompetitiveLogViewModel
@@ -48,6 +51,25 @@ fun MatchLogScreen(
     var showDeleteDialog by remember { mutableStateOf<Tournament?>(null) }
     var showPremiumDialog by remember { mutableStateOf(false) }
 
+    // Contati una volta per tutta la lista. Prima ogni riga scorreva l'intero
+    // archivio dei match per contare i suoi, quindi il costo cresceva con
+    // (tornei x match) a ogni ricomposizione -- cioe' a ogni frame di
+    // scorrimento.
+    val matchCountByTournament = remember(viewModel.allMatches) {
+        viewModel.allMatches.groupingBy { it.tournamentId }.eachCount()
+    }
+
+    // Il mazzo di un torneo serve solo per le sue copertine: l'indice evita di
+    // cercarlo riga per riga.
+    val decksById = remember(viewModel.userDecks) {
+        viewModel.userDecks.associateBy { it.id }
+    }
+
+    // Due domande diverse sullo stesso archivio: "cosa ho giocato" e "come sto
+    // andando". Prima c'era solo la prima, e la seconda si riduceva a due
+    // riquadri con record e percentuale in cima alla lista.
+    var showStats by remember { mutableStateOf(false) }
+
     Scaffold(
         containerColor = AppColors.background,
         topBar = {
@@ -68,18 +90,22 @@ fun MatchLogScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (premiumManager.canCreateTournament(viewModel.tournaments.size)) {
-                        onAddTournament(null)
-                    } else {
-                        showPremiumDialog = true
-                    }
-                },
-                containerColor = AppColors.orange,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = AppLocale.addTournament, tint = AppColors.textPrimary)
+            // Il FAB crea tornei: nella vista statistiche non avrebbe niente da
+            // fare, e coprirebbe l'ultima riga della tabella dei matchup.
+            if (!showStats) {
+                FloatingActionButton(
+                    onClick = {
+                        if (premiumManager.canCreateTournament(viewModel.tournaments.size)) {
+                            onAddTournament(null)
+                        } else {
+                            showPremiumDialog = true
+                        }
+                    },
+                    containerColor = AppColors.orange,
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = AppLocale.addTournament, tint = AppColors.textPrimary)
+                }
             }
         }
     ) { padding ->
@@ -88,25 +114,27 @@ fun MatchLogScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Global stats
-            if (viewModel.allMatches.isNotEmpty()) {
-                Row(
+            ModeSwitch(
+                options = listOf(
+                    AppLocale.matchLogTabTournaments,
+                    AppLocale.matchLogTabStats
+                ),
+                selectedIndex = if (showStats) 1 else 0,
+                onSelect = { showStats = it == 1 },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            if (showStats) {
+                LazyColumn(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    StatMini(
-                        label = AppLocale.matchRecordLabel,
-                        value = AppLocale.matchRecord(viewModel.globalWins, viewModel.globalLosses, viewModel.globalTies),
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatMini(
-                        label = AppLocale.matchWinRate,
-                        value = "${viewModel.globalWinRate.toInt()}%",
-                        modifier = Modifier.weight(0.5f)
-                    )
+                    matchStatsSection(summary = viewModel.summary)
                 }
+                return@Column
             }
 
             if (viewModel.isLoading) {
@@ -132,7 +160,8 @@ fun MatchLogScreen(
                     items(viewModel.tournaments, key = { it.id }) { tournament ->
                         TournamentCard(
                             tournament = tournament,
-                            matchCount = viewModel.allMatches.count { it.tournamentId == tournament.id },
+                            matchCount = matchCountByTournament[tournament.id] ?: 0,
+                            deck = decksById[tournament.deckId],
                             onClick = { onTournamentClick(tournament.id) },
                             onDelete = { showDeleteDialog = tournament }
                         )
@@ -180,6 +209,7 @@ fun MatchLogScreen(
 private fun TournamentCard(
     tournament: Tournament,
     matchCount: Int,
+    deck: Deck?,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -202,24 +232,32 @@ private fun TournamentCard(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Type badge
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(typeColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = when (tournament.type) {
-                        "Cup" -> Icons.Default.EmojiEvents
-                        "Challenge" -> Icons.Default.Star
-                        else -> Icons.Default.Group
-                    },
-                    contentDescription = null,
-                    tint = typeColor,
-                    modifier = Modifier.size(22.dp)
-                )
+            // Il mazzo con cui hai giocato, quando ha delle copertine: e' la
+            // cosa per cui si riconosce un torneo passato. Il tipo resta
+            // scritto nella targhetta qui accanto, quindi l'icona a cerchio
+            // ripeteva un'informazione gia' presente: la teniamo solo per i
+            // tornei senza copertine, cosi' la riga non perde il suo inizio.
+            if (deck.hasChosenSprites()) {
+                DeckSpriteRow(deck = deck, size = 40.dp)
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(typeColor.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = when (tournament.type) {
+                            "Cup" -> Icons.Default.EmojiEvents
+                            "Challenge" -> Icons.Default.Star
+                            else -> Icons.Default.Group
+                        },
+                        contentDescription = null,
+                        tint = typeColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
 
             Spacer(Modifier.width(12.dp))
@@ -296,17 +334,6 @@ private fun TournamentCard(
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Default.Delete, AppLocale.delete, tint = AppColors.textMuted, modifier = Modifier.size(18.dp))
             }
-        }
-    }
-}
-
-@Composable
-private fun StatMini(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = AppColors.card)) {
-        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, color = AppColors.textMuted, fontSize = 11.sp)
-            Spacer(Modifier.height(4.dp))
-            Text(value, color = AppColors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
     }
 }

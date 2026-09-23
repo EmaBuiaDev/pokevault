@@ -34,6 +34,7 @@ import com.emabuia.pokevault.data.model.DeckAnalysis
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 @Composable
 fun DeckDetailView(
     deck: Deck,
@@ -132,9 +133,29 @@ fun DeckDetailView(
         }.filter { it.second.isNotEmpty() }
     }
 
+    // Gli stessi due Pokemon che rappresentano il mazzo nell'elenco, con lo
+    // stesso criterio: aprire un deck non deve mostrare un'altra faccia.
+    val spriteContext = LocalContext.current
+    val heroSpriteUrls = remember(groupedCards, deck.coverImageUrls, PokemonSpriteResolver.isReady) {
+        val available = groupedCards
+            .filter { (card, _) -> classifyForDeckSections(card) == "Pokémon" }
+            .sortedByDescending { (card, copies) -> headlineScore(card, copies) }
+            .mapNotNull { (card, _) ->
+                PokemonSpriteResolver.spriteUrlForCardName(spriteContext, card.name)
+            }
+            .distinct()
+
+        deck.chosenSpriteCovers().filter { it in available }.ifEmpty { available }.take(2)
+    }
+
     val deckAnalysis = remember(groupedCards) {
         val expanded = groupedCards.flatMap { (card, qty) -> List(qty) { card } }
-        val typesCount = expanded.flatMap { it.type.split(",").map { t -> t.trim() } }
+        // Solo i Pokemon, per la stessa ragione spiegata in
+        // DeckLabViewModel.analyzeDeck: le Trainer entrano con tipo
+        // "Colorless" e sommandole coprirebbero i tipi veri del mazzo.
+        val typesCount = expanded
+            .filter { classifyForDeckSections(it) == "Pokémon" }
+            .flatMap { it.type.split(",").map { t -> t.trim() } }
             .filter { it.isNotEmpty() }
             .groupingBy { it }
             .eachCount()
@@ -149,32 +170,67 @@ fun DeckDetailView(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(AppColors.background)) {
-        Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
-            if (deck.coverImageUrl.isNotEmpty()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(deck.coverImageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            
+        Box(modifier = Modifier.fillMaxWidth().height(190.dp)) {
+            // Stessa lingua dell'elenco: il colore del tipo e i due Pokemon
+            // che danno il nome al mazzo. Prima qui c'era l'immagine di una
+            // carta ritagliata a tutta larghezza -- pesante da scaricare, e a
+            // quel taglio se ne vedeva un pezzo di illustrazione che non
+            // diceva quale carta fosse.
+            val accent = TypeColors.of(normalizeTypeKey(deck.mainTypes.firstOrNull().orEmpty()))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                Color(0xFF10151F),
+                                Color(0xFF1C2D44),
+                                accent.copy(alpha = 0.32f)
+                            )
+                        )
+                    )
+            )
+
+            // Scurisce sotto, dove vanno nome e conteggio, e raccorda con lo
+            // sfondo della lista che comincia subito dopo. Prima degli sprite,
+            // non dopo: al contrario il raccordo li sbiadirebbe proprio dove
+            // devono farsi riconoscere.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.4f),
+                                Color.Black.copy(alpha = 0.35f),
                                 Color.Transparent,
                                 AppColors.background
                             )
                         )
                     )
             )
+
+            if (heroSpriteUrls.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 18.dp, bottom = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy((-16).dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    heroSpriteUrls.forEach { url ->
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(url)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(96.dp)
+                        )
+                    }
+                }
+            }
 
             Row(
                 modifier = Modifier
@@ -235,6 +291,32 @@ fun DeckDetailView(
                     color = AppColors.textMuted,
                     fontSize = 13.sp
                 )
+                if (deck.deckOnly) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        color = AppColors.purple.copy(alpha = 0.85f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Science,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = AppLocale.deckTestBadge,
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
         }
 

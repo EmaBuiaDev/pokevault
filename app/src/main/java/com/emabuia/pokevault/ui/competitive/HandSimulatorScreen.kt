@@ -144,8 +144,11 @@ fun HandSimulatorScreen(
     val decks = viewModel.decks
     val selectedDeck = decks.firstOrNull { it.id == selectedDeckId }
 
-    val cardPool = remember(selectedDeck, viewModel.ownedCards) {
-        selectedDeck?.let { buildDeckCardPool(it, viewModel.ownedCards) } ?: emptyList()
+    // allCards e non ownedCards: un deck di prova va simulato per quello che
+    // e', 60 carte. Con le sole possedute il mazzo risulterebbe piu' corto di
+    // quello che l'utente ha costruito e ogni probabilita' verrebbe sbagliata.
+    val cardPool = remember(selectedDeck, viewModel.allCards) {
+        selectedDeck?.let { buildDeckCardPool(it, viewModel.allCards) } ?: emptyList()
     }
     val deckCardNames = remember(cardPool) {
         cardPool.map { it.name }.distinct().sorted()
@@ -153,6 +156,13 @@ fun HandSimulatorScreen(
 
     LaunchedEffect(selectedDeckId, savedReloadTick) {
         savedHands = localStore.getSavedHands(selectedDeckId)
+    }
+
+    // Le carte importate prima che il catalogo avesse lo stadio sono in
+    // collezione senza: qui si riparano, perche' e' questa la schermata in cui
+    // un Pokemon contato come Base al posto di una Fase 1 cambia i numeri.
+    LaunchedEffect(Unit) {
+        viewModel.ensureCardStagesFromCatalog(context)
     }
 
     // Un solo mazzo: sceglierlo a mano sarebbe un tocco imposto senza scelta.
@@ -374,7 +384,7 @@ fun HandSimulatorScreen(
                             }
 
                             feedback = null
-                            accuracyWarnings = deckAccuracyWarnings(deck, viewModel.ownedCards)
+                            accuracyWarnings = deckAccuracyWarnings(deck, viewModel.allCards)
                             isSimulating = true
 
                             // Fino a 10.000 mescolate di una lista da 60 carte:

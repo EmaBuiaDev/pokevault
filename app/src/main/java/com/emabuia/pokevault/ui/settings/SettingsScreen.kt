@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import com.emabuia.pokevault.data.billing.GiftCodeRepository
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
@@ -49,11 +50,13 @@ fun SettingsScreen(
     authViewModel: AuthViewModel,
     onAccountDeleted: () -> Unit,
     onLogout: () -> Unit = {},
-    onNavigateToPremium: () -> Unit = {}
+    onNavigateToPremium: () -> Unit = {},
+    onNavigateToGiftCodes: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val premiumManager = remember { PremiumManager.getInstance() }
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
+    val giftUntilMs by premiumManager.giftUntilMs.collectAsStateWithLifecycle()
     val selectedHomeSpriteId by premiumManager.selectedHomeSpriteId.collectAsStateWithLifecycle()
     val homeSpriteIds = remember { premiumManager.homeSpriteIds }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -171,11 +174,32 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.WorkspacePremium,
                 title = AppLocale.premiumSettingsLabel,
-                subtitle = if (isPremium) AppLocale.premiumSettingsSubtitleActive
-                           else AppLocale.premiumSettingsSubtitleFree,
+                subtitle = when {
+                    // Un mese regalo ha una scadenza: dire "abbonamento attivo"
+                    // a chi lo ha ricevuto gli nasconde quando finisce.
+                    giftUntilMs > System.currentTimeMillis() ->
+                        AppLocale.premiumSettingsSubtitleGift(formatSettingsDate(giftUntilMs))
+                    isPremium -> AppLocale.premiumSettingsSubtitleActive
+                    else -> AppLocale.premiumSettingsSubtitleFree
+                },
                 onClick = onNavigateToPremium,
                 accentColor = AppColors.gold
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Codici regalo. Resta nascosta se il Worker non e' configurato:
+            // una schermata che non puo' fare altro che dare errore e' peggio
+            // di una voce che non c'e'.
+            if (GiftCodeRepository.isConfigured) {
+                SettingsItem(
+                    icon = Icons.Default.CardGiftcard,
+                    title = AppLocale.giftSettingsLabel,
+                    subtitle = AppLocale.giftSettingsSubtitle,
+                    onClick = onNavigateToGiftCodes,
+                    accentColor = AppColors.gold
+                )
+            }
 
             // Play richiede un percorso in-app per gestire o disdire
             // l'abbonamento: prima non esisteva da nessuna parte.
@@ -908,3 +932,7 @@ private fun ReauthenticateDeleteDialog(
         }
     }
 }
+
+private fun formatSettingsDate(epochMs: Long): String =
+    java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
+        .format(java.util.Date(epochMs))

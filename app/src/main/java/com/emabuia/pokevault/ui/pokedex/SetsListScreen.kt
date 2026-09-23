@@ -51,6 +51,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
+import com.emabuia.pokevault.ui.components.RarityMarkWithLabel
+import com.emabuia.pokevault.ui.components.RarityOverlayBadge
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
@@ -176,6 +178,7 @@ fun SetsListScreen(
     openCardSearch: Boolean = false,
     onBack: () -> Unit,
     onSetClick: (String, String) -> Unit,
+    onIllustratorClick: ((String) -> Unit)? = null,
     viewModel: SetsViewModel = viewModel()
 ) {
     val state = viewModel.uiState
@@ -255,6 +258,7 @@ fun SetsListScreen(
             onRemoveCard = {},
             onDismiss = { selectedCard = null },
             cardList = state.searchedCards,
+            onIllustratorClick = onIllustratorClick,
             onCardChange = { selectedCard = it }
         )
     }
@@ -644,9 +648,13 @@ private fun CardFilterSheet(
             if (facets.rarities.isNotEmpty()) {
                 FilterSection(title = AppLocale.rarity) {
                     facets.rarities.forEach { rarity ->
-                        val info = RarityUtils.getRarityInfo(rarity)
                         SeriesFilterChip(
-                            label = "${info.emoji} ${AppLocale.translateRarity(rarity)}",
+                            // Solo il nome, e quello della stringa esatta: il
+                            // chip e' condiviso con gli altri filtri e prende
+                            // una stringa, dove un simbolo disegnato non entra.
+                            // `info.label` qui non va: raggruppa, e il filtro
+                            // e' per stringa esatta.
+                            label = AppLocale.translateRarity(rarity),
                             count = 0,
                             showCount = false,
                             isSelected = rarity in filter.rarities,
@@ -1133,17 +1141,12 @@ private fun SearchResultGridCard(card: TcgCard, onClick: () -> Unit) {
                 modifier = Modifier.fillMaxSize()
             )
             if (!card.rarity.isNullOrBlank()) {
-                val info = RarityUtils.getRarityInfo(card.rarity)
-                Box(
+                RarityOverlayBadge(
+                    info = RarityUtils.getRarityInfo(card.rarity),
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(4.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(info.color.copy(alpha = 0.85f))
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                ) {
-                    Text(info.emoji, fontSize = 10.sp)
-                }
+                )
             }
             if (price > 0) {
                 Box(
@@ -1228,7 +1231,7 @@ private fun SearchResultListRow(card: TcgCard, onClick: () -> Unit) {
             Spacer(modifier = Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (rarityInfo != null) {
-                    Text("${rarityInfo.emoji} ${rarityInfo.label}", color = AppColors.textMuted, fontSize = 11.sp)
+                    RarityMarkWithLabel(rarityInfo, fontSize = 11)
                 }
                 if (rarityInfo != null && card.set?.name?.isNotBlank() == true) {
                     Text("  •  ", color = AppColors.textMuted, fontSize = 11.sp)

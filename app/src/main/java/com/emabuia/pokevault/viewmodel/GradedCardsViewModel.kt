@@ -7,21 +7,43 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.util.GradeBucket
+import com.emabuia.pokevault.util.GradeTier
+import com.emabuia.pokevault.util.GradedCompany
+import com.emabuia.pokevault.util.GradedLab
+import com.emabuia.pokevault.util.GradedSort
+import com.emabuia.pokevault.util.GradedSummary
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 
+/**
+ * Lo stato della sezione Gradate.
+ *
+ * I conti non stanno qui: li fa [GradedLab], che e' testato. Questo oggetto
+ * tiene le carte, cosa l'utente ha chiesto di vedere, e il risultato pronto per
+ * la griglia.
+ */
 data class GradedCardsUiState(
     val allCards: List<PokemonCard> = emptyList(),
-    val filteredCards: List<PokemonCard> = emptyList(),
+    val visibleCards: List<PokemonCard> = emptyList(),
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
     val searchQuery: String = "",
     val selectedCompany: String? = null,
-    val totalGraded: Int = 0,
-    val totalValue: Double = 0.0,
-    val averageGrade: Float = 0f,
-    val companyCounts: Map<String, Int> = emptyMap()
-)
+    val selectedTier: GradeTier? = null,
+    val sort: GradedSort = GradedSort.GRADE_DESC,
+    val summary: GradedSummary = GradedLab.summary(emptyList()),
+    val companies: List<GradedCompany> = emptyList(),
+    val spread: List<GradeBucket> = emptyList()
+) {
+    /** Vuoto vero: non ha gradate, non "i filtri non pescano niente". */
+    val isEmpty: Boolean get() = allCards.isEmpty()
+
+    /** I filtri sono al loro posto di partenza. */
+    val hasFilters: Boolean
+        get() = searchQuery.isNotBlank() || selectedCompany != null || selectedTier != null
+}
 
 class GradedCardsViewModel : ViewModel() {
 
@@ -30,64 +52,83 @@ class GradedCardsViewModel : ViewModel() {
     var uiState by mutableStateOf(GradedCardsUiState())
         private set
 
+    /**
+     * Il collect in corso.
+     *
+     * Serve a [retry]: senza cancellare il precedente, un secondo tentativo
+     * lascerebbe due listener Firestore attaccati alla stessa collezione.
+     */
+    private var loadJob: Job? = null
+
     init {
-        loadGradedCards()
+        load()
     }
 
-    private fun loadGradedCards() {
-        viewModelScope.launch {
+    private fun load() {
+        loadJob?.cancel()
+        uiState = uiState.copy(isLoading = true, errorMessage = null)
+        loadJob = viewModelScope.launch {
             repository.getCards()
                 .catch { e ->
-                    uiState = uiState.copy(
-                        isLoading = false,
-                        errorMessage = e.message ?: "Errore sconosciuto"
-                    )
+                    // Il messaggio tecnico non finisce a schermo: la schermata
+                    // mostra una frase sua e un pulsante per riprovare.
+                    uiState = uiState.copy(isLoading = false, errorMessage = e.message ?: "")
                 }
                 .collect { cards ->
                     val graded = cards.filter { it.isGraded }
-                    val grades = graded.mapNotNull { it.grade }
-                    val companyCounts = graded
-                        .groupBy { it.gradingCompany.ifBlank { "N/D" } }
-                        .mapValues { it.value.size }
-
                     uiState = uiState.copy(
                         allCards = graded,
-                        filteredCards = applyFilters(graded, uiState.searchQuery, uiState.selectedCompany),
+                        visibleCards = visible(graded, uiState),
                         isLoading = false,
-                        totalGraded = graded.size,
-                        totalValue = graded.sumOf { it.estimatedValue * it.quantity },
-                        averageGrade = if (grades.isNotEmpty()) grades.average().toFloat() else 0f,
-                        companyCounts = companyCounts
+                        errorMessage = null,
+                        summary = GradedLab.summary(graded),
+                        companies = GradedLab.companyCounts(graded),
+                        spread = GradedLab.tierCounts(graded)
                     )
                 }
         }
     }
 
+    /** Dopo un errore. Ricomincia da zero, listener compreso. */
+    fun retry() = load()
+
     fun updateSearch(query: String) {
-        uiState = uiState.copy(
-            searchQuery = query,
-            filteredCards = applyFilters(uiState.allCards, query, uiState.selectedCompany)
-        )
+        uiState = uiState.copy(searchQuery = query).withVisible()
     }
 
+    /** Ripassare l'ente gia' selezionato lo deseleziona: il chip e' un toggle. */
     fun filterByCompany(company: String?) {
-        uiState = uiState.copy(
-            selectedCompany = company,
-            filteredCards = applyFilters(uiState.allCards, uiState.searchQuery, company)
-        )
+        val next = if (company == uiState.selectedCompany) null else company
+        uiState = uiState.copy(selectedCompany = next).withVisible()
     }
 
-    private fun applyFilters(
-        cards: List<PokemonCard>,
-        query: String,
-        company: String?
-    ): List<PokemonCard> {
-        return cards.filter { card ->
-            val matchesQuery = query.isBlank() ||
-                card.name.contains(query, ignoreCase = true) ||
-                card.set.contains(query, ignoreCase = true)
-            val matchesCompany = company == null || card.gradingCompany == company
-            matchesQuery && matchesCompany
-        }.sortedByDescending { it.grade ?: 0f }
+    fun filterByTier(tier: GradeTier?) {
+        val next = if (tier == uiState.selectedTier) null else tier
+        uiState = uiState.copy(selectedTier = next).withVisible()
     }
+
+    fun setSort(sort: GradedSort) {
+        if (sort == uiState.sort) return
+        uiState = uiState.copy(sort = sort).withVisible()
+    }
+
+    fun clearFilters() {
+        uiState = uiState.copy(
+            searchQuery = "",
+            selectedCompany = null,
+            selectedTier = null
+        ).withVisible()
+    }
+
+    private fun GradedCardsUiState.withVisible(): GradedCardsUiState =
+        copy(visibleCards = visible(allCards, this))
+
+    private fun visible(cards: List<PokemonCard>, state: GradedCardsUiState) =
+        GradedLab.visible(
+            cards = cards,
+            query = state.searchQuery,
+            company = state.selectedCompany,
+            tier = state.selectedTier,
+            sort = state.sort
+        )
 }

@@ -17,7 +17,8 @@ Pokémon: catalogo, gestione collezione, prezzi, deck lab e scanner OCR.
 |---|---|
 | `app/` | App Android (`com.emabuia.pokevault`, `minSdk 26`, `compileSdk 36`) |
 | `pokevault-proxy-worker/` | Worker Cloudflare (`pokevault-proxy`): API `/v1/*`, catalogo D1, immagini R2, prezzi PokeWallet isolati dietro il Worker — vedi il suo [README](pokevault-proxy-worker/README.md) |
-| `docs/` | Documentazione di sviluppo (testing, ecc.) |
+| `docs/` | Documentazione di sviluppo ([ambienti](docs/AMBIENTI.md), [testing](docs/TESTING.md), ecc.) |
+| `firebase.json`, `.firebaserc` | Regole e indici Firestore versionati, con gli alias dei due progetti — vedi [`docs/AMBIENTI.md`](docs/AMBIENTI.md) |
 | `MIGRATION_PLAN.md` | Piano operativo della migrazione al catalogo proprietario, con checkpoint di sessione verificati |
 
 ## Stack tecnico
@@ -31,13 +32,29 @@ Pokémon: catalogo, gestione collezione, prezzi, deck lab e scanner OCR.
 ```bash
 cp local.properties.example local.properties
 # compila POKEWALLET_API_KEY / ITALIAN_CATALOG_URL solo se serve bypassare il proxy Cloudflare
-./gradlew assembleDebug
+./gradlew assembleProdDebug
 ```
 
 Richiede **JDK 21** per Gradle (il JBR 25 incluso in Android Studio più recente
 è incompatibile con Kotlin 2.0.21 — vedi `MIGRATION_PLAN.md` per il dettaglio
 dell'errore). `local.properties` non va mai committato: contiene chiavi API e,
 per le build di release, la configurazione della firma.
+
+## Ambienti
+
+Due flavor, `prod` e `staging`, su due progetti Firebase distinti: provare
+l'app non significa più scrivere nei dati veri. Hanno `applicationId` diversi,
+quindi si installano insieme sullo stesso telefono.
+
+```bash
+./gradlew installStagingDebug   # dati separati, per sviluppare
+./gradlew installProdDebug      # quello che finisce su Play
+```
+
+Il Worker Cloudflare resta condiviso; gli acquisti Play e le rotte
+autenticate del Worker funzionano solo in produzione. Setup del progetto
+Firebase di staging, regole Firestore versionate e nomi dei task cambiati:
+**[`docs/AMBIENTI.md`](docs/AMBIENTI.md)**.
 
 ## Testing
 
@@ -46,8 +63,8 @@ per nuovi test, come funziona la CI su GitHub Actions e i problemi noti dei
 due workflow attuali.
 
 ```bash
-./gradlew testDebugUnitTest   # unit test, veloce
-./gradlew connectedAndroidTest  # test instrumentati, richiede emulatore
+./gradlew testProdDebugUnitTest   # unit test, veloce
+./gradlew connectedProdDebugAndroidTest  # test instrumentati, richiede emulatore
 ```
 
 ## Worker Cloudflare

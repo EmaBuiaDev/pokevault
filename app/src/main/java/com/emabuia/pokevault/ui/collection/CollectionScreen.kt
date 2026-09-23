@@ -1,9 +1,10 @@
 package com.emabuia.pokevault.ui.collection
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -12,8 +13,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,12 +38,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -53,103 +55,84 @@ import coil.imageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.PokemonCard
-import com.emabuia.pokevault.data.model.collectionGroupKey
+import com.emabuia.pokevault.ui.components.CardImageSkeleton
+import com.emabuia.pokevault.ui.components.CardVariants
 import com.emabuia.pokevault.ui.components.CollectionSkeleton
+import com.emabuia.pokevault.ui.components.LabSearchField
+import com.emabuia.pokevault.ui.components.OwnedVariantBadges
+import com.emabuia.pokevault.ui.components.RaritySymbolIcon
+import com.emabuia.pokevault.ui.components.formatEur
 import com.emabuia.pokevault.ui.components.holoFoil
-import com.emabuia.pokevault.ui.navigation.sharedCardImage
 import com.emabuia.pokevault.ui.home.components.SearchBar
+import com.emabuia.pokevault.ui.navigation.sharedCardImage
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.CardCategory
+import com.emabuia.pokevault.util.CardGroup
+import com.emabuia.pokevault.util.CollectionFilter
+import com.emabuia.pokevault.util.CollectionLayout
+import com.emabuia.pokevault.util.CollectionSort
+import com.emabuia.pokevault.util.ExpansionGroupSection
+import com.emabuia.pokevault.util.ExpansionOrder
+import com.emabuia.pokevault.util.FacetCount
 import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.util.RarityUtils
-import com.emabuia.pokevault.util.getTypeEmojiForCollection
+import com.emabuia.pokevault.util.ValueBucket
+import com.emabuia.pokevault.viewmodel.CollectionUiState
 import com.emabuia.pokevault.viewmodel.CollectionViewModel
-import com.emabuia.pokevault.viewmodel.SortOrder
-import com.emabuia.pokevault.viewmodel.SupertypeFilter
 
-private enum class ExpansionSortOrder {
-    BY_NAME_ASC,
-    BY_TOTAL_CARDS_DESC,
-    BY_TOTAL_CARDS_ASC
+private const val PREFS_NAME = "collection_view_prefs"
+
+/** Quante espansioni mostra il filtro prima di "Mostra tutte". */
+private const val EXPANSIONS_PREVIEW = 12
+
+// ── Etichette ─────────────────────────────────────────────────────────────────
+
+private fun CollectionSort.label(): String = when (this) {
+    CollectionSort.NUMBER -> AppLocale.sortNumber
+    CollectionSort.NEWEST -> AppLocale.sortRecent
+    CollectionSort.NAME -> AppLocale.sortNameAsc
+    CollectionSort.PRICE_DESC -> AppLocale.sortPriceHigh
+    CollectionSort.PRICE_ASC -> AppLocale.sortPriceLow
 }
 
-/** Etichette localizzate, al posto del nome grezzo dell'enum. */
-private fun SortOrder.label(): String = when (this) {
-    SortOrder.NEWEST -> AppLocale.sortRecent
-    SortOrder.PRICE_ASC -> AppLocale.sortPriceAsc
-    SortOrder.PRICE_DESC -> AppLocale.sortPriceDesc
-    SortOrder.NAME_ASC -> AppLocale.sortNameAsc
-    SortOrder.NUMBER -> AppLocale.sortSetNumber
+private fun ExpansionOrder.label(): String = when (this) {
+    ExpansionOrder.NAME -> "A-Z"
+    ExpansionOrder.RECENT -> AppLocale.sortRecent
+    ExpansionOrder.MOST_CARDS -> AppLocale.moreCards
+    ExpansionOrder.FEWEST_CARDS -> AppLocale.fewerCards
+    ExpansionOrder.MOST_VALUE -> AppLocale.expansionOrderMostValue
 }
 
-private fun SupertypeFilter.label(): String = when (this) {
-    SupertypeFilter.ALL -> AppLocale.categoryAll
-    SupertypeFilter.POKEMON -> AppLocale.categoryPokemon
-    SupertypeFilter.TRAINER -> AppLocale.categoryTrainer
-    SupertypeFilter.ENERGY -> AppLocale.categoryEnergy
+private fun CardCategory.label(): String = when (this) {
+    CardCategory.ALL -> AppLocale.categoryAll
+    CardCategory.POKEMON -> AppLocale.categoryPokemon
+    CardCategory.TRAINER -> AppLocale.categoryTrainer
+    CardCategory.ENERGY -> AppLocale.categoryEnergy
 }
+
+private fun ValueBucket.label(): String = when (this) {
+    ValueBucket.NO_PRICE -> AppLocale.valueNoPrice
+    ValueBucket.UNDER_1 -> AppLocale.valueUnder1
+    ValueBucket.FROM_1_TO_10 -> AppLocale.value1to10
+    ValueBucket.FROM_10_TO_50 -> AppLocale.value10to50
+    ValueBucket.OVER_50 -> AppLocale.valueOver50
+}
+
+// ── Schermata ─────────────────────────────────────────────────────────────────
 
 /**
- * Una sezione dell'accordion per espansione, con gli aggregati gia' calcolati.
+ * Le mie carte.
  *
- * Totali e righe della griglia venivano ricalcolati dentro il builder della
- * LazyColumn, quindi su tutte le carte di tutte le espansioni a ogni
- * ricomposizione del contenuto. Qui sono calcolati una volta sola, dentro il
- * remember che costruisce le sezioni.
+ * Due modi di guardare la stessa collezione: **per espansione**, la
+ * fisarmonica di sempre, e **tutte**, una griglia unica. La seconda serve
+ * perche' ordinare per prezzo o per data dentro sezioni chiuse non diceva
+ * niente: la carta piu' cara della collezione stava in cima alla sua
+ * espansione, magari la trentesima della lista.
+ *
+ * Raggruppamento, filtri e ordinamenti sono calcolati nel ViewModel, fuori dal
+ * thread principale: qui si disegna e basta.
  */
-private data class ExpansionSection(
-    val name: String,
-    val groups: List<Pair<String, List<PokemonCard>>>,
-    val totalQuantity: Int,
-    val totalValue: Double,
-    val gridRows: List<List<Pair<String, List<PokemonCard>>>>
-)
-
-@Composable
-private fun CollectionCardImageFallback(card: PokemonCard, compact: Boolean) {
-    val titleSize = if (compact) 8.sp else 10.sp
-    val detailSize = if (compact) 7.sp else 8.sp
-    val series = "-"
-    val setName = AppLocale.displaySetName(card.set).ifBlank { "-" }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.surface)
-            .padding(if (compact) 4.dp else 6.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = card.name,
-                color = AppColors.textPrimary,
-                fontSize = titleSize,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = series,
-                color = AppColors.textMuted,
-                fontSize = detailSize,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = setName,
-                color = AppColors.textMuted,
-                fontSize = detailSize,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionScreen(
@@ -162,17 +145,26 @@ fun CollectionScreen(
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
 
-    // Selection mode
+    LaunchedEffect(Unit) {
+        viewModel.attachPreferences(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
+    }
+    // Dopo le preferenze e non prima: altrimenti il ripristino della vista
+    // salvata cancellerebbe la richiesta della Home. Chiave sulla richiesta,
+    // cosi' vale anche quando la schermata c'era gia' e viene solo ripresa.
+    LaunchedEffect(CollectionShortcut.pendingRecent) {
+        if (CollectionShortcut.consumeRecent()) viewModel.showRecentFirst()
+    }
+
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedGroupKeys by remember { mutableStateOf(setOf<String>()) }
-
     var showFilters by remember { mutableStateOf(false) }
-    var expansionSortOrder by rememberSaveable { mutableStateOf(ExpansionSortOrder.BY_NAME_ASC) }
 
-    BackHandler(enabled = isSelectionMode) {
+    fun exitSelection() {
         isSelectionMode = false
         selectedGroupKeys = emptySet()
     }
+
+    BackHandler(enabled = isSelectionMode) { exitSelection() }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.successMessage, state.errorMessage) {
@@ -183,64 +175,47 @@ fun CollectionScreen(
         }
     }
 
-    // Compute grouped cards by logical card key and organize them by expansion.
-    val groupedCards = remember(state.filteredCards) {
-        state.filteredCards
-            .groupBy { it.collectionGroupKey() }
-            .entries
-            .map { (key, group) -> key to group }
-    }
-    val groupedByExpansion = remember(groupedCards, state.sortOrder) {
-        groupedCards.groupBy { (_, group) ->
-            group.firstOrNull()?.set?.takeIf { it.isNotBlank() } ?: if (AppLocale.isItalian) "Espansione sconosciuta" else "Unknown Expansion"
-        }.mapValues { entry ->
-            entry.value.sortedWith { a, b ->
-                val cardA = a.second.firstOrNull()
-                val cardB = b.second.firstOrNull()
-                when (state.sortOrder) {
-                    SortOrder.NEWEST -> 0
-                    SortOrder.PRICE_ASC -> (cardA?.estimatedValue ?: 0.0).compareTo(cardB?.estimatedValue ?: 0.0)
-                    SortOrder.PRICE_DESC -> (cardB?.estimatedValue ?: 0.0).compareTo(cardA?.estimatedValue ?: 0.0)
-                    SortOrder.NAME_ASC -> (cardA?.name ?: "").lowercase().compareTo((cardB?.name ?: "").lowercase())
-                    SortOrder.NUMBER -> {
-                        val numA = cardA?.cardNumber ?: ""
-                        val numB = cardB?.cardNumber ?: ""
-                        val digitA = numA.filter { it.isDigit() }.toIntOrNull() ?: Int.MAX_VALUE
-                        val digitB = numB.filter { it.isDigit() }.toIntOrNull() ?: Int.MAX_VALUE
-                        if (digitA != digitB) digitA.compareTo(digitB) else numA.compareTo(numB)
-                    }
-                }
-            }
+    val hasActiveFilters = !state.filter.isEmpty
+    // In vista per espansione, un ordinamento diverso dal numero apre le
+    // sezioni come faceva prima: dentro sezioni chiuse non si vedrebbe.
+    val shouldExpandAll = hasActiveFilters || state.sort != CollectionSort.NUMBER
+    val visibleExpansionNames = remember(state.sections) { state.sections.map { it.expansion }.toSet() }
+
+    // Espansioni aperte. Chiuse all'ingresso: con collezioni grandi aprirle
+    // tutte subito costava.
+    // Salvate come lista, e non affidate al salvataggio automatico: tornando
+    // dal dettaglio di una carta prima si richiudevano tutte, perche' stavano
+    // in un remember che la navigazione butta via.
+    var expandedExpansions by rememberSaveable(
+        stateSaver = listSaver<Set<String>, String>(save = { it.toList() }, restore = { it.toSet() })
+    ) { mutableStateOf(setOf<String>()) }
+    var wasExpandingAll by remember { mutableStateOf(shouldExpandAll) }
+    LaunchedEffect(shouldExpandAll, visibleExpansionNames) {
+        expandedExpansions = when {
+            shouldExpandAll -> expandedExpansions + visibleExpansionNames
+            // Si esce da un filtro: si torna tutto chiuso, come prima.
+            wasExpandingAll -> emptySet()
+            // Senza filtri si tolgono solo le espansioni sparite. Prima ogni
+            // cambio dell'elenco (una carta aggiunta in un set nuovo, l'ultima
+            // di un set cancellata) richiudeva tutte quelle aperte a mano.
+            else -> expandedExpansions intersect visibleExpansionNames
         }
+        wasExpandingAll = shouldExpandAll
     }
-    val visibleExpansionNames = remember(groupedByExpansion) { groupedByExpansion.keys.toSet() }
-    val hasActiveFilters = state.searchQuery.isNotBlank() ||
-        state.selectedSet != null ||
-        state.selectedType != null ||
-        state.selectedRarity != null ||
-        state.supertypeFilter != SupertypeFilter.ALL ||
-        state.sortOrder != SortOrder.NUMBER
 
-    // Gestione espansioni aperte (inizialmente vuoto = tutte chiuse)
-    var expandedExpansions by remember { mutableStateOf(setOf<String>()) }
-
-    // Prefetch immagini per rendere piu' fluida l'apertura delle espansioni.
-    LaunchedEffect(state.filteredCards, state.isGridView, expandedExpansions) {
-        val maxPrefetch = if (state.isGridView) 72 else 48
-        val cardsToPrefetch = if (expandedExpansions.isEmpty()) {
-            state.filteredCards.asSequence().take(maxPrefetch)
+    // Le immagini delle prime tessere visibili si chiedono in anticipo, cosi'
+    // aprire una sezione non mostra una griglia di scheletri.
+    LaunchedEffect(state.visibleGroups, state.layout, expandedExpansions, state.isGridView) {
+        val max = if (state.isGridView) 72 else 48
+        val source = if (state.layout == CollectionLayout.ALL) {
+            state.visibleGroups.asSequence()
         } else {
-            state.filteredCards
-                .asSequence()
-                .filter { card ->
-                    val expansionName = card.set.takeIf { it.isNotBlank() }
-                        ?: if (AppLocale.isItalian) "Espansione sconosciuta" else "Unknown Expansion"
-                    expansionName in expandedExpansions
-                }
-                .take(maxPrefetch)
+            state.sections.asSequence()
+                .filter { it.expansion in expandedExpansions }
+                .flatMap { it.groups.asSequence() }
         }
-        cardsToPrefetch
-            .map { ImageUrlUtils.safeProxiedImageUrl(it.imageUrl) }
+        source.take(max)
+            .map { ImageUrlUtils.safeProxiedImageUrl(it.representative.imageUrl) }
             .filter { it.isNotBlank() }
             .distinct()
             .forEach { url ->
@@ -255,14 +230,19 @@ fun CollectionScreen(
             }
     }
 
-    // Performance: con tante carte evitare di espandere tutto all'ingresso.
-    // Auto-espandi solo quando ci sono filtri attivi, per mostrare subito i risultati filtrati.
-    LaunchedEffect(hasActiveFilters, visibleExpansionNames) {
-        expandedExpansions = if (hasActiveFilters && visibleExpansionNames.isNotEmpty()) {
-            expandedExpansions + visibleExpansionNames
+    fun onTileClick(key: String) {
+        if (isSelectionMode) {
+            selectedGroupKeys = if (key in selectedGroupKeys) selectedGroupKeys - key else selectedGroupKeys + key
+            if (selectedGroupKeys.isEmpty()) isSelectionMode = false
         } else {
-            emptySet()
+            onCardClick(key)
         }
+    }
+
+    fun onTileLongClick(key: String) {
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        isSelectionMode = true
+        selectedGroupKeys = selectedGroupKeys + key
     }
 
     Scaffold(
@@ -271,15 +251,15 @@ fun CollectionScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    if (isSelectionMode) {
-                        Text(AppLocale.selectedCount(selectedGroupKeys.size), fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
-                    } else {
-                        Text(AppLocale.myCardsSingleLine, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
-                    }
+                    Text(
+                        if (isSelectionMode) AppLocale.selectedCount(selectedGroupKeys.size) else AppLocale.myCardsSingleLine,
+                        fontWeight = FontWeight.Bold,
+                        color = AppColors.textPrimary
+                    )
                 },
                 navigationIcon = {
                     if (isSelectionMode) {
-                        IconButton(onClick = { isSelectionMode = false; selectedGroupKeys = emptySet() }) {
+                        IconButton(onClick = { exitSelection() }) {
                             Icon(Icons.Default.Close, AppLocale.cancel, tint = AppColors.textPrimary)
                         }
                     } else {
@@ -290,15 +270,11 @@ fun CollectionScreen(
                 },
                 actions = {
                     if (isSelectionMode) {
-                        IconButton(onClick = {
-                            selectedGroupKeys = if (selectedGroupKeys.size == groupedCards.size) {
-                                emptySet()
-                            } else {
-                                groupedCards.map { it.first }.toSet()
-                            }
-                        }) {
+                        val allKeys = state.visibleGroups.map { it.key }.toSet()
+                        val allSelected = allKeys.isNotEmpty() && selectedGroupKeys.containsAll(allKeys)
+                        IconButton(onClick = { selectedGroupKeys = if (allSelected) emptySet() else allKeys }) {
                             Icon(
-                                imageVector = if (selectedGroupKeys.size == groupedCards.size) Icons.Default.Deselect else Icons.Default.SelectAll,
+                                imageVector = if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll,
                                 contentDescription = AppLocale.selectAll,
                                 tint = AppColors.textPrimary
                             )
@@ -307,7 +283,7 @@ fun CollectionScreen(
                         if (state.isGridView) {
                             IconButton(onClick = { viewModel.toggleGridColumns() }) {
                                 Icon(
-                                    imageVector = when(state.gridColumns) {
+                                    imageVector = when (state.gridColumns) {
                                         2 -> Icons.Default.ViewModule
                                         3 -> Icons.Default.GridView
                                         4 -> Icons.Default.Apps
@@ -333,23 +309,12 @@ fun CollectionScreen(
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // ── Stats ──
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    StatMiniCard("Carte", "${state.stats.totalCards}", AppColors.blue, Modifier.weight(1f))
-                    StatMiniCard("Uniche", "${state.stats.uniqueCards}", AppColors.purple, Modifier.weight(1f))
-                    StatMiniCard("Valore", "\u20AC${"%.2f".format(state.stats.totalValue)}", AppColors.green, Modifier.weight(1f))
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
+                SummaryStrip(state = state)
 
                 if (!isSelectionMode) {
+                    Spacer(modifier = Modifier.height(12.dp))
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(modifier = Modifier.weight(1f)) {
@@ -359,334 +324,88 @@ fun CollectionScreen(
                             )
                         }
                         Spacer(modifier = Modifier.width(10.dp))
-                        Surface(
-                            onClick = { showFilters = true },
-                            color = if (hasActiveFilters) AppColors.blue.copy(alpha = 0.9f) else AppColors.card,
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.size(50.dp),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Tune,
-                                    contentDescription = AppLocale.filters,
-                                    tint = AppColors.textPrimary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                if (hasActiveFilters) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(8.dp)
-                                            .size(9.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFFFF5D5D))
-                                    )
-                                }
+                        FilterButton(
+                            activeCount = state.filter.activeCount,
+                            onClick = { showFilters = true }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Toolbar(
+                        state = state,
+                        onLayout = viewModel::setLayout,
+                        onSort = viewModel::setSort,
+                        onExpansionOrder = viewModel::setExpansionOrder,
+                        canExpandAll = state.layout == CollectionLayout.BY_EXPANSION &&
+                            visibleExpansionNames.isNotEmpty() &&
+                            !expandedExpansions.containsAll(visibleExpansionNames),
+                        onToggleExpandAll = {
+                            expandedExpansions = if (expandedExpansions.containsAll(visibleExpansionNames)) {
+                                emptySet()
+                            } else {
+                                visibleExpansionNames
                             }
                         }
-                    }
-
-                    if (hasActiveFilters) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        ActiveFiltersRow(state = state, viewModel = viewModel)
-                    }
-
-                    Spacer(modifier = Modifier.height(if (hasActiveFilters) 12.dp else 14.dp))
-                    ExpansionSortRow(
-                        selectedOrder = expansionSortOrder,
-                        onOrderSelected = { expansionSortOrder = it },
-                        onExpandAll = { expandedExpansions = visibleExpansionNames },
-                        onCollapseAll = { expandedExpansions = emptySet() },
-                        canExpandAll = visibleExpansionNames.isNotEmpty() && (visibleExpansionNames.size > expandedExpansions.size),
-                        canCollapseAll = expandedExpansions.isNotEmpty()
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    if (state.filter.activeCount > 0) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        ActiveFiltersRow(filter = state.filter, viewModel = viewModel)
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
 
-                // ── Contenuto ──
-                // Crossfade e non un semplice if: la lista deve prendere il
-                // posto dello scheletro sfumando, non comparire di scatto.
                 Crossfade(
                     targetState = state.isLoading,
                     animationSpec = tween(AppMotion.crossfade),
                     label = "collectionLoading"
                 ) { isLoadingContent ->
-                    if (isLoadingContent) {
-                        CollectionSkeleton()
-                    } else {
-                        if (groupedCards.isEmpty()) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(AppLocale.emptyCollectionTitle, color = AppColors.textMuted)
-                            }
-                        } else {
-                            // Totali e righe della griglia precalcolati qui, non dentro il
-                            // builder della LazyColumn: prima venivano risommati su tutte le
-                            // carte di tutte le espansioni a ogni ricomposizione del
-                            // contenuto, e chunked() riallocava una lista di liste per ogni
-                            // sezione espansa.
-                            val expansionSections = remember(groupedByExpansion, expansionSortOrder, state.gridColumns) {
-                                groupedByExpansion
-                                    .toList()
-                                    .map { (name, groups) ->
-                                        ExpansionSection(
-                                            name = name,
-                                            groups = groups,
-                                            totalQuantity = groups.sumOf { (_, cards) -> cards.sumOf { it.quantity } },
-                                            totalValue = groups.sumOf { (_, cards) ->
-                                                cards.sumOf { card -> card.estimatedValue * card.quantity }
-                                            },
-                                            gridRows = groups.chunked(state.gridColumns)
-                                        )
-                                    }
-                                    .sortedWith(
-                                        when (expansionSortOrder) {
-                                            ExpansionSortOrder.BY_NAME_ASC ->
-                                                compareBy { it.name.lowercase() }
-                                            ExpansionSortOrder.BY_TOTAL_CARDS_DESC ->
-                                                compareByDescending<ExpansionSection> { it.totalQuantity }
-                                                    .thenBy { it.name.lowercase() }
-                                            ExpansionSortOrder.BY_TOTAL_CARDS_ASC ->
-                                                compareBy<ExpansionSection> { it.totalQuantity }
-                                                    .thenBy { it.name.lowercase() }
-                                        }
-                                    )
-                            }
-
-                            // Flat LazyColumn: header + righe carte come item separati.
-                            // Compose renderizza solo gli elementi visibili → nessun lag su espansioni con molte carte.
-                            LazyColumn(
-                                contentPadding = PaddingValues(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 0.dp,
-                                    bottom = if (isSelectionMode) 80.dp else 20.dp
-                                )
-                            ) {
-                                expansionSections.forEachIndexed { sectionIndex, section ->
-                                    val expansionName = section.name
-                                    val cardsInExpansion = section.groups
-                                    val totalQuantity = section.totalQuantity
-                                    val totalExpansionValue = section.totalValue
-                                    val isExpanded = expansionName in expandedExpansions
-                                    val cardSpacing = if (state.gridColumns > 4) 6.dp else 10.dp
-
-                                    // Spaziatura tra sezioni
-                                    if (sectionIndex > 0) {
-                                        item(key = "gap_$expansionName") {
-                                            Spacer(modifier = Modifier.height(12.dp))
-                                        }
-                                    }
-
-                                    // Header sezione (sempre visibile)
-                                    item(key = "hdr_$expansionName") {
-                                        ExpansionAccordionHeader(
-                                            expansionName = AppLocale.displaySetName(expansionName),
-                                            totalCards = totalQuantity,
-                                            totalValue = totalExpansionValue,
-                                            uniqueCards = cardsInExpansion.size,
-                                            isExpanded = isExpanded,
-                                            onToggle = {
-                                                expandedExpansions = if (isExpanded) {
-                                                    expandedExpansions - expansionName
-                                                } else {
-                                                    expandedExpansions + expansionName
-                                                }
-                                            }
-                                        )
-                                    }
-
-                                    // Carte: lazy item per riga/carta, solo quando espansa
-                                    if (isExpanded) {
-                                        if (state.isGridView) {
-                                            val rows = section.gridRows
-                                            itemsIndexed(
-                                                items = rows,
-                                                // Chiave sull'indice di riga: la precedente usava il
-                                                // primo elemento della riga, quindi cambiava a ogni
-                                                // variazione del contenuto e due righe che iniziavano
-                                                // con lo stesso gruppo potevano collidere.
-                                                key = { rowIndex, _ -> "row_${expansionName}_$rowIndex" }
-                                            ) { _, row ->
-                                                Row(
-                                                    horizontalArrangement = Arrangement.spacedBy(cardSpacing),
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .background(AppColors.card)
-                                                        .padding(horizontal = 10.dp, vertical = if (state.gridColumns > 4) 3.dp else 5.dp)
-                                                ) {
-                                                    row.forEach { (groupKey, group) ->
-                                                        val representative = group.first()
-                                                        val totalQty = group.sumOf { it.quantity }
-                                                        CollectionCardGridItem(
-                                                            card = representative.copy(quantity = totalQty),
-                                                            isSelected = groupKey in selectedGroupKeys,
-                                                            isSelectionMode = isSelectionMode,
-                                                            gridColumns = state.gridColumns,
-                                                            sharedKey = groupKey,
-                                                            onClick = {
-                                                                if (isSelectionMode) {
-                                                                    selectedGroupKeys = if (groupKey in selectedGroupKeys) {
-                                                                        selectedGroupKeys - groupKey
-                                                                    } else {
-                                                                        selectedGroupKeys + groupKey
-                                                                    }
-                                                                    if (selectedGroupKeys.isEmpty()) isSelectionMode = false
-                                                                } else {
-                                                                        onCardClick(groupKey)
-                                                                }
-                                                            },
-                                                            onLongClick = {
-                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                isSelectionMode = true
-                                                                selectedGroupKeys = selectedGroupKeys + groupKey
-                                                            },
-                                                            modifier = Modifier.weight(1f)
-                                                        )
-                                                    }
-                                                    repeat(state.gridColumns - row.size) {
-                                                        Spacer(modifier = Modifier.weight(1f))
-                                                    }
-                                                }
-                                            }
-                                        } else {
-                                            items(
-                                                items = cardsInExpansion,
-                                                key = { pair -> "card_${expansionName}_${pair.first}" }
-                                            ) { (groupKey, group) ->
-                                                val representative = group.first()
-                                                val totalQty = group.sumOf { it.quantity }
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .background(AppColors.card)
-                                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                                ) {
-                                                    CollectionCardListItem(
-                                                        card = representative.copy(quantity = totalQty),
-                                                        isSelected = groupKey in selectedGroupKeys,
-                                                        isSelectionMode = isSelectionMode,
-                                                        onClick = {
-                                                            if (isSelectionMode) {
-                                                                selectedGroupKeys = if (groupKey in selectedGroupKeys) {
-                                                                    selectedGroupKeys - groupKey
-                                                                } else {
-                                                                    selectedGroupKeys + groupKey
-                                                                }
-                                                                if (selectedGroupKeys.isEmpty()) isSelectionMode = false
-                                                            } else {
-                                                                    onCardClick(groupKey)
-                                                            }
-                                                        },
-                                                        onLongClick = {
-                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                            isSelectionMode = true
-                                                            selectedGroupKeys = selectedGroupKeys + groupKey
-                                                        },
-                                                        // La riga mostra la quantita' aggregata del gruppo,
-                                                        // quindi il delete deve rimuovere il gruppo intero:
-                                                        // prima cancellava solo il documento del
-                                                        // rappresentante e le altre varianti restavano.
-                                                        onDelete = { viewModel.deleteMultipleGroups(setOf(groupKey)) }
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        // Chiusura visiva della sezione espansa
-                                        item(key = "btm_$expansionName") {
-                                            Spacer(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(10.dp)
-                                                    .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-                                                    .background(AppColors.card)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    when {
+                        isLoadingContent -> CollectionSkeleton()
+                        state.groups.isEmpty() -> EmptyCollection(onAddCard = onAddCard)
+                        state.visibleGroups.isEmpty() -> NoResults(onClear = { viewModel.clearFiltersAndSearch() })
+                        state.layout == CollectionLayout.ALL -> AllCardsContent(
+                            groups = state.visibleGroups,
+                            isGridView = state.isGridView,
+                            gridColumns = state.gridColumns,
+                            selectedKeys = selectedGroupKeys,
+                            isSelectionMode = isSelectionMode,
+                            onClick = ::onTileClick,
+                            onLongClick = ::onTileLongClick
+                        )
+                        else -> ByExpansionContent(
+                            sections = state.sections,
+                            expanded = expandedExpansions,
+                            onToggle = { name ->
+                                expandedExpansions = if (name in expandedExpansions) expandedExpansions - name
+                                else expandedExpansions + name
+                            },
+                            isGridView = state.isGridView,
+                            gridColumns = state.gridColumns,
+                            selectedKeys = selectedGroupKeys,
+                            isSelectionMode = isSelectionMode,
+                            onClick = ::onTileClick,
+                            onLongClick = ::onTileLongClick
+                        )
                     }
                 }
             }
 
-            // Selection bottom bar
             if (isSelectionMode && selectedGroupKeys.isNotEmpty()) {
-                var showConfirm by remember { mutableStateOf(false) }
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color.Transparent, AppColors.surface.copy(alpha = 0.95f), AppColors.surface)
-                            )
-                        )
-                        .padding(top = 16.dp, bottom = 12.dp, start = 16.dp, end = 16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        IconButton(
-                            onClick = { isSelectionMode = false; selectedGroupKeys = emptySet() },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(Icons.Default.Close, null, tint = AppColors.textMuted)
-                        }
-
-                        Text(
-                            text = AppLocale.selectedCount(selectedGroupKeys.size),
-                            color = AppColors.textPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        if (showConfirm) {
-                            Button(
-                                onClick = {
-                                    viewModel.deleteMultipleGroups(selectedGroupKeys)
-                                    isSelectionMode = false
-                                    selectedGroupKeys = emptySet()
-                                    showConfirm = false
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = AppColors.red),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text(AppLocale.confirm, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            }
-                            OutlinedButton(
-                                onClick = { showConfirm = false },
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, AppColors.textMuted.copy(alpha = 0.3f)),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text(AppLocale.cancel, color = AppColors.textMuted, fontSize = 13.sp)
-                            }
-                        } else {
-                            Button(
-                                onClick = { showConfirm = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = AppColors.red),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(AppLocale.delete, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            }
-                        }
-                    }
-                }
+                SelectionBar(
+                    count = selectedGroupKeys.size,
+                    onCancel = { exitSelection() },
+                    onDelete = {
+                        viewModel.deleteMultipleGroups(selectedGroupKeys)
+                        exitSelection()
+                    },
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
             }
         }
 
         if (showFilters) {
-            FilterBottomSheet(
+            FilterSheet(
                 state = state,
                 viewModel = viewModel,
                 onDismiss = { showFilters = false }
@@ -695,402 +414,418 @@ fun CollectionScreen(
     }
 }
 
+// ── Riepilogo in cima ─────────────────────────────────────────────────────────
+
+/**
+ * Valore, carte e uniche in una striscia sola. Coi filtri attivi dice anche
+ * quante ne stai guardando: "42 di 380 carte", e quanto valgono.
+ */
 @Composable
-private fun ExpansionSortRow(
-    selectedOrder: ExpansionSortOrder,
-    onOrderSelected: (ExpansionSortOrder) -> Unit,
-    onExpandAll: () -> Unit,
-    onCollapseAll: () -> Unit,
+private fun SummaryStrip(state: CollectionUiState) {
+    val filtered = !state.filter.isEmpty && !state.isLoading
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.linearGradient(listOf(AppColors.blue.copy(alpha = 0.16f), AppColors.surface))
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(AppLocale.collectionStatValue, color = AppColors.textMuted, fontSize = 11.sp)
+                Text(
+                    formatEur(state.stats.totalValue),
+                    color = AppColors.textPrimary,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            SummaryNumber(value = state.stats.totalCards, label = AppLocale.collectionStatCards, color = AppColors.blue)
+            Spacer(modifier = Modifier.width(18.dp))
+            SummaryNumber(value = state.stats.uniqueCards, label = AppLocale.collectionStatUnique, color = AppColors.purple)
+        }
+        if (filtered) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                AppLocale.collectionResults(state.visibleGroups.size, state.groups.size) +
+                    " · " + formatEur(state.visibleValue),
+                color = AppColors.blue,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryNumber(value: Int, label: String, color: Color) {
+    Column(horizontalAlignment = Alignment.End) {
+        Text("$value", color = color, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = AppColors.textMuted, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun FilterButton(activeCount: Int, onClick: () -> Unit) {
+    val active = activeCount > 0
+    Surface(
+        onClick = onClick,
+        color = if (active) AppColors.blue else AppColors.searchBar,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.size(50.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Default.Tune,
+                contentDescription = AppLocale.filters,
+                tint = if (active) Color.White else AppColors.textPrimary,
+                modifier = Modifier.size(20.dp)
+            )
+            // Il numero, non un pallino: "3 filtri attivi" si legge da qui.
+            if (active) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(5.dp)
+                        .size(17.dp)
+                        .clip(CircleShape)
+                        .background(AppColors.red),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "$activeCount",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ── Barra: vista e ordinamento ────────────────────────────────────────────────
+
+/**
+ * Vista e ordinamento in una riga. Prima c'erano due ordinamenti in due posti
+ * -- le carte nel pannello filtri, le espansioni in una fila di chip sotto la
+ * ricerca -- e non si capiva quale comandasse cosa. Ora un solo menu, diviso
+ * in "Carte" ed "Espansioni".
+ */
+@Composable
+private fun Toolbar(
+    state: CollectionUiState,
+    onLayout: (CollectionLayout) -> Unit,
+    onSort: (CollectionSort) -> Unit,
+    onExpansionOrder: (ExpansionOrder) -> Unit,
     canExpandAll: Boolean,
-    canCollapseAll: Boolean
+    onToggleExpandAll: () -> Unit
 ) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    var menuOpen by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        item {
-            Surface(
-                color = AppColors.card,
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Sort,
-                        contentDescription = null,
-                        tint = AppColors.textMuted,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = AppLocale.expansionOrder,
-                        color = AppColors.textMuted,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        }
-        item {
-            FilterChip(
-                label = "A-Z",
-                isSelected = selectedOrder == ExpansionSortOrder.BY_NAME_ASC,
-                onClick = { onOrderSelected(ExpansionSortOrder.BY_NAME_ASC) }
-            )
-        }
-        item {
-            FilterChip(
-                label = AppLocale.moreCards,
-                isSelected = selectedOrder == ExpansionSortOrder.BY_TOTAL_CARDS_DESC,
-                onClick = { onOrderSelected(ExpansionSortOrder.BY_TOTAL_CARDS_DESC) }
-            )
-        }
-        item {
-            FilterChip(
-                label = AppLocale.fewerCards,
-                isSelected = selectedOrder == ExpansionSortOrder.BY_TOTAL_CARDS_ASC,
-                onClick = { onOrderSelected(ExpansionSortOrder.BY_TOTAL_CARDS_ASC) }
-            )
-        }
-        item {
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable(enabled = canExpandAll, onClick = onExpandAll),
-                color = if (canExpandAll) AppColors.card else AppColors.card.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, AppColors.textMuted.copy(alpha = 0.3f))
-            ) {
-                Text(
-                    text = AppLocale.expandAll,
-                    color = if (canExpandAll) AppColors.textPrimary else AppColors.textMuted,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+        SegmentedLayout(selected = state.layout, onSelect = onLayout)
+        Spacer(modifier = Modifier.weight(1f))
+
+        if (state.layout == CollectionLayout.BY_EXPANSION && state.sections.isNotEmpty()) {
+            IconButton(onClick = onToggleExpandAll, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = if (canExpandAll) Icons.Default.UnfoldMore else Icons.Default.UnfoldLess,
+                    contentDescription = if (canExpandAll) AppLocale.expandAll else AppLocale.collapseAll,
+                    tint = AppColors.textSecondary,
+                    modifier = Modifier.size(20.dp)
                 )
             }
+            Spacer(modifier = Modifier.width(4.dp))
         }
-        item {
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable(enabled = canCollapseAll, onClick = onCollapseAll),
-                color = if (canCollapseAll) AppColors.card else AppColors.card.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, AppColors.textMuted.copy(alpha = 0.3f))
-            ) {
-                Text(
-                    text = AppLocale.collapseAll,
-                    color = if (canCollapseAll) AppColors.textPrimary else AppColors.textMuted,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                )
-            }
-        }
-    }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun FilterBottomSheet(
-    state: com.emabuia.pokevault.viewmodel.CollectionUiState,
-    viewModel: CollectionViewModel,
-    onDismiss: () -> Unit
-) {
-    fun canonicalSetLabel(rawSet: String): String {
-        return AppLocale.displaySetName(rawSet)
-            .ifBlank { if (AppLocale.isItalian) "Espansione sconosciuta" else "Unknown Expansion" }
-            .trim()
-    }
-
-    val setCounts = remember(state.cards) {
-        state.cards
-            .groupBy { canonicalSetLabel(it.set) }
-            .mapValues { it.value.sumOf { c -> c.quantity } }
-            .toList()
-            .sortedByDescending { it.second }
-    }
-    val rarityCounts = remember(state.cards) {
-        state.cards.filter { it.rarity.isNotBlank() }
-            .groupBy { it.rarity }
-            .mapValues { it.value.sumOf { c -> c.quantity } }
-            .toList()
-            .sortedByDescending { it.second }
-    }
-    val types = AppLocale.getTypes()
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = AppColors.surface,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.textMuted.copy(alpha = 0.45f)) }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 32.dp)
-        ) {
+        Box {
             Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(AppColors.searchBar)
+                    .clickable { menuOpen = true }
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
-                Column {
-                    Text(AppLocale.filters, style = MaterialTheme.typography.headlineSmall, color = AppColors.textPrimary)
-                    Text(AppLocale.organizeCardsHint, color = AppColors.textMuted, fontSize = 12.sp)
-                }
-                TextButton(onClick = {
-                    viewModel.filterBySupertype(SupertypeFilter.ALL)
-                    viewModel.filterBySet(null)
-                    viewModel.filterByType(null)
-                    viewModel.filterByRarity(null)
-                    viewModel.updateSortOrder(SortOrder.NUMBER)
-                }) {
-                    Icon(Icons.Default.RestartAlt, contentDescription = null, tint = AppColors.blue)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(AppLocale.resetFilters, color = AppColors.blue)
-                }
+                Icon(
+                    Icons.AutoMirrored.Filled.Sort,
+                    contentDescription = AppLocale.sortMenuTitle,
+                    tint = AppColors.textSecondary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    state.sort.label(),
+                    color = AppColors.textPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = AppColors.textMuted,
+                    modifier = Modifier.size(18.dp)
+                )
             }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            FilterSectionCard(
-                title = "Ordinamento",
-                icon = Icons.AutoMirrored.Filled.Sort
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                containerColor = AppColors.surface
             ) {
-                item {
-                    FilterChip(
-                        label = AppLocale.sortRecent,
-                        isSelected = state.sortOrder == SortOrder.NEWEST,
-                        onClick = { viewModel.updateSortOrder(SortOrder.NEWEST) }
+                MenuHeader(AppLocale.sortSectionCards)
+                CollectionSort.entries.forEach { sort ->
+                    MenuOption(
+                        label = sort.label(),
+                        selected = state.sort == sort,
+                        onClick = { onSort(sort); menuOpen = false }
                     )
                 }
-                item {
-                    FilterChip(
-                        label = AppLocale.sortPriceAsc,
-                        isSelected = state.sortOrder == SortOrder.PRICE_ASC,
-                        onClick = { viewModel.updateSortOrder(SortOrder.PRICE_ASC) }
-                    )
-                }
-                item {
-                    FilterChip(
-                        label = AppLocale.sortPriceDesc,
-                        isSelected = state.sortOrder == SortOrder.PRICE_DESC,
-                        onClick = { viewModel.updateSortOrder(SortOrder.PRICE_DESC) }
-                    )
-                }
-                item {
-                    FilterChip(
-                        label = AppLocale.sortNameAsc,
-                        isSelected = state.sortOrder == SortOrder.NAME_ASC,
-                        onClick = { viewModel.updateSortOrder(SortOrder.NAME_ASC) }
-                    )
-                }
-                item {
-                    FilterChip(
-                        label = AppLocale.sortSetNumber,
-                        isSelected = state.sortOrder == SortOrder.NUMBER,
-                        onClick = { viewModel.updateSortOrder(SortOrder.NUMBER) }
-                    )
-                }
-            }
-
-            FilterSectionCard(
-                title = "Categoria",
-                icon = Icons.Default.Category
-            ) {
-                item {
-                    FilterChip(
-                        label = "Tutti",
-                        isSelected = state.supertypeFilter == SupertypeFilter.ALL,
-                        onClick = { viewModel.filterBySupertype(SupertypeFilter.ALL) }
-                    )
-                }
-                item {
-                    FilterChip(
-                        label = "Pokémon",
-                        isSelected = state.supertypeFilter == SupertypeFilter.POKEMON,
-                        onClick = { viewModel.filterBySupertype(SupertypeFilter.POKEMON) }
-                    )
-                }
-                item {
-                    FilterChip(
-                        label = "Trainer",
-                        isSelected = state.supertypeFilter == SupertypeFilter.TRAINER,
-                        onClick = { viewModel.filterBySupertype(SupertypeFilter.TRAINER) }
-                    )
-                }
-                item {
-                    FilterChip(
-                        label = "Energy",
-                        isSelected = state.supertypeFilter == SupertypeFilter.ENERGY,
-                        onClick = { viewModel.filterBySupertype(SupertypeFilter.ENERGY) }
-                    )
-                }
-            }
-
-            FilterSectionCard(
-                title = "Tipologia",
-                icon = Icons.Default.Bolt
-            ) {
-                item {
-                    FilterChip(
-                        label = "Tutti",
-                        isSelected = state.selectedType == null,
-                        onClick = { viewModel.filterByType(null) }
-                    )
-                }
-                items(types, key = { it }) { type ->
-                    FilterChip(
-                        label = type,
-                        isSelected = state.selectedType == type,
-                        onClick = { viewModel.filterByType(type) }
-                    )
-                }
-            }
-
-            if (setCounts.isNotEmpty()) {
-                FilterSectionCard(
-                    title = "Espansione",
-                    icon = Icons.Default.CollectionsBookmark
-                ) {
-                    item {
-                        FilterChip(
-                            label = "Tutti i set",
-                            isSelected = state.selectedSet == null,
-                            onClick = { viewModel.filterBySet(null) }
-                        )
-                    }
-                    items(setCounts, key = { it.first }) { (setLabel, count) ->
-                        FilterChip(
-                            label = "$setLabel ($count)",
-                            isSelected = state.selectedSet == setLabel,
-                            onClick = { viewModel.filterBySet(setLabel) }
+                if (state.layout == CollectionLayout.BY_EXPANSION) {
+                    HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.2f))
+                    MenuHeader(AppLocale.sortSectionExpansions)
+                    ExpansionOrder.entries.forEach { order ->
+                        MenuOption(
+                            label = order.label(),
+                            selected = state.expansionOrder == order,
+                            onClick = { onExpansionOrder(order); menuOpen = false }
                         )
                     }
                 }
-            }
-
-            if (rarityCounts.isNotEmpty()) {
-                FilterSectionCard(
-                    title = AppLocale.rarity,
-                    icon = Icons.Default.AutoAwesome
-                ) {
-                    item {
-                        FilterChip(
-                            label = AppLocale.all,
-                            isSelected = state.selectedRarity == null,
-                            onClick = { viewModel.filterByRarity(null) }
-                        )
-                    }
-                    items(rarityCounts, key = { it.first }) { (rarity, count) ->
-                        FilterChip(
-                            label = "${AppLocale.translateRarity(rarity)} ($count)",
-                            isSelected = state.selectedRarity == rarity,
-                            onClick = { viewModel.filterByRarity(rarity) }
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Icon(Icons.Default.Done, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(AppLocale.showResults, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 @Composable
-fun ActiveFiltersRow(
-    state: com.emabuia.pokevault.viewmodel.CollectionUiState,
-    viewModel: CollectionViewModel
-) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (state.selectedSet != null) {
-            item {
-                RemovableFilterChip(
-                    label = "Set: ${state.selectedSet}",
-                    onRemove = { viewModel.filterBySet(null) }
-                )
-            }
-        }
-        if (state.selectedType != null) {
-            item {
-                RemovableFilterChip(
-                    label = "Tipo: ${state.selectedType}",
-                    onRemove = { viewModel.filterByType(null) }
-                )
-            }
-        }
-        if (state.selectedRarity != null) {
-            item {
-                RemovableFilterChip(
-                    label = "Rarità: ${AppLocale.translateRarity(state.selectedRarity)}",
-                    onRemove = { viewModel.filterByRarity(null) }
-                )
-            }
-        }
-        if (state.supertypeFilter != SupertypeFilter.ALL) {
-            item {
-                RemovableFilterChip(
-                    label = "${AppLocale.filterCategoryPrefix}: ${state.supertypeFilter.label()}",
-                    onRemove = { viewModel.filterBySupertype(SupertypeFilter.ALL) }
-                )
-            }
-        }
-        if (state.sortOrder != SortOrder.NUMBER) {
-            item {
-                RemovableFilterChip(
-                    label = "${AppLocale.filterSortPrefix}: ${state.sortOrder.label()}",
-                    onRemove = { viewModel.updateSortOrder(SortOrder.NUMBER) }
-                )
-            }
-        }
-    }
+private fun MenuHeader(text: String) {
+    Text(
+        text.uppercase(),
+        color = AppColors.textMuted,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+    )
 }
 
 @Composable
-fun RemovableFilterChip(label: String, onRemove: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = AppColors.blue.copy(alpha = 0.2f),
-        border = BorderStroke(1.dp, AppColors.blue.copy(alpha = 0.5f))
-    ) {
-        Row(
-            modifier = Modifier
-                .clickable(onClick = onRemove)
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+private fun MenuOption(label: String, selected: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = {
             Text(
-                text = label,
-                color = AppColors.textPrimary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                label,
+                color = if (selected) AppColors.blue else AppColors.textPrimary,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                fontSize = 14.sp
             )
-            Icon(Icons.Default.Close, contentDescription = null, tint = AppColors.textMuted, modifier = Modifier.size(14.dp))
+        },
+        trailingIcon = if (selected) {
+            { Icon(Icons.Default.Check, contentDescription = null, tint = AppColors.blue, modifier = Modifier.size(18.dp)) }
+        } else null,
+        onClick = onClick
+    )
+}
+
+@Composable
+private fun SegmentedLayout(selected: CollectionLayout, onSelect: (CollectionLayout) -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(AppColors.searchBar)
+            .padding(3.dp)
+    ) {
+        listOf(
+            CollectionLayout.BY_EXPANSION to AppLocale.collectionLayoutByExpansion,
+            CollectionLayout.ALL to AppLocale.collectionLayoutAll
+        ).forEach { (layout, label) ->
+            val isSelected = layout == selected
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isSelected) AppColors.blue else Color.Transparent)
+                    .clickable { onSelect(layout) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    label,
+                    color = if (isSelected) Color.White else AppColors.textSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+// ── Contenuto: tutte le carte ─────────────────────────────────────────────────
+
+@Composable
+private fun AllCardsContent(
+    groups: List<CardGroup>,
+    isGridView: Boolean,
+    gridColumns: Int,
+    selectedKeys: Set<String>,
+    isSelectionMode: Boolean,
+    onClick: (String) -> Unit,
+    onLongClick: (String) -> Unit
+) {
+    val bottom = if (isSelectionMode) 88.dp else 24.dp
+    if (isGridView) {
+        val spacing = if (gridColumns > 4) 6.dp else 10.dp
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(gridColumns),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = bottom),
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            gridItems(groups, key = { it.key }) { group ->
+                CollectionCardGridItem(
+                    card = group.representative,
+                    isSelected = group.key in selectedKeys,
+                    isSelectionMode = isSelectionMode,
+                    gridColumns = gridColumns,
+                    ownedVariants = group.variants,
+                    sharedKey = group.key,
+                    onClick = { onClick(group.key) },
+                    onLongClick = { onLongClick(group.key) },
+                    modifier = Modifier.animateItem()
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = bottom),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(groups, key = { it.key }) { group ->
+                CollectionCardListItem(
+                    group = group,
+                    isSelected = group.key in selectedKeys,
+                    isSelectionMode = isSelectionMode,
+                    showExpansion = true,
+                    onClick = { onClick(group.key) },
+                    onLongClick = { onLongClick(group.key) },
+                    modifier = Modifier.animateItem()
+                )
+            }
+        }
+    }
+}
+
+// ── Contenuto: per espansione ─────────────────────────────────────────────────
+
+@Composable
+private fun ByExpansionContent(
+    sections: List<ExpansionGroupSection>,
+    expanded: Set<String>,
+    onToggle: (String) -> Unit,
+    isGridView: Boolean,
+    gridColumns: Int,
+    selectedKeys: Set<String>,
+    isSelectionMode: Boolean,
+    onClick: (String) -> Unit,
+    onLongClick: (String) -> Unit
+) {
+    // Le righe della griglia si ricalcolano solo se cambiano sezioni o colonne,
+    // non a ogni ricomposizione del contenuto.
+    val gridRows = remember(sections, gridColumns) {
+        sections.associate { it.expansion to it.groups.chunked(gridColumns) }
+    }
+    val cardSpacing = if (gridColumns > 4) 6.dp else 10.dp
+
+    LazyColumn(
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = if (isSelectionMode) 88.dp else 24.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        sections.forEachIndexed { index, section ->
+            val name = section.expansion
+            val isExpanded = name in expanded
+
+            if (index > 0) {
+                item(key = "gap_$name") { Spacer(modifier = Modifier.height(10.dp)) }
+            }
+
+            item(key = "hdr_$name") {
+                ExpansionAccordionHeader(
+                    expansionName = section.label,
+                    totalCards = section.totalQuantity,
+                    totalValue = section.totalValue,
+                    uniqueCards = section.groups.size,
+                    isExpanded = isExpanded,
+                    onToggle = { onToggle(name) }
+                )
+            }
+
+            if (isExpanded) {
+                if (isGridView) {
+                    itemsIndexed(
+                        items = gridRows[name].orEmpty(),
+                        // Chiave sull'indice di riga: col primo elemento della
+                        // riga due righe potevano collidere.
+                        key = { rowIndex, _ -> "row_${name}_$rowIndex" }
+                    ) { _, row ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(cardSpacing),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(AppColors.card)
+                                .padding(horizontal = 10.dp, vertical = if (gridColumns > 4) 3.dp else 5.dp)
+                        ) {
+                            row.forEach { group ->
+                                CollectionCardGridItem(
+                                    card = group.representative,
+                                    isSelected = group.key in selectedKeys,
+                                    isSelectionMode = isSelectionMode,
+                                    gridColumns = gridColumns,
+                                    ownedVariants = group.variants,
+                                    sharedKey = group.key,
+                                    onClick = { onClick(group.key) },
+                                    onLongClick = { onLongClick(group.key) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            repeat(gridColumns - row.size) { Spacer(modifier = Modifier.weight(1f)) }
+                        }
+                    }
+                } else {
+                    items(section.groups, key = { "card_${name}_${it.key}" }) { group ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(AppColors.card)
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            CollectionCardListItem(
+                                group = group,
+                                isSelected = group.key in selectedKeys,
+                                isSelectionMode = isSelectionMode,
+                                showExpansion = false,
+                                onClick = { onClick(group.key) },
+                                onLongClick = { onLongClick(group.key) }
+                            )
+                        }
+                    }
+                }
+
+                item(key = "btm_$name") {
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                            .background(AppColors.card)
+                    )
+                }
+            }
         }
     }
 }
@@ -1104,86 +839,50 @@ private fun ExpansionAccordionHeader(
     isExpanded: Boolean,
     onToggle: () -> Unit
 ) {
-    val shape = if (isExpanded)
-        RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
-    else
-        RoundedCornerShape(12.dp)
+    val shape = if (isExpanded) RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp) else RoundedCornerShape(12.dp)
     val chevronRotation by animateFloatAsState(
         targetValue = if (isExpanded) 180f else 0f,
         animationSpec = tween(AppMotion.chevron),
         label = "expansionChevron"
     )
+    // Il bordo e' il testo attenuato e non un bianco fisso: il bianco al 8%
+    // spariva nel tema chiaro, e la card si confondeva col fondo.
     Surface(
         color = AppColors.card,
         shape = shape,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+        border = BorderStroke(1.dp, AppColors.textMuted.copy(alpha = 0.18f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onToggle)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                shape = CircleShape,
-                color = AppColors.blue.copy(alpha = 0.15f),
-                border = BorderStroke(1.dp, AppColors.blue.copy(alpha = 0.25f))
-            ) {
-                Icon(
-                    imageVector = Icons.Default.AutoAwesomeMosaic,
-                    contentDescription = null,
-                    tint = AppColors.blue,
-                    modifier = Modifier.padding(6.dp).size(14.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = expansionName,
-                        color = AppColors.textPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "\u20AC${"%.2f".format(totalValue)}",
-                            color = AppColors.green,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = AppColors.blue.copy(alpha = 0.2f),
-                            border = BorderStroke(1.dp, AppColors.blue.copy(alpha = 0.3f))
-                        ) {
-                            Text(
-                                text = "x$totalCards",
-                                color = AppColors.blue,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
                 Text(
-                    text = "$uniqueCards uniche · $totalCards tot.",
+                    text = expansionName,
+                    color = AppColors.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = AppLocale.expansionCardsAndCopies(uniqueCards, totalCards),
                     color = AppColors.textMuted,
                     fontSize = 11.sp
                 )
+            }
+            if (totalValue > 0.0) {
+                Text(
+                    text = formatEur(totalValue),
+                    color = AppColors.green,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                Spacer(modifier = Modifier.width(8.dp))
             }
             // Una freccia sola che ruota, non due icone che si scambiano: lo
             // scambio secco non dice in che verso sta andando la sezione.
@@ -1191,65 +890,513 @@ private fun ExpansionAccordionHeader(
                 imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = null,
                 tint = AppColors.textMuted,
-                modifier = Modifier
-                    .size(20.dp)
-                    .graphicsLayer { rotationZ = chevronRotation }
+                modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = chevronRotation }
             )
         }
     }
 }
 
+// ── Stati vuoti ───────────────────────────────────────────────────────────────
+
 @Composable
-fun FilterSectionCard(
+private fun EmptyCollection(onAddCard: () -> Unit) {
+    CenteredMessage(
+        icon = Icons.Default.CollectionsBookmark,
+        title = AppLocale.emptyCollectionTitle,
+        subtitle = AppLocale.emptyCollectionHint,
+        action = AppLocale.addCard,
+        onAction = onAddCard
+    )
+}
+
+/**
+ * Nessun risultato per i filtri: non e' una collezione vuota, e deve dirlo --
+ * prima le due situazioni mostravano la stessa scritta, e con un filtro
+ * dimenticato sembrava che le carte fossero sparite.
+ */
+@Composable
+private fun NoResults(onClear: () -> Unit) {
+    CenteredMessage(
+        icon = Icons.Default.FilterAltOff,
+        title = AppLocale.noResultsTitle,
+        subtitle = null,
+        action = AppLocale.noResultsAction,
+        onAction = onClear
+    )
+}
+
+@Composable
+private fun CenteredMessage(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
-    icon: ImageVector,
-    content: LazyListScope.() -> Unit
+    subtitle: String?,
+    action: String,
+    onAction: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        color = AppColors.card,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Column(modifier = Modifier.padding(vertical = 12.dp)) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(icon, contentDescription = null, tint = AppColors.blue, modifier = Modifier.size(18.dp))
-                Text(title, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold)
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                content = content
+        Icon(icon, contentDescription = null, tint = AppColors.textMuted.copy(alpha = 0.6f), modifier = Modifier.size(48.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(title, color = AppColors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        if (subtitle != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(subtitle, color = AppColors.textMuted, fontSize = 13.sp, textAlign = TextAlign.Center)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = onAction,
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text(action, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+// ── Selezione ─────────────────────────────────────────────────────────────────
+
+@Composable
+private fun SelectionBar(
+    count: Int,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showConfirm by remember { mutableStateOf(false) }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(listOf(Color.Transparent, AppColors.surface.copy(alpha = 0.95f), AppColors.surface))
             )
+            .padding(top = 16.dp, bottom = 12.dp, start = 16.dp, end = 16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconButton(onClick = onCancel, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Close, null, tint = AppColors.textMuted)
+            }
+            Text(
+                text = AppLocale.selectedCount(count),
+                color = AppColors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                modifier = Modifier.weight(1f)
+            )
+            if (showConfirm) {
+                Button(
+                    onClick = { showConfirm = false; onDelete() },
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.red),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text(AppLocale.confirm, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+                OutlinedButton(
+                    onClick = { showConfirm = false },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, AppColors.textMuted.copy(alpha = 0.3f)),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text(AppLocale.cancel, color = AppColors.textMuted, fontSize = 13.sp)
+                }
+            } else {
+                Button(
+                    onClick = { showConfirm = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.red),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(AppLocale.delete, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+        }
+    }
+}
+
+// ── Filtri attivi ─────────────────────────────────────────────────────────────
+
+/** Ogni filtro attivo come chip da togliere col tocco. */
+@Composable
+private fun ActiveFiltersRow(filter: CollectionFilter, viewModel: CollectionViewModel) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (filter.category != CardCategory.ALL) {
+            item(key = "cat") { RemovableFilterChip(filter.category.label()) { viewModel.setCategory(CardCategory.ALL) } }
+        }
+        items(filter.types.toList(), key = { "t_$it" }) { RemovableFilterChip(it) { viewModel.toggleType(it) } }
+        items(filter.rarities.toList(), key = { "r_$it" }) { RemovableFilterChip(it) { viewModel.toggleRarity(it) } }
+        items(filter.expansions.toList(), key = { "e_$it" }) { RemovableFilterChip(it) { viewModel.toggleExpansion(it) } }
+        items(filter.variants.toList(), key = { "v_$it" }) { RemovableFilterChip(CardVariants.label(it)) { viewModel.toggleVariant(it) } }
+        items(filter.languages.toList(), key = { "l_$it" }) { RemovableFilterChip(it) { viewModel.toggleLanguage(it) } }
+        items(filter.values.toList(), key = { "p_${it.name}" }) { RemovableFilterChip(it.label()) { viewModel.toggleValue(it) } }
+        if (filter.onlyDuplicates) {
+            item(key = "dup") { RemovableFilterChip(AppLocale.filterOnlyDuplicates) { viewModel.setOnlyDuplicates(false) } }
+        }
+        item(key = "clear") {
+            TextButton(onClick = { viewModel.clearFilters() }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text(AppLocale.filtersClear, color = AppColors.blue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
 
 @Composable
-fun FilterChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
-    Surface(
+private fun RemovableFilterChip(label: String, onRemove: () -> Unit) {
+    Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick),
-        color = if (isSelected) AppColors.blue else AppColors.card,
-        border = if (!isSelected) BorderStroke(1.dp, AppColors.textMuted.copy(alpha = 0.3f)) else null
+            .clip(RoundedCornerShape(14.dp))
+            .background(AppColors.blue.copy(alpha = 0.15f))
+            .border(1.dp, AppColors.blue.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+            .clickable(onClick = onRemove)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
             text = label,
-            color = if (isSelected) Color.White else AppColors.textPrimary,
+            color = AppColors.textPrimary,
             fontSize = 12.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
+        Icon(Icons.Default.Close, contentDescription = null, tint = AppColors.textMuted, modifier = Modifier.size(14.dp))
     }
 }
+
+// ── Pannello filtri ───────────────────────────────────────────────────────────
+
+/**
+ * Il pannello filtri.
+ *
+ * Ogni scelta si applica subito, e il tasto in fondo dice quante carte
+ * restano: si vede l'effetto prima di chiudere. I chip vanno a capo invece di
+ * scorrere di lato -- con cento espansioni la fila orizzontale di prima non si
+ * usava -- e ognuno dice quante carte contiene.
+ *
+ * Niente riquadri `card` dentro il pannello: nel tema chiaro `surface` e
+ * `card` sono lo stesso bianco, e le sezioni sparivano.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun FilterSheet(
+    state: CollectionUiState,
+    viewModel: CollectionViewModel,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val facets = state.facets
+    val filter = state.filter
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppColors.surface,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.textMuted.copy(alpha = 0.45f)) }
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    AppLocale.filters,
+                    color = AppColors.textPrimary,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    onClick = { viewModel.clearFilters() },
+                    enabled = filter.activeCount > 0
+                ) {
+                    Text(
+                        AppLocale.filtersClear,
+                        color = if (filter.activeCount > 0) AppColors.blue else AppColors.textMuted,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+            ) {
+                FilterSection(AppLocale.filterCategory) {
+                    CardCategory.entries.forEach { category ->
+                        val count = facets.categories[category] ?: 0
+                        if (category == CardCategory.ALL || count > 0) {
+                            SelectChip(
+                                label = category.label(),
+                                count = count,
+                                selected = filter.category == category,
+                                onClick = { viewModel.setCategory(category) }
+                            )
+                        }
+                    }
+                }
+
+                // I tipi solo dove hanno senso: su Allenatori ed Energie non
+                // filtrerebbero niente.
+                val showTypes = filter.category == CardCategory.ALL || filter.category == CardCategory.POKEMON
+                if (showTypes && facets.types.isNotEmpty()) {
+                    FilterSection(AppLocale.filterType) {
+                        facets.types.forEach { (type, count) ->
+                            SelectChip(
+                                label = type,
+                                count = count,
+                                selected = type in filter.types,
+                                onClick = { viewModel.toggleType(type) }
+                            )
+                        }
+                    }
+                }
+
+                if (facets.rarities.isNotEmpty()) {
+                    FilterSection(AppLocale.rarity) {
+                        facets.rarities.forEach { (label, count) ->
+                            val info = remember(label) { RarityUtils.getRarityInfo(facets.raritySamples[label]) }
+                            SelectChip(
+                                label = label,
+                                count = count,
+                                selected = label in filter.rarities,
+                                onClick = { viewModel.toggleRarity(label) },
+                                leading = { RaritySymbolIcon(info, size = 11.dp) }
+                            )
+                        }
+                    }
+                }
+
+                if (facets.variants.size > 1) {
+                    FilterSection(AppLocale.filterVariant) {
+                        facets.variants.forEach { (variant, count) ->
+                            SelectChip(
+                                label = CardVariants.label(variant),
+                                count = count,
+                                selected = variant in filter.variants,
+                                onClick = { viewModel.toggleVariant(variant) },
+                                leading = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(CardVariants.color(variant))
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (facets.expansions.size > 1) {
+                    ExpansionFilterSection(
+                        expansions = facets.expansions,
+                        selected = filter.expansions,
+                        onToggle = viewModel::toggleExpansion
+                    )
+                }
+
+                FilterSection(AppLocale.filterValue) {
+                    ValueBucket.entries.forEach { bucket ->
+                        val count = facets.values[bucket] ?: 0
+                        if (count > 0 || bucket in filter.values) {
+                            SelectChip(
+                                label = bucket.label(),
+                                count = count,
+                                selected = bucket in filter.values,
+                                onClick = { viewModel.toggleValue(bucket) }
+                            )
+                        }
+                    }
+                }
+
+                if (facets.languages.size > 1) {
+                    FilterSection(AppLocale.filterLanguage) {
+                        facets.languages.forEach { (language, count) ->
+                            SelectChip(
+                                label = language,
+                                count = count,
+                                selected = language in filter.languages,
+                                onClick = { viewModel.toggleLanguage(language) }
+                            )
+                        }
+                    }
+                }
+
+                if (facets.duplicates > 0 || filter.onlyDuplicates) {
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { viewModel.setOnlyDuplicates(!filter.onlyDuplicates) }
+                            .padding(vertical = 6.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(AppLocale.filterOnlyDuplicates, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                AppLocale.filterOnlyDuplicatesHint(facets.duplicates),
+                                color = AppColors.textMuted,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Switch(
+                            checked = filter.onlyDuplicates,
+                            onCheckedChange = { viewModel.setOnlyDuplicates(it) },
+                            colors = SwitchDefaults.colors(checkedTrackColor = AppColors.blue)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+
+            // Fisso in fondo: dice quante carte restano prima di chiudere.
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(AppLocale.showCardsButton(state.visibleGroups.size), fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterSection(title: String, content: @Composable FlowRowScope.() -> Unit) {
+    Spacer(modifier = Modifier.height(18.dp))
+    Text(title, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+    Spacer(modifier = Modifier.height(10.dp))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        content = content
+    )
+}
+
+/**
+ * Le espansioni sono tante: le piu' ricche in vista, le altre dietro "Mostra
+ * tutte", e un campo per cercarle. Quelle scelte restano sempre in vista, o
+ * non si capirebbe da dove viene un filtro attivo.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ExpansionFilterSection(
+    expansions: List<FacetCount>,
+    selected: Set<String>,
+    onToggle: (String) -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    var showAll by remember { mutableStateOf(false) }
+    val needsSearch = expansions.size > EXPANSIONS_PREVIEW
+    val shown = remember(expansions, selected, query, showAll) {
+        val q = query.trim().lowercase()
+        when {
+            q.isNotEmpty() -> expansions.filter { it.value.lowercase().contains(q) }
+            showAll || !needsSearch -> expansions
+            else -> {
+                val top = expansions.take(EXPANSIONS_PREVIEW)
+                top + expansions.filter { it.value in selected && it !in top }
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(18.dp))
+    Text(AppLocale.filterExpansion, color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+    if (needsSearch) {
+        Spacer(modifier = Modifier.height(10.dp))
+        LabSearchField(
+            value = query,
+            onValueChange = { query = it },
+            hint = AppLocale.searchExpansionHint,
+            accent = AppColors.blue
+        )
+    }
+    Spacer(modifier = Modifier.height(10.dp))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        shown.forEach { (expansion, count) ->
+            SelectChip(
+                label = expansion,
+                count = count,
+                selected = expansion in selected,
+                onClick = { onToggle(expansion) }
+            )
+        }
+    }
+    if (needsSearch && query.isBlank()) {
+        TextButton(onClick = { showAll = !showAll }, contentPadding = PaddingValues(0.dp)) {
+            Text(
+                if (showAll) AppLocale.showFewer else AppLocale.filterShowAllExpansions(expansions.size),
+                color = AppColors.blue,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+/**
+ * Il chip dei filtri. Bordo col testo attenuato e non un bianco fisso: deve
+ * vedersi sia sul pannello scuro sia su quello chiaro.
+ */
+@Composable
+private fun SelectChip(
+    label: String,
+    count: Int?,
+    selected: Boolean,
+    onClick: () -> Unit,
+    leading: (@Composable () -> Unit)? = null
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .clip(shape)
+            .background(if (selected) AppColors.blue.copy(alpha = 0.16f) else Color.Transparent)
+            .border(
+                1.dp,
+                if (selected) AppColors.blue else AppColors.textMuted.copy(alpha = 0.3f),
+                shape
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        leading?.invoke()
+        Text(
+            label,
+            color = if (selected) AppColors.blue else AppColors.textPrimary,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (count != null) {
+            Text("$count", color = AppColors.textMuted, fontSize = 11.sp)
+        }
+    }
+}
+
+// ── Tessere ───────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1258,6 +1405,8 @@ fun CollectionCardGridItem(
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
     gridColumns: Int = 3,
+    /** Le stampe possedute di questa carta: la tessera le riunisce tutte. */
+    ownedVariants: Set<String> = emptySet(),
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     /**
@@ -1268,62 +1417,82 @@ fun CollectionCardGridItem(
     sharedKey: String? = null,
     modifier: Modifier = Modifier
 ) {
+    val compact = gridColumns > 4
+    val corner = if (compact) 4.dp else 10.dp
+    val imageUrl = remember(card.imageUrl) { ImageUrlUtils.safeProxiedImageUrl(card.imageUrl) }
+    var failed by remember(imageUrl) { mutableStateOf(imageUrl.isBlank()) }
+
     Box(
         modifier = modifier
             .aspectRatio(0.72f)
-            .clip(RoundedCornerShape(if (gridColumns > 4) 4.dp else 10.dp))
+            .clip(RoundedCornerShape(corner))
             .background(AppColors.card)
-            .then(
-                when {
-                    isSelected -> Modifier.border(if (gridColumns > 4) 1.dp else 2.dp, AppColors.blue, RoundedCornerShape(if (gridColumns > 4) 4.dp else 10.dp))
-                    else -> Modifier.border(if (gridColumns > 4) 0.5.dp else 1.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(if (gridColumns > 4) 4.dp else 10.dp))
-                }
+            .border(
+                width = if (isSelected) (if (compact) 1.dp else 2.dp) else (if (compact) 0.5.dp else 1.dp),
+                color = if (isSelected) AppColors.blue else AppColors.textMuted.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(corner)
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
-        AsyncImage(
-            model = ImageUrlUtils.safeProxiedImageUrl(card.imageUrl),
-            contentDescription = card.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (sharedKey != null) Modifier.sharedCardImage(sharedKey) else Modifier)
-                .holoFoil(enabled = RarityUtils.hasFoilFinish(card.rarity)),
-            error = painterResource(id = android.R.drawable.ic_menu_report_image) // Fallback invisibile o icona standard
-        )
+        if (failed) {
+            // Il nome della carta al posto dell'icona di sistema "immagine
+            // rotta" di prima: una tessera senza immagine deve dire che carta e'.
+            CollectionCardImageFallback(card = card, compact = compact)
+        } else {
+            // Sotto l'immagine, non dentro: resta visibile mentre arriva.
+            CardImageSkeleton(number = card.cardNumber)
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = card.name,
+                contentScale = ContentScale.Crop,
+                onError = { failed = true },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (sharedKey != null) Modifier.sharedCardImage(sharedKey) else Modifier)
+                    .holoFoil(enabled = RarityUtils.hasFoilFinish(card.rarity))
+            )
+        }
 
-        if (isSelected) Box(modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.blue.copy(alpha = 0.15f)))
+        if (isSelected) Box(modifier = Modifier.fillMaxSize().background(AppColors.blue.copy(alpha = 0.15f)))
 
-        // Selection checkbox (top-left)
         if (isSelectionMode) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(if (gridColumns > 4) 2.dp else 4.dp)
-                    .size(if (gridColumns > 4) 12.dp else 20.dp)
+                    .padding(if (compact) 2.dp else 4.dp)
+                    .size(if (compact) 12.dp else 20.dp)
                     .clip(CircleShape)
                     .background(if (isSelected) AppColors.blue else Color.Black.copy(alpha = 0.5f))
-                    .border(if (gridColumns > 4) 1.dp else 1.5.dp, if (isSelected) AppColors.blue else Color.White.copy(alpha = 0.4f), CircleShape),
+                    .border(if (compact) 1.dp else 1.5.dp, if (isSelected) AppColors.blue else Color.White.copy(alpha = 0.4f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (isSelected) {
-                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(if (gridColumns > 4) 8.dp else 13.dp))
+                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(if (compact) 8.dp else 13.dp))
                 }
             }
         }
 
-        // Quantity badge (top-right)
+        // Le stampe possedute, in alto a sinistra: dall'altra parte c'e' gia'
+        // il contatore delle copie. Sotto le cinque colonne le tessere sono
+        // troppo piccole perche' una lettera si legga, e li' si saltano.
+        if (ownedVariants.isNotEmpty() && gridColumns <= 4 && !isSelectionMode) {
+            OwnedVariantBadges(
+                variants = ownedVariants,
+                size = if (gridColumns > 3) 13 else 16,
+                fontSize = if (gridColumns > 3) 7 else 9,
+                modifier = Modifier.align(Alignment.TopStart).padding(4.dp)
+            )
+        }
+
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(if (gridColumns > 4) 2.dp else 4.dp)
-                .size(if (gridColumns > 4) 14.dp else 22.dp)
-                .clip(CircleShape).background(AppColors.blue),
+                .padding(if (compact) 2.dp else 4.dp)
+                .size(if (compact) 14.dp else 22.dp)
+                .clip(CircleShape)
+                .background(AppColors.blue),
             contentAlignment = Alignment.Center
         ) {
-            val compact = gridColumns > 4
             val quantityFontSize = if (compact) 7.sp else 10.sp
             Text(
                 text = "x${card.quantity}",
@@ -1340,29 +1509,66 @@ fun CollectionCardGridItem(
     }
 }
 
+@Composable
+private fun CollectionCardImageFallback(card: PokemonCard, compact: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppColors.surface)
+            .padding(if (compact) 4.dp else 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = card.name,
+                color = AppColors.textPrimary,
+                fontSize = if (compact) 8.sp else 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            if (card.cardNumber.isNotBlank()) {
+                Text(
+                    text = "#${card.cardNumber}",
+                    color = AppColors.textMuted,
+                    fontSize = if (compact) 7.sp else 8.sp,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Una riga della vista lista. Il prezzo e' quello della stampa piu' cara, come
+ * nell'ordinamento: prima mostrava il prezzo della prima stampa, e la riga
+ * diceva 1 € per una carta che in collezione valeva 30.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun CollectionCardListItem(
-    card: PokemonCard,
-    isSelected: Boolean = false,
-    isSelectionMode: Boolean = false,
+private fun CollectionCardListItem(
+    group: CardGroup,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
+    showExpansion: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit = {},
-    onDelete: () -> Unit
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val card = group.representative
+    val imageUrl = remember(card.imageUrl) { ImageUrlUtils.safeProxiedImageUrl(card.imageUrl) }
     Row(
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(if (isSelected) AppColors.blue.copy(alpha = 0.15f) else AppColors.card)
-            .then(
-                if (isSelected) Modifier.border(1.dp, AppColors.blue, RoundedCornerShape(12.dp)) else Modifier
-            )
+            .then(if (isSelected) Modifier.border(1.dp, AppColors.blue, RoundedCornerShape(12.dp)) else Modifier)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Selection checkbox
         if (isSelectionMode) {
             Box(
                 modifier = Modifier
@@ -1372,41 +1578,47 @@ fun CollectionCardListItem(
                     .border(1.5.dp, if (isSelected) AppColors.blue else AppColors.textMuted.copy(alpha = 0.4f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (isSelected) {
-                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                }
+                if (isSelected) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
             }
         }
 
-        AsyncImage(
-            model = ImageUrlUtils.safeProxiedImageUrl(card.imageUrl),
-            contentDescription = card.name,
-            modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp)),
-            contentScale = ContentScale.Crop
-        )
-        
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(card.name, color = AppColors.textPrimary, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.width(6.dp))
-                if (card.estimatedValue > 0) {
-                    Text("\u20AC${"%.2f".format(card.estimatedValue)}", color = AppColors.green, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                }
-            }
-            Text("${AppLocale.displaySetName(card.set)} \u00B7 x${card.quantity}", color = AppColors.textMuted, fontSize = 12.sp)
+        Box(modifier = Modifier.size(50.dp, 70.dp).clip(RoundedCornerShape(4.dp))) {
+            CardImageSkeleton(number = card.cardNumber)
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = card.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
+
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                card.name,
+                color = AppColors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                buildString {
+                    if (showExpansion) append(group.expansionLabel).append(" · ")
+                    if (card.cardNumber.isNotBlank()) append("#").append(card.cardNumber).append(" · ")
+                    append("x").append(group.totalQuantity)
+                },
+                color = AppColors.textMuted,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            OwnedVariantBadges(variants = group.variants, size = 15, fontSize = 8)
+        }
+
+        if (group.topValue > 0) {
+            Text(formatEur(group.topValue), color = AppColors.green, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
         if (!isSelectionMode) {
             Icon(Icons.Default.ChevronRight, null, tint = AppColors.textMuted)
-        }
-    }
-}
-
-@Composable
-fun StatMiniCard(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
-    Box(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.1f)).padding(10.dp)) {
-        Column {
-            Text(value, color = color, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text(label, color = AppColors.textMuted, fontSize = 10.sp)
         }
     }
 }

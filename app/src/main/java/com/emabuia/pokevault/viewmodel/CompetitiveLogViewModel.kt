@@ -1,10 +1,13 @@
 package com.emabuia.pokevault.viewmodel
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.data.competitive.CompetitiveSummary
+import com.emabuia.pokevault.data.competitive.MatchupAnalyzer
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.MatchLog
@@ -74,6 +77,29 @@ class CompetitiveLogViewModel : ViewModel() {
     val globalWinRate: Float get() {
         val total = globalWins + globalLosses + globalTies
         return if (total == 0) 0f else (globalWins.toFloat() / total) * 100f
+    }
+
+    /**
+     * Tutto quello che si puo' dire sulle partite registrate.
+     *
+     * E' `derivedStateOf` e non una funzione: la schermata delle statistiche la
+     * legge in piu' punti durante la stessa composizione, e ricalcolare
+     * l'aggregazione a ogni lettura sarebbe lavoro buttato. Si aggiorna da sola
+     * quando cambiano le partite o i tornei.
+     */
+    val summary: CompetitiveSummary by derivedStateOf {
+        MatchupAnalyzer.analyze(allMatches, tournaments)
+    }
+
+    /**
+     * I mazzi avversari gia' incontrati, dal piu' frequente.
+     *
+     * Servono a proporli al momento di registrare una partita: il campo e'
+     * libero, e la stessa grafia scritta in tre modi diversi produce tre
+     * matchup separati che non dicono niente.
+     */
+    val knownOpponentDecks: List<String> by derivedStateOf {
+        MatchupAnalyzer.knownOpponentDecks(allMatches)
     }
 
     private var matchesJob: Job? = null

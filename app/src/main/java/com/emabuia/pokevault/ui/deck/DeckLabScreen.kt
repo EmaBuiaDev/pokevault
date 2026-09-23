@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.CardClassifier
 import com.emabuia.pokevault.data.model.Deck
@@ -47,33 +48,42 @@ fun DeckLabScreen(
     // tocco, che e' gia' il comportamento corretto. Raccoglierlo senza usarlo
     // faceva solo ricomporre l'intero schermo a ogni cambio di stato premium.
     val context = LocalContext.current
+    val deckScope = rememberCoroutineScope()
 
     var showSheet by remember { mutableStateOf(false) }
     var showDiscardDeckDialog by remember { mutableStateOf(false) }
+    var showDeleteDeckDialog by remember { mutableStateOf(false) }
+    var showNewDeckSourceDialog by remember { mutableStateOf(false) }
 
     /** C'e' del lavoro che uno swipe distruggerebbe. */
     fun hasDeckWork(): Boolean =
         viewModel.selectedCardsIds.isNotEmpty() || viewModel.newDeckName.isNotBlank()
 
-    // Uno swipe leggero verso il basso non puo' buttare via un deck appena
-    // importato: cinquanta carte riconosciute, il nome, la copertina scelta.
-    // Il gesto viene rifiutato e al suo posto si chiede conferma.
+    // Uno swipe verso il basso non puo' buttare via un deck appena importato:
+    // cinquanta carte riconosciute, il nome, la copertina scelta. Il gesto
+    // viene rifiutato e il pannello torna su.
+    //
+    // Rifiutato in silenzio, pero'. Prima apriva la richiesta di conferma, e
+    // il risultato era che scorrendo la griglia delle carte -- quando la lista
+    // e' gia' in cima, il resto dello scorrimento arriva al pannello e lui lo
+    // legge come un tentativo di chiusura -- compariva dal nulla un dialog che
+    // chiedeva se buttare via il deck.
+    //
+    // Chi invece chiude apposta: il tasto X (onRequestClose) e il tasto
+    // indietro (il BackHandler dentro al pannello). Il tocco fuori passa di
+    // qui come lo swipe, quindi finche' c'e' del lavoro non fa niente: le due
+    // vie esplicite restano, e nessuna delle due puo' scattare per sbaglio.
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { target ->
-            if (target == SheetValue.Hidden && hasDeckWork()) {
-                showDiscardDeckDialog = true
-                false
-            } else {
-                true
-            }
+            !(target == SheetValue.Hidden && hasDeckWork())
         }
     )
 
     fun closeDeckSheet() {
         showDiscardDeckDialog = false
         showSheet = false
-        viewModel.resetNewDeckState()
+        viewModel.discardEditingDeck()
     }
     var showImportDialog by remember { mutableStateOf(false) }
     var showPremiumDeckDialog by remember { mutableStateOf(false) }
@@ -227,7 +237,10 @@ fun DeckLabScreen(
                         onClick = {
                             if (premiumManager.canCreateDeck(viewModel.decks.size)) {
                                 viewModel.resetNewDeckState()
-                                showSheet = true
+                                // La domanda si fa qui, una volta, invece di
+                                // tenere un selettore acceso in cima
+                                // all'editor per tutta la sessione.
+                                showNewDeckSourceDialog = true
                             } else {
                                 showPremiumDeckDialog = true
                             }
@@ -247,17 +260,20 @@ fun DeckLabScreen(
                 selectedDeck != null -> {
                     DeckDetailView(
                         deck = selectedDeck!!,
-                        allOwnedCards = viewModel.ownedCards,
+                        // allCards e non ownedCards: un deck di prova ha dentro
+                        // carte che non sono in collezione, e senza queste il
+                        // dettaglio mostrerebbe un mazzo mezzo vuoto.
+                        allOwnedCards = viewModel.allCards,
                         onBack = { selectedDeck = null },
                         onCardClick = onCardClick,
                         onEdit = {
                             viewModel.prepareEdit(selectedDeck!!)
                             showSheet = true
                         },
-                        onDelete = {
-                            viewModel.deleteDeck(selectedDeck!!.id)
-                            selectedDeck = null
-                        },
+                        // Il cestino non esegue piu' da solo: cancellare un
+                        // deck non si annulla, e da quando esistono i deck di
+                        // prova si porta via anche le loro carte.
+                        onDelete = { showDeleteDeckDialog = true },
                         onDuplicate = {
                             if (premiumManager.canCreateDeck(viewModel.decks.size)) {
                                 viewModel.duplicateDeck(selectedDeck!!)
@@ -286,8 +302,8 @@ fun DeckLabScreen(
                     } else {
                         // Indice costruito una volta per l'intera lista, invece che
                         // scandito da ogni riga.
-                        val ownedById = remember(viewModel.ownedCards) {
-                            viewModel.ownedCards.associateBy { it.id }
+                        val ownedById = remember(viewModel.allCards) {
+                            viewModel.allCards.associateBy { it.id }
                         }
                         LazyColumn(
                             contentPadding = PaddingValues(20.dp),
@@ -352,14 +368,25 @@ fun DeckLabScreen(
         if (showSheet) {
             ModalBottomSheet(
                 onDismissRequest = {
-                    // Vale anche per il tasto indietro e per il tocco fuori:
-                    // sono tre modi di dire la stessa cosa per sbaglio.
+                    // Resta per il tocco fuori dal pannello. Il tasto indietro
+                    // non passa piu' di qui: vedi il BackHandler sotto.
                     if (hasDeckWork()) showDiscardDeckDialog = true else closeDeckSheet()
                 },
                 sheetState = sheetState,
                 containerColor = AppColors.surface,
+                // Il pannello non si chiude da solo col tasto indietro.
+                // Lasciandoglielo fare, spariva prima che la conferma
+                // comparisse: si rispondeva "continua" a un dialog sopra al
+                // nulla, e il pannello non tornava piu' su perche' il suo stato
+                // era gia' Hidden. Ora il tasto indietro lo gestiamo noi, e il
+                // pannello resta dov'e' finche' non si e' deciso.
+                properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
                 dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.textMuted) }
             ) {
+                BackHandler {
+                    if (hasDeckWork()) showDiscardDeckDialog = true else closeDeckSheet()
+                }
+
                 NewDeckBottomSheetContent(
                     viewModel = viewModel,
                     isEditing = viewModel.editingDeckId != null,
@@ -374,6 +401,62 @@ fun DeckLabScreen(
                     }
                 )
             }
+        }
+
+        val deckToDelete = selectedDeck
+        if (showDeleteDeckDialog && deckToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDeckDialog = false },
+                containerColor = AppColors.card,
+                title = {
+                    Text(
+                        text = AppLocale.deckDeleteTitle,
+                        color = AppColors.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = AppLocale.deckDeleteBody(deckToDelete.name),
+                            color = AppColors.textSecondary,
+                            fontSize = 13.sp
+                        )
+                        // Su un deck di prova si perde di piu' di quanto dica
+                        // il nome del deck: vale la pena scriverlo prima.
+                        if (deckToDelete.deckOnly) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = AppLocale.deckDeleteBodyTestDeck,
+                                color = AppColors.yellow,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    // Tenere il deck e' la scelta sicura, quindi ha il peso
+                    // visivo e sta dove il pollice arriva per primo.
+                    Button(
+                        onClick = { showDeleteDeckDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(AppLocale.cancel, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteDeckDialog = false
+                            viewModel.deleteDeck(deckToDelete.id)
+                            selectedDeck = null
+                        }
+                    ) {
+                        Text(AppLocale.delete, color = AppColors.red)
+                    }
+                }
+            )
         }
 
         if (showDiscardDeckDialog) {
@@ -398,7 +481,16 @@ fun DeckLabScreen(
                     // Continuare e' la scelta sicura, quindi sta dove il pollice
                     // arriva per primo e ha il peso visivo.
                     Button(
-                        onClick = { showDiscardDeckDialog = false },
+                        onClick = {
+                            showDiscardDeckDialog = false
+                            // Rete di sicurezza: il pannello non dovrebbe mai
+                            // essere nascosto arrivando qui, ma se un dispositivo
+                            // lo chiudesse lo stesso, "continua" deve riportare
+                            // dove si stava -- non lasciare uno schermo vuoto.
+                            if (!sheetState.isVisible) {
+                                deckScope.launch { sheetState.show() }
+                            }
+                        },
                         colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
                         shape = RoundedCornerShape(10.dp)
                     ) {
@@ -426,24 +518,49 @@ fun DeckLabScreen(
             )
         }
 
-        // Risultato import
+        // Deck nuovo: la stessa domanda dell'import, ma al contrario -- le
+        // carte che non possiedi non ci sono ancora, la risposta vale per
+        // quelle che verranno. Chiudere senza scegliere non apre l'editor:
+        // e' una rinuncia, non un valore predefinito preso di nascosto.
+        if (showNewDeckSourceDialog) {
+            DeckCardSourceDialog(
+                prompt = AppLocale.deckSourceNewDeckQuestion,
+                onChoose = { source ->
+                    showNewDeckSourceDialog = false
+                    viewModel.chooseDeckCardSource(source)
+                    showSheet = true
+                },
+                onDismiss = { showNewDeckSourceDialog = false }
+            )
+        }
+
+        // Import: prima la scelta su dove finiscono le carte che non possiedi,
+        // poi il riepilogo. Sono due momenti diversi e non vanno mescolati --
+        // decidere in fondo a un elenco di carte mancanti e' una domanda che
+        // arriva quando l'utente sta gia' leggendo un esito.
         val importResult = viewModel.importResult
         if (importResult != null) {
-            ImportResultDialog(
-                result = importResult,
-                isAddingMissingCards = viewModel.isAddingMissingCards,
-                onDismiss = {
-                    viewModel.clearImportResult()
-                    if (viewModel.selectedCardsIds.isNotEmpty()) {
-                        showSheet = true
+            if (viewModel.isImportSourceChoicePending) {
+                DeckCardSourceDialog(
+                    prompt = AppLocale.deckSourceQuestion(
+                        importResult.missingMetaDeckCards.sumOf { it.qty }
+                    ),
+                    isWorking = viewModel.isAddingMissingCards,
+                    onChoose = { source -> viewModel.applyImportCardSource(source, context) },
+                    onSkip = { viewModel.skipMissingCards() },
+                    onDismiss = { viewModel.skipMissingCards() }
+                )
+            } else {
+                ImportResultDialog(
+                    result = importResult,
+                    onDismiss = {
+                        viewModel.clearImportResult()
+                        if (viewModel.selectedCardsIds.isNotEmpty()) {
+                            showSheet = true
+                        }
                     }
-                },
-                onAddMissingCards = {
-                    viewModel.addMissingCardsToCollection(importResult.missingMetaDeckCards, context) {
-                        showSheet = true
-                    }
-                }
-            )
+                )
+            }
         }
 
         // Premium gate dialogs

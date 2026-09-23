@@ -31,13 +31,19 @@ Risposta di `verify` e `entitlement`:
   "state": "active",
   "expiryTimeMs": 1789041101186,
   "autoRenewing": true,
-  "productId": "pokevault_premium_monthly"
+  "productId": "pokevault_premium_monthly",
+  "giftUntilMs": null
 }
 ```
 
 `entitled` è già la decisione finale: uno stato `canceled` resta valido fino
 alla scadenza, perché l'utente ha disdetto il rinnovo ma ha pagato fino a quella
 data.
+
+Da `/v1/billing/entitlement` è anche la **somma di due fonti**: l'abbonamento
+Play e il mese regalo riscattato con un codice (vedi `GIFT.md`). Un utente senza
+abbonamento ma con un regalo attivo riceve `entitled: true` e `state: "gift"`.
+Il client interroga un endpoint solo, così non deve conciliare due verità.
 
 ## Cosa devi configurare tu
 
@@ -98,6 +104,76 @@ quando il messaggio non è una notifica di abbonamento o il purchase token non �
 ancora associato a un utente: un non-2xx farebbe ritentare Pub/Sub all'infinito
 su un messaggio che non diventerà mai valido.
 
+## Il sintomo, visto davvero
+
+Osservato in test interno il 16 settembre 2026, sulla 3.1.3 (versionCode 35):
+
+> Comprato l'abbonamento, poi cambiato account PokeVault sullo stesso telefono:
+> **qualunque account risulta premium.**
+
+Non e' un bug introdotto da qualche parte, e' precisamente questo buco.
+L'abbonamento appartiene all'**account Google Play del dispositivo**, non
+all'account PokeVault: `queryPurchasesAsync` chiede al Play Store se quel
+portafoglio possiede l'abbonamento, e il Play Store non sa che esista un login
+PokeVault. `updatePremiumStatus(purchased.isNotEmpty())` accende quindi il
+premium per chiunque sia connesso in quel momento.
+
+Quanto pesa: per condividere il premium bisogna condividere il telefono, non si
+passa a distanza. Chi paga e poi si rifa' l'account tiene il premium. E' stato
+deciso di pubblicare la 3.1.3 cosi' — si comporta come la 3.1.2 gia' live, non
+peggiora nulla — e di affrontare il binding come lavoro a se'.
+
+Effetto collaterale da ricordare quando si testa: con un abbonamento attivo sul
+dispositivo, **il riscatto di un codice regalo non produce alcun effetto
+visibile**, perche' il premium risulta gia' acceso. Per provare i regali serve
+un account Play senza abbonamento, o annullare quello di test.
+
+## Un acquisto, un account
+
+Regola scelta il 16/09/2026: **vince il primo account che verifica**
+quell'acquisto. Gli altri ricevono `409` con
+`{"entitled": false, "reason": "token_claimed_by_other_account"}` e restano
+senza premium.
+
+Senza questa regola la verifica lato server non avrebbe risolto niente:
+`saveEntitlement` risolve il conflitto su `uid` e l'indice su `purchase_token`
+non era unico, quindi ogni account poteva rivendicare lo stesso abbonamento e
+ottenere la sua riga. Lo chiude `schema/011_entitlement_one_token_one_account.sql`,
+che rende unico il token.
+
+### Sbloccare un abbonamento legato all'account sbagliato
+
+Capita: l'utente apre l'app col primo account che trova e quello si prende
+l'abbonamento. Si libera cosi', e al giro successivo il primo che verifica se
+lo riprende:
+
+```bash
+npx wrangler d1 execute pokevault-catalog --remote \
+  --command "DELETE FROM entitlements WHERE purchase_token = '<token>'"
+```
+
+Per trovare il token partendo dall'utente:
+
+```bash
+npx wrangler d1 execute pokevault-catalog --remote \
+  --command "SELECT purchase_token, state FROM entitlements WHERE uid = '<uid>'"
+```
+
+## Cosa NON risolve
+
+Non ferma un'app modificata. Le funzioni premium di PokeVault sono tutte locali
+— album, deck, export, sprite — quindi un APK patchato le sblocca comunque,
+qualunque cosa risponda il Worker. Nessuna verifica lato server puo' impedirlo:
+l'unica difesa sarebbe spostare qualche funzione premium sul server, che e' un
+lavoro di tutt'altra portata.
+
+Quello che risolve, e che e' il motivo per cui esiste:
+
+- il premium segue l'account PokeVault, non l'account Google Play del telefono;
+- chi paga e perde lo stato locale (cache Play stantia, cambio dispositivo,
+  reinstallo) puo' **recuperare** il premium, cosa che prima era impossibile;
+- rimborsi, disdette e sospensioni diventano visibili in fretta.
+
 ## Cosa manca ancora nell'app
 
 Il Worker è pronto; **il client Android non lo chiama ancora**. Per chiudere il
@@ -115,3 +191,17 @@ cerchio serve, in `PremiumManager`:
 Questo passo è deliberatamente separato: senza i secret configurati (punto 2)
 gli endpoint rispondono 500/502, e cablare subito il client renderebbe il
 premium non funzionante finché la configurazione non è completa.
+
+> **Aggiornamento (16 settembre 2026).** Il client ora chiama il Worker, ma
+> **solo** per i codici regalo (`/v1/gift/*`, vedi `GIFT.md`), che sono in
+> produzione.
+>
+> Di conseguenza **`FIREBASE_PROJECT_ID` è già impostato** (`pokevault-32d28`):
+> è l'unico secret condiviso fra questa pagina e i codici regalo, e non va
+> rimesso. Del punto 2 qui sopra resta da fare solo
+> `PLAY_SERVICE_ACCOUNT_JSON` / `PLAY_PACKAGE_NAME` / `RTDN_SHARED_SECRET`.
+>
+> I punti 1, 3 e 4 restano interi: l'entitlement Play è ancora verificato solo
+> in locale da `PremiumManager`, e `/v1/billing/verify` risponde 502 finché il
+> service account non è configurato. I codici regalo funzionano lo stesso —
+> non passano da Google.

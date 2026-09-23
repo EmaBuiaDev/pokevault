@@ -351,6 +351,23 @@ export function isEntitled(state: string, expiryTimeMs: number | null): boolean 
   return false;
 }
 
+/**
+ * Scadenza del mese regalo attivo di un utente, o null se non ne ha uno.
+ *
+ * La riga la scrive src/gift.ts, ma la lettura sta qui e non li' per tenere le
+ * dipendenze in una sola direzione: gift.ts importa da billing.ts (la verifica
+ * dell'ID token), non viceversa. Chi calcola l'entitlement deve conoscere
+ * entrambe le fonti, ed e' questo modulo.
+ */
+export async function activeGiftUntilMs(db: D1Database, uid: string): Promise<number | null> {
+  const row = await db
+    .prepare('SELECT granted_until_ms FROM gift_redemptions WHERE uid = ?1')
+    .bind(uid)
+    .first<{ granted_until_ms: number }>();
+  const until = row?.granted_until_ms ?? null;
+  return until !== null && until > Date.now() ? until : null;
+}
+
 // ── Rotte ───────────────────────────────────────────────────────────────────
 
 function json(data: unknown, status = 200): Response {
@@ -396,10 +413,34 @@ export async function handleBillingRequest(
     const purchaseToken = body.purchaseToken?.trim();
     if (!purchaseToken) return json({ error: 'purchaseToken mancante' }, 400);
 
+    // Un acquisto appartiene a un account solo, e vince il primo che lo
+    // verifica. Senza questo controllo la verifica lato server non risolverebbe
+    // nulla: ogni account potrebbe rivendicare lo stesso abbonamento e
+    // ottenere la sua riga, che e' esattamente il "cambio account e sono tutti
+    // premium" che questa pagina esiste per chiudere.
+    const owner = await db
+      .prepare('SELECT uid FROM entitlements WHERE purchase_token = ?1')
+      .bind(purchaseToken)
+      .first<{ uid: string }>();
+    if (owner && owner.uid !== uid) {
+      return json({ entitled: false, reason: 'token_claimed_by_other_account' }, 409);
+    }
+
     const status = await fetchSubscriptionStatus(purchaseToken, env);
     if (!status) return json({ error: 'verifica presso Google non riuscita' }, 502);
 
-    await saveEntitlement(db, uid, purchaseToken, status);
+    try {
+      await saveEntitlement(db, uid, purchaseToken, status);
+    } catch (error) {
+      // Due account che verificano lo stesso token nello stesso istante
+      // passano entrambi il controllo di sopra: a fermarli e' l'indice unico
+      // di 011. E' il vincolo che ha funzionato, non un guasto.
+      const message = error instanceof Error ? error.message : String(error);
+      if (/UNIQUE|constraint/i.test(message)) {
+        return json({ entitled: false, reason: 'token_claimed_by_other_account' }, 409);
+      }
+      throw error;
+    }
 
     return json({
       entitled: isEntitled(status.state, status.expiryTimeMs),
@@ -411,9 +452,16 @@ export async function handleBillingRequest(
   }
 
   // GET /v1/billing/entitlement — stato corrente dell'utente autenticato.
+  //
+  // Il premium ha due fonti indipendenti: l'abbonamento Play e il mese regalo
+  // riscattato con un codice (vedi src/gift.ts). Il client interroga un solo
+  // endpoint e riceve gia' la somma: decidere qui evita che due sorgenti di
+  // verita' si contraddicano sul telefono.
   if (pathname === '/v1/billing/entitlement' && request.method === 'GET') {
     const uid = await verifyFirebaseIdToken(bearerToken(request), env);
     if (!uid) return json({ error: 'ID token Firebase assente o non valido' }, 401);
+
+    const giftUntilMs = await activeGiftUntilMs(db, uid);
 
     const row = await db
       .prepare(
@@ -428,14 +476,21 @@ export async function handleBillingRequest(
         auto_renewing: number;
       }>();
 
-    if (!row) return json({ entitled: false, state: 'none' });
+    if (!row) {
+      return json({
+        entitled: giftUntilMs !== null,
+        state: giftUntilMs !== null ? 'gift' : 'none',
+        giftUntilMs,
+      });
+    }
 
     return json({
-      entitled: isEntitled(row.state, row.expiry_time_ms),
+      entitled: isEntitled(row.state, row.expiry_time_ms) || giftUntilMs !== null,
       state: row.state,
       expiryTimeMs: row.expiry_time_ms,
       autoRenewing: row.auto_renewing === 1,
       productId: row.product_id,
+      giftUntilMs,
     });
   }
 
