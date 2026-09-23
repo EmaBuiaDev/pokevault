@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +51,11 @@ fun DeckLabScreen(
     val context = LocalContext.current
     val deckScope = rememberCoroutineScope()
 
+    // Una volta per processo: i segnaposto di import vecchi tornano carte vere.
+    LaunchedEffect(Unit) { viewModel.repairImportPlaceholders(context) }
+
+    // Saveable: tornando dal dettaglio di un deck il filtro resta quello scelto.
+    var deckListFilter by rememberSaveable { mutableStateOf(DeckListFilter.ALL) }
     var showSheet by remember { mutableStateOf(false) }
     var showDiscardDeckDialog by remember { mutableStateOf(false) }
     var showDeleteDeckDialog by remember { mutableStateOf(false) }
@@ -305,16 +311,48 @@ fun DeckLabScreen(
                         val ownedById = remember(viewModel.allCards) {
                             viewModel.allCards.associateBy { it.id }
                         }
+                        // Le righe si ricalcolano solo quando cambiano i deck o il
+                        // filtro, non a ogni ricomposizione dello schermo.
+                        val deckRows = remember(viewModel.decks, deckListFilter) {
+                            buildDeckListRows(viewModel.decks, deckListFilter)
+                        }
                         LazyColumn(
                             contentPadding = PaddingValues(20.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            items(viewModel.decks, key = { it.id }) { deck ->
-                                DeckItem(
-                                    deck = deck,
-                                    onClick = { selectedDeck = deck },
-                                    ownedById = ownedById
+                            item(key = "deck_filter") {
+                                DeckListFilterBar(
+                                    selected = deckListFilter,
+                                    decks = viewModel.decks,
+                                    onSelect = { deckListFilter = it }
                                 )
+                            }
+                            if (deckRows.isEmpty()) {
+                                item(key = "deck_filter_empty") {
+                                    Text(
+                                        text = AppLocale.deckFilterEmpty,
+                                        color = AppColors.textMuted,
+                                        fontSize = 13.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 32.dp)
+                                    )
+                                }
+                            }
+                            items(
+                                deckRows,
+                                key = { it.key },
+                                contentType = { it::class }
+                            ) { row ->
+                                when (row) {
+                                    is DeckListRow.Header -> DeckListSectionHeader(row.label, row.count)
+                                    is DeckListRow.Item -> DeckItem(
+                                        deck = row.deck,
+                                        onClick = { selectedDeck = row.deck },
+                                        ownedById = ownedById
+                                    )
+                                }
                             }
                         }
                     }

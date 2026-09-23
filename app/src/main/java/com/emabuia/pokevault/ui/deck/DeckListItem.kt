@@ -43,81 +43,21 @@ fun DeckItem(
         cardCounts.keys.mapNotNull { ownedById[it] }
     }
 
-    fun classifyForDeckSections(card: PokemonCard): String {
-        val supertype = card.supertype.lowercase()
-        val type = card.type.lowercase()
-        val name = card.name.lowercase()
-        val subtypes = card.subtypes.map { it.lowercase() }
-
-        val hasEnergyMarker =
-            supertype.contains("energy") ||
-                supertype.contains("energ") ||
-                type.contains("energy") ||
-                type.contains("energia") ||
-                subtypes.any { it.contains("energy") || it.contains("energia") } ||
-                name.contains("energy") ||
-                name.contains("energia")
-        if (hasEnergyMarker) return "Energy"
-
-        val hasTrainerMarker =
-            supertype.contains("trainer") ||
-                supertype.contains("allenat") ||
-                supertype.contains("aiuto") ||
-                type.contains("trainer") ||
-                type.contains("supporter") ||
-                type.contains("item") ||
-                type.contains("stadium") ||
-                type.contains("tool") ||
-                type.contains("allenat") ||
-                type.contains("aiuto") ||
-                type.contains("stadio") ||
-                type.contains("strumento") ||
-                subtypes.any {
-                    it == "item" ||
-                        it == "stadium" ||
-                        it == "supporter" ||
-                        it == "tool" ||
-                        it == "strumento" ||
-                        it == "stadio" ||
-                        it == "aiuto"
-                }
-
-        val hasPokemonSubtypeMarker = subtypes.any {
-            it == "basic" ||
-                it == "stage 1" ||
-                it == "stage 2" ||
-                it == "baby" ||
-                it == "ex" ||
-                it == "v" ||
-                it == "vmax" ||
-                it == "vstar"
+    // Una passata sola: prima erano tre filtri sull'intero mazzo, ognuno
+    // che riclassificava ogni carta, per ogni riga dell'elenco.
+    val counts = remember(uniqueDeckCards, cardCounts) {
+        var pokemon = 0
+        var trainer = 0
+        var energy = 0
+        uniqueDeckCards.forEach { card ->
+            val copies = cardCounts[card.id] ?: 0
+            when (classifyForDeckSections(card)) {
+                "Pokémon" -> pokemon += copies
+                "Energy" -> energy += copies
+                else -> trainer += copies
+            }
         }
-        val hasPokemonTypeMarker =
-            type in listOf(
-                "grass", "fire", "water", "lightning", "electric", "fighting",
-                "psychic", "darkness", "metal", "dragon", "fairy"
-            )
-        val hasStrongPokemonMarker =
-            card.hp > 0 ||
-                hasPokemonSubtypeMarker ||
-                hasPokemonTypeMarker
-        val hasExplicitPokemonSupertype = supertype.contains("pok")
-
-        if (hasTrainerMarker && !hasStrongPokemonMarker) return "Trainer"
-        if (hasStrongPokemonMarker) return "Pokémon"
-        if (hasExplicitPokemonSupertype && !hasTrainerMarker && type != "colorless") return "Pokémon"
-
-        return "Trainer"
-    }
-    
-    val pokemonCount = remember(uniqueDeckCards, cardCounts) { 
-        uniqueDeckCards.filter { classifyForDeckSections(it) == "Pokémon" }.sumOf { cardCounts[it.id] ?: 0 } 
-    }
-    val trainerCount = remember(uniqueDeckCards, cardCounts) { 
-        uniqueDeckCards.filter { classifyForDeckSections(it) == "Trainer" }.sumOf { cardCounts[it.id] ?: 0 } 
-    }
-    val energyCount = remember(uniqueDeckCards, cardCounts) {
-        uniqueDeckCards.filter { classifyForDeckSections(it) == "Energy" }.sumOf { cardCounts[it.id] ?: 0 }
+        DeckSectionCounts(pokemon, trainer, energy)
     }
 
     // I due Pokemon che danno il nome al mazzo, come si usa fare altrove. Il
@@ -150,7 +90,10 @@ fun DeckItem(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(140.dp)
+                // Minimo, non fisso: con il badge "Deck di prova" il riquadro
+                // delle informazioni non ci stava in 140dp e la barra delle 60
+                // carte usciva tagliata sotto. I fondi seguono con matchParentSize.
+                .heightIn(min = 140.dp)
         ) {
             // Lo sfondo prende il colore del tipo principale del mazzo: fermo,
             // ma non uguale per tutti. Prima qui c'erano una scia luminosa e
@@ -162,7 +105,7 @@ fun DeckItem(
 
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .matchParentSize()
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -180,7 +123,7 @@ fun DeckItem(
             // servirebbe conoscere la dimensione per scriverli.
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .matchParentSize()
                     .background(
                         Brush.horizontalGradient(
                             0f to Color.Transparent,
@@ -192,17 +135,18 @@ fun DeckItem(
 
             // Una banda sottile sul bordo sinistro nel colore del tipo: da'
             // alla riga un punto fermo da cui inizia a leggersi.
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(4.dp)
-                    .align(Alignment.CenterStart)
-                    .background(accent.copy(alpha = 0.85f))
-            )
+            Box(modifier = Modifier.matchParentSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(4.dp)
+                        .background(accent.copy(alpha = 0.85f))
+                )
+            }
 
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .matchParentSize()
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
@@ -214,65 +158,39 @@ fun DeckItem(
                     )
             )
 
-            // Gli sprite dei Pokemon piu' giocati, a destra e dietro al
-            // riquadro delle informazioni: sono l'identita' del mazzo, e
-            // devono farsi riconoscere prima di essere letti.
-            if (spriteUrls.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy((-12).dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    spriteUrls.forEach { url ->
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(url)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.size(70.dp)
-                        )
-                    }
-                }
-            }
-
-            Column(
+            // Informazioni a sinistra, sprite a destra, ognuno nel suo spazio.
+            // Prima stavano tutti e due sopra lo stesso Box, il riquadro in
+            // basso a sinistra e gli sprite al centro a destra, e nessuno dei
+            // due limitava l'altro: con un nome lungo o il badge "Deck di
+            // prova" il riquadro arrivava sotto gli sprite e li copriva.
+            Row(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.30f),
-                                Color.Black.copy(alpha = 0.62f)
+                    .fillMaxWidth()
+                    .heightIn(min = 140.dp)
+                    .padding(start = 12.dp, end = 8.dp, bottom = 12.dp, top = 12.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.30f),
+                                    Color.Black.copy(alpha = 0.62f)
+                                )
                             )
                         )
-                    )
-                    .border(
-                        BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                        RoundedCornerShape(12.dp)
-                    )
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
-            ) {
-                // "Deck di prova" sta accanto al nome, non sospeso in un
-                // angolo: e' una cosa che si dice del mazzo, e si legge
-                // insieme a come si chiama.
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = deck.name,
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
+                        .border(
+                            BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    // "Deck di prova" sta sopra il nome, non accanto: accanto
+                    // rubava spazio al nome, che si troncava dopo poche lettere.
                     if (deck.deckOnly) {
-                        Spacer(modifier = Modifier.width(6.dp))
                         Surface(
                             color = AppColors.purple.copy(alpha = 0.9f),
                             shape = RoundedCornerShape(5.dp)
@@ -286,24 +204,63 @@ fun DeckItem(
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                             )
                         }
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    Text(
+                        text = deck.name,
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${counts.pokemon} Pokémon • ${counts.trainer} Trainer • ${counts.energy} Energy",
+                        color = AppColors.blue,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    // Quante carte ha il mazzo rispetto alle 60 che ne fanno uno
+                    // legale. Era un'informazione che l'elenco non dava affatto:
+                    // per sapere se un deck era finito bisognava aprirlo.
+                    Spacer(modifier = Modifier.height(6.dp))
+                    DeckSizeBar(cardCount = deck.cards.size)
+                }
+
+                // Gli sprite dei Pokemon che danno il nome al mazzo: sono
+                // l'identita' del deck, e devono farsi riconoscere prima di
+                // essere letti. Larghezza fissa anche senza sprite, cosi' le
+                // righe restano allineate fra loro.
+                Row(
+                    modifier = Modifier
+                        .width(SPRITE_AREA_WIDTH)
+                        .align(Alignment.CenterVertically),
+                    horizontalArrangement = Arrangement.spacedBy((-14).dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    spriteUrls.forEach { url ->
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(url)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(64.dp)
+                        )
                     }
                 }
-                Text(
-                    text = "$pokemonCount Pokémon • $trainerCount Trainer • $energyCount Energy",
-                    color = AppColors.blue,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                // Quante carte ha il mazzo rispetto alle 60 che ne fanno uno
-                // legale. Era un'informazione che l'elenco non dava affatto:
-                // per sapere se un deck era finito bisognava aprirlo.
-                Spacer(modifier = Modifier.height(6.dp))
-                DeckSizeBar(cardCount = deck.cards.size)
             }
         }
     }
 }
+
+/** Due sprite da 64dp che si accavallano di 14. */
+private val SPRITE_AREA_WIDTH = 114.dp
+
 
 /**
  * Il riempimento del mazzo verso le 60 carte.
@@ -402,3 +359,72 @@ internal fun normalizeTypeKey(type: String): String = when (type.lowercase().tri
     else -> type.lowercase().trim()
 }
 
+
+private data class DeckSectionCounts(val pokemon: Int, val trainer: Int, val energy: Int)
+
+private fun classifyForDeckSections(card: PokemonCard): String {
+    val supertype = card.supertype.lowercase()
+    val type = card.type.lowercase()
+    val name = card.name.lowercase()
+    val subtypes = card.subtypes.map { it.lowercase() }
+
+    val hasEnergyMarker =
+        supertype.contains("energy") ||
+            supertype.contains("energ") ||
+            type.contains("energy") ||
+            type.contains("energia") ||
+            subtypes.any { it.contains("energy") || it.contains("energia") } ||
+            name.contains("energy") ||
+            name.contains("energia")
+    if (hasEnergyMarker) return "Energy"
+
+    val hasTrainerMarker =
+        supertype.contains("trainer") ||
+            supertype.contains("allenat") ||
+            supertype.contains("aiuto") ||
+            type.contains("trainer") ||
+            type.contains("supporter") ||
+            type.contains("item") ||
+            type.contains("stadium") ||
+            type.contains("tool") ||
+            type.contains("allenat") ||
+            type.contains("aiuto") ||
+            type.contains("stadio") ||
+            type.contains("strumento") ||
+            subtypes.any {
+                it == "item" ||
+                    it == "stadium" ||
+                    it == "supporter" ||
+                    it == "tool" ||
+                    it == "strumento" ||
+                    it == "stadio" ||
+                    it == "aiuto"
+            }
+
+    val hasPokemonSubtypeMarker = subtypes.any {
+        it == "basic" ||
+            it == "stage 1" ||
+            it == "stage 2" ||
+            it == "baby" ||
+            it == "ex" ||
+            it == "v" ||
+            it == "vmax" ||
+            it == "vstar"
+    }
+    val hasPokemonTypeMarker =
+        type in listOf(
+            "grass", "fire", "water", "lightning", "electric", "fighting",
+            "psychic", "darkness", "metal", "dragon", "fairy"
+        )
+    val hasStrongPokemonMarker =
+        card.hp > 0 ||
+            hasPokemonSubtypeMarker ||
+            hasPokemonTypeMarker
+    val hasExplicitPokemonSupertype = supertype.contains("pok")
+
+    if (hasTrainerMarker && !hasStrongPokemonMarker) return "Trainer"
+    if (hasStrongPokemonMarker) return "Pokémon"
+    if (hasExplicitPokemonSupertype && !hasTrainerMarker && type != "colorless") return "Pokémon"
+
+    return "Trainer"
+}
