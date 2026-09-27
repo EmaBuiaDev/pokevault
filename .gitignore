@@ -23,4 +23,6 @@ app/release/
 # Firebase CLI — log locali di debug, non configurazione
 firebase-debug.log
 firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
 .firebase/
