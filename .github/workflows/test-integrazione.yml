@@ -8,7 +8,8 @@ name: Test di integrazione (collezione e deck)
 # - le stampe che si sommano, le carte solo-deck che non contano;
 # - l'import di un deck dal tasto Importa e da CSV, "in collezione" (il valore
 #   sale) e "deck di prova" (non cambia niente);
-# - che un utente non possa leggere le carte di un altro.
+# - che un utente non possa leggere le carte di un altro;
+# - che ogni sigla delle decklist (BLK, PBL, MEG...) porti al set giusto.
 #
 # I test stanno in app/src/test/java/com/emabuia/pokevault/integration/ e girano
 # con Robolectric: niente emulatore Android, pochi minuti su Linux. Nessun dato
@@ -71,6 +72,9 @@ jobs:
       - name: Test di integrazione sull'emulatore Firebase
         env:
           POKEVAULT_EMULATOR_REQUIRED: '1'
+          # Solo lettura: SigleDecklistTest legge da D1 le sigle dei set
+          # (expansions.upstream_set_code). Stesso segreto di catalog-ingest.yml.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: >
           npx -y firebase-tools@13 emulators:exec
           --config firebase.emulators.json

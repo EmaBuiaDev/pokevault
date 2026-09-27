@@ -51,6 +51,22 @@ Le carte si cercano nel catalogo vero e il prezzo si risolve come nell'app.
 | import da CSV in collezione fa salire numero e valore | Lo stesso deck da CSV dà lo stesso risultato |
 | import come deck di prova non tocca la collezione | Con "deck di prova" le carte restano nel deck: numero e valore della collezione non cambiano |
 
+## Livello 2 — Sigle delle decklist (`SigleDecklistTest`)
+
+Nelle decklist una carta è "Air Balloon BLK 79": sigla del set e numero. Se
+la tabella delle sigle (`SetCodeMapper`) non conosce un set nuovo, o ne
+scambia due, l'import crea carte senza immagine o le prende dall'altro set.
+
+| Test | Cosa garantisce |
+|---|---|
+| ogni sigla delle decklist porta al suo set | Per ogni set con una sigla su D1 (`expansions.upstream_set_code`), la ricerca vera dell'import con quella sigla e un numero del set trova una carta **di quel set**. Un set nuovo entra nel controllo da solo, appena l'import del catalogo lo scrive su D1 |
+
+Non usa l'emulatore Firebase: legge il catalogo dal worker e le sigle da D1
+(in sola lettura, col segreto `CLOUDFLARE_API_TOKEN`). Al primo giro ha
+trovato PLB (Esplosione Plasma) senza voce nella tabella. Copre i set che su
+D1 hanno la sigla: al 27/09/2026 sono 25, i recenti; i 111 più vecchi non
+l'hanno ancora.
+
 ## Livello 3 — Catalogo dal vivo
 
 | Controllo | Cosa garantisce |
