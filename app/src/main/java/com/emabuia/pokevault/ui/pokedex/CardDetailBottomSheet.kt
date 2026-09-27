@@ -38,11 +38,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.util.IllustratorNames
 import com.emabuia.pokevault.ui.components.CardVariants
 import com.emabuia.pokevault.ui.components.OwnedVariantBadges
@@ -295,8 +297,29 @@ fun CardDetailBottomSheet(
                             },
                         contentAlignment = Alignment.Center
                     ) {
+                        // La griglia ha gia' in memoria la miniatura di questa
+                        // carta, sotto l'URL `size=low`; qui si chiede
+                        // `size=high`, che per Coil e' un'altra immagine e
+                        // ripartiva da zero: un riquadro vuoto per 150-500 ms
+                        // a ogni apertura e a ogni scorrimento. Il worker oggi
+                        // serve per le due taglie lo stesso file (stesso
+                        // ETag), quindi la miniatura come segnaposto e' gia'
+                        // l'immagine finale; se un giorno `high` diventasse
+                        // davvero piu' grande, arriverebbe e la sostituirebbe.
+                        // La chiave va scritta come la scrive la griglia
+                        // (TcgCardCompactItem), safeImageUrl compreso.
+                        val imageRequest = remember(card.images.large, card.images.small) {
+                            ImageRequest.Builder(context)
+                                .data(card.images.large)
+                                .placeholderMemoryCacheKey(
+                                    card.images.small
+                                        .takeIf { it.isNotBlank() }
+                                        ?.let(ImageUrlUtils::safeImageUrl)
+                                )
+                                .build()
+                        }
                         AsyncImage(
-                            model = card.images.large,
+                            model = imageRequest,
                             contentDescription = card.name,
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
