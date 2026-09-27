@@ -51,6 +51,18 @@ object DeckImportParser {
                 continue
             }
 
+            // Una riga da foglio di calcolo: "4,Charizard ex,SVI,125". La
+            // riga di intestazione ("Quantita';Nome;Set;Numero") si salta,
+            // altrimenti finirebbe presa per il nome del deck.
+            if (isDelimited(line)) {
+                if (isCsvHeader(line)) continue
+                val csvCard = parseDelimitedLine(line, currentSection)
+                if (csvCard != null) {
+                    cards.add(csvCard)
+                    continue
+                }
+            }
+
             // Prova a parsare come carta
             val card = parseCardLine(line, currentSection)
             if (card != null) {
@@ -111,9 +123,12 @@ object DeckImportParser {
 
         val rest = qtyMatch.groupValues[2].trim()
 
-        // Prova a estrarre set e numero dalla fine
-        // Pattern: "... SET_CODE NUMBER" dove SET_CODE è 2-5 lettere/numeri e NUMBER è numeri
-        val setNumberRegex = Regex("""^(.+?)\s+([A-Za-z]{2,5}\d*)\s+(\d+\w*)$""")
+        // Prova a estrarre set e numero dalla fine: "... SET_CODE NUMBER".
+        // Il codice di solito comincia con una lettera (SVI, sv5, ME05), ma
+        // non sempre: 30C e' "30 Anniversario". Senza la seconda forma la
+        // riga "4 Mew ex 30C 66" diventava una carta chiamata "Mew ex 30C 66",
+        // senza set, e l'import non poteva trovarla.
+        val setNumberRegex = Regex("""^(.+?)\s+([A-Za-z]{2,5}\d*|\d{1,2}[A-Za-z]{1,3})\s+(\d+\w*)$""")
         val setMatch = setNumberRegex.find(rest)
 
         val name: String
@@ -141,6 +156,43 @@ object DeckImportParser {
             number = number,
             qty = qty,
             type = type
+        )
+    }
+
+    private val delimiter = Regex("""[,;\t]""")
+
+    private fun isDelimited(line: String): Boolean = delimiter.containsMatchIn(line)
+
+    private fun isCsvHeader(line: String): Boolean {
+        val first = line.split(delimiter).first().trim().lowercase()
+        return first in setOf("qty", "quantity", "quantita", "quantità", "q.ta", "count", "copie", "n")
+    }
+
+    /**
+     * "QTY,NAME[,SET[,NUMBER]]" con virgola, punto e virgola o tab.
+     *
+     * Null se la prima colonna non e' una quantita': vuol dire che la
+     * virgola sta dentro la riga per altri motivi, e ci pensa il parser
+     * normale.
+     */
+    private fun parseDelimitedLine(line: String, currentSection: String?): ParsedCard? {
+        val fields = line.split(delimiter).map { it.trim().trim('"') }
+        if (fields.size < 2) return null
+
+        val qty = fields[0].toIntOrNull() ?: return null
+        if (qty <= 0 || qty > 60) return null
+
+        val name = fields[1].takeIf { it.isNotBlank() } ?: return null
+        val set = fields.getOrNull(2)?.takeIf { it.isNotBlank() }
+            ?.let { SetCodeMapper.normalizeDecklistSetCode(it.uppercase()) }
+        val number = fields.getOrNull(3)?.takeIf { it.isNotBlank() }
+
+        return ParsedCard(
+            name = name,
+            set = set,
+            number = number,
+            qty = qty,
+            type = currentSection ?: inferCardType(name)
         )
     }
 

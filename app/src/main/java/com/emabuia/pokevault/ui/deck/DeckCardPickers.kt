@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,6 +30,71 @@ import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
+/**
+ * La faccia di una carta della collezione dentro al Deck Lab.
+ *
+ * L'URL passa da [ImageUrlUtils.safeProxiedImageUrl] come in Collezione. Le
+ * carte salvate con un indirizzo diretto di api.pokewallet.io si vedevano in
+ * Collezione, che lo riscrive verso il proxy, e restavano vuote qui: quella
+ * riscrittura c'era, ed e' andata persa quando DeckLabScreen.kt e' stato
+ * diviso in piu' file.
+ *
+ * Senza immagine, o se non si carica, mostra nome e numero: un riquadro vuoto
+ * non dice quale carta c'e' nel mazzo.
+ */
+@Composable
+internal fun DeckCardImage(
+    card: PokemonCard,
+    requestWidth: Int,
+    requestHeight: Int,
+    modifier: Modifier = Modifier
+) {
+    val imageUrl = remember(card.imageUrl) { ImageUrlUtils.safeProxiedImageUrl(card.imageUrl) }
+    var failed by remember(imageUrl) { mutableStateOf(imageUrl.isBlank()) }
+
+    if (failed) {
+        Box(
+            modifier = modifier
+                .background(AppColors.surface)
+                .padding(4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = card.name,
+                    color = AppColors.textPrimary,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+                if (card.cardNumber.isNotBlank()) {
+                    Text(
+                        text = "#${card.cardNumber}",
+                        color = AppColors.textMuted,
+                        fontSize = 8.sp,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    } else {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(imageUrl)
+                .crossfade(true)
+                .size(requestWidth, requestHeight)
+                .build(),
+            contentDescription = card.name,
+            contentScale = ContentScale.Fit,
+            onError = { failed = true },
+            modifier = modifier
+        )
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CardSelectionItem(
@@ -55,13 +121,10 @@ fun CardSelectionItem(
             )
             .clickable(enabled = isEditable, onClick = onAdd)
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(card.imageUrl)
-                .size(200, 280)
-                .build(),
-            contentDescription = card.name,
-            contentScale = ContentScale.Fit,
+        DeckCardImage(
+            card = card,
+            requestWidth = 200,
+            requestHeight = 280,
             modifier = Modifier
                 .fillMaxSize()
                 .alpha(if (isEditable && !canAddMore && inDeckCount == 0) 0.5f else 1f)
@@ -181,7 +244,7 @@ fun TcgCardSearchItem(
     ) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
-                .data(card.images.small)
+                .data(ImageUrlUtils.safeImageUrl(card.images.small))
                 .crossfade(true)
                 .size(200, 280)
                 .build(),

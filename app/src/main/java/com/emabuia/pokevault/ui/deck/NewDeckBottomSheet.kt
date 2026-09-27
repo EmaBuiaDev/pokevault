@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +46,7 @@ import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.emabuia.pokevault.viewmodel.DeckLabViewModel
 
@@ -319,6 +321,57 @@ private fun DeckEditorHeader(isEditing: Boolean, cardCount: Int, onClose: () -> 
     }
 }
 
+/**
+ * Pokemon, Trainer, Energia: quale parte del mazzo mostra la griglia.
+ *
+ * Nella release le schede rispondevano solo nella meta' alta: la meta' bassa
+ * se la prendeva il campo di ricerca subito sotto, la cui area di tocco con
+ * Compose 1.7 sale di una trentina di dp oltre il bordo visibile. In debug --
+ * Compose 1.9.2, portata da ui-tooling -- non succede, per questo nessuno se
+ * n'era accorto: si toccava "Trainer" nel mezzo e si restava sui Pokemon, e
+ * Allenatori ed Energie del mazzo non si potevano ne' vedere ne' togliere.
+ *
+ * zIndex mette le schede davanti al campo nel test dei tocchi: l'area che si
+ * vede come scheda risponde come scheda, in tutte e due le versioni.
+ */
+@Composable
+private fun DeckCategoryTabs(titles: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .zIndex(1f)
+    ) {
+        titles.forEachIndexed { index, title ->
+            val isSelected = index == selected
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    // 48dp anche quando la tastiera comprime il pannello e
+                    // l'etichetta e' corta: e' il bersaglio minimo di un tocco.
+                    .height(48.dp)
+                    .clickable { onSelect(index) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                Text(
+                    text = title,
+                    color = if (isSelected) AppColors.blue else AppColors.textMuted,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(if (isSelected) AppColors.blue else Color.Transparent)
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun DeckStepSwitch(step: Int, onSelect: (Int) -> Unit) {
     val labels = listOf(AppLocale.deckStepCards, AppLocale.deckStepDetails)
@@ -507,33 +560,11 @@ private fun DeckCardsStep(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        SecondaryTabRow(
-            selectedTabIndex = selectedTabIndex,
-            containerColor = Color.Transparent,
-            contentColor = AppColors.blue,
-            divider = {}
-        ) {
-            tabs.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTabIndex == index,
-                    onClick = { selectedTabIndex = index },
-                    // Altezza dichiarata invece che lasciata al default: il
-                    // bersaglio deve restare di 48dp anche quando la tastiera
-                    // comprime il pannello e l'etichetta e' corta.
-                    modifier = Modifier.height(48.dp),
-                    text = {
-                        Text(
-                            text = title,
-                            fontSize = 13.sp,
-                            maxLines = 1,
-                            fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal
-                        )
-                    },
-                    selectedContentColor = AppColors.blue,
-                    unselectedContentColor = AppColors.textMuted
-                )
-            }
-        }
+        DeckCategoryTabs(
+            titles = tabs,
+            selected = selectedTabIndex,
+            onSelect = { selectedTabIndex = it }
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -1289,7 +1320,7 @@ private fun TcgCardQuantityDialog(
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 AsyncImage(
-                    model = card.images.small,
+                    model = ImageUrlUtils.safeImageUrl(card.images.small),
                     contentDescription = card.name,
                     modifier = Modifier
                         .height(160.dp)

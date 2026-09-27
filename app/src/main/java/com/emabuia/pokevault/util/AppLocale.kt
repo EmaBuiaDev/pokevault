@@ -981,6 +981,14 @@ object AppLocale {
     else
         "Contains cards you don't own: they are not in your collection."
 
+    val deckFilterAll: String get() = if (isItalian) "Tutti" else "All"
+    val deckFilterCollection: String get() = if (isItalian) "Collezione" else "Collection"
+    val deckFilterTest: String get() = if (isItalian) "Di prova" else "Test"
+    val deckFilterEmpty: String get() = if (isItalian)
+        "Nessun deck in questa categoria."
+    else
+        "No decks in this category."
+
     // Meta Archetype
     val metaShare: String get() = "Meta Share"
     val metaAvgWinrate: String get() = if (isItalian) "Win Rate medio" else "Avg Win Rate"

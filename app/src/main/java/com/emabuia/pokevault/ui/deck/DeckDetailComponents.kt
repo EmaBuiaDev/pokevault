@@ -368,14 +368,10 @@ fun DeckDetailView(
                                         .weight(1f)
                                         .aspectRatio(0.71f)
                                 ) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current)
-                                            .data(card.imageUrl)
-                                            .crossfade(true)
-                                            .size(250, 350)
-                                            .build(),
-                                        contentDescription = card.name,
-                                        contentScale = ContentScale.Fit,
+                                    DeckCardImage(
+                                        card = card,
+                                        requestWidth = 250,
+                                        requestHeight = 350,
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .clip(RoundedCornerShape(8.dp))

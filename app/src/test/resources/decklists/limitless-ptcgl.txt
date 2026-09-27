@@ -1,0 +1,3903 @@
+===== 0
+Pokémon: 16
+4 Ethan's Pichu DRI 71
+4 Poltchageist PBL 5
+4 Igglybuff 30C 120
+4 Budew ASC 16
+
+Trainer: 44
+4 Lillie's Determination MEG 119
+3 Gwynn PBL 78
+2 Black Belt's Training JTG 143
+2 Boss's Orders MEG 114
+1 Lana's Aid TWM 155
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+4 Crushing Hammer POR 71
+3 Pokégear 3.0 SVI 186
+3 Night Stretcher ASC 196
+2 Special Red Card CRI 82
+1 Sacred Ash DRI 168
+3 Handheld Fan TWM 150
+3 Brave Bangle WHT 80
+4 Battle Cage PFL 85
+1 Neutralization Zone SFA 60
+
+===== 1
+Pokémon: 24
+3 Mew ex 30C 66
+3 Meowth ex POR 62
+2 Dreepy TWM 128
+2 Drakloak TWM 129
+1 Dragapult ex TWM 130
+2 Wellspring Mask Ogerpon ex TWM 64
+2 Latias ex SSP 76
+2 Lillie's Clefairy ex JTG 56
+1 Koraidon ex ASC 121
+1 Moltres PFL 14
+1 Chien-Pao SSP 56
+1 Fezandipiti ex ASC 142
+1 Unown 30C 72
+1 Mega Kangaskhan ex MEG 104
+1 Scream Tail ex TWM 94
+
+Trainer: 22
+4 Brock's Scouting JTG 146
+4 Crispin SCR 133
+2 Boss's Orders MEG 114
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+2 Wondrous Patch PFL 94
+1 Prime Catcher TEF 157
+3 Area Zero Underdepths SCR 131
+
+Energy: 14
+4 Psychic Energy MEE 5
+4 Telepathic Psychic Energy POR 88
+3 Fire Energy MEE 2
+2 Water Energy MEE 3
+1 Fighting Energy MEE 6
+
+===== 2
+Pokémon: 18
+3 Electrike MEG 49
+3 Mega Manectric ex MEG 50
+1 Manectric PBL 24
+3 Tynamo ASC 59
+3 Eelektrik ASC 60
+1 Mega Eelektross ex ASC 61
+2 Iono's Wattrel JTG 54
+2 Iono's Kilowattrel JTG 55
+
+Trainer: 30
+4 Lillie's Determination MEG 119
+3 Canari ASC 185
+2 Hilda WHT 84
+2 Boss's Orders MEG 114
+1 Judge POR 76
+4 Buddy-Buddy Poffin TEF 144
+3 Ultra Ball MEG 131
+3 Poké Pad POR 81
+1 Switch MEG 130
+1 Night Stretcher ASC 196
+2 Air Balloon ASC 181
+1 Hero's Cape TEF 152
+2 Battle Cage PFL 85
+1 Levincia JTG 150
+
+Energy: 12
+9 Lightning Energy MEE 4
+3 Voltaic Lightning Energy PBL 84
+
+===== 3
+Pokémon: 26
+4 Shuppet PBL 33
+3 Banette PBL 34
+4 Dhelmise PBL 39
+3 Poltchageist PBL 5
+2 Sinistcha PBL 6
+3 Dunsparce JTG 120
+3 Dudunsparce TEF 129
+1 Lillie's Clefairy ex JTG 56
+1 Bloodmoon Ursaluna ex TWM 141
+1 Patrat CRI 70
+1 Shaymin DRI 10
+
+Trainer: 27
+4 Gwynn PBL 78
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+4 Poké Pad POR 81
+4 Ultra Ball MEG 131
+2 Buddy-Buddy Poffin TEF 144
+2 Night Stretcher ASC 196
+1 Switch MEG 130
+1 Special Red Card CRI 82
+2 Prism Tower CRI 80
+1 Jamming Tower TWM 153
+
+Energy: 7
+4 Telepathic Psychic Energy POR 88
+2 Psychic Energy MEE 5
+1 Legacy Energy TWM 167
+
+===== 4
+Pokémon: 24
+3 Slowpoke SCR 57
+3 Slowking SCR 58
+3 Mega Kangaskhan ex MEG 104
+2 Bronzor TEF 68
+2 Bronzong TEF 69
+2 Latias ex SSP 76
+2 Kyurem SFA 47
+1 Mew ex 30C 66
+1 Drapion POR 52
+1 Lillie's Clefairy ex JTG 56
+1 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+1 Annihilape PBL 41
+1 Metagross CRI 61
+
+Trainer: 27
+4 Ciphermaniac's Codebreaking TEF 145
+3 Lillie's Determination MEG 119
+1 Surfer SSP 187
+4 Ultra Ball MEG 131
+3 Poké Pad POR 81
+3 Wondrous Patch PFL 94
+2 Night Stretcher ASC 196
+1 Secret Box TWM 163
+1 Switch MEG 130
+1 Sacred Ash DRI 168
+4 Academy at Night SFA 54
+
+Energy: 9
+4 Telepathic Psychic Energy POR 88
+4 Psychic Energy MEE 5
+1 Boomerang Energy TWM 166
+
+===== 5
+Pokémon: 19
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Budew ASC 16
+2 Munkidori TWM 95
+1 Dunsparce JTG 120
+1 Dudunsparce TEF 129
+1 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+1 Judge POR 76
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+4 Crushing Hammer POR 71
+3 Night Stretcher ASC 196
+3 Ultra Ball MEG 131
+1 Unfair Stamp TWM 165
+1 Special Red Card CRI 82
+2 Risky Ruins MEG 127
+
+Energy: 8
+3 Fire Energy MEE 2
+3 Psychic Energy MEE 5
+2 Darkness Energy MEE 7
+
+===== 6
+Pokémon: 24
+2 Staryu POR 20
+2 Mega Starmie ex POR 21
+2 Froakie CRI 20
+2 Frogadier CRI 21
+2 Greninja ex TWM 106
+2 Duskull PRE 35
+2 Dusclops PRE 36
+1 Dusknoir PRE 37
+2 Snorunt ASC 46
+2 Mega Froslass ex ASC 47
+2 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+1 Budew ASC 16
+1 Shaymin DRI 10
+
+Trainer: 28
+3 Lillie's Determination MEG 119
+2 Hilda WHT 84
+2 Boss's Orders MEG 114
+1 Judge POR 76
+1 Colress's Tenacity SFA 57
+1 Team Rocket's Petrel DRI 176
+1 Wally's Compassion MEG 132
+3 Ultra Ball MEG 131
+3 Buddy-Buddy Poffin TEF 144
+3 Poké Pad POR 81
+2 Night Stretcher ASC 196
+1 Rare Candy MEG 125
+1 Special Red Card CRI 82
+1 Switch MEG 130
+1 Air Balloon ASC 181
+1 Grand Tree SCR 136
+1 Surfing Beach MEG 129
+
+Energy: 8
+4 Water Energy MEE 3
+3 Ignition Energy WHT 86
+1 Bubbly Water Energy CRI 84
+
+===== 7
+Pokémon: 20
+4 Grookey TWM 14
+4 Thwackey TWM 15
+3 Applin TWM 17
+1 Applin TWM 126
+3 Dipplin TWM 18
+1 Goldeen TWM 44
+1 Seaking PRE 21
+1 Rellor TEF 23
+1 Rabsca TEF 24
+1 Shaymin DRI 10
+
+Trainer: 35
+4 Lillie's Determination MEG 119
+2 Gladion's Final Battle PBL 77
+2 Boss's Orders MEG 114
+4 Bug Catching Set TWM 143
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+2 Ultra Ball MEG 131
+1 Secret Box TWM 163
+1 Tool Scrapper ASC 212
+1 Night Stretcher ASC 196
+1 Sacred Ash DRI 168
+1 Switch MEG 130
+2 Brave Bangle WHT 80
+2 Air Balloon ASC 181
+3 Festival Grounds TWM 149
+1 Forest of Vitality MEG 117
+
+Energy: 5
+4 Grass Energy MEE 1
+1 Growing Grass Energy POR 86
+
+===== 8
+Pokémon: 19
+4 Cynthia's Gible DRI 102
+4 Cynthia's Gabite DRI 103
+3 Cynthia's Garchomp ex DRI 104
+4 Cynthia's Roselia DRI 7
+3 Cynthia's Roserade DRI 8
+1 Cynthia's Spiritomb DRI 129
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Hilda WHT 84
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+3 Fighting Gong MEG 116
+2 Rare Candy MEG 125
+2 Premium Power Pro MEG 124
+2 Special Red Card CRI 82
+1 Night Stretcher ASC 196
+1 Switch MEG 130
+4 Cynthia's Power Weight DRI 162
+1 Team Rocket's Watchtower DRI 180
+
+Energy: 8
+4 Rocky Fighting Energy POR 87
+3 Fighting Energy MEE 6
+1 Neo Upper Energy TEF 162
+
+===== 9
+Pokémon: 12
+4 Team Rocket's Murkrow DRI 127
+3 Team Rocket's Honchkrow ASC 127
+2 Team Rocket's Articuno DRI 51
+1 Team Rocket's Porygon DRI 153
+2 Team Rocket's Porygon2 DRI 154
+
+Trainer: 40
+4 Team Rocket's Archer DRI 170
+4 Team Rocket's Giovanni DRI 174
+4 Team Rocket's Ariana DRI 171
+4 Team Rocket's Petrel DRI 176
+4 Team Rocket's Proton DRI 177
+2 Hilda WHT 84
+4 Team Rocket's Transceiver DRI 178
+4 Poké Pad POR 81
+3 Roto-Stick PRE 127
+2 Night Stretcher ASC 196
+1 Miracle Headset SSP 183
+1 Lucky Helmet TWM 158
+3 Team Rocket's Factory DRI 173
+
+Energy: 8
+4 Team Rocket's Energy DRI 182
+4 Ignition Energy WHT 86
+
+===== 10
+Pokémon: 18
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+2 Munkidori TWM 95
+1 Skorupi POR 51
+1 Drapion POR 52
+1 N's Purrloin JTG 96
+1 N's Zekrom ASC 155
+1 N's Reshiram JTG 116
+1 Pecharunt ex SFA 39
+1 Tatsugiri TWM 131
+1 Fezandipiti ex ASC 142
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Black Belt's Training JTG 143
+1 Judge POR 76
+4 Buddy-Buddy Poffin TEF 144
+4 Transformation Tome CRI 83
+3 N's PP Up JTG 153
+2 Night Stretcher ASC 196
+2 Ultra Ball MEG 131
+2 Poké Pad POR 81
+1 Secret Box TWM 163
+1 Special Red Card CRI 82
+1 Binding Mochi PRE 95
+1 Air Balloon ASC 181
+1 N's Castle JTG 152
+1 Team Rocket's Watchtower DRI 180
+
+Energy: 8
+8 Darkness Energy MEE 7
+
+===== 11
+Pokémon: 21
+3 Mega Kangaskhan ex MEG 104
+3 Mew ex 30C 66
+2 Latias ex SSP 76
+2 Teal Mask Ogerpon ex TWM 25
+2 Lillie's Clefairy ex JTG 56
+2 Meowth ex POR 62
+1 Mega Latias ex MEG 100
+1 Fezandipiti ex ASC 142
+1 Jirachi ex 30C 102
+1 Iron Crown ex TEF 81
+1 Wellspring Mask Ogerpon ex TWM 64
+1 Stunfisk ASC 62
+1 Paldean Tauros SSP 18
+
+Trainer: 25
+4 Crispin SCR 133
+2 Cyrano SSP 170
+2 Boss's Orders MEG 114
+1 Judge POR 76
+4 Energy Switch MEG 115
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+2 Wondrous Patch PFL 94
+1 Glass Trumpet SCR 135
+1 Hero's Cape TEF 152
+2 Area Zero Underdepths SCR 131
+
+Energy: 14
+5 Psychic Energy MEE 5
+4 Grass Energy MEE 1
+3 Fire Energy MEE 2
+1 Lightning Energy MEE 4
+1 Water Energy MEE 3
+
+===== 12
+Pokémon: 21
+4 Lillie's Clefairy ex JTG 56
+4 Mega Kangaskhan ex MEG 104
+3 Latias ex SSP 76
+3 Meowth ex POR 62
+2 Wellspring Mask Ogerpon ex TWM 64
+2 Heatran PBL 7
+1 Chien-Pao SSP 56
+1 Koraidon ex ASC 121
+1 Fezandipiti ex ASC 142
+
+Trainer: 28
+4 Crispin SCR 133
+3 Cyrano SSP 170
+3 Boss's Orders MEG 114
+2 Judge POR 76
+3 Dusk Ball SSP 175
+3 Night Stretcher ASC 196
+3 Wondrous Patch PFL 94
+1 Unfair Stamp TWM 165
+3 Lillie's Pearl JTG 151
+3 Area Zero Underdepths SCR 131
+
+Energy: 11
+4 Psychic Energy MEE 5
+2 Fighting Energy MEE 6
+2 Water Energy MEE 3
+2 Fire Energy MEE 2
+1 Telepathic Psychic Energy POR 88
+
+===== 13
+Pokémon: 20
+4 Mega Kangaskhan ex MEG 104
+3 Meowth ex POR 62
+2 Lillie's Clefairy ex JTG 56
+2 Teal Mask Ogerpon ex TWM 25
+2 Latias ex SSP 76
+1 Fezandipiti ex ASC 142
+1 Wellspring Mask Ogerpon ex TWM 64
+1 Raging Bolt ex TEF 123
+1 Iron Leaves ex TEF 25
+1 Chien-Pao SSP 56
+1 Enamorus TWM 93
+1 Iron Crown ex TEF 81
+
+Trainer: 26
+4 Crispin SCR 133
+2 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Ciphermaniac's Codebreaking TEF 145
+4 Energy Switch MEG 115
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Glass Trumpet SCR 135
+1 Hero's Cape TEF 152
+4 Area Zero Underdepths SCR 131
+
+Energy: 14
+6 Grass Energy MEE 1
+3 Psychic Energy MEE 5
+2 Lightning Energy MEE 4
+2 Fighting Energy MEE 6
+1 Water Energy MEE 3
+
+===== 14
+Pokémon: 16
+4 Igglybuff 30C 120
+2 Ethan's Pichu DRI 71
+2 Budew ASC 16
+2 Cornerstone Mask Ogerpon ex TWM 112
+2 Team Rocket's Chingling DRI 85
+1 Tyrogue MEG 71
+1 Pikachu ex SSP 57
+1 Patrat CRI 70
+1 Shaymin DRI 10
+
+Trainer: 42
+4 Lillie's Determination MEG 119
+2 Lana's Aid TWM 155
+2 Boss's Orders MEG 114
+2 Colress's Tenacity SFA 57
+1 Lucian TWM 157
+1 Naveen POR 79
+4 Buddy-Buddy Poffin TEF 144
+4 Crushing Hammer POR 71
+4 Pokégear 3.0 SVI 186
+2 Poké Pad POR 81
+2 Pokémon Catcher POR 82
+2 Special Red Card CRI 82
+1 Enhanced Hammer TWM 148
+1 Tera Orb SSP 189
+1 Dark Bell PBL 75
+1 Fighting Gong MEG 116
+2 Lucky Helmet TWM 158
+2 Brave Bangle WHT 80
+4 Area Zero Underdepths SCR 131
+
+Energy: 2
+1 Fighting Energy MEE 6
+1 Enriching Energy SSP 191
+
+===== 15
+Pokémon: 20
+4 Carvanha PFL 60
+3 Mega Sharpedo ex PFL 61
+2 Toxel PFL 67
+2 Toxtricity PFL 68
+2 Munkidori TWM 95
+2 Pecharunt ex SFA 39
+1 Buneary PFL 83
+1 Mega Lopunny ex PFL 84
+1 Tatsugiri TWM 131
+1 Fezandipiti ex ASC 142
+1 Yveltal MEG 88
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Judge POR 76
+2 Janine's Secret Art PRE 112
+1 Team Rocket's Petrel DRI 176
+4 Buddy-Buddy Poffin TEF 144
+4 Ultra Ball MEG 131
+3 Poké Pad POR 81
+1 Night Stretcher ASC 196
+1 Prime Catcher TEF 157
+3 Binding Mochi PRE 95
+2 Team Rocket's Watchtower DRI 180
+1 Gravity Mountain SSP 177
+
+Energy: 9
+9 Darkness Energy MEE 7
+
+===== 16
+Pokémon: 24
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+2 Dragapult ex TWM 130
+1 Bronzor TEF 68
+1 Bronzor PRE 66
+2 Bronzong TEF 69
+2 Meowth ex POR 62
+1 Buneary PFL 83
+1 Mega Lopunny ex PFL 84
+1 Fezandipiti ex ASC 142
+1 Latias ex SSP 76
+1 Moltres PFL 14
+1 Munkidori TWM 95
+1 Shaymin DRI 10
+1 Budew ASC 16
+
+Trainer: 26
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Salvatore TEF 160
+4 Ultra Ball MEG 131
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+2 Night Stretcher ASC 196
+1 Switch MEG 130
+1 Unfair Stamp TWM 165
+1 Risky Ruins MEG 127
+
+Energy: 10
+3 Fire Energy MEE 2
+3 Psychic Energy MEE 5
+2 Darkness Energy MEE 7
+2 Telepathic Psychic Energy POR 88
+
+===== 17
+Pokémon: 19
+4 Beldum TEF 113
+4 Metang TEF 114
+1 Metagross CRI 61
+4 Drilbur PBL 46
+2 Mega Excadrill ex PBL 65
+2 Genesect ex BLK 67
+1 Shaymin DRI 10
+1 Mega Skarmory ex POR 55
+
+Trainer: 24
+4 Team Rocket's Petrel DRI 176
+2 Brock's Scouting JTG 146
+2 Lillie's Determination MEG 119
+2 Kieran TWM 154
+1 Xerosic's Machinations SFA 64
+1 Boss's Orders MEG 114
+4 Buddy-Buddy Poffin TEF 144
+2 Pokégear 3.0 SVI 186
+2 Jumbo Ice Cream PFL 91
+1 Tool Scrapper ASC 212
+1 Switch MEG 130
+1 Hero's Cape TEF 152
+1 Gravity Mountain SSP 177
+
+Energy: 17
+17 Metal Energy MEE 8
+
+===== 18
+Pokémon: 15
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+1 Fezandipiti ex ASC 142
+1 Munkidori TWM 95
+1 N's Zekrom ASC 155
+1 N's Reshiram JTG 116
+1 Pecharunt ex SFA 39
+1 N's Purrloin JTG 96
+1 Tatsugiri TWM 131
+
+Trainer: 37
+4 Lillie's Determination MEG 119
+4 Boss's Orders MEG 114
+3 Cyrano SSP 170
+2 Judge POR 76
+1 Janine's Secret Art PRE 112
+1 Black Belt's Training JTG 143
+4 Buddy-Buddy Poffin TEF 144
+3 Poké Pad POR 81
+3 N's PP Up JTG 153
+2 Night Stretcher ASC 196
+2 Ultra Ball MEG 131
+1 Secret Box TWM 163
+1 Special Red Card CRI 82
+2 Binding Mochi PRE 95
+1 Air Balloon ASC 181
+3 Team Rocket's Watchtower DRI 180
+
+Energy: 8
+8 Darkness Energy MEE 15
+
+===== 19
+Pokémon: 19
+4 Ethan's Cyndaquil DRI 32
+4 Ethan's Quilava DRI 33
+4 Ethan's Typhlosion DRI 34
+2 Dreepy TWM 128
+1 Drakloak TWM 129
+1 Dragapult ex TWM 130
+1 Shaymin DRI 10
+1 Fezandipiti ex ASC 142
+1 Victini SSP 21
+
+Trainer: 34
+4 Ethan's Adventure DRI 165
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Black Belt's Training JTG 143
+2 Judge POR 76
+1 Team Rocket's Petrel DRI 176
+3 Night Stretcher ASC 196
+3 Poké Pad POR 81
+2 Ultra Ball MEG 131
+2 Switch MEG 130
+2 Buddy-Buddy Poffin TEF 144
+2 Energy Retrieval SVI 171
+1 Rare Candy MEG 125
+2 Brave Bangle WHT 80
+2 Battle Cage PFL 85
+
+Energy: 7
+6 Fire Energy MEE 2
+1 Neo Upper Energy TEF 162
+
+===== 20
+Pokémon: 19
+4 Abra MEG 54
+4 Kadabra MEG 55
+3 Alakazam MEG 56
+3 Dunsparce JTG 120
+3 Dudunsparce TEF 129
+1 Fezandipiti ex ASC 142
+1 Genesect SFA 40
+
+Trainer: 35
+4 Boss's Orders MEG 114
+4 Dawn PFL 87
+3 Brock's Scouting JTG 146
+3 Hilda WHT 84
+1 Lana's Aid TWM 155
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+3 Rare Candy MEG 125
+2 Enhanced Hammer TWM 148
+1 Night Stretcher ASC 196
+1 Sacred Ash DRI 168
+2 Handheld Fan TWM 150
+1 Lucky Helmet TWM 158
+2 Battle Cage PFL 85
+
+Energy: 6
+4 Telepathic Psychic Energy POR 88
+1 Psychic Energy MEE 5
+1 Enriching Energy SSP 191
+
+===== 21
+Pokémon: 21
+4 Cynthia's Gible DRI 102
+4 Cynthia's Gabite DRI 103
+3 Cynthia's Garchomp ex DRI 104
+4 Cynthia's Roselia DRI 7
+3 Cynthia's Roserade DRI 8
+1 Relicanth TEF 84
+1 Shaymin DRI 10
+1 Cynthia's Spiritomb DRI 129
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Judge POR 76
+2 Hilda WHT 84
+1 Team Rocket's Petrel DRI 176
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+3 Fighting Gong MEG 116
+1 Premium Power Pro MEG 124
+1 Rare Candy MEG 125
+1 Night Stretcher ASC 196
+1 Switch MEG 130
+3 Cynthia's Power Weight DRI 162
+1 Forest of Vitality MEG 117
+
+Energy: 8
+4 Fighting Energy MEE 6
+3 Rocky Fighting Energy POR 87
+1 Neo Upper Energy TEF 162
+
+===== 22
+Pokémon: 20
+4 Beldum TEF 113
+4 Metang TEF 114
+1 Metagross CRI 61
+3 Drilbur PBL 46
+2 Mega Excadrill ex PBL 65
+2 Genesect ex BLK 67
+1 Mega Skarmory ex POR 55
+1 Fezandipiti ex ASC 142
+1 Team Rocket's Articuno DRI 51
+1 Team Rocket's Kangaskhan ex ASC 162
+
+Trainer: 23
+4 Team Rocket's Petrel DRI 176
+4 Brock's Scouting JTG 146
+1 Boss's Orders MEG 114
+1 Kieran TWM 154
+4 Pokégear 3.0 SVI 186
+3 Buddy-Buddy Poffin TEF 144
+2 Jumbo Ice Cream PFL 91
+1 Special Red Card CRI 82
+1 Night Stretcher ASC 196
+1 Energy Recycler DRI 164
+1 Precious Trolley SSP 185
+
+Energy: 17
+17 Metal Energy MEE 16
+
+===== 23
+Pokémon: 16
+3 Riolu MEG 76
+3 Mega Lucario ex MEG 77
+2 Makuhita MEG 72
+2 Hariyama MEG 73
+2 Solrock MEG 75
+2 Lunatone MEG 74
+1 Cornerstone Mask Ogerpon ex TWM 112
+1 Meowth ex POR 62
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Judge POR 76
+2 Tarragon POR 85
+1 Wally's Compassion MEG 132
+1 Team Rocket's Petrel DRI 176
+4 Poké Pad POR 81
+4 Fighting Gong MEG 116
+4 Premium Power Pro MEG 124
+2 Ultra Ball MEG 131
+1 Switch MEG 130
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+2 Air Balloon ASC 181
+2 Gravity Mountain SSP 177
+1 Team Rocket's Watchtower DRI 180
+
+Energy: 10
+7 Fighting Energy MEE 14
+3 Rocky Fighting Energy POR 87
+
+===== 24
+Pokémon: 18
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+2 Munkidori TWM 95
+2 N's Zekrom ASC 155
+1 N's Darumaka JTG 26
+1 N's Darmanitan JTG 27
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+1 Pecharunt ex SFA 39
+1 N's Reshiram JTG 116
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Cyrano SSP 170
+2 Janine's Secret Art PRE 112
+1 Black Belt's Training JTG 143
+4 Buddy-Buddy Poffin TEF 144
+3 Poké Pad POR 81
+3 N's PP Up JTG 153
+2 Night Stretcher ASC 196
+2 Ultra Ball MEG 131
+1 Enhanced Hammer TWM 148
+1 Tool Scrapper ASC 212
+1 Special Red Card CRI 82
+1 Survival Brace TWM 164
+1 Powerglass SFA 63
+1 Binding Mochi PRE 95
+2 N's Castle JTG 152
+
+Energy: 8
+8 Darkness Energy MEE 15
+
+===== 25
+Pokémon: 19
+3 Buneary MEG 107
+3 Mega Lopunny ex PFL 84
+2 Dunsparce JTG 120
+1 Dunsparce TEF 128
+3 Dudunsparce TEF 129
+2 Mew ex 30C 66
+1 Psyduck ASC 39
+1 Fan Rotom SCR 118
+1 Lillie's Clefairy ex JTG 56
+1 Stunfisk ASC 62
+1 Moltres PFL 14
+
+Trainer: 33
+4 Hilda WHT 84
+3 Boss's Orders MEG 114
+3 Wally's Compassion MEG 132
+2 Lillie's Determination MEG 119
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+3 Pokégear 3.0 SVI 186
+3 Ultra Ball MEG 131
+1 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+2 Air Balloon ASC 181
+2 Nighttime Mine ASC 197
+1 Battle Cage PFL 85
+
+Energy: 8
+4 Mist Energy TEF 161
+3 Prism Energy ASC 216
+1 Enriching Energy SSP 191
+
+===== 26
+Pokémon: 21
+4 Mega Kangaskhan ex MEG 104
+3 Meowth ex POR 62
+2 Latias ex SSP 76
+2 Teal Mask Ogerpon ex TWM 25
+2 Lillie's Clefairy ex JTG 56
+1 Chien-Pao SSP 56
+1 Raging Bolt ex TEF 123
+1 Iron Leaves ex TEF 25
+1 Iron Crown ex TEF 81
+1 Wellspring Mask Ogerpon ex TWM 64
+1 Fezandipiti ex ASC 142
+1 Enamorus TWM 93
+1 Koraidon ex ASC 121
+
+Trainer: 25
+4 Crispin SCR 133
+2 Cyrano SSP 170
+2 Boss's Orders MEG 114
+1 Ciphermaniac's Codebreaking TEF 145
+4 Ultra Ball MEG 131
+4 Energy Switch MEG 115
+2 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+1 Special Red Card CRI 82
+1 Glass Trumpet SCR 135
+3 Area Zero Underdepths SCR 131
+
+Energy: 14
+6 Grass Energy MEE 9
+3 Psychic Energy MEE 13
+2 Lightning Energy MEE 12
+2 Fighting Energy MEE 14
+1 Water Energy MEE 11
+
+===== 27
+Pokémon: 18
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Munkidori TWM 95
+1 Dunsparce JTG 120
+1 Dudunsparce TEF 129
+1 Budew ASC 16
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+4 Poké Pad POR 81
+4 Crushing Hammer POR 71
+4 Buddy-Buddy Poffin TEF 144
+3 Night Stretcher ASC 196
+3 Ultra Ball MEG 131
+1 Unfair Stamp TWM 165
+1 Special Red Card CRI 82
+2 Jamming Tower TWM 153
+1 Risky Ruins MEG 127
+
+Energy: 9
+3 Fire Energy MEE 10
+3 Darkness Energy MEE 15
+3 Psychic Energy MEE 13
+
+===== 28
+Pokémon: 20
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+2 N's Darumaka JTG 26
+2 N's Darmanitan JTG 27
+2 N's Zekrom ASC 155
+1 Pecharunt ex SFA 39
+1 Meowth ex POR 62
+1 Munkidori TWM 95
+1 Budew ASC 16
+1 Yveltal MEG 88
+1 N's Reshiram JTG 116
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Black Belt's Training JTG 143
+1 Janine's Secret Art PRE 112
+1 Judge POR 76
+4 Buddy-Buddy Poffin TEF 144
+3 Poké Pad POR 81
+3 Ultra Ball MEG 131
+3 N's PP Up JTG 153
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+1 Binding Mochi PRE 95
+2 N's Castle JTG 152
+
+Energy: 8
+8 Darkness Energy MEE 15
+
+===== 29
+Pokémon: 22
+4 Meowth ex POR 62
+4 Mega Kangaskhan ex MEG 104
+4 Lillie's Clefairy ex JTG 56
+3 Latias ex SSP 76
+2 Fezandipiti ex ASC 142
+2 Wellspring Mask Ogerpon ex TWM 64
+1 Koraidon ex ASC 121
+1 Chien-Pao SSP 56
+1 Paldean Tauros SSP 18
+
+Trainer: 28
+4 Crispin SCR 133
+3 Boss's Orders MEG 114
+1 Ciphermaniac's Codebreaking TEF 145
+1 Cyrano SSP 170
+1 AZ's Tranquility CRI 76
+4 Dusk Ball SSP 175
+4 Ultra Ball MEG 131
+3 Wondrous Patch PFL 94
+1 Prime Catcher TEF 157
+2 Lillie's Pearl JTG 151
+4 Area Zero Underdepths SCR 131
+
+Energy: 10
+4 Psychic Energy MEE 13
+2 Fighting Energy MEE 14
+2 Water Energy MEE 11
+1 Fire Energy MEE 10
+1 Telepathic Psychic Energy POR 88
+
+===== 30
+Pokémon: 20
+4 Abra MEG 54
+4 Kadabra MEG 55
+3 Alakazam MEG 56
+3 Dunsparce JTG 120
+3 Dudunsparce TEF 129
+1 Psyduck ASC 39
+1 Shaymin DRI 10
+1 Fezandipiti ex ASC 142
+
+Trainer: 33
+4 Hilda WHT 84
+4 Dawn PFL 87
+3 Boss's Orders MEG 114
+1 Eri TEF 146
+1 Lana's Aid TWM 155
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+3 Rare Candy MEG 125
+2 Enhanced Hammer TWM 148
+1 Night Stretcher ASC 196
+1 Wondrous Patch PFL 94
+1 Sacred Ash DRI 168
+4 Battle Cage PFL 85
+
+Energy: 7
+4 Telepathic Psychic Energy POR 88
+2 Psychic Energy MEE 13
+1 Enriching Energy SSP 191
+
+===== 31
+Pokémon: 19
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+2 Munkidori TWM 95
+1 N's Reshiram JTG 116
+1 Fezandipiti ex ASC 142
+1 N's Purrloin JTG 96
+1 Budew ASC 16
+1 Pecharunt ex SFA 39
+1 N's Zekrom ASC 155
+1 Tatsugiri TWM 131
+1 Meowth ex POR 62
+1 Yveltal MEG 88
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Judge POR 76
+1 Black Belt's Training JTG 143
+4 Buddy-Buddy Poffin TEF 144
+4 Transformation Tome CRI 83
+3 N's PP Up JTG 153
+2 Ultra Ball MEG 131
+2 Poké Pad POR 81
+1 Secret Box TWM 163
+1 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+2 Binding Mochi PRE 95
+2 Team Rocket's Watchtower DRI 180
+1 N's Castle JTG 152
+
+Energy: 7
+7 Darkness Energy MEE 15
+
+===== 32
+Pokémon: 18
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Munkidori TWM 95
+2 Budew ASC 16
+1 Meowth ex POR 62
+1 Moltres PFL 14
+1 Fezandipiti ex ASC 142
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+1 Judge POR 76
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+4 Crushing Hammer POR 71
+3 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+2 Risky Ruins MEG 127
+1 Team Rocket's Watchtower DRI 180
+
+Energy: 9
+3 Psychic Energy MEE 13
+3 Darkness Energy MEE 15
+3 Fire Energy MEE 10
+
+===== 33
+Pokémon: 21
+4 Lillie's Clefairy ex JTG 56
+4 Mega Kangaskhan ex MEG 104
+3 Latias ex SSP 76
+3 Meowth ex POR 62
+2 Wellspring Mask Ogerpon ex TWM 64
+2 Heatran PBL 7
+1 Chien-Pao SSP 56
+1 Koraidon ex ASC 121
+1 Fezandipiti ex ASC 142
+
+Trainer: 28
+4 Crispin SCR 133
+3 Cyrano SSP 170
+3 Boss's Orders MEG 114
+2 Judge POR 76
+3 Dusk Ball SSP 175
+3 Night Stretcher ASC 196
+3 Wondrous Patch PFL 94
+1 Unfair Stamp TWM 165
+3 Lillie's Pearl JTG 151
+3 Area Zero Underdepths SCR 131
+
+Energy: 11
+4 Psychic Energy MEE 13
+2 Fighting Energy MEE 14
+2 Water Energy MEE 11
+2 Fire Energy MEE 10
+1 Telepathic Psychic Energy POR 88
+
+===== 34
+Pokémon: 20
+4 Mega Kangaskhan ex MEG 104
+3 Meowth ex POR 62
+2 Latias ex SSP 76
+2 Teal Mask Ogerpon ex TWM 25
+2 Lillie's Clefairy ex JTG 56
+1 Chien-Pao SSP 56
+1 Fezandipiti ex ASC 142
+1 Raging Bolt ex TEF 123
+1 Iron Leaves ex TEF 25
+1 Enamorus TWM 93
+1 Iron Crown ex TEF 81
+1 Wellspring Mask Ogerpon ex TWM 64
+
+Trainer: 26
+4 Crispin SCR 133
+2 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Ciphermaniac's Codebreaking TEF 145
+4 Energy Switch MEG 115
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Glass Trumpet SCR 135
+1 Hero's Cape TEF 152
+4 Area Zero Underdepths SCR 131
+
+Energy: 14
+6 Grass Energy MEE 9
+3 Psychic Energy MEE 13
+2 Lightning Energy MEE 12
+2 Fighting Energy MEE 14
+1 Water Energy MEE 11
+
+===== 35
+Pokémon: 20
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Duskull PRE 35
+1 Dusclops PRE 36
+1 Dusknoir PRE 37
+1 Fezandipiti ex ASC 142
+1 Munkidori TWM 95
+1 Meowth ex POR 62
+1 Budew ASC 16
+1 Moltres PFL 14
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+4 Ultra Ball MEG 131
+3 Rare Candy MEG 125
+2 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+1 Special Red Card CRI 82
+1 Team Rocket's Watchtower DRI 180
+1 Risky Ruins MEG 127
+1 Jamming Tower TWM 153
+
+Energy: 8
+3 Psychic Energy MEE 13
+3 Fire Energy MEE 10
+2 Darkness Energy MEE 15
+
+===== 36
+Pokémon: 21
+4 Mega Kangaskhan ex MEG 104
+3 Meowth ex POR 62
+2 Lillie's Clefairy ex JTG 56
+2 Teal Mask Ogerpon ex TWM 25
+2 Latias ex SSP 76
+1 Fezandipiti ex ASC 142
+1 Raging Bolt ex TEF 123
+1 Iron Leaves ex TEF 25
+1 Iron Crown ex TEF 81
+1 Wellspring Mask Ogerpon ex TWM 64
+1 Koraidon ex ASC 121
+1 Jirachi ex 30C 102
+1 Chien-Pao SSP 56
+
+Trainer: 26
+4 Crispin SCR 133
+2 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Ciphermaniac's Codebreaking TEF 145
+1 Xerosic's Machinations SFA 64
+4 Energy Switch MEG 115
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+2 Glass Trumpet SCR 135
+1 Hero's Cape TEF 152
+3 Area Zero Underdepths SCR 131
+
+Energy: 13
+6 Grass Energy MEE 9
+2 Psychic Energy MEE 13
+2 Lightning Energy MEE 12
+2 Fighting Energy MEE 14
+1 Water Energy MEE 11
+
+===== 37
+Pokémon: 22
+4 Abra MEG 54
+4 Kadabra MEG 55
+3 Alakazam MEG 56
+3 Dunsparce JTG 120
+2 Dudunsparce TEF 129
+2 Rellor TEF 23
+1 Rabsca TEF 24
+1 Psyduck ASC 39
+1 Fezandipiti ex ASC 142
+1 Genesect SFA 40
+
+Trainer: 32
+4 Dawn PFL 87
+3 Boss's Orders MEG 114
+3 Hilda WHT 84
+1 Eri TEF 146
+1 Lana's Aid TWM 155
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+3 Rare Candy MEG 125
+2 Enhanced Hammer TWM 148
+1 Special Red Card CRI 82
+1 Sacred Ash DRI 168
+2 Handheld Fan TWM 150
+1 Air Balloon ASC 181
+2 Forest of Vitality MEG 117
+
+Energy: 6
+4 Telepathic Psychic Energy POR 88
+1 Psychic Energy MEE 13
+1 Enriching Energy SSP 191
+
+===== 38
+Pokémon: 28
+4 Poltchageist PBL 5
+4 Sinistcha PBL 6
+4 Shuppet PBL 33
+4 Banette PBL 34
+3 Dhelmise PBL 39
+2 Dunsparce TEF 128
+2 Dudunsparce TEF 129
+1 Dudunsparce ex JTG 121
+1 Lillie's Clefairy ex JTG 56
+1 Spiritomb PBL 35
+1 Patrat CRI 70
+1 Shaymin DRI 10
+
+Trainer: 25
+4 Gwynn PBL 78
+3 Lillie's Determination MEG 119
+2 Team Rocket's Petrel DRI 176
+2 Boss's Orders MEG 114
+3 Night Stretcher ASC 196
+3 Ultra Ball MEG 131
+3 Poké Pad POR 81
+1 Brilliant Blender SSP 164
+1 Switch MEG 130
+3 Prism Tower CRI 80
+
+Energy: 7
+4 Telepathic Psychic Energy POR 88
+3 Psychic Energy MEE 5
+
+===== 39
+Pokémon: 16
+3 Riolu MEG 76
+3 Mega Lucario ex MEG 77
+3 Solrock MEG 75
+2 Makuhita MEG 72
+2 Hariyama MEG 73
+2 Lunatone MEG 74
+1 Meowth ex POR 62
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+3 Judge POR 76
+2 Boss's Orders MEG 114
+1 Wally's Compassion MEG 132
+4 Fighting Gong MEG 116
+4 Ultra Ball MEG 131
+4 Poké Pad POR 81
+4 Premium Power Pro MEG 124
+2 Switch MEG 130
+1 Air Balloon ASC 181
+1 Maximum Belt TEF 154
+2 Team Rocket's Watchtower DRI 180
+
+Energy: 12
+12 Fighting Energy MEE 6
+
+===== 40
+Pokémon: 18
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+2 Munkidori TWM 95
+2 N's Zekrom ASC 155
+1 N's Darumaka JTG 26
+1 N's Darmanitan JTG 27
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+1 Pecharunt ex SFA 39
+1 N's Reshiram JTG 116
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Cyrano SSP 170
+2 Janine's Secret Art PRE 112
+1 Black Belt's Training JTG 143
+4 Buddy-Buddy Poffin TEF 144
+3 Poké Pad POR 81
+3 N's PP Up JTG 153
+2 Night Stretcher ASC 196
+2 Ultra Ball MEG 131
+1 Enhanced Hammer TWM 148
+1 Tool Scrapper ASC 212
+1 Special Red Card CRI 82
+1 Scoop Up Cyclone TWM 162
+1 Powerglass SFA 63
+1 Binding Mochi PRE 95
+2 N's Castle JTG 152
+
+Energy: 8
+8 Darkness Energy MEE 7
+
+===== 41
+Pokémon: 21
+4 Shuppet PBL 33
+4 Banette PBL 34
+4 Poltchageist PBL 5
+4 Sinistcha PBL 6
+4 Dhelmise PBL 39
+1 Spiritomb PBL 35
+
+Trainer: 30
+4 Lillie's Determination MEG 119
+4 Naveen POR 79
+2 Boss's Orders MEG 114
+1 Larry's Skill PRE 115
+4 Buddy-Buddy Poffin TEF 144
+4 Ultra Ball MEG 131
+4 Poké Pad POR 81
+2 Night Stretcher ASC 196
+4 Prism Tower CRI 80
+1 Neutralization Zone SFA 60
+
+Energy: 9
+5 Psychic Energy MEE 5
+4 Telepathic Psychic Energy POR 88
+
+===== 42
+Pokémon: 21
+4 Beldum CRI 59
+4 Metang TEF 114
+2 Metagross CRI 61
+4 Drilbur PBL 46
+2 Mega Excadrill ex PBL 65
+2 Genesect ex BLK 67
+1 Fezandipiti ex ASC 142
+1 Mega Skarmory ex POR 55
+1 Shaymin DRI 10
+
+Trainer: 23
+4 Brock's Scouting JTG 146
+4 Team Rocket's Petrel DRI 176
+2 Boss's Orders MEG 114
+2 Lillie's Determination MEG 119
+4 Buddy-Buddy Poffin TEF 144
+2 Jumbo Ice Cream PFL 91
+1 Special Red Card CRI 82
+1 Energy Recycler DRI 164
+1 Ultra Ball MEG 131
+1 Switch MEG 130
+1 Hero's Cape TEF 152
+
+Energy: 16
+16 Metal Energy MEE 8
+
+===== 43
+Pokémon: 24
+4 Duskull PRE 35
+2 Dusclops PRE 36
+2 Dusknoir PRE 37
+2 Abra MEG 54
+2 Abra TWM 80
+4 Kadabra MEG 55
+3 Alakazam MEG 56
+2 Budew ASC 16
+1 Fezandipiti ex ASC 142
+1 Patrat CRI 70
+1 Shaymin DRI 10
+
+Trainer: 31
+4 Hilda WHT 84
+4 Gwynn PBL 78
+2 Dawn PFL 87
+1 Boss's Orders MEG 114
+4 Rare Candy MEG 125
+4 Poké Pad POR 81
+3 Buddy-Buddy Poffin TEF 144
+2 Night Stretcher ASC 196
+2 Special Red Card CRI 82
+2 Strange Timepiece MEG 128
+1 Enhanced Hammer TWM 148
+1 Prime Catcher TEF 157
+1 Sacred Ash DRI 168
+
+Energy: 5
+4 Telepathic Psychic Energy POR 88
+1 Psychic Energy MEE 5
+
+===== 44
+Pokémon: 19
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Munkidori TWM 95
+2 Budew ASC 16
+1 Dunsparce JTG 120
+1 Dudunsparce TEF 129
+1 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+1 Judge POR 76
+4 Buddy-Buddy Poffin TEF 144
+4 Crushing Hammer POR 71
+4 Poké Pad POR 81
+3 Ultra Ball MEG 131
+3 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+2 Risky Ruins MEG 127
+
+Energy: 9
+4 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7
+
+===== 45
+Pokémon: 20
+4 Dunsparce JTG 120
+3 Dudunsparce TEF 129
+1 Dudunsparce ex JTG 121
+3 Numel ASC 27
+2 Mega Camerupt ex MEG 22
+2 Larvesta SSP 24
+2 Volcarona BLK 16
+2 Fan Rotom SCR 118
+1 Fezandipiti ex ASC 142
+
+Trainer: 28
+4 Lillie's Determination MEG 119
+3 Hilda WHT 84
+2 Boss's Orders MEG 114
+1 Wally's Compassion MEG 132
+4 Ultra Ball MEG 131
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+2 Switch MEG 130
+1 Blowtorch PFL 86
+1 Maximum Belt TEF 154
+2 Gravity Mountain SSP 177
+
+Energy: 12
+8 Fire Energy MEE 2
+4 Ignition Energy WHT 86
+
+===== 46
+Pokémon: 12
+4 Team Rocket's Murkrow DRI 127
+3 Team Rocket's Honchkrow ASC 127
+2 Team Rocket's Porygon DRI 153
+1 Team Rocket's Porygon2 DRI 154
+2 Team Rocket's Articuno DRI 51
+
+Trainer: 40
+4 Team Rocket's Archer DRI 170
+4 Team Rocket's Petrel DRI 176
+4 Team Rocket's Giovanni DRI 174
+4 Team Rocket's Ariana DRI 171
+4 Team Rocket's Proton DRI 177
+4 Team Rocket's Transceiver DRI 178
+4 Roto-Stick PRE 127
+3 Poké Pad POR 81
+3 Night Stretcher ASC 196
+1 Miracle Headset SSP 183
+2 Lucky Helmet TWM 158
+3 Team Rocket's Factory DRI 173
+
+Energy: 8
+4 Ignition Energy WHT 86
+4 Team Rocket's Energy DRI 182
+
+===== 47
+Pokémon: 26
+4 Duskull PRE 35
+2 Dusclops PRE 36
+4 Dusknoir PRE 37
+4 Mega Kangaskhan ex MEG 104
+2 Bronzor TEF 68
+2 Bronzong TEF 69
+2 Buneary PFL 83
+1 Mega Lopunny ex PFL 84
+2 Latias ex SSP 76
+1 Bloodmoon Ursaluna ex TWM 141
+1 Meowth ex POR 62
+1 Budew ASC 16
+
+Trainer: 28
+4 Lillie's Determination MEG 119
+4 Hilda WHT 84
+2 Boss's Orders MEG 114
+4 Ultra Ball MEG 131
+4 Poké Pad POR 81
+4 Rare Candy MEG 125
+4 Switch MEG 130
+2 Jamming Tower TWM 153
+
+Energy: 6
+4 Telepathic Psychic Energy POR 88
+1 Psychic Energy MEE 5
+1 Enriching Energy SSP 191
+
+===== 48
+Pokémon: 20
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Munkidori TWM 95
+2 Budew ASC 16
+1 Dunsparce JTG 120
+1 Dudunsparce ex JTG 121
+1 Dudunsparce TEF 129
+1 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Eri TEF 146
+1 Rosa's Encouragement POR 84
+1 Judge POR 76
+4 Crushing Hammer POR 71
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+3 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+2 Risky Ruins MEG 127
+
+Energy: 8
+3 Fire Energy MEE 2
+3 Psychic Energy MEE 5
+2 Darkness Energy MEE 7
+
+===== 49
+Pokémon: 22
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+2 Dragapult ex TWM 130
+2 Torchic DRI 40
+1 Combusken DRI 41
+2 Blaziken ex JTG 24
+2 Budew ASC 16
+1 Chi-Yu TWM 39
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+1 Patrat CRI 70
+1 Shaymin DRI 10
+
+Trainer: 30
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Dawn PFL 87
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+3 Ultra Ball MEG 131
+2 Rare Candy MEG 125
+2 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+1 Dark Bell PBL 75
+1 Special Red Card CRI 82
+1 Jamming Tower TWM 153
+1 Team Rocket's Watchtower DRI 180
+
+Energy: 8
+4 Psychic Energy MEE 5
+4 Fire Energy MEE 2
+
+===== 50
+Pokémon: 13
+4 Team Rocket's Murkrow DRI 127
+3 Team Rocket's Honchkrow ASC 127
+2 Team Rocket's Porygon DRI 153
+1 Team Rocket's Porygon2 DRI 154
+2 Team Rocket's Articuno DRI 51
+1 Team Rocket's Mimikyu DRI 87
+
+Trainer: 39
+4 Team Rocket's Proton DRI 177
+4 Team Rocket's Ariana DRI 171
+4 Team Rocket's Giovanni DRI 174
+4 Team Rocket's Archer DRI 170
+4 Team Rocket's Petrel DRI 176
+4 Poké Pad POR 81
+4 Team Rocket's Transceiver DRI 178
+4 Roto-Stick PRE 127
+3 Night Stretcher ASC 196
+1 Miracle Headset SSP 183
+3 Team Rocket's Factory DRI 173
+
+Energy: 8
+4 Ignition Energy WHT 86
+4 Team Rocket's Energy DRI 182
+
+===== 51
+Pokémon: 20
+4 Teal Mask Ogerpon ex TWM 25
+2 Chikorita MEG 8
+2 Bayleef MEG 9
+2 Meganium MEG 10
+2 Smoliv DRI 21
+2 Dolliv DRI 22
+2 Arboliva ex DRI 23
+2 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+1 Budew ASC 16
+
+Trainer: 28
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Dawn PFL 87
+1 Briar SCR 132
+1 Lana's Aid TWM 155
+1 Ciphermaniac's Codebreaking TEF 145
+4 Ultra Ball MEG 131
+4 Bug Catching Set TWM 143
+1 Poké Pad POR 81
+1 Night Stretcher ASC 196
+1 Energy Switch MEG 115
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+4 Forest of Vitality MEG 117
+
+Energy: 12
+12 Grass Energy MEE 1
+
+===== 52
+Pokémon: 10
+4 Mega Kangaskhan ex MEG 104
+3 Dwebble DRI 11
+3 Crustle DRI 12
+
+Trainer: 37
+4 Lillie's Determination MEG 119
+4 Boss's Orders MEG 114
+4 Team Rocket's Petrel DRI 176
+3 Eri TEF 146
+2 Hilda WHT 84
+1 Xerosic's Machinations SFA 64
+1 Pokémon Center Lady MEG 123
+4 Jumbo Ice Cream PFL 91
+3 Pokégear 3.0 SVI 186
+2 Buddy-Buddy Poffin TEF 144
+1 Switch MEG 130
+1 Ultra Ball MEG 131
+1 Special Red Card CRI 82
+1 Enhanced Hammer TWM 148
+1 Handheld Fan TWM 150
+1 Hero's Cape TEF 152
+1 Lumiose City POR 77
+1 Team Rocket's Factory DRI 173
+1 Festival Grounds TWM 149
+
+Energy: 13
+4 Mist Energy TEF 161
+4 Growing Grass Energy POR 86
+4 Spiky Energy JTG 159
+1 Grass Energy MEE 1
+
+===== 53
+Pokémon: 18
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+2 Munkidori TWM 95
+2 N's Zekrom ASC 155
+1 N's Darumaka JTG 26
+1 N's Darmanitan JTG 27
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+1 Pecharunt ex SFA 39
+1 N's Reshiram JTG 116
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Cyrano SSP 170
+2 Janine's Secret Art PRE 112
+1 Black Belt's Training JTG 143
+4 Buddy-Buddy Poffin TEF 144
+3 Poké Pad POR 81
+3 N's PP Up JTG 153
+2 Night Stretcher ASC 196
+2 Ultra Ball MEG 131
+1 Enhanced Hammer TWM 148
+1 Tool Scrapper ASC 212
+1 Special Red Card CRI 82
+1 Survival Brace TWM 164
+1 Powerglass SFA 63
+1 Binding Mochi PRE 95
+2 N's Castle JTG 152
+
+Energy: 8
+8 Darkness Energy MEE 7
+
+===== 54
+Pokémon: 19
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Munkidori TWM 95
+2 Budew ASC 16
+1 Dunsparce JTG 120
+1 Dudunsparce TEF 129
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+4 Poké Pad POR 81
+4 Crushing Hammer POR 71
+4 Buddy-Buddy Poffin TEF 144
+3 Night Stretcher ASC 196
+3 Ultra Ball MEG 131
+1 Unfair Stamp TWM 165
+1 Special Red Card CRI 82
+2 Risky Ruins MEG 127
+
+Energy: 9
+3 Psychic Energy MEE 5
+3 Darkness Energy MEE 7
+3 Fire Energy MEE 2
+
+===== 55
+Pokémon: 19
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Munkidori TWM 95
+2 Budew ASC 16
+1 Fezandipiti ex ASC 142
+1 Lillie's Clefairy ex JTG 56
+1 Meowth ex POR 62
+1 Shaymin DRI 10
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+1 Judge POR 76
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+3 Crushing Hammer POR 71
+3 Night Stretcher ASC 196
+3 Ultra Ball MEG 131
+1 Unfair Stamp TWM 165
+1 Enhanced Hammer TWM 148
+1 Special Red Card CRI 82
+2 Risky Ruins MEG 127
+
+Energy: 8
+3 Fire Energy MEE 2
+3 Psychic Energy MEE 5
+2 Darkness Energy MEE 7
+
+===== 56
+Pokémon: 20
+3 Mega Kangaskhan ex MEG 104
+3 Meowth ex POR 62
+2 Latias ex SSP 76
+2 Teal Mask Ogerpon ex TWM 25
+2 Lillie's Clefairy ex JTG 56
+1 Chien-Pao SSP 56
+1 Passimian SSP 111
+1 Raging Bolt ex TEF 123
+1 Iron Leaves ex TEF 25
+1 Iron Crown ex TEF 81
+1 Wellspring Mask Ogerpon ex TWM 64
+1 Fezandipiti ex ASC 142
+1 Paldean Tauros SSP 18
+
+Trainer: 26
+4 Crispin SCR 133
+2 Cyrano SSP 170
+2 Boss's Orders MEG 114
+1 Ciphermaniac's Codebreaking TEF 145
+1 Judge POR 76
+4 Ultra Ball MEG 131
+4 Energy Switch MEG 115
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Glass Trumpet SCR 135
+1 Hero's Cape TEF 152
+3 Area Zero Underdepths SCR 131
+
+Energy: 14
+6 Grass Energy MEE 1
+2 Psychic Energy MEE 5
+2 Lightning Energy MEE 4
+2 Fighting Energy MEE 6
+1 Water Energy MEE 3
+1 Fire Energy MEE 2
+
+===== 57
+Pokémon: 23
+3 Froakie CRI 20
+1 Froakie TWM 56
+2 Frogadier CRI 21
+1 Frogadier TWM 57
+3 Mega Greninja ex CRI 22
+1 Greninja ex TWM 106
+1 Greninja ex 30C 21
+3 N's Zorua JTG 97
+3 N's Zoroark ex JTG 98
+1 Totodile TEF 39
+1 Meowth ex POR 62
+1 Tatsugiri TWM 131
+1 Fezandipiti ex ASC 142
+1 Patrat CRI 70
+
+Trainer: 30
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Dawn PFL 87
+1 AZ's Tranquility CRI 76
+1 Hilda WHT 84
+1 Wally's Compassion MEG 132
+4 Buddy-Buddy Poffin TEF 144
+2 Rare Candy MEG 125
+2 Ultra Ball MEG 131
+2 Special Red Card CRI 82
+2 Poké Pad POR 81
+1 Night Stretcher ASC 196
+1 Great Haul Net CRI 78
+1 Accompanying Flute TWM 142
+2 Air Balloon ASC 181
+2 Surfing Beach MEG 129
+
+Energy: 7
+6 Water Energy MEE 3
+1 Neo Upper Energy TEF 162
+
+===== 58
+Pokémon: 18
+4 Carvanha PFL 60
+3 Mega Sharpedo ex PFL 61
+2 Toxel PFL 67
+2 Toxtricity PFL 68
+2 Tatsugiri TWM 131
+2 Munkidori TWM 95
+2 Pecharunt ex SFA 39
+1 Fezandipiti ex ASC 142
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+4 Boss's Orders MEG 114
+2 Judge POR 76
+2 Team Rocket's Petrel DRI 176
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+3 Binding Mochi PRE 95
+3 Team Rocket's Watchtower DRI 180
+
+Energy: 9
+9 Darkness Energy MEE 7
+
+===== 59
+Pokémon: 20
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Munkidori TWM 95
+2 Budew ASC 16
+1 Dunsparce TEF 128
+1 Dudunsparce TEF 129
+1 Meowth ex POR 62
+1 Moltres PFL 14
+1 Fezandipiti ex ASC 142
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+1 Judge POR 76
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+4 Crushing Hammer POR 71
+3 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+2 Risky Ruins MEG 127
+
+Energy: 9
+4 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7
+
+===== 60
+Pokémon: 21
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Duskull PRE 35
+2 Dusclops PRE 36
+1 Dusknoir PRE 37
+1 Munkidori TWM 95
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+1 Budew ASC 16
+1 Moltres PFL 14
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Dawn PFL 87
+1 Rosa's Encouragement POR 84
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+2 Rare Candy MEG 125
+1 Unfair Stamp TWM 165
+1 Special Red Card CRI 82
+2 Team Rocket's Watchtower DRI 180
+
+Energy: 8
+3 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7
+
+===== 61
+Pokémon: 19
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+1 Vulpix MEG 19
+1 Ninetales CRI 9
+1 N's Darumaka JTG 26
+1 N's Darmanitan JTG 27
+1 Meowth ex POR 62
+1 N's Reshiram JTG 116
+1 Munkidori TWM 95
+1 Pecharunt ex SFA 39
+1 Fezandipiti ex ASC 142
+1 N's Zekrom ASC 155
+1 Budew ASC 16
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Black Belt's Training JTG 143
+4 Buddy-Buddy Poffin TEF 144
+4 Transformation Tome CRI 83
+3 Ultra Ball MEG 131
+3 N's PP Up JTG 153
+2 Poké Pad POR 81
+1 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Secret Box TWM 163
+2 Binding Mochi PRE 95
+2 N's Castle JTG 152
+
+Energy: 8
+7 Darkness Energy MEE 7
+1 Fire Energy MEE 2
+
+===== 62
+Pokémon: 14
+4 Relicanth PBL 17
+2 Terapagos ex SCR 128
+2 Lillie's Clefairy ex JTG 56
+1 Tirtouga BLK 22
+1 Cradily SCR 6
+1 Walking Wake ex TEF 50
+1 Terapagos SSP 161
+1 Rampardos ex PBL 45
+1 Tyrantrum POR 45
+
+Trainer: 36
+3 Crispin SCR 133
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Team Rocket's Petrel DRI 176
+1 Judge POR 76
+2 Antique Cover Fossil SCR 129
+2 Antique Root Fossil SCR 130
+2 Poké Pad POR 81
+2 Antique Skull Fossil PBL 73
+2 Rare Candy MEG 125
+2 Antique Jaw Fossil POR 68
+1 Ultra Ball MEG 131
+1 Energy Search POR 72
+1 Night Stretcher ASC 196
+1 Switch MEG 130
+1 Lillie's Pearl JTG 151
+1 Sparkling Crystal SCR 142
+4 Fossil Quarry PBL 76
+1 Area Zero Underdepths SCR 131
+
+Energy: 10
+2 Psychic Energy MEE 5
+2 Fighting Energy MEE 6
+2 Grass Energy MEE 1
+2 Water Energy MEE 3
+2 Prism Energy ASC 216
+
+===== 63
+Pokémon: 12
+4 Team Rocket's Murkrow DRI 127
+3 Team Rocket's Honchkrow ASC 127
+2 Team Rocket's Porygon DRI 153
+1 Team Rocket's Porygon2 DRI 154
+2 Team Rocket's Articuno DRI 51
+
+Trainer: 40
+4 Team Rocket's Ariana DRI 171
+4 Team Rocket's Giovanni DRI 174
+4 Team Rocket's Petrel DRI 176
+4 Team Rocket's Archer DRI 170
+4 Team Rocket's Proton DRI 177
+4 Team Rocket's Transceiver DRI 178
+3 Poké Pad POR 81
+3 Night Stretcher ASC 196
+3 Roto-Stick PRE 127
+1 Ultra Ball MEG 131
+1 Pokégear 3.0 SVI 186
+1 Miracle Headset SSP 183
+1 Air Balloon ASC 181
+3 Team Rocket's Factory DRI 173
+
+Energy: 8
+4 Team Rocket's Energy DRI 182
+4 Ignition Energy WHT 86
+
+===== 64
+Pokémon: 21
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Meowth ex POR 62
+2 Munkidori TWM 95
+1 Maractus JTG 8
+1 Latias ex SSP 76
+1 Fezandipiti ex ASC 142
+1 Budew ASC 16
+1 Bloodmoon Ursaluna ex TWM 141
+1 Moltres PFL 14
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+4 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Judge POR 76
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+2 Rare Candy MEG 125
+1 Unfair Stamp TWM 165
+1 Risky Ruins MEG 127
+1 Area Zero Underdepths SCR 131
+1 Jamming Tower TWM 153
+
+Energy: 8
+3 Fire Energy MEE 2
+3 Psychic Energy MEE 5
+2 Darkness Energy MEE 7
+
+===== 65
+Pokémon: 17
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+2 N's Zekrom ASC 155
+1 N's Darumaka JTG 26
+1 N's Darmanitan JTG 27
+1 Munkidori TWM 95
+1 N's Reshiram JTG 116
+1 Yveltal MEG 88
+1 Meowth ex POR 62
+1 Pecharunt ex SFA 39
+
+Trainer: 35
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Brock's Scouting JTG 146
+1 Janine's Secret Art PRE 112
+1 Black Belt's Training JTG 143
+4 Buddy-Buddy Poffin TEF 144
+4 Transformation Tome CRI 83
+3 N's PP Up JTG 153
+2 Poké Pad POR 81
+2 Ultra Ball MEG 131
+1 Secret Box TWM 163
+1 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Energy Switch MEG 115
+2 Binding Mochi PRE 95
+2 N's Castle JTG 152
+
+Energy: 8
+8 Darkness Energy MEE 7
+
+===== 66
+Pokémon: 21
+3 Goldeen TWM 44
+3 Seaking PRE 21
+3 Grookey TWM 14
+3 Thwackey TWM 15
+2 Rellor TEF 23
+1 Rabsca TEF 24
+2 Applin SCR 12
+2 Dipplin TWM 18
+1 Meowth ex POR 62
+1 Shaymin DRI 10
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Gladion's Final Battle PBL 77
+4 Buddy-Buddy Poffin TEF 144
+3 Ultra Ball MEG 131
+3 Poké Pad POR 81
+2 Hand Trimmer TEF 150
+2 Switch MEG 130
+2 Night Stretcher ASC 196
+1 Sacred Ash DRI 168
+2 Air Balloon ASC 181
+1 Brave Bangle WHT 80
+1 Maximum Belt TEF 154
+4 Festival Grounds TWM 149
+
+Energy: 6
+6 Grass Energy MEE 1
+
+===== 67
+Pokémon: 21
+4 Beldum TEF 113
+4 Metang TEF 114
+1 Metagross CRI 61
+4 Drilbur PBL 46
+2 Mega Excadrill ex PBL 65
+2 Genesect ex BLK 67
+1 Team Rocket's Articuno DRI 51
+1 Shaymin DRI 10
+1 Team Rocket's Kangaskhan ex ASC 162
+1 Mega Skarmory ex POR 55
+
+Trainer: 23
+4 Brock's Scouting JTG 146
+4 Team Rocket's Petrel DRI 176
+4 Lillie's Determination MEG 119
+4 Buddy-Buddy Poffin TEF 144
+4 Jumbo Ice Cream PFL 91
+1 Energy Recycler DRI 164
+1 Switch MEG 130
+1 Hero's Cape TEF 152
+
+Energy: 16
+16 Metal Energy MEE 8
+
+===== 68
+Pokémon: 11
+4 Wailmer PBL 15
+3 Wailord ex PBL 16
+3 Munkidori TWM 95
+1 Meowth ex POR 62
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+3 Misty's Vitality PBL 80
+2 Boss's Orders MEG 114
+1 Crispin SCR 133
+1 Hilda WHT 84
+4 Ultra Ball MEG 131
+4 Poké Pad POR 81
+4 Pokégear 3.0 SVI 186
+3 Jumbo Ice Cream PFL 91
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Prime Catcher TEF 157
+2 Heavy Baton TEF 151
+2 Surfing Beach MEG 129
+
+Energy: 15
+9 Water Energy MEE 3
+4 Darkness Energy MEE 7
+2 Bubbly Water Energy CRI 84
+
+===== 69
+Pokémon: 16
+3 Steven's Beldum DRI 143
+2 Steven's Metang DRI 144
+3 Steven's Metagross ex DRI 145
+3 Mew ex 30C 66
+2 Mega Skarmory ex POR 55
+1 Meowth ex POR 62
+1 Genesect ex BLK 67
+1 Fezandipiti ex ASC 142
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+2 Cyrano SSP 170
+2 Team Rocket's Petrel DRI 176
+2 Boss's Orders MEG 114
+1 Brock's Scouting JTG 146
+1 Dawn PFL 87
+4 Ultra Ball MEG 131
+3 Poké Pad POR 81
+3 Rare Candy MEG 125
+2 Night Stretcher ASC 196
+2 Pokégear 3.0 SVI 186
+1 Energy Recycler DRI 164
+1 Scoop Up Cyclone TWM 162
+3 Air Balloon ASC 181
+1 Team Rocket's Watchtower DRI 180
+
+Energy: 12
+6 Metal Energy MEE 8
+6 Psychic Energy MEE 5
+
+===== 70
+Pokémon: 20
+4 Carvanha PFL 60
+3 Mega Sharpedo ex PFL 61
+3 Pecharunt ex SFA 39
+2 Toxel PFL 67
+2 Toxtricity PFL 68
+2 Munkidori TWM 95
+2 Tatsugiri TWM 131
+1 Fezandipiti ex ASC 142
+1 Mega Absol ex MEG 86
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+4 Boss's Orders MEG 114
+3 Judge POR 76
+2 Team Rocket's Petrel DRI 176
+4 Buddy-Buddy Poffin TEF 144
+4 Ultra Ball MEG 131
+4 Poké Pad POR 81
+1 Unfair Stamp TWM 165
+1 Night Stretcher ASC 196
+3 Binding Mochi PRE 95
+1 Team Rocket's Watchtower DRI 180
+
+Energy: 9
+9 Darkness Energy MEE 7
+
+===== 71
+Pokémon: 19
+4 Riolu MEG 76
+3 Mega Lucario ex MEG 77
+2 Makuhita MEG 72
+2 Hariyama MEG 73
+2 Lunatone MEG 74
+2 Solrock MEG 75
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+1 Shaymin DRI 10
+1 Psyduck ASC 39
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+2 Judge POR 76
+2 Carmine TWM 145
+2 Boss's Orders MEG 114
+2 Wally's Compassion MEG 132
+4 Fighting Gong MEG 116
+4 Premium Power Pro MEG 124
+3 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+2 Poké Pad POR 81
+2 Switch MEG 130
+1 Tool Scrapper ASC 212
+2 Air Balloon ASC 181
+1 Maximum Belt TEF 154
+
+Energy: 8
+6 Fighting Energy MEE 6
+2 Rocky Fighting Energy POR 87
+
+===== 72
+Pokémon: 12
+4 Team Rocket's Murkrow DRI 127
+3 Team Rocket's Honchkrow ASC 127
+2 Team Rocket's Porygon DRI 153
+1 Team Rocket's Porygon2 DRI 154
+2 Team Rocket's Articuno DRI 51
+
+Trainer: 40
+4 Team Rocket's Ariana DRI 171
+4 Team Rocket's Proton DRI 177
+4 Team Rocket's Giovanni DRI 174
+4 Team Rocket's Petrel DRI 176
+4 Team Rocket's Archer DRI 170
+4 Team Rocket's Transceiver DRI 178
+4 Roto-Stick PRE 127
+4 Poké Pad POR 81
+3 Night Stretcher ASC 196
+1 Miracle Headset SSP 183
+1 Lucky Helmet TWM 158
+3 Team Rocket's Factory DRI 173
+
+Energy: 8
+4 Ignition Energy WHT 86
+4 Team Rocket's Energy DRI 182
+
+===== 73
+Pokémon: 21
+4 Teal Mask Ogerpon ex TWM 25
+2 Chikorita MEG 8
+2 Bayleef MEG 9
+2 Meganium MEG 10
+2 Smoliv DRI 21
+2 Dolliv DRI 22
+2 Arboliva ex DRI 23
+1 Hoothoot SCR 114
+1 Noctowl SCR 115
+1 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+1 Budew ASC 16
+
+Trainer: 28
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Dawn PFL 87
+1 Briar SCR 132
+1 Lana's Aid TWM 155
+4 Ultra Ball MEG 131
+4 Bug Catching Set TWM 143
+2 Poké Pad POR 81
+1 Energy Switch MEG 115
+1 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+4 Forest of Vitality MEG 117
+
+Energy: 11
+11 Grass Energy MEE 1
+
+===== 74
+Pokémon: 18
+4 Beldum TEF 113
+4 Metang TEF 114
+1 Metagross CRI 61
+4 Drilbur PBL 46
+2 Mega Excadrill ex PBL 65
+2 Genesect ex BLK 67
+1 Mega Skarmory ex POR 55
+
+Trainer: 25
+4 Brock's Scouting JTG 146
+4 Team Rocket's Petrel DRI 176
+1 Kieran TWM 154
+4 Buddy-Buddy Poffin TEF 144
+4 Jumbo Ice Cream PFL 91
+2 Team Rocket's Transceiver DRI 178
+1 Energy Recycler DRI 164
+1 Ultra Ball MEG 131
+1 Tool Scrapper ASC 212
+1 Special Red Card CRI 82
+1 Switch MEG 130
+1 Hero's Cape TEF 152
+
+Energy: 17
+17 Metal Energy MEE 8
+
+===== 75
+Pokémon: 19
+3 Dreepy TWM 128
+3 Drakloak TWM 129
+2 Dragapult ex TWM 130
+2 Torchic DRI 40
+1 Combusken DRI 41
+2 Blaziken ex JTG 24
+1 Chi-Yu TWM 39
+1 Budew ASC 16
+1 Lillie's Clefairy ex JTG 56
+1 Munkidori TWM 95
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+1 Dawn PFL 87
+1 Xerosic's Machinations SFA 64
+1 Judge POR 76
+1 Crispin SCR 133
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+4 Ultra Ball MEG 131
+3 Rare Candy MEG 125
+2 Night Stretcher ASC 196
+1 Secret Box TWM 163
+1 Special Red Card CRI 82
+1 Air Balloon ASC 181
+1 Team Rocket's Watchtower DRI 180
+1 Risky Ruins MEG 127
+
+Energy: 8
+3 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7
+
+===== 76
+Pokémon: 21
+4 Mega Kangaskhan ex MEG 104
+3 Meowth ex POR 62
+3 Lillie's Clefairy ex JTG 56
+2 Teal Mask Ogerpon ex TWM 25
+2 Latias ex SSP 76
+2 Fezandipiti ex ASC 142
+1 Iron Crown ex TEF 81
+1 Chien-Pao SSP 56
+1 Iron Leaves ex TEF 25
+1 Paldean Tauros SSP 18
+1 Wellspring Mask Ogerpon ex TWM 64
+
+Trainer: 27
+4 Crispin SCR 133
+2 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Ciphermaniac's Codebreaking TEF 145
+4 Ultra Ball MEG 131
+4 Energy Switch MEG 115
+2 Night Stretcher ASC 196
+1 Dusk Ball SSP 175
+1 Unfair Stamp TWM 165
+2 Lillie's Pearl JTG 151
+4 Area Zero Underdepths SCR 131
+
+Energy: 12
+5 Grass Energy MEE 1
+3 Psychic Energy MEE 5
+2 Telepathic Psychic Energy POR 88
+1 Water Energy MEE 3
+1 Fire Energy MEE 2
+
+===== 77
+Pokémon: 21
+3 N's Zorua JTG 97
+3 N's Zoroark ex JTG 98
+2 Torchic DRI 40
+2 Combusken DRI 41
+2 Blaziken ex JTG 24
+1 N's Darumaka JTG 26
+1 N's Darmanitan JTG 27
+1 Fezandipiti ex ASC 142
+1 Pecharunt SVP 149
+1 Munkidori TWM 95
+1 Lillie's Clefairy ex JTG 56
+1 Tatsugiri TWM 131
+1 N's Reshiram JTG 116
+1 Budew ASC 16
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Hilda WHT 84
+1 Dawn PFL 87
+4 Buddy-Buddy Poffin TEF 144
+3 Poké Pad POR 81
+3 Rare Candy MEG 125
+3 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+1 Switch MEG 130
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+1 Air Balloon ASC 181
+2 Team Rocket's Watchtower DRI 180
+
+Energy: 8
+4 Darkness Energy MEE 7
+3 Fire Energy MEE 2
+1 Psychic Energy MEE 5
+
+===== 78
+Pokémon: 22
+4 Beldum TEF 113
+4 Metang TEF 114
+2 Metagross CRI 61
+4 Drilbur PBL 46
+2 Mega Excadrill ex PBL 65
+2 Genesect ex BLK 67
+1 Piplup PFL 27
+1 Empoleon ex PFL 70
+1 Mega Skarmory ex POR 55
+1 Fezandipiti ex ASC 142
+
+Trainer: 22
+4 Team Rocket's Petrel DRI 176
+3 Brock's Scouting JTG 146
+1 Boss's Orders MEG 114
+3 Buddy-Buddy Poffin TEF 144
+2 Team Rocket's Transceiver DRI 178
+2 Jumbo Ice Cream PFL 91
+1 Energy Recycler DRI 164
+1 Ultra Ball MEG 131
+1 Tool Scrapper ASC 212
+1 Switch MEG 130
+1 Pokégear 3.0 SVI 186
+1 Hero's Cape TEF 152
+1 Gravity Mountain SSP 177
+
+Energy: 16
+16 Metal Energy MEE 8
+
+===== 79
+Pokémon: 12
+4 Charcadet SSP 32
+3 Ceruledge ex SSP 36
+2 Solrock MEG 75
+2 Lunatone MEG 74
+1 Drilbur TEF 85
+
+Trainer: 28
+4 Explorer's Guidance TEF 147
+4 Carmine TWM 145
+1 Boss's Orders MEG 114
+4 Ultra Ball MEG 131
+4 Fighting Gong MEG 116
+4 Pokémon Catcher POR 82
+3 Night Stretcher ASC 196
+3 Poké Pad POR 81
+1 Brilliant Blender SSP 164
+
+Energy: 20
+14 Fighting Energy MEE 6
+6 Fire Energy MEE 2
+
+===== 80
+Pokémon: 19
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Munkidori TWM 95
+2 Budew ASC 16
+1 Dunsparce JTG 120
+1 Dudunsparce TEF 129
+1 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+4 Crushing Hammer POR 71
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+3 Night Stretcher ASC 196
+3 Ultra Ball MEG 131
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+2 Risky Ruins MEG 127
+
+Energy: 9
+3 Fire Energy MEE 2
+3 Darkness Energy MEE 7
+3 Psychic Energy MEE 5
+
+===== 81
+Pokémon: 17
+3 Froakie CRI 20
+3 Frogadier CRI 21
+3 Mega Greninja ex CRI 22
+3 Staryu POR 20
+3 Mega Starmie ex POR 21
+1 Fezandipiti ex ASC 142
+1 Budew ASC 16
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+1 Dawn PFL 87
+1 Team Rocket's Petrel DRI 176
+1 Rosa's Encouragement POR 84
+1 Judge POR 76
+1 Hilda WHT 84
+1 Salvatore TEF 160
+4 Buddy-Buddy Poffin TEF 144
+3 Ultra Ball MEG 131
+2 Poké Pad POR 81
+2 Rare Candy MEG 125
+2 Special Red Card CRI 82
+1 Energy Retrieval SVI 171
+1 Night Stretcher ASC 196
+1 Energy Search POR 72
+2 Air Balloon ASC 181
+2 Surfing Beach MEG 129
+
+Energy: 10
+9 Water Energy MEE 3
+1 Neo Upper Energy TEF 162
+
+===== 82
+Pokémon: 20
+3 Carvanha PFL 60
+3 Mega Sharpedo ex PFL 61
+2 Toxel PFL 67
+2 Toxtricity PFL 68
+2 Munkidori TWM 95
+2 Pecharunt ex SFA 39
+2 Tatsugiri TWM 131
+1 Buneary PFL 83
+1 Mega Lopunny ex PFL 84
+1 Yveltal MEG 88
+1 Fezandipiti ex ASC 142
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+3 Judge POR 76
+3 Boss's Orders MEG 114
+2 Team Rocket's Petrel DRI 176
+4 Ultra Ball MEG 131
+3 Poké Pad POR 81
+3 Buddy-Buddy Poffin TEF 144
+2 Night Stretcher ASC 196
+1 Mega Signal MEG 121
+1 Unfair Stamp TWM 165
+2 Binding Mochi PRE 95
+2 Team Rocket's Watchtower DRI 180
+1 Gravity Mountain SSP 177
+
+Energy: 9
+9 Darkness Energy MEE 7
+
+===== 83
+Pokémon: 22
+3 Slowpoke SCR 57
+3 Slowking SCR 58
+2 Mega Kangaskhan ex MEG 104
+2 Latias ex SSP 76
+2 Mew ex 30C 66
+2 Kyurem SFA 47
+1 Metagross CRI 61
+1 Lillie's Clefairy ex JTG 56
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+1 Munkidori TWM 95
+1 Annihilape SSP 100
+1 Cofagrigus SSP 83
+1 Smoochum SSP 75
+
+Trainer: 27
+4 Lillie's Determination MEG 119
+3 Ciphermaniac's Codebreaking TEF 145
+1 Crispin SCR 133
+4 Ultra Ball MEG 131
+3 Poké Pad POR 81
+3 Night Stretcher ASC 196
+3 Wondrous Patch PFL 94
+1 Secret Box TWM 163
+1 Switch MEG 130
+4 Academy at Night SFA 54
+
+Energy: 11
+4 Telepathic Psychic Energy POR 88
+4 Psychic Energy MEE 5
+2 Darkness Energy MEE 7
+1 Boomerang Energy TWM 166
+
+===== 84
+Pokémon: 21
+4 Marnie's Impidimp DRI 134
+2 Marnie's Morgrem DRI 135
+3 Marnie's Grimmsnarl ex DRI 136
+4 Munkidori TWM 95
+3 Snorunt ASC 46
+3 Froslass TWM 53
+1 Budew ASC 16
+1 Yveltal MEG 88
+
+Trainer: 30
+4 Team Rocket's Petrel DRI 176
+4 Lillie's Determination MEG 119
+2 Gwynn PBL 78
+2 Boss's Orders MEG 114
+4 Poké Pad POR 81
+3 Rare Candy MEG 125
+3 Buddy-Buddy Poffin TEF 144
+2 Night Stretcher ASC 196
+1 Secret Box TWM 163
+1 Dark Bell PBL 75
+1 Air Balloon ASC 181
+3 Spikemuth Gym DRI 169
+
+Energy: 9
+9 Darkness Energy MEE 7
+
+===== 85
+Pokémon: 21
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Duskull PRE 35
+2 Dusclops PRE 36
+1 Dusknoir PRE 37
+2 Budew ASC 16
+1 Meowth ex POR 62
+1 Munkidori TWM 95
+1 Fezandipiti ex ASC 142
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Judge POR 76
+1 Rosa's Encouragement POR 84
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+4 Ultra Ball MEG 131
+2 Rare Candy MEG 125
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Sparkling Crystal SCR 142
+2 Team Rocket's Watchtower DRI 180
+
+Energy: 8
+3 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7
+
+===== 86
+Pokémon: 23
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Dunsparce JTG 120
+1 Dunsparce TEF 128
+2 Dudunsparce TEF 129
+1 Dudunsparce ex JTG 121
+2 Munkidori TWM 95
+2 Budew ASC 16
+1 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+
+Trainer: 29
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+1 Judge POR 76
+4 Ultra Ball MEG 131
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+2 Risky Ruins MEG 127
+
+Energy: 8
+3 Fire Energy MEE 10
+3 Psychic Energy MEE 13
+2 Darkness Energy MEE 15
+
+===== 87
+Pokémon: 15
+4 Team Rocket's Tarountula DRI 19
+4 Team Rocket's Spidops DRI 20
+2 Team Rocket's Mewtwo ex DRI 81
+2 Team Rocket's Articuno DRI 51
+1 Lillie's Clefairy ex JTG 56
+1 Team Rocket's Wobbuffet DRI 82
+1 Team Rocket's Mimikyu DRI 87
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+3 Team Rocket's Giovanni DRI 174
+3 Team Rocket's Ariana DRI 171
+2 Team Rocket's Proton DRI 177
+1 Team Rocket's Petrel DRI 176
+1 Team Rocket's Archer DRI 170
+4 Team Rocket's Transceiver DRI 178
+3 Ultra Ball MEG 131
+3 Night Stretcher ASC 196
+2 Pokégear 3.0 SVI 186
+2 Bug Catching Set TWM 143
+1 Energy Switch MEG 115
+2 Lucky Helmet TWM 158
+2 Prism Tower CRI 80
+1 Team Rocket's Factory DRI 173
+
+Energy: 11
+6 Grass Energy MEE 9
+4 Team Rocket's Energy DRI 182
+1 Psychic Energy MEE 13
+
+===== 88
+Pokémon: 19
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Munkidori TWM 95
+2 Budew ASC 16
+1 Dunsparce JTG 120
+1 Dudunsparce TEF 129
+1 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Judge POR 76
+1 Rosa's Encouragement POR 84
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+4 Crushing Hammer POR 71
+3 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+2 Risky Ruins MEG 127
+
+Energy: 9
+3 Psychic Energy MEE 5
+3 Darkness Energy MEE 7
+3 Fire Energy MEE 2
+
+===== 89
+Pokémon: 12
+4 Team Rocket's Murkrow DRI 127
+3 Team Rocket's Honchkrow ASC 127
+2 Team Rocket's Porygon DRI 153
+1 Team Rocket's Porygon2 DRI 154
+2 Team Rocket's Articuno DRI 51
+
+Trainer: 40
+4 Team Rocket's Ariana DRI 171
+4 Team Rocket's Archer DRI 170
+4 Team Rocket's Giovanni DRI 174
+4 Team Rocket's Proton DRI 177
+4 Team Rocket's Petrel DRI 176
+4 Poké Pad POR 81
+4 Team Rocket's Transceiver DRI 178
+4 Roto-Stick PRE 127
+2 Night Stretcher ASC 196
+1 Miracle Headset SSP 183
+2 Lucky Helmet TWM 158
+3 Team Rocket's Factory DRI 173
+
+Energy: 8
+4 Team Rocket's Energy DRI 182
+4 Ignition Energy WHT 86
+
+===== 90
+Pokémon: 22
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Duskull PRE 35
+2 Dusclops PRE 36
+1 Dusknoir PRE 37
+2 Budew ASC 16
+1 Meowth ex POR 62
+1 Patrat CRI 70
+1 Moltres PFL 14
+1 Fezandipiti ex ASC 142
+
+Trainer: 30
+4 Lillie's Determination MEG 119
+2 Crispin SCR 133
+2 Boss's Orders MEG 114
+1 Rosa's Encouragement POR 84
+1 Judge POR 76
+1 Dawn PFL 87
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+4 Ultra Ball MEG 131
+3 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+2 Jamming Tower TWM 153
+
+Energy: 8
+4 Psychic Energy MEE 13
+4 Fire Energy MEE 10
+
+===== 91
+Pokémon: 23
+4 Munkidori TWM 95
+3 Marnie's Impidimp DRI 134
+2 Marnie's Morgrem DRI 135
+2 Marnie's Grimmsnarl ex DRI 136
+3 Snorunt ASC 46
+3 Froslass TWM 53
+1 Shaymin DRI 10
+1 Psyduck ASC 39
+1 Budew ASC 16
+1 Yveltal MEG 88
+1 Bloodmoon Ursaluna ex TWM 141
+1 Marnie's Morpeko DRI 137
+
+Trainer: 29
+4 Lillie's Determination MEG 119
+3 Team Rocket's Petrel DRI 176
+3 Gwynn PBL 78
+2 Boss's Orders MEG 114
+4 Poké Pad POR 81
+2 Night Stretcher ASC 196
+2 Buddy-Buddy Poffin TEF 144
+1 Special Red Card CRI 82
+1 Energy Switch MEG 115
+1 Secret Box TWM 163
+1 Rare Candy MEG 125
+1 Air Balloon ASC 181
+3 Spikemuth Gym DRI 169
+1 Team Rocket's Watchtower DRI 180
+
+Energy: 8
+8 Darkness Energy MEE 15
+
+===== 92
+Pokémon: 21
+4 Beldum TEF 113
+3 Metang TEF 114
+1 Metagross CRI 61
+3 Drilbur PBL 46
+2 Mega Excadrill ex PBL 65
+2 Genesect ex BLK 67
+1 Piplup PFL 27
+1 Empoleon ex PFL 70
+1 Fezandipiti ex ASC 142
+1 Mega Mawile ex MEG 94
+1 Mega Skarmory ex POR 55
+1 Shaymin DRI 10
+
+Trainer: 23
+4 Team Rocket's Petrel DRI 176
+2 Lillie's Determination MEG 119
+2 Brock's Scouting JTG 146
+4 Buddy-Buddy Poffin TEF 144
+2 Jumbo Ice Cream PFL 91
+2 Pokégear 3.0 SVI 186
+1 Rare Candy MEG 125
+1 Energy Recycler DRI 164
+1 Switch MEG 130
+1 Ultra Ball MEG 131
+1 Brave Bangle WHT 80
+1 Hero's Cape TEF 152
+1 Air Balloon ASC 181
+
+Energy: 16
+16 Metal Energy MEE 16
+
+===== 93
+Pokémon: 19
+3 Meowth ex POR 62
+3 Mega Kangaskhan ex MEG 104
+2 Teal Mask Ogerpon ex TWM 25
+2 Latias ex SSP 76
+2 Lillie's Clefairy ex JTG 56
+1 Chien-Pao SSP 56
+1 Raging Bolt ex TEF 123
+1 Iron Crown ex TEF 81
+1 Iron Leaves ex TEF 25
+1 Fezandipiti ex ASC 142
+1 Wellspring Mask Ogerpon ex TWM 64
+1 Enamorus TWM 93
+
+Trainer: 27
+4 Crispin SCR 133
+2 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Ciphermaniac's Codebreaking TEF 145
+4 Ultra Ball MEG 131
+4 Energy Switch MEG 115
+2 Night Stretcher ASC 196
+1 Switch MEG 130
+1 Special Red Card CRI 82
+1 Glass Trumpet SCR 135
+1 Hero's Cape TEF 152
+3 Area Zero Underdepths SCR 131
+1 Jamming Tower TWM 153
+
+Energy: 14
+7 Grass Energy MEE 9
+2 Lightning Energy MEE 12
+2 Fighting Energy MEE 14
+2 Psychic Energy MEE 13
+1 Water Energy MEE 11
+
+===== 94
+Pokémon: 20
+4 Carvanha PFL 60
+3 Mega Sharpedo ex PFL 61
+2 Toxel PFL 67
+2 Toxtricity PFL 68
+2 Pecharunt ex SFA 39
+2 Tatsugiri TWM 131
+2 Munkidori TWM 95
+1 Buneary MEG 107
+1 Mega Lopunny ex PFL 84
+1 Fezandipiti ex ASC 142
+
+Trainer: 31
+4 Boss's Orders MEG 114
+4 Lillie's Determination MEG 119
+3 Judge POR 76
+2 Team Rocket's Petrel DRI 176
+4 Poké Pad POR 81
+4 Buddy-Buddy Poffin TEF 144
+3 Ultra Ball MEG 131
+1 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+3 Binding Mochi PRE 95
+2 Team Rocket's Watchtower DRI 180
+
+Energy: 9
+9 Darkness Energy MEE 15
+
+===== 95
+Pokémon: 22
+3 Steven's Beldum DRI 143
+1 Steven's Metang DRI 144
+3 Steven's Metagross ex DRI 145
+2 Mew ex 30C 66
+2 Genesect ex BLK 67
+1 Mimikyu ex JTG 69
+1 Team Rocket's Mewtwo ex DRI 81
+1 Fezandipiti ex ASC 142
+1 Lillie's Clefairy ex JTG 56
+1 Meowth ex POR 62
+1 Mega Skarmory ex POR 55
+1 Deoxys CRI 32
+1 Regigigas PRE 86
+1 Unown 30C 72
+1 Budew ASC 16
+1 Latias ex SSP 76
+
+Trainer: 27
+4 Team Rocket's Petrel DRI 176
+3 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+4 Team Rocket's Transceiver DRI 178
+4 Ultra Ball MEG 131
+3 Rare Candy MEG 125
+2 Energy Recycler DRI 164
+2 Special Red Card CRI 82
+1 Precious Trolley SSP 185
+1 Night Stretcher ASC 196
+1 Team Rocket's Factory DRI 173
+
+Energy: 11
+6 Metal Energy MEE 16
+5 Psychic Energy MEE 13
+
+===== 96
+Pokémon: 22
+4 Ethan's Cyndaquil DRI 32
+4 Ethan's Quilava DRI 33
+3 Ethan's Typhlosion DRI 34
+3 Duskull PRE 35
+2 Dusclops PRE 36
+2 Dusknoir PRE 37
+1 Fezandipiti ex ASC 142
+1 Victini SSP 21
+1 Budew ASC 16
+1 Shaymin DRI 10
+
+Trainer: 33
+4 Ethan's Adventure DRI 165
+3 Boss's Orders MEG 114
+2 Lana's Aid TWM 155
+2 Lillie's Determination MEG 119
+1 Kieran TWM 154
+1 Team Rocket's Petrel DRI 176
+3 Buddy-Buddy Poffin TEF 144
+3 Rare Candy MEG 125
+3 Poké Pad POR 81
+3 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+1 Secret Box TWM 163
+1 Redeemable Ticket JTG 156
+2 Brave Bangle WHT 80
+2 Team Rocket's Watchtower DRI 180
+
+Energy: 5
+5 Fire Energy MEE 10
+
+===== 97
+Pokémon: 20
+4 Applin TWM 17
+3 Dipplin TWM 18
+3 Grookey TWM 14
+4 Thwackey TWM 15
+2 Goldeen TWM 44
+1 Seaking PRE 21
+1 Rellor TEF 23
+2 Rabsca TEF 24
+
+Trainer: 35
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Gladion's Final Battle PBL 77
+1 Kieran TWM 154
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+2 Night Stretcher ASC 196
+2 Ultra Ball MEG 131
+2 Bug Catching Set TWM 143
+1 Tool Scrapper ASC 212
+1 Secret Box TWM 163
+1 Sacred Ash DRI 168
+1 Switch MEG 130
+2 Air Balloon ASC 181
+2 Brave Bangle WHT 80
+4 Festival Grounds TWM 149
+
+Energy: 5
+4 Grass Energy MEE 9
+1 Growing Grass Energy POR 86
+
+===== 98
+Pokémon: 26
+4 Poltchageist PBL 5
+4 Sinistcha PBL 6
+4 Shuppet PBL 33
+3 Banette PBL 34
+3 Dhelmise PBL 39
+1 Dunsparce JTG 120
+1 Dudunsparce TEF 129
+1 Dudunsparce ex JTG 121
+1 Spiritomb PBL 35
+1 Lillie's Clefairy ex JTG 56
+1 Yveltal 30C 100
+1 Patrat CRI 70
+1 Latias ex SSP 76
+
+Trainer: 27
+3 Gwynn PBL 78
+3 Explorer's Guidance TEF 147
+2 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+1 Surfer SSP 187
+1 Xerosic's Machinations SFA 64
+4 Poké Pad POR 81
+4 Ultra Ball MEG 131
+3 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+3 Prism Tower CRI 80
+
+Energy: 7
+4 Telepathic Psychic Energy POR 88
+2 Psychic Energy MEE 13
+1 Legacy Energy TWM 167
+
+===== 99
+Pokémon: 24
+2 Froakie CRI 20
+2 Frogadier CRI 21
+2 Greninja ex TWM 106
+2 Duskull PRE 35
+2 Dusclops PRE 36
+1 Dusknoir PRE 37
+2 Staryu POR 20
+2 Mega Starmie ex POR 21
+2 Snorunt ASC 46
+2 Mega Froslass ex ASC 47
+2 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+1 Budew ASC 16
+1 Shaymin DRI 10
+
+Trainer: 28
+3 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Hilda WHT 84
+1 Wally's Compassion MEG 132
+1 Judge POR 76
+1 Colress's Tenacity SFA 57
+1 Team Rocket's Petrel DRI 176
+3 Buddy-Buddy Poffin TEF 144
+3 Ultra Ball MEG 131
+3 Poké Pad POR 81
+2 Night Stretcher ASC 196
+1 Rare Candy MEG 125
+1 Switch MEG 130
+1 Special Red Card CRI 82
+1 Air Balloon ASC 181
+1 Surfing Beach MEG 129
+1 Grand Tree SCR 136
+
+Energy: 8
+4 Water Energy MEE 11
+3 Ignition Energy WHT 86
+1 Bubbly Water Energy CRI 84
+
+===== 100
+Pokémon: 20
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+2 N's Zekrom ASC 155
+1 N's Darumaka JTG 26
+1 N's Darmanitan JTG 27
+1 Pecharunt ex SFA 39
+1 Meowth ex POR 62
+1 Tatsugiri TWM 131
+1 Munkidori TWM 95
+1 Fezandipiti ex ASC 142
+1 Budew ASC 16
+1 Yveltal MEG 88
+1 N's Reshiram JTG 116
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+1 Black Belt's Training JTG 143
+1 Cyrano SSP 170
+4 Transformation Tome CRI 83
+4 Buddy-Buddy Poffin TEF 144
+3 Ultra Ball MEG 131
+3 N's PP Up JTG 153
+2 Poké Pad POR 81
+1 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+2 Binding Mochi PRE 95
+2 N's Castle JTG 152
+
+Energy: 8
+8 Darkness Energy MEE 7
+
+===== 101
+Pokémon: 24
+4 Shuppet PBL 33
+3 Banette PBL 34
+4 Dhelmise PBL 39
+2 Dunsparce JTG 120
+1 Dunsparce TEF 128
+2 Dudunsparce TEF 129
+2 Poltchageist PBL 5
+1 Sinistcha PBL 6
+2 Lillie's Clefairy ex JTG 56
+1 Patrat CRI 70
+1 Flutter Mane TEF 78
+1 Bloodmoon Ursaluna ex TWM 141
+
+Trainer: 29
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Gwynn PBL 78
+1 Kieran TWM 154
+4 Poké Pad POR 81
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+2 Buddy-Buddy Poffin TEF 144
+2 Pokégear 3.0 SVI 186
+1 Air Balloon ASC 181
+3 Prism Tower CRI 80
+
+Energy: 7
+4 Telepathic Psychic Energy POR 88
+2 Psychic Energy MEE 5
+1 Legacy Energy TWM 167
+
+===== 102
+Pokémon: 20
+4 Munkidori TWM 95
+3 Dunsparce JTG 120
+3 Dudunsparce TEF 129
+3 Marnie's Impidimp DRI 134
+2 Marnie's Morgrem DRI 135
+3 Marnie's Grimmsnarl ex DRI 136
+1 Psyduck ASC 39
+1 Shaymin DRI 10
+
+Trainer: 30
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Judge POR 76
+1 Black Belt's Training JTG 143
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+3 Rare Candy MEG 125
+2 Jumbo Ice Cream PFL 91
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Air Balloon ASC 181
+1 Hero's Cape TEF 152
+3 Spikemuth Gym DRI 169
+
+Energy: 10
+10 Darkness Energy MEE 7
+
+===== 103
+Pokémon: 18
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Budew ASC 16
+2 Munkidori TWM 95
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+1 Moltres PFL 14
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Judge POR 76
+1 Rosa's Encouragement POR 84
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+4 Ultra Ball MEG 131
+4 Crushing Hammer POR 71
+3 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+1 Special Red Card CRI 82
+2 Risky Ruins MEG 127
+
+Energy: 8
+3 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7
+
+===== 104
+Pokémon: 17
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+2 Dragapult ex TWM 130
+1 Dunsparce TEF 128
+1 Dudunsparce TEF 129
+1 Budew ASC 16
+1 Munkidori TWM 95
+1 Fezandipiti ex ASC 142
+1 Meowth ex POR 62
+1 Moltres PFL 14
+
+Trainer: 35
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+4 Poké Pad POR 81
+4 Crushing Hammer POR 71
+4 Buddy-Buddy Poffin TEF 144
+3 Night Stretcher ASC 196
+3 Ultra Ball MEG 131
+2 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+1 Rare Candy MEG 125
+2 Team Rocket's Watchtower DRI 180
+1 Risky Ruins MEG 127
+
+Energy: 8
+3 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7
+
+===== 105
+Pokémon: 18
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+3 Dragapult ex TWM 130
+2 Munkidori TWM 95
+2 Budew ASC 16
+1 Moltres PFL 14
+1 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+
+Trainer: 34
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Rosa's Encouragement POR 84
+1 Judge POR 76
+4 Crushing Hammer POR 71
+4 Ultra Ball MEG 131
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+3 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Unfair Stamp TWM 165
+2 Risky Ruins MEG 127
+
+Energy: 8
+3 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7
+
+===== 106
+Pokémon: 20
+4 Mega Kangaskhan ex MEG 104
+3 Meowth ex POR 62
+2 Lillie's Clefairy ex JTG 56
+2 Teal Mask Ogerpon ex TWM 25
+2 Latias ex SSP 76
+1 Fezandipiti ex ASC 142
+1 Iron Leaves ex TEF 25
+1 Iron Crown ex TEF 81
+1 Koraidon ex ASC 121
+1 Raging Bolt ex TEF 123
+1 Chien-Pao SSP 56
+1 Wellspring Mask Ogerpon ex TWM 64
+
+Trainer: 27
+4 Crispin SCR 133
+2 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Ciphermaniac's Codebreaking TEF 145
+4 Energy Switch MEG 115
+4 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+2 Glass Trumpet SCR 135
+1 Special Red Card CRI 82
+1 Hero's Cape TEF 152
+4 Area Zero Underdepths SCR 131
+
+Energy: 13
+6 Grass Energy MEE 1
+2 Fighting Energy MEE 6
+2 Lightning Energy MEE 4
+2 Psychic Energy MEE 5
+1 Water Energy MEE 3
+
+===== 107
+Pokémon: 19
+4 Froakie CRI 20
+3 Frogadier CRI 21
+3 Greninja ex 30C 21
+1 Greninja ex TWM 106
+3 Duskull PRE 35
+2 Dusclops PRE 36
+2 Dusknoir PRE 37
+1 Meowth ex POR 62
+
+Trainer: 31
+4 Lillie's Determination MEG 119
+3 Dawn PFL 87
+3 Team Rocket's Petrel DRI 176
+4 Rare Candy MEG 125
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+4 Ultra Ball MEG 131
+2 Energy Search POR 72
+2 Night Stretcher ASC 196
+1 Grand Tree SCR 136
+
+Energy: 10
+10 Water Energy MEE 3
+
+===== 108
+Pokémon: 20
+4 Abra MEG 54
+3 Kadabra MEG 55
+3 Alakazam MEG 56
+2 Dunsparce JTG 120
+1 Dunsparce TEF 128
+3 Dudunsparce TEF 129
+2 Genesect SFA 40
+1 Fezandipiti ex ASC 142
+1 Shaymin DRI 10
+
+Trainer: 34
+4 Dawn PFL 87
+3 Boss's Orders MEG 114
+3 Hilda WHT 84
+1 Lana's Aid TWM 155
+1 Eri TEF 146
+4 Poké Pad POR 81
+3 Rare Candy MEG 125
+3 Buddy-Buddy Poffin TEF 144
+2 Enhanced Hammer TWM 148
+1 Night Stretcher ASC 196
+1 Sacred Ash DRI 168
+3 Handheld Fan TWM 150
+1 Air Balloon ASC 181
+3 Battle Cage PFL 85
+1 Nighttime Mine ASC 197
+
+Energy: 6
+4 Telepathic Psychic Energy POR 88
+1 Enriching Energy SSP 191
+1 Psychic Energy MEE 5
+
+===== 109
+Pokémon: 17
+4 Froakie CRI 20
+2 Frogadier CRI 21
+2 Mega Greninja ex CRI 22
+1 Greninja ex 30C 21
+1 Greninja ex TWM 106
+2 Dunsparce JTG 120
+2 Dudunsparce TEF 129
+1 Meowth ex POR 62
+1 Fezandipiti ex ASC 142
+1 Budew ASC 16
+
+Trainer: 33
+4 Lillie's Determination MEG 119
+3 Hilda WHT 84
+2 Boss's Orders MEG 114
+1 Rosa's Encouragement POR 84
+1 Team Rocket's Petrel DRI 176
+4 Ultra Ball MEG 131
+4 Buddy-Buddy Poffin TEF 144
+3 Rare Candy MEG 125
+3 Poké Pad POR 81
+2 Night Stretcher ASC 196
+1 Great Haul Net CRI 78
+1 Energy Retrieval SVI 171
+2 Air Balloon ASC 181
+2 Surfing Beach MEG 129
+
+Energy: 10
+7 Water Energy MEE 3
+2 Ignition Energy WHT 86
+1 Neo Upper Energy TEF 162
+
+===== 110
+Pokémon: 22
+3 Slowpoke SCR 57
+3 Slowking SCR 58
+2 Latias ex SSP 76
+2 Mega Kangaskhan ex MEG 104
+2 Kyurem SFA 47
+2 Mew ex 30C 66
+1 Metagross CRI 61
+1 Munkidori TWM 95
+1 Smoochum SSP 75
+1 Annihilape SSP 100
+1 Fezandipiti ex ASC 142
+1 Lillie's Clefairy ex JTG 56
+1 Meowth ex POR 62
+1 Cofagrigus SSP 83
+
+Trainer: 27
+4 Lillie's Determination MEG 119
+3 Ciphermaniac's Codebreaking TEF 145
+1 Crispin SCR 133
+4 Ultra Ball MEG 131
+3 Poké Pad POR 81
+3 Night Stretcher ASC 196
+3 Wondrous Patch PFL 94
+1 Secret Box TWM 163
+1 Switch MEG 130
+4 Academy at Night SFA 54
+
+Energy: 11
+4 Telepathic Psychic Energy POR 88
+4 Psychic Energy MEE 5
+2 Darkness Energy MEE 7
+1 Boomerang Energy TWM 166
+
+===== 111
+Pokémon: 22
+4 Meowth ex POR 62
+4 Mega Kangaskhan ex MEG 104
+3 Lillie's Clefairy ex JTG 56
+2 Wellspring Mask Ogerpon ex TWM 64
+2 Latias ex SSP 76
+2 Fezandipiti ex ASC 142
+2 Mew ex 30C 66
+1 Moltres PFL 14
+1 Chien-Pao SSP 56
+1 Unown 30C 72
+
+Trainer: 28
+4 Crispin SCR 133
+3 Boss's Orders MEG 114
+2 Ciphermaniac's Codebreaking TEF 145
+1 Cyrano SSP 170
+4 Ultra Ball MEG 131
+4 Dusk Ball SSP 175
+3 Wondrous Patch PFL 94
+1 Prime Catcher TEF 157
+2 Lillie's Pearl JTG 151
+4 Area Zero Underdepths SCR 131
+
+Energy: 10
+4 Psychic Energy MEE 5
+2 Telepathic Psychic Energy POR 88
+2 Water Energy MEE 3
+2 Fire Energy MEE 2
+
+===== 112
+Pokémon: 19
+3 Meowth ex POR 62
+3 Mega Kangaskhan ex MEG 104
+2 Teal Mask Ogerpon ex TWM 25
+2 Latias ex SSP 76
+2 Lillie's Clefairy ex JTG 56
+1 Chien-Pao SSP 56
+1 Raging Bolt ex TEF 123
+1 Iron Crown ex TEF 81
+1 Iron Leaves ex TEF 25
+1 Wellspring Mask Ogerpon ex TWM 64
+1 Fezandipiti ex ASC 142
+1 Enamorus TWM 93
+
+Trainer: 27
+4 Crispin SCR 133
+2 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Ciphermaniac's Codebreaking TEF 145
+4 Ultra Ball MEG 131
+4 Energy Switch MEG 115
+2 Night Stretcher ASC 196
+1 Switch MEG 130
+1 Special Red Card CRI 82
+1 Glass Trumpet SCR 135
+1 Hero's Cape TEF 152
+3 Area Zero Underdepths SCR 131
+1 Jamming Tower TWM 153
+
+Energy: 14
+7 Grass Energy MEE 1
+2 Lightning Energy MEE 4
+2 Fighting Energy MEE 6
+2 Psychic Energy MEE 5
+1 Water Energy MEE 3
+
+===== 113
+Pokémon: 23
+4 Cinderace MEG 28
+3 Tynamo ASC 59
+3 Eelektrik ASC 60
+3 Mega Zeraora ex PBL 27
+2 Eevee TWM 135
+2 Sylveon PRE 40
+1 Espeon ex PRE 34
+2 Electrike MEG 49
+1 Mega Manectric ex MEG 50
+1 Shaymin DRI 10
+1 Lillie's Clefairy ex JTG 56
+
+Trainer: 24
+4 Lillie's Determination MEG 119
+3 Canari ASC 185
+3 Boss's Orders MEG 114
+2 Gwynn PBL 78
+1 Xerosic's Machinations SFA 64
+1 Team Rocket's Petrel DRI 176
+2 Ultra Ball MEG 131
+2 Buddy-Buddy Poffin TEF 144
+1 Special Red Card CRI 82
+1 Night Stretcher ASC 196
+1 Hero's Cape TEF 152
+1 Air Balloon ASC 181
+2 Battle Cage PFL 85
+
+Energy: 13
+7 Lightning Energy MEE 4
+3 Psychic Energy MEE 5
+3 Voltaic Lightning Energy PBL 84
+
+===== 114
+Pokémon: 23
+4 Abra MEG 54
+3 Kadabra MEG 55
+3 Alakazam MEG 56
+3 Dunsparce JTG 120
+3 Dudunsparce TEF 129
+1 Togepi SSP 70
+1 Togekiss SSP 72
+1 Shaymin DRI 10
+1 Psyduck ASC 39
+1 Fezandipiti ex ASC 142
+1 Fan Rotom SCR 118
+1 Genesect SFA 40
+
+Trainer: 30
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Hilda WHT 84
+1 Lana's Aid TWM 155
+1 Dawn PFL 87
+4 Poké Pad POR 81
+3 Rare Candy MEG 125
+2 Buddy-Buddy Poffin TEF 144
+2 Night Stretcher ASC 196
+1 Special Red Card CRI 82
+1 Sacred Ash DRI 168
+1 Enhanced Hammer TWM 148
+1 Air Balloon ASC 181
+4 Battle Cage PFL 85
+
+Energy: 7
+3 Psychic Energy MEE 5
+3 Telepathic Psychic Energy POR 88
+1 Enriching Energy SSP 191
+
+===== 115
+Pokémon: 12
+4 Team Rocket's Murkrow DRI 127
+3 Team Rocket's Honchkrow ASC 127
+2 Team Rocket's Porygon DRI 153
+1 Team Rocket's Porygon2 DRI 154
+2 Team Rocket's Articuno DRI 51
+
+Trainer: 40
+4 Team Rocket's Ariana DRI 171
+4 Team Rocket's Giovanni DRI 174
+4 Team Rocket's Petrel DRI 176
+4 Team Rocket's Archer DRI 170
+4 Team Rocket's Proton DRI 177
+2 Hilda WHT 84
+4 Roto-Stick PRE 127
+4 Team Rocket's Transceiver DRI 178
+3 Night Stretcher ASC 196
+2 Poké Pad POR 81
+1 Tool Scrapper ASC 212
+1 Miracle Headset SSP 183
+3 Team Rocket's Factory DRI 173
+
+Energy: 8
+4 Team Rocket's Energy DRI 182
+4 Ignition Energy WHT 86
+
+===== 116
+Pokémon: 21
+4 Munkidori TWM 95
+3 Snorunt ASC 46
+3 Froslass TWM 53
+2 Eevee SSP 143
+1 Eevee TWM 135
+2 Espeon 30C 69
+1 Sylveon PRE 40
+1 Umbreon ex 30C 92
+2 Budew ASC 16
+1 Shaymin DRI 10
+1 Psyduck ASC 39
+
+Trainer: 29
+4 Lillie's Determination MEG 119
+3 Crispin SCR 133
+2 Gwynn PBL 78
+1 Hassel TWM 151
+4 Buddy-Buddy Poffin TEF 144
+4 Poké Pad POR 81
+3 Night Stretcher ASC 196
+2 Ultra Ball MEG 131
+2 Pokégear 3.0 SVI 186
+1 Secret Box TWM 163
+2 Air Balloon ASC 181
+1 Counter Gain SSP 169
+
+Energy: 10
+6 Darkness Energy MEE 7
+4 Psychic Energy MEE 5
+
+===== 117
+Pokémon: 17
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+2 Munkidori TWM 95
+1 N's Darumaka JTG 26
+1 N's Darmanitan JTG 27
+1 Pecharunt ex SFA 39
+1 Fezandipiti ex ASC 142
+1 N's Purrloin JTG 96
+1 N's Reshiram JTG 116
+1 N's Zekrom ASC 155
+
+Trainer: 35
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Cyrano SSP 170
+1 Janine's Secret Art PRE 112
+1 Black Belt's Training JTG 143
+1 Judge POR 76
+1 Xerosic's Machinations SFA 64
+4 Buddy-Buddy Poffin TEF 144
+3 N's PP Up JTG 153
+2 Ultra Ball MEG 131
+2 Night Stretcher ASC 196
+2 Poké Pad POR 81
+1 Secret Box TWM 163
+1 Special Red Card CRI 82
+2 Binding Mochi PRE 95
+1 Powerglass SFA 63
+1 Air Balloon ASC 181
+2 Team Rocket's Watchtower DRI 180
+1 Gravity Mountain SSP 177
+
+Energy: 8
+8 Darkness Energy MEE 7
+
+===== 118
+Pokémon: 23
+4 Dreepy TWM 128
+4 Drakloak TWM 129
+2 Dragapult ex TWM 130
+2 Torchic DRI 40
+1 Combusken DRI 41
+2 Blaziken ex JTG 24
+1 Blaziken DRI 42
+2 Munkidori TWM 95
+1 Budew ASC 16
+1 Fezandipiti ex ASC 142
+1 Lillie's Clefairy ex JTG 56
+1 Meowth ex POR 62
+1 Shaymin DRI 10
+
+Trainer: 29
+4 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin SCR 133
+1 Xerosic's Machinations SFA 64
+4 Buddy-Buddy Poffin TEF 144
+3 Poké Pad POR 81
+3 Ultra Ball MEG 131
+2 Rare Candy MEG 125
+2 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+1 Special Red Card CRI 82
+1 Switch MEG 130
+1 Team Rocket's Watchtower DRI 180
+1 Jamming Tower TWM 153
+
+Energy: 8
+3 Psychic Energy MEE 5
+3 Fire Energy MEE 2
+2 Darkness Energy MEE 7
+
+===== 119
+Pokémon: 20
+4 Cynthia's Gible DRI 102
+4 Cynthia's Gabite DRI 103
+3 Cynthia's Garchomp ex DRI 104
+3 Cynthia's Roselia DRI 7
+3 Cynthia's Roserade DRI 8
+1 Shellos SSP 46
+1 Gastrodon SSP 107
+1 Cynthia's Spiritomb DRI 129
+
+Trainer: 32
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Larry's Skill PRE 115
+1 Team Rocket's Petrel DRI 176
+3 Buddy-Buddy Poffin TEF 144
+3 Fighting Gong MEG 116
+3 Pokégear 3.0 SVI 186
+3 Poké Pad POR 81
+2 Premium Power Pro MEG 124
+2 Night Stretcher ASC 196
+1 Unfair Stamp TWM 165
+1 Switch MEG 130
+1 Special Red Card CRI 82
+3 Cynthia's Power Weight DRI 162
+1 Nighttime Mine ASC 197
+
+Energy: 8
+4 Rocky Fighting Energy POR 87
+4 Fighting Energy MEE 6
+

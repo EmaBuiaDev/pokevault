@@ -46,6 +46,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.emabuia.pokevault.BuildConfig
+import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.emabuia.pokevault.ui.theme.AppColors
@@ -189,6 +191,15 @@ fun AppNavigation(
     var lastTrackedRoute by remember { mutableStateOf<String?>(null) }
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
+
+    // "Quando e' stata aperta l'ultima volta, e con che versione": solo per
+    // leggerlo dalla console di Firebase. Una scrittura per apertura, in
+    // merge sul documento dell'utente; vedi FirestoreRepository.touchLastSeen.
+    LaunchedEffect(authViewModel.uiState.isLoggedIn) {
+        if (authViewModel.uiState.isLoggedIn) {
+            FirestoreRepository().touchLastSeen(BuildConfig.VERSION_NAME)
+        }
+    }
 
     LaunchedEffect(currentRoute, authViewModel.uiState.isLoggedIn) {
         if (!authViewModel.uiState.isLoggedIn) return@LaunchedEffect

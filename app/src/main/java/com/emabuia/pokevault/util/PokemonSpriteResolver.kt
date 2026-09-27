@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.util
 
 import android.content.Context
+import com.emabuia.pokevault.data.remote.PokemonNameMatcher
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -90,6 +91,13 @@ object PokemonSpriteResolver {
                         val name = asciiKey(line.substringAfter(',').trim())
                         if (name.isEmpty()) null else name to id
                     }.toMap()
+                }.let { base ->
+                    // I Paradosso sono le sole specie che l'italiano traduce: la
+                    // tabella di PokeAPI non conoscerebbe mai "Furiatonante".
+                    // Stessa lista, verificata sul catalogo, che usa l'import.
+                    base + PokemonNameMatcher.translatedSpecies.mapNotNull { (en, it) ->
+                        base[asciiKey(en)]?.let { id -> asciiKey(it) to id }
+                    }
                 }
             } catch (_: Exception) {
                 // Un asset illeggibile non deve far saltare un elenco di mazzi:
@@ -180,6 +188,15 @@ object PokemonSpriteResolver {
         while (parts.size > 1) {
             parts = parts.drop(1)
             table[matchKey(parts.joinToString(""))]?.let { return it }
+        }
+
+        // Dalla coda verso la testa: in italiano la specie viene prima e il
+        // resto la segue -- "Ogerpon Maschera Turchese-ex", "Clefairy-ex di
+        // Lylia". Le due passate di sopra ragionano all'inglese e qui non
+        // trovavano niente, cosi' un deck importato restava senza sprite.
+        val all = tokens(cardName)
+        for (length in all.size - 1 downTo 1) {
+            table[matchKey(all.take(length).joinToString(""))]?.let { return it }
         }
 
         return null
