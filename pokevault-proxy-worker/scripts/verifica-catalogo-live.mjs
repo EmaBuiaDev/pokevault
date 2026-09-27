@@ -37,7 +37,7 @@ const CF_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || 'e6c4d1ff864abf6dbcb4
 const R2_BUCKET = 'pokevault-images';
 
 // CatalogRepository.SET_IMAGE_CACHE_VERSION
-const SET_IMAGE_CACHE_VERSION = 'setimg-v4';
+const SET_IMAGE_CACHE_VERSION = 'setimg-v5';
 // CatalogRepository.appendItalianImageCacheBuster
 const ITALIAN_IMAGE_CACHE_BUSTER = 'itv=r2v3';
 

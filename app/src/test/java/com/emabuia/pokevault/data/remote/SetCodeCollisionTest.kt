@@ -108,16 +108,16 @@ class SetCodeCollisionTest {
 
     /**
      * Non basta che BLK e WHT siano diversi: devono essere quelli giusti.
-     * Black Bolt e' "Luce Nera" (rsv10pt5), White Flare e' "Fuoco Bianco"
-     * (zsv10pt5), e la lettera iniziale dell'id non segue la lettera del
-     * codice. Scambiandoli i due restano distinti, quindi ogni verifica di
-     * sola collisione passa lo stesso mentre ogni carta importata esce dal
-     * set sbagliato: e' l'unico modo per accorgersene da qui.
+     * Lo dicono le carte: zsv10pt5 ha Zekrom-ex ed e' Black Bolt / "Luce
+     * Nera", rsv10pt5 ha Reshiram-ex ed e' White Flare / "Fuoco Bianco" (la
+     * lettera dell'id e' quella del leggendario). Scambiandoli i due restano
+     * distinti, quindi ogni verifica di sola collisione passa lo stesso: e'
+     * successo, e questo test fissava lo scambio fino alla 3.1.5.
      */
     @Test
     fun testBlackBoltEWhiteFlareVannoSuiSetGiusti() {
-        assertEquals("rsv10pt5", code("BLK")?.lowercase())
-        assertEquals("zsv10pt5", code("WHT")?.lowercase())
+        assertEquals("zsv10pt5", code("BLK")?.lowercase())
+        assertEquals("rsv10pt5", code("WHT")?.lowercase())
     }
 
     /**

@@ -105,7 +105,11 @@ class CatalogRepository {
     }
 
     companion object {
-        private const val SET_IMAGE_CACHE_VERSION = "setimg-v4"
+        // Fa parte dell'URL del logo: cambiarlo e' l'unico modo di far
+        // riscaricare un logo che su R2 e' cambiato, perche' il worker lo serve
+        // come immutabile e Coil lo tiene in cache per mesi. v5 (3.1.5): i
+        // loghi di Luce Nera e Fuoco Bianco, scambiati su R2 il 27/09/2026.
+        private const val SET_IMAGE_CACHE_VERSION = "setimg-v5"
         private const val SETS_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000L   // 7 days
         private const val CARDS_CACHE_DURATION = 30 * 24 * 60 * 60 * 1000L  // 30 days
         private const val SEARCH_CACHE_DURATION = 60 * 60 * 1000L           // 1 hour
@@ -2549,18 +2553,14 @@ class CatalogRepository {
             "sv08" -> "SSP"
             "sv09" -> "JTG"
             "sv10" -> "DRI"
-            // ATTENZIONE: queste due sono scambiate rispetto alla verita', e
-            // vanno lasciate cosi'. zsv10pt5 e' "Fuoco Bianco" (White Flare) e
-            // rsv10pt5 e' "Luce Nera" (Black Bolt) -- lo conferma SetCodeMapper,
-            // dove l'accoppiamento giusto e' BLK->rsv10pt5 e WHT->zsv10pt5.
-            // Ma su R2 i due loghi sono caricati sotto la chiave sbagliata
-            // (it/BLK/logo.png contiene White Flare, it/WHT/logo.png Black
-            // Bolt), quindi le due inversioni si annullano e il logo mostrato
-            // e' quello giusto. Raddrizzare SOLO questa mappa rompe i loghi.
-            // Per sistemarle davvero bisogna scambiare i due oggetti su R2 e
-            // questa mappa nella stessa release: R2 e' condiviso da tutte le
-            // versioni installate, quindi cambiarlo da solo sbaglia il logo a
-            // chi non ha ancora aggiornato.
+            // zsv10pt5 ha Zekrom-ex ed e' Black Bolt / "Luce Nera" (BLK),
+            // rsv10pt5 ha Reshiram-ex ed e' White Flare / "Fuoco Bianco" (WHT):
+            // questa mappa e' giusta, e lo era anche quando qui c'era scritto il
+            // contrario. Sbagliati erano i due loghi su R2 (it/BLK conteneva
+            // White Flare), scambiati il 27/09/2026; SetCodeMapper, che aveva
+            // BLK e WHT invertiti, e' stato raddrizzato nella 3.1.5 insieme a
+            // SET_IMAGE_CACHE_VERSION, perche' i telefoni tenevano in cache il
+            // logo vecchio.
             "zsv10pt5" -> "BLK"
             "rsv10pt5" -> "WHT"
             "sv3pt5" -> "MEW"
