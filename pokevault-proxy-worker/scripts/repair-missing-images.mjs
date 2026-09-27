@@ -99,20 +99,48 @@ async function layoutForSet(expansionId, setCode) {
   return entry;
 }
 
+// Dove il codice Limitless del set non e' il nostro. Da allungare quando un set
+// risulta "limitless HTTP 403" ma sul sito c'e': il codice giusto si legge
+// dall'URL della pagina carta (limitlesstcg.com/cards/PHF/24a).
+const LIMITLESS_SET_CODES = { XY4: 'PHF' };
+
+// Limitless vuole tre cifre, la lettera delle varianti in minuscolo e niente
+// prefisso nei promo: 24a -> 024a, SM22 -> 022 (limitlesstcg.com/cards/SMP/22).
+function limitlessNumber(rawNumber) {
+  const m = /^(?:[A-Za-z]+)?(\d+)([A-Za-z]?)$/.exec(rawNumber);
+  return m ? `${pad(m[1])}${m[2].toLowerCase()}` : null;
+}
+
+async function fetchBuffer(url) {
+  const res = await fetch(url);
+  return res.ok ? { buf: Buffer.from(await res.arrayBuffer()) } : { status: res.status };
+}
+
 async function fetchUpstream(setCode, rawNumber, isNumeric) {
   const officialNumber = isNumeric ? unpad(rawNumber) : rawNumber;
-  const sources = [
-    { name: 'pokemon.com', url: `${OFFICIAL_BASE}/${setCode}/${setCode}_IT_${officialNumber}.png` },
-  ];
-  // Limitless numera solo a cifre: i promo tipo "SM01" li' non si trovano.
-  if (isNumeric) sources.push({ name: 'limitless', url: `${LIMITLESS_BASE}/${setCode}/${setCode}_${pad(rawNumber)}_R_IT.png` });
   const statuses = [];
-  for (const source of sources) {
-    const res = await fetch(source.url);
-    if (res.ok) return { source: source.name, png: Buffer.from(await res.arrayBuffer()) };
-    statuses.push(`${source.name} HTTP ${res.status}`);
+
+  const official = await fetchBuffer(`${OFFICIAL_BASE}/${setCode}/${setCode}_IT_${officialNumber}.png`);
+  if (official.buf) return { source: 'pokemon.com', png: official.buf };
+  statuses.push(`pokemon.com HTTP ${official.status}`);
+
+  const number = limitlessNumber(rawNumber);
+  if (!number) return { reason: statuses.join(', ') };
+  const code = LIMITLESS_SET_CODES[setCode] ?? setCode;
+  const base = `${LIMITLESS_BASE}/${code}/${code}_${number}_R_`;
+  const it = await fetchBuffer(`${base}IT.png`);
+  if (!it.buf) {
+    statuses.push(`limitless HTTP ${it.status}`);
+    return { reason: statuses.join(', ') };
   }
-  return { reason: statuses.join(', ') };
+  // Per le carte mai stampate in italiano Limitless puo' servire l'inglese
+  // sotto il nome _IT: identico byte per byte all'_EN, e' quello.
+  const en = await fetchBuffer(`${base}EN.png`);
+  if (en.buf && en.buf.equals(it.buf)) {
+    statuses.push('limitless _IT identico all\'_EN');
+    return { reason: statuses.join(', ') };
+  }
+  return { source: 'limitless', png: it.buf };
 }
 
 async function main() {
