@@ -585,7 +585,13 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 ownedVariants = optimisticVariants
             )
 
-            firestoreRepository.addCards(preparedCards)
+            // Il server risponde dopo: se rifiuta, Firestore ritira la
+            // scrittura dalla cache e il listener delle possedute rimette a
+            // posto i badge da solo. Qui resta solo da dirlo.
+            firestoreRepository.addCards(
+                preparedCards,
+                onServerError = { uiState = uiState.copy(errorMessage = "Errore") }
+            )
                 .onSuccess {
                     uiState = uiState.copy(
                         successMessage = if (AppLocale.isItalian) "${preparedCards.size} carte aggiunte!" else "${preparedCards.size} cards added!"

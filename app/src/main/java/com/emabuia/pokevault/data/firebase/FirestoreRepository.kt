@@ -16,6 +16,7 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
+import com.google.firebase.firestore.WriteBatch
 import kotlin.math.abs
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -647,7 +648,10 @@ class FirestoreRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun addCards(cards: List<PokemonCard>): Result<List<String>> {
+    suspend fun addCards(
+        cards: List<PokemonCard>,
+        onServerError: (Exception) -> Unit = {}
+    ): Result<List<String>> {
         return try {
             if (cards.isEmpty()) return Result.success(emptyList())
 
@@ -769,14 +773,39 @@ class FirestoreRepository {
                 )
             )
 
-            batch.commit().await()
+            commitLocalFirst(batch, onServerError)
             Result.success(addedIds)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun deleteCards(cards: List<PokemonCard>): Result<Int> {
+    /**
+     * Manda il batch senza aspettare il server, come [addCard] e [deleteCard]
+     * fanno con le scritture singole.
+     *
+     * `commit().await()` torna solo alla conferma del server: la UI era gia'
+     * aggiornata (la scrittura finisce subito nella cache locale e i listener
+     * emettono), ma il messaggio "100 carte aggiunte" arrivava un giro di rete
+     * dopo, e senza rete non arrivava affatto. Una volta chiamato commit() la
+     * scrittura e' in coda in Firestore: sopravvive anche se chi l'ha chiesta
+     * viene cancellato, quindi si puo' rispondere subito.
+     *
+     * Se il server la rifiuta, Firestore toglie da solo la scrittura dalla
+     * cache e i listener riemettono lo stato vero; [onServerError] serve solo
+     * a dirlo all'utente. Arriva sul thread principale.
+     */
+    private fun commitLocalFirst(
+        batch: WriteBatch,
+        onServerError: (Exception) -> Unit
+    ) {
+        batch.commit().addOnFailureListener { e -> onServerError(e) }
+    }
+
+    suspend fun deleteCards(
+        cards: List<PokemonCard>,
+        onServerError: (Exception) -> Unit = {}
+    ): Result<Int> {
         return try {
             if (cards.isEmpty()) return Result.success(0)
 
@@ -800,7 +829,7 @@ class FirestoreRepository {
                 )
             )
 
-            batch.commit().await()
+            commitLocalFirst(batch, onServerError)
             Result.success(cards.size)
         } catch (e: Exception) {
             Result.failure(e)
