@@ -79,7 +79,11 @@ object SetCodeMapper {
         "ASR" to "swsh10",
         "LOR" to "swsh11",
         "SIT" to "swsh12",
-        "CRZ" to "swsh12pt5"
+        "CRZ" to "swsh12pt5",
+        // Esplosione Plasma, formato Expanded. Mancava: "PLB 53" non trovava
+        // nessuna carta. L'ha trovato SigleDecklistTest, che prova ogni set
+        // con una sigla su D1.
+        "PLB" to "bw10"
     )
 
     private val apiIdRegex = Regex("^[a-z0-9]+$")
