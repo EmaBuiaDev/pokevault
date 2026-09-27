@@ -55,13 +55,18 @@ object SetCodeMapper {
         // questi i loro id veri: "sv11" non esiste, e mandandoceli entrambi si
         // rendevano indistinguibili esattamente come MEG e MEP.
         //
-        // L'accoppiamento non si indovina dalla lettera dell'id: Black Bolt e'
-        // "Luce Nera" e sta su rsv10pt5, White Flare e' "Fuoco Bianco" e sta su
-        // zsv10pt5. Scambiati, i due codici restano distinti -- quindi un test
-        // che guardi solo le collisioni passa lo stesso -- ma ogni carta
-        // importata esce dal set sbagliato.
-        "BLK" to "rsv10pt5",
-        "WHT" to "zsv10pt5",
+        // Quale e' quale lo dicono le carte, non i nomi: zsv10pt5 ha Zekrom-ex
+        // ed e' Black Bolt / "Luce Nera", rsv10pt5 ha Reshiram-ex (e le WHT di
+        // Limitless: Brave Bangle 80 = Braccialcoraggio) ed e' White Flare /
+        // "Fuoco Bianco". La lettera dell'id e' quella del leggendario.
+        //
+        // Fino alla 3.1.5 erano scambiati, e scambiati i due codici restano
+        // distinti -- un test di sole collisioni passa lo stesso. La ricerca
+        // per set accettava allora tutti e due i set, e un Allenatore BLK col
+        // nome tradotto usciva da Fuoco Bianco: "Air Balloon BLK 79" entrava
+        // come Vecchio Fossilpiuma (ImportDeckEmulatorTest lo prova).
+        "BLK" to "zsv10pt5",
+        "WHT" to "rsv10pt5",
         "RCL" to "swsh2",
         "DAA" to "swsh3",
         "CPA" to "swsh35",
@@ -100,8 +105,8 @@ object SetCodeMapper {
         "chaos rising" to "dcr",
         // Stessi id degli alias BLK/WHT qui sopra: il percorso per nome e'
         // l'altra meta' della stessa ricerca e deve dare lo stesso risultato.
-        "black bolt" to "rsv10pt5",
-        "white flare" to "zsv10pt5",
+        "black bolt" to "zsv10pt5",
+        "white flare" to "rsv10pt5",
         "rebel clash" to "swsh2",
         "darkness ablaze" to "swsh3",
         "champions path" to "swsh35",

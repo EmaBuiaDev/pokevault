@@ -28,11 +28,12 @@ class SetCodeMapperTest {
         // SetCodeCollisionTest, che ora vieta la classe di errore invece dei
         // singoli casi.
         assertEquals("mep", SetCodeMapper.normalizeDecklistSetCode("MEP"))
-        // BLK e WHT erano stati tolti da "sv11" ma scambiati fra loro, e qui
-        // lo scambio era fissato: Black Bolt e' "Luce Nera" (rsv10pt5) e White
-        // Flare e' "Fuoco Bianco" (zsv10pt5).
-        assertEquals("rsv10pt5", SetCodeMapper.normalizeDecklistSetCode("BLK"))
-        assertEquals("zsv10pt5", SetCodeMapper.normalizeDecklistSetCode("wht"))
+        // BLK e WHT erano stati tolti da "sv11" ma poi scambiati fra loro, e
+        // questo test fissava lo scambio. Lo dicono le carte: zsv10pt5 ha
+        // Zekrom-ex ed e' Black Bolt / Luce Nera, rsv10pt5 ha Reshiram-ex ed e'
+        // White Flare / Fuoco Bianco.
+        assertEquals("zsv10pt5", SetCodeMapper.normalizeDecklistSetCode("BLK"))
+        assertEquals("rsv10pt5", SetCodeMapper.normalizeDecklistSetCode("wht"))
     }
 
     @Test

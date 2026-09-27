@@ -133,6 +133,60 @@ class ImportDeckEmulatorTest {
         verificaInCollezione(importa(csv, DeckCardSource.COLLECTION))
     }
 
+    /**
+     * BLK e' Black Bolt / Luce Nera (zsv10pt5, quello con Zekrom-ex), WHT e'
+     * White Flare / Fuoco Bianco (rsv10pt5, quello con Reshiram-ex).
+     *
+     * Con le due sigle scambiate nel SetCodeMapper la ricerca accettava tutti
+     * e due i set: vinceva il nome se coincideva, se no la prima carta con
+     * quel numero, e Fuoco Bianco viene prima. Le carte WHT uscivano giuste
+     * per caso; un Allenatore BLK col nome tradotto no: "Air Balloon BLK 79"
+     * entrava come Vecchio Fossilpiuma, il 79 di Fuoco Bianco.
+     */
+    @Test
+    fun `import con sigle BLK e WHT trova la carta del set giusto`() {
+        val lista = """
+            Pokémon: 1
+            1 Zekrom ex BLK 34
+
+            Trainer: 5
+            1 Air Balloon BLK 79
+            1 Fennel BLK 82
+            1 N's Plan BLK 83
+            1 Hilda WHT 84
+            1 Brave Bangle WHT 80
+        """.trimIndent()
+        // nome italiano (senza spazi e simboli) -> set da cui deve venire
+        val attese = mapOf(
+            "zekromex" to "zsv10pt5",
+            "palloncino" to "zsv10pt5",
+            "zania" to "zsv10pt5",
+            "pianodin" to "zsv10pt5",
+            "anita" to "rsv10pt5",
+            "braccialcoraggio" to "rsv10pt5"
+        )
+        val uid = emu(timeoutMs = 180_000) {
+            val uid = nuovoUtente()
+            val vm = ViewModelProvider(store, ViewModelProvider.NewInstanceFactory())[DeckLabViewModel::class.java]
+            val risultato = vm.importFromText(lista)
+            vm.chooseDeckCardSource(DeckCardSource.COLLECTION)
+            val finito = CompletableDeferred<Unit>()
+            vm.addMissingCardsToCollection(risultato.missingMetaDeckCards, RuntimeEnvironment.getApplication()) {
+                finito.complete(Unit)
+            }
+            withTimeout(150_000) { finito.await() }
+            uid
+        }
+
+        val carte = emu { carteSulServer(uid) }
+        val chiave = { nome: String -> nome.lowercase().replace(Regex("[^a-z0-9]"), "") }
+        assertEquals("le carte importate", attese.keys, carte.map { chiave(it.name) }.toSet())
+        carte.forEach { c ->
+            val set = attese.getValue(chiave(c.name))
+            assertTrue("${c.name} deve venire da $set: ${c.apiCardId}", c.apiCardId.contains(set, ignoreCase = true))
+        }
+    }
+
     @Test
     fun `import come deck di prova non tocca la collezione`() {
         val uid = importa(testoPtcg, DeckCardSource.DECK_ONLY)
