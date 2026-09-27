@@ -54,12 +54,15 @@ Da Android Studio: click destro sulla classe o sul singolo metodo di test → *R
 
 ## CI su GitHub Actions
 
-Due workflow, entrambi in `.github/workflows/`:
+Quattro workflow di test, tutti in `.github/workflows/`. Cosa verifica ognuno
+dei test prima di una release è in [CATALOGO_TEST.md](CATALOGO_TEST.md).
 
 | Workflow | Job | Trigger |
 |---|---|---|
 | `android-tests.yml` | `test` (unit test) | push su `master`, `R*`, `release/**`, `feature/**`, `fix/**`, `claude/**`; PR verso `master`/`release/**` |
 | `android-advanced-tests.yml` | `unit-tests`, `instrumented-tests`, `lint-analysis`, `build` | push/PR su `master`/`release/**`; `workflow_dispatch`; schedule giornaliero |
+| `test-integrazione.yml` | `integrazione` (collezione e import deck sull'emulatore Firebase) | push su `R*`, `release/**`; PR verso `master`/`release/**`; `workflow_dispatch` |
+| `verifica-catalogo.yml` | `verifica` (loghi, immagini e prezzi sul worker di produzione) | ogni giorno alle 07:00 UTC; push su `R*`, `release/**`; `workflow_dispatch` |
 
 I due workflow hanno una portata diversa di proposito: i test unitari sono
 veloci e girano su tutti i branch su cui si lavora, mentre quello avanzato
