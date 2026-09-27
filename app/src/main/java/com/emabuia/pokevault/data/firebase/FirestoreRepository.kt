@@ -10,6 +10,7 @@ import com.emabuia.pokevault.data.model.Tournament
 import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.model.collectionCardKey
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -659,6 +660,7 @@ class FirestoreRepository {
             val addedIds = mutableListOf<String>()
             var totalCardsDelta = 0L
             var totalValueDelta = 0.0
+            val cachedByApiId = cachedCardsByApiId(cards)
 
             for (card in cards) {
                 var effectiveEstimatedValue = card.estimatedValue
@@ -689,19 +691,11 @@ class FirestoreRepository {
                 )
 
                 if (card.apiCardId.isNotBlank()) {
-                    val existing: QuerySnapshot? = try {
-                        cardsCollection
-                            .whereEqualTo("apiCardId", card.apiCardId)
-                            .whereEqualTo("variant", card.variant)
-                            .get(Source.CACHE).await()
-                    } catch (_: Exception) {
-                        null
-                    }
-
                     // Stessa regola di addCard: le copie solo-deck sono un
                     // insieme a parte e non assorbono quantita' di collezione, ne'
                     // si fondono fra loro.
-                    val existingForLanguage = if (card.deckOnly) null else existing?.documents?.firstOrNull { doc ->
+                    val existingForLanguage = if (card.deckOnly) null else cachedByApiId[card.apiCardId]?.firstOrNull { doc ->
+                        doc.get("variant") == card.variant &&
                         normalizeLanguageKey(doc.getString("language")) == normalizeLanguageKey(canonicalLanguage) &&
                             (doc.getBoolean("deckOnly") ?: false) == card.deckOnly
                     }
@@ -778,6 +772,41 @@ class FirestoreRepository {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Le carte gia' in collezione che [addCards] potrebbe dover sommare,
+     * raggruppate per `apiCardId`, lette dalla cache in un colpo solo.
+     *
+     * Prima si faceva una query per carta (apiCardId + variant): la cache
+     * locale non ha indici su quei campi, quindi ognuna scorreva l'intera
+     * collezione, e aggiungerne 100 voleva dire 100 scansioni in fila prima
+     * ancora di scrivere. Qui la scansione e' una, e il resto si fa in
+     * memoria. L'ordine dei documenti e' lo stesso di quelle query (per id),
+     * quindi a parita' di candidati si sceglie lo stesso documento di prima.
+     *
+     * Le carte solo-deck non si fondono mai (vedi [addCard]): se ci sono solo
+     * quelle, non serve leggere niente. Se la cache non risponde si torna a
+     * mappa vuota, cioe' tutte carte nuove, come faceva il catch di prima.
+     */
+    private suspend fun cachedCardsByApiId(cards: List<PokemonCard>): Map<String, List<DocumentSnapshot>> {
+        val wanted = cards.asSequence()
+            .filter { !it.deckOnly && it.apiCardId.isNotBlank() }
+            .map { it.apiCardId }
+            .toSet()
+        if (wanted.isEmpty()) return emptyMap()
+
+        val snapshot = try {
+            cardsCollection.get(Source.CACHE).await()
+        } catch (_: Exception) {
+            return emptyMap()
+        }
+        return snapshot.documents
+            .mapNotNull { doc ->
+                val apiCardId = doc.get("apiCardId") as? String
+                if (apiCardId != null && apiCardId in wanted) apiCardId to doc else null
+            }
+            .groupBy({ it.first }, { it.second })
     }
 
     /**
