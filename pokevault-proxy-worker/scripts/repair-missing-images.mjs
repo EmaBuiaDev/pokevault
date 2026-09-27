@@ -7,7 +7,13 @@
 // script), quindi restano buchi anche per carte che l'archivio ufficiale espone
 // regolarmente. Il 2026-09-13 erano 17, tutte in me05 (la 42 e le 80-95).
 //
-// Sorgente di riparazione: assets.pokemon.com, indipendente da TCGdex.
+// Sorgente di riparazione: assets.pokemon.com, indipendente da TCGdex. Se
+// l'archivio ufficiale non ha la carta si prova il CDN di Limitless, che per
+// molti set tiene anche la scansione italiana (<SET>_<nnn>_R_IT.png). Il
+// 2026-09-27 cosi' si sono riparate le MEP 28, 32, 78 e 79, assenti sia su
+// pokemon.com sia su TCGdex. Il nome del file non garantisce la lingua: il
+// dry-run stampa la fonte di ogni carta, e le Limitless vanno guardate prima
+// dell'--apply.
 //
 //   node scripts/repair-missing-images.mjs                 (tutto il catalogo, dry-run)
 //   node scripts/repair-missing-images.mjs me05            (un solo set, dry-run)
@@ -18,6 +24,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import sharp from 'sharp';
+import { detectConvention, detectR2Layout, r2KeyFor } from './lib/set-convention.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workerRoot = path.resolve(__dirname, '..');
@@ -27,6 +34,7 @@ const DATABASE = 'pokevault-catalog';
 // Stesso namespace di wrangler.toml, [[kv_namespaces]] binding CACHE.
 const KV_NAMESPACE_ID = '14e664fe935345578443564f353685b9';
 const OFFICIAL_BASE = 'https://assets.pokemon.com/static-assets/content-assets/cms2-it-it/img/cards/web';
+const LIMITLESS_BASE = 'https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/tpci';
 // Stessa qualita' di recompress-webp.mjs, cosi' le riparate restano
 // indistinguibili dal resto della libreria.
 const WEBP_QUALITY = 82;
@@ -66,12 +74,74 @@ function sqlString(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
 
-// L'URL ufficiale vuole il numero SENZA zero iniziali (ME05_IT_42.png), la
-// chiave R2 e il card_id su D1 lo vogliono paddato a tre cifre
-// (ME05_IT_042.webp). Sbagliare verso costa un 404 silenzioso, quindi le due
-// forme restano separate e non intercambiabili.
+// L'URL ufficiale vuole il numero SENZA zero iniziali (ME05_IT_42.png),
+// Limitless lo vuole paddato a tre cifre (MEP_028_R_IT.png), e la chiave R2
+// segue la grafia del set (ME05_IT_042.webp in me05, 28.webp in mep).
+// Sbagliare verso costa un 404 silenzioso, quindi le forme restano separate e
+// non intercambiabili.
 const unpad = (n) => String(parseInt(n, 10));
 const pad = (n) => String(parseInt(n, 10)).padStart(3, '0');
+
+// Dove stanno gia' le immagini di un set, per caricare le riparate accanto e
+// non spargere il set su due layout (vedi lib/set-convention.mjs). Calcolato
+// una volta per set.
+const setLayouts = new Map();
+async function layoutForSet(expansionId, setCode) {
+  if (setLayouts.has(expansionId)) return setLayouts.get(expansionId);
+  const rows = await d1Query(`SELECT card_id, card_number, image_status FROM cards WHERE expansion_id = ${sqlString(expansionId)}`);
+  const convention = detectConvention(rows, setCode);
+  const sample = rows.find((r) => r.image_status === 'ok' && String(r.card_number ?? '').trim() !== '');
+  const layout = sample
+    ? await detectR2Layout({ setId: expansionId, sampleNumber: String(sample.card_number).trim(), bucket: BUCKET, tmpDir, runWrangler })
+    : null;
+  const entry = { convention, layout };
+  setLayouts.set(expansionId, entry);
+  return entry;
+}
+
+// Dove il codice Limitless del set non e' il nostro. Da allungare quando un set
+// risulta "limitless HTTP 403" ma sul sito c'e': il codice giusto si legge
+// dall'URL della pagina carta (limitlesstcg.com/cards/PHF/24a).
+const LIMITLESS_SET_CODES = { XY4: 'PHF' };
+
+// Limitless vuole tre cifre, la lettera delle varianti in minuscolo e niente
+// prefisso nei promo: 24a -> 024a, SM22 -> 022 (limitlesstcg.com/cards/SMP/22).
+function limitlessNumber(rawNumber) {
+  const m = /^(?:[A-Za-z]+)?(\d+)([A-Za-z]?)$/.exec(rawNumber);
+  return m ? `${pad(m[1])}${m[2].toLowerCase()}` : null;
+}
+
+async function fetchBuffer(url) {
+  const res = await fetch(url);
+  return res.ok ? { buf: Buffer.from(await res.arrayBuffer()) } : { status: res.status };
+}
+
+async function fetchUpstream(setCode, rawNumber, isNumeric) {
+  const officialNumber = isNumeric ? unpad(rawNumber) : rawNumber;
+  const statuses = [];
+
+  const official = await fetchBuffer(`${OFFICIAL_BASE}/${setCode}/${setCode}_IT_${officialNumber}.png`);
+  if (official.buf) return { source: 'pokemon.com', png: official.buf };
+  statuses.push(`pokemon.com HTTP ${official.status}`);
+
+  const number = limitlessNumber(rawNumber);
+  if (!number) return { reason: statuses.join(', ') };
+  const code = LIMITLESS_SET_CODES[setCode] ?? setCode;
+  const base = `${LIMITLESS_BASE}/${code}/${code}_${number}_R_`;
+  const it = await fetchBuffer(`${base}IT.png`);
+  if (!it.buf) {
+    statuses.push(`limitless HTTP ${it.status}`);
+    return { reason: statuses.join(', ') };
+  }
+  // Per le carte mai stampate in italiano Limitless puo' servire l'inglese
+  // sotto il nome _IT: identico byte per byte all'_EN, e' quello.
+  const en = await fetchBuffer(`${base}EN.png`);
+  if (en.buf && en.buf.equals(it.buf)) {
+    statuses.push('limitless _IT identico all\'_EN');
+    return { reason: statuses.join(', ') };
+  }
+  return { source: 'limitless', png: it.buf };
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -113,29 +183,28 @@ async function main() {
     // immagine per sempre, di cui 64 pubblicate regolarmente a monte
     // (verificato il 15/09/2026).
     const isNumeric = /^\d+$/.test(rawNumber);
-    const officialNumber = isNumeric ? unpad(rawNumber) : rawNumber;
-    const keyNumber = isNumeric ? pad(rawNumber) : rawNumber;
 
-    const url = `${OFFICIAL_BASE}/${setCode}/${setCode}_IT_${officialNumber}.png`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      unavailable.push({ ...card, reason: `archivio ufficiale HTTP ${res.status}` });
-      console.log(`  ${setCode}/${keyNumber} ${card.nome} -- non disponibile a monte (HTTP ${res.status})`);
+    const upstream = await fetchUpstream(setCode, rawNumber, isNumeric);
+    if (!upstream.png) {
+      unavailable.push({ ...card, reason: upstream.reason });
+      console.log(`  ${setCode}/${rawNumber} ${card.nome} -- non disponibile a monte (${upstream.reason})`);
       continue;
     }
 
-    const png = Buffer.from(await res.arrayBuffer());
-    const webp = await sharp(png).webp({ quality: WEBP_QUALITY }).toBuffer();
+    const { convention, layout } = await layoutForSet(card.expansion_id, setCode);
+    const keyNumber = convention.formatNumber(rawNumber);
+    const webp = await sharp(upstream.png).webp({ quality: WEBP_QUALITY }).toBuffer();
     const localFile = path.join(tmpDir, `${setCode}_${keyNumber}.webp`);
     await writeFile(localFile, webp);
+    const key = r2KeyFor(layout, setCode, keyNumber);
     prepared.push({
       setCode,
       number: rawNumber,
       cardId: card.card_id,
-      key: `it/${setCode}/${setCode}_IT_${keyNumber}.webp`,
+      key,
       localFile,
     });
-    console.log(`  ${setCode}/${keyNumber} ${card.nome}  png ${(png.length / 1024).toFixed(0)} KB -> webp ${(webp.length / 1024).toFixed(0)} KB`);
+    console.log(`  ${key} ${card.nome}  [${upstream.source}] png ${(upstream.png.length / 1024).toFixed(0)} KB -> webp ${(webp.length / 1024).toFixed(0)} KB`);
   }
 
   console.log(`\nRiparabili: ${prepared.length}, non disponibili a monte: ${unavailable.length}`);
@@ -172,7 +241,7 @@ async function main() {
   await rm(tmpDir, { recursive: true, force: true });
   console.log(`\nFatto: ${prepared.length} immagini riparate.`);
   if (unavailable.length > 0) {
-    console.log(`Restano ${unavailable.length} carte non disponibili nemmeno sull'archivio ufficiale:`);
+    console.log(`Restano ${unavailable.length} carte non disponibili a monte:`);
     unavailable.forEach((c) => console.log(`  ${c.card_id} ${c.nome} -- ${c.reason}`));
   }
 }

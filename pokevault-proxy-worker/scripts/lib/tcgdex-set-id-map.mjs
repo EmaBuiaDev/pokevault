@@ -12,8 +12,13 @@ export const TCGDEX_ID_OVERRIDES = {
   sv4pt5: 'sv04.5', // Paldean Fates
   sv6pt5: 'sv06.5', // Shrouded Fable
   sv8pt5: 'sv08.5', // Prismatic Evolutions
-  zsv10pt5: 'sv10.5w', // White Flare
-  rsv10pt5: 'sv10.5b', // Black Bolt
+  // La lettera e' il leggendario: z = Zekrom = Black Bolt (Luce Nera, BLK),
+  // r = Reshiram = White Flare (Fuoco Bianco, WHT). Fino al 27/09/2026 erano
+  // scritti al contrario, e i backfill hanno incrociato illustratore, rarita' e
+  // tipo dei due set (riparati con riallinea-set-tcgdex.mjs). Per verificare si
+  // guardano le carte, non i nomi: Zekrom-ex e' la 34 di zsv10pt5.
+  zsv10pt5: 'sv10.5b', // Black Bolt
+  rsv10pt5: 'sv10.5w', // White Flare
   swsh45sv: 'swsh4.5sv', // Shining Fates Shiny Vault
   pgo: 'swsh10.5', // Pokémon GO
   cel25c: 'cel25cc', // Celebrations Classic Collection

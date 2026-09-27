@@ -123,7 +123,7 @@ async function runD1Query(sql) {
 async function fetchD1CardNumbers(expansionId) {
   // Solo le carte ancora senza PS: rilanciarlo non rifa' il lavoro gia' fatto.
   const parsed = await runD1Query(
-    `SELECT card_id, card_number FROM cards WHERE expansion_id = ${sqlString(expansionId)} AND (ps IS NULL OR ps = '')`
+    `SELECT card_id, card_number, nome FROM cards WHERE expansion_id = ${sqlString(expansionId)} AND (ps IS NULL OR ps = '')`
   );
   return parsed[0]?.results ?? [];
 }
@@ -158,11 +158,14 @@ async function backfillExpansion(expansionId, apply) {
     const detail = await fetchJson(`https://api.tcgdex.net/v2/it/cards/${ref.id}`);
     const hp = detail?.hp;
     const ps = Number.isInteger(hp) && hp > 0 ? String(hp) : null;
-    return { row, ps };
+    return { row, ps, tcgdexName: detail?.name };
   });
 
   const withPs = results.filter((r) => r.ps);
   console.log(`[${expansionId}] ${withPs.length}/${rows.length} carte con PS trovati (TCGdex: ${tcgdexId})`);
+  // Il match e' per numero: stampare anche i due nomi e' l'unico modo di
+  // accorgersi che nostro e TCGdex numerano diverso (Allenatore che prende PS).
+  for (const r of withPs) console.log(`    ${r.row.card_id}  ${r.row.nome}  <- ${r.tcgdexName} PS ${r.ps}`);
 
   if (apply && withPs.length > 0) {
     await mkdir(tmpDir, { recursive: true });

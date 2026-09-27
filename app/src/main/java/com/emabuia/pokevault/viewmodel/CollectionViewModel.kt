@@ -417,7 +417,16 @@ class CollectionViewModel : ViewModel() {
             val remainingCards = originalCards.filterNot { card -> card.id in deletedIds }
             applyCardsSnapshot(remainingCards)
 
-            repository.deleteCards(cardsToDelete)
+            // Se il server rifiuta, Firestore rimette le carte nella cache e il
+            // listener di getCards() le riemette: la lista si ripara da sola,
+            // qui resta solo da dirlo. Ripristinare originalCards a quel punto
+            // potrebbe cancellare modifiche arrivate nel frattempo.
+            repository.deleteCards(
+                cardsToDelete,
+                onServerError = { error ->
+                    uiState = uiState.copy(errorMessage = "${AppLocale.errorPrefix}: ${error.message}")
+                }
+            )
                 .onSuccess {
                     uiState = uiState.copy(successMessage = AppLocale.cardsDeleted(cardsToDelete.size))
                 }

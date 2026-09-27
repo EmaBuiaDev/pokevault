@@ -10,12 +10,14 @@ import com.emabuia.pokevault.data.model.Tournament
 import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.model.collectionCardKey
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
+import com.google.firebase.firestore.WriteBatch
 import kotlin.math.abs
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -647,7 +649,10 @@ class FirestoreRepository {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun addCards(cards: List<PokemonCard>): Result<List<String>> {
+    suspend fun addCards(
+        cards: List<PokemonCard>,
+        onServerError: (Exception) -> Unit = {}
+    ): Result<List<String>> {
         return try {
             if (cards.isEmpty()) return Result.success(emptyList())
 
@@ -655,6 +660,7 @@ class FirestoreRepository {
             val addedIds = mutableListOf<String>()
             var totalCardsDelta = 0L
             var totalValueDelta = 0.0
+            val cachedByApiId = cachedCardsByApiId(cards)
 
             for (card in cards) {
                 var effectiveEstimatedValue = card.estimatedValue
@@ -685,19 +691,11 @@ class FirestoreRepository {
                 )
 
                 if (card.apiCardId.isNotBlank()) {
-                    val existing: QuerySnapshot? = try {
-                        cardsCollection
-                            .whereEqualTo("apiCardId", card.apiCardId)
-                            .whereEqualTo("variant", card.variant)
-                            .get(Source.CACHE).await()
-                    } catch (_: Exception) {
-                        null
-                    }
-
                     // Stessa regola di addCard: le copie solo-deck sono un
                     // insieme a parte e non assorbono quantita' di collezione, ne'
                     // si fondono fra loro.
-                    val existingForLanguage = if (card.deckOnly) null else existing?.documents?.firstOrNull { doc ->
+                    val existingForLanguage = if (card.deckOnly) null else cachedByApiId[card.apiCardId]?.firstOrNull { doc ->
+                        doc.get("variant") == card.variant &&
                         normalizeLanguageKey(doc.getString("language")) == normalizeLanguageKey(canonicalLanguage) &&
                             (doc.getBoolean("deckOnly") ?: false) == card.deckOnly
                     }
@@ -769,14 +767,74 @@ class FirestoreRepository {
                 )
             )
 
-            batch.commit().await()
+            commitLocalFirst(batch, onServerError)
             Result.success(addedIds)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun deleteCards(cards: List<PokemonCard>): Result<Int> {
+    /**
+     * Le carte gia' in collezione che [addCards] potrebbe dover sommare,
+     * raggruppate per `apiCardId`, lette dalla cache in un colpo solo.
+     *
+     * Prima si faceva una query per carta (apiCardId + variant): la cache
+     * locale non ha indici su quei campi, quindi ognuna scorreva l'intera
+     * collezione, e aggiungerne 100 voleva dire 100 scansioni in fila prima
+     * ancora di scrivere. Qui la scansione e' una, e il resto si fa in
+     * memoria. L'ordine dei documenti e' lo stesso di quelle query (per id),
+     * quindi a parita' di candidati si sceglie lo stesso documento di prima.
+     *
+     * Le carte solo-deck non si fondono mai (vedi [addCard]): se ci sono solo
+     * quelle, non serve leggere niente. Se la cache non risponde si torna a
+     * mappa vuota, cioe' tutte carte nuove, come faceva il catch di prima.
+     */
+    private suspend fun cachedCardsByApiId(cards: List<PokemonCard>): Map<String, List<DocumentSnapshot>> {
+        val wanted = cards.asSequence()
+            .filter { !it.deckOnly && it.apiCardId.isNotBlank() }
+            .map { it.apiCardId }
+            .toSet()
+        if (wanted.isEmpty()) return emptyMap()
+
+        val snapshot = try {
+            cardsCollection.get(Source.CACHE).await()
+        } catch (_: Exception) {
+            return emptyMap()
+        }
+        return snapshot.documents
+            .mapNotNull { doc ->
+                val apiCardId = doc.get("apiCardId") as? String
+                if (apiCardId != null && apiCardId in wanted) apiCardId to doc else null
+            }
+            .groupBy({ it.first }, { it.second })
+    }
+
+    /**
+     * Manda il batch senza aspettare il server, come [addCard] e [deleteCard]
+     * fanno con le scritture singole.
+     *
+     * `commit().await()` torna solo alla conferma del server: la UI era gia'
+     * aggiornata (la scrittura finisce subito nella cache locale e i listener
+     * emettono), ma il messaggio "100 carte aggiunte" arrivava un giro di rete
+     * dopo, e senza rete non arrivava affatto. Una volta chiamato commit() la
+     * scrittura e' in coda in Firestore: sopravvive anche se chi l'ha chiesta
+     * viene cancellato, quindi si puo' rispondere subito.
+     *
+     * Se il server la rifiuta, Firestore toglie da solo la scrittura dalla
+     * cache e i listener riemettono lo stato vero; [onServerError] serve solo
+     * a dirlo all'utente. Arriva sul thread principale.
+     */
+    private fun commitLocalFirst(
+        batch: WriteBatch,
+        onServerError: (Exception) -> Unit
+    ) {
+        batch.commit().addOnFailureListener { e -> onServerError(e) }
+    }
+
+    suspend fun deleteCards(
+        cards: List<PokemonCard>,
+        onServerError: (Exception) -> Unit = {}
+    ): Result<Int> {
         return try {
             if (cards.isEmpty()) return Result.success(0)
 
@@ -800,7 +858,7 @@ class FirestoreRepository {
                 )
             )
 
-            batch.commit().await()
+            commitLocalFirst(batch, onServerError)
             Result.success(cards.size)
         } catch (e: Exception) {
             Result.failure(e)

@@ -35,3 +35,6 @@ catalog-live.json
 import-catalog.sql
 .rarity-tmp/
 ingest-*-official.sql
+
+# Report di scripts/verifica-catalogo-live.mjs (in CI finisce negli artifact)
+report-catalogo/
