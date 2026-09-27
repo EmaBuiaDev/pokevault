@@ -16,7 +16,6 @@ import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,9 +46,16 @@ class ImportDeckEmulatorTest {
     @Before
     fun setUp() {
         EmulatorEnv.assumeEmulator()
-        assumeTrue(
-            "Proxy non configurato in local.properties: l'import non puo' cercare le carte nel catalogo",
-            BuildConfig.POKEWALLET_PROXY_ENABLED && BuildConfig.POKEWALLET_PROXY_URL.isNotBlank()
+        // Senza queste due l'app non trova le carte nel catalogo e le crea "di
+        // ripiego", senza id ne' immagine: il test fallirebbe per la
+        // configurazione, non per l'app. Il primo giro in CI e' andato cosi'.
+        EmulatorEnv.richiedi(
+            BuildConfig.POKEWALLET_PROXY_ENABLED && BuildConfig.POKEWALLET_PROXY_URL.isNotBlank(),
+            "Manca POKEWALLET_PROXY_URL (o PROXY_ENABLED=false) in local.properties: l'import non puo' cercare le carte"
+        )
+        EmulatorEnv.richiedi(
+            BuildConfig.ITALIAN_CATALOG_URL.isNotBlank(),
+            "Manca ITALIAN_CATALOG_URL in local.properties: senza catalogo italiano l'import non trova le carte"
         )
         val app = RuntimeEnvironment.getApplication()
         EmulatorEnv.init(app)

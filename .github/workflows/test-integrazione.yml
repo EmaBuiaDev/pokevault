@@ -40,7 +40,9 @@ jobs:
     timeout-minutes: 30
     env:
       # L'URL del worker e' pubblico (e' dentro l'APK): serve all'import deck
-      # per cercare le carte nel catalogo come fa l'app.
+      # per cercare le carte nel catalogo come fa l'app. Il catalogo italiano
+      # (ITALIAN_CATALOG_URL) sta sullo stesso worker: senza, l'import crea le
+      # carte senza trovarle.
       POKEVAULT_PROXY_URL: https://pokevault-proxy.pokevault-emanu.workers.dev/
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +66,7 @@ jobs:
           echo "POKEWALLET_API_KEY=" >> local.properties
           echo "POKEWALLET_PROXY_ENABLED=true" >> local.properties
           echo "POKEWALLET_PROXY_URL=$POKEVAULT_PROXY_URL" >> local.properties
+          echo "ITALIAN_CATALOG_URL=${POKEVAULT_PROXY_URL}ita/catalog.json" >> local.properties
 
       - name: Test di integrazione sull'emulatore Firebase
         env:

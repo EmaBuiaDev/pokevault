@@ -110,6 +110,10 @@ invece di lasciar passare una release senza aver provato niente.
   worker è giù o una carta del deck di prova sparisce dal catalogo, fallisce
   anche se l'app è a posto: il messaggio lo dice ("trovata nel catalogo",
   "il valore della collezione sale").
+- **L'import deck vuole in `local.properties` sia `POKEWALLET_PROXY_URL` sia
+  `ITALIAN_CATALOG_URL`** (`<worker>/ita/catalog.json`). Senza la seconda
+  l'app non trova le carte e le crea "di ripiego": il primo giro in CI è
+  fallito così. Ora se ne manca una il test si ferma subito e dice quale.
 - **Un 404 resta nella cache del worker per 24 ore.** Un'immagine caricata da
   poco può risultare mancante: il livello 3 lo segnala come avviso quando su
   R2 il file c'è ma il worker risponde 404.

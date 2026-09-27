@@ -63,6 +63,17 @@ object EmulatorEnv {
         assumeTrue("Emulatore Firebase spento: test di integrazione saltati", up)
     }
 
+    /**
+     * Un prerequisito dell'ambiente (non dell'app): fuori dal job di
+     * integrazione se manca il test si salta, dentro fallisce col [motivo].
+     * Stessa logica di [assumeEmulator]: una configurazione di CI sbagliata
+     * non deve poter far passare una release senza aver provato niente.
+     */
+    fun richiedi(condizione: Boolean, motivo: String) {
+        if (required && !condizione) throw AssertionError(motivo)
+        assumeTrue(motivo, condizione)
+    }
+
     private fun portOpen(port: Int): Boolean = try {
         Socket().use { it.connect(InetSocketAddress(HOST, port), 500); true }
     } catch (_: Exception) {
