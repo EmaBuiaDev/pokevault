@@ -46,15 +46,15 @@ jobs:
       # carte senza trovarle.
       POKEVAULT_PROXY_URL: https://pokevault-proxy.pokevault-emanu.workers.dev/
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -92,7 +92,7 @@ jobs:
 
       - name: Allega il report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: report-integrazione
           path: app/build/reports/tests/testProdDebugUnitTest/
