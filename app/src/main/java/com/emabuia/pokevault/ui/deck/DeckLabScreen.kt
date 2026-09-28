@@ -70,22 +70,26 @@ fun DeckLabScreen(
 
     // Uno swipe verso il basso non puo' buttare via un deck appena importato:
     // cinquanta carte riconosciute, il nome, la copertina scelta. Il gesto
-    // viene rifiutato e il pannello torna su.
+    // viene rifiutato, il pannello torna su e si chiede se chiudere davvero.
     //
-    // Rifiutato in silenzio, pero'. Prima apriva la richiesta di conferma, e
-    // il risultato era che scorrendo la griglia delle carte -- quando la lista
-    // e' gia' in cima, il resto dello scorrimento arriva al pannello e lui lo
-    // legge come un tentativo di chiusura -- compariva dal nulla un dialog che
-    // chiedeva se buttare via il deck.
+    // La conferma era stata tolta (28/09/2026 rimessa su richiesta): scorrendo
+    // la griglia delle carte gia' in cima, il resto dello scorrimento arriva al
+    // pannello, che lo legge come un tentativo di chiusura, e il dialog compare
+    // anche a chi voleva solo scorrere. Si e' scelto di tenerlo lo stesso: un
+    // dialog di troppo costa un tocco su "continua", uno swipe rifiutato in
+    // silenzio lasciava l'utente senza capire perche' il pannello non si chiude.
     //
-    // Chi invece chiude apposta: il tasto X (onRequestClose) e il tasto
-    // indietro (il BackHandler dentro al pannello). Il tocco fuori passa di
-    // qui come lo swipe, quindi finche' c'e' del lavoro non fa niente: le due
-    // vie esplicite restano, e nessuna delle due puo' scattare per sbaglio.
+    // Le altre vie per chiudere: il tasto X (onRequestClose) e il tasto
+    // indietro (il BackHandler dentro al pannello) aprono la stessa conferma.
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { target ->
-            !(target == SheetValue.Hidden && hasDeckWork())
+            if (target == SheetValue.Hidden && hasDeckWork()) {
+                showDiscardDeckDialog = true
+                false
+            } else {
+                true
+            }
         }
     )
 
@@ -422,6 +426,14 @@ fun DeckLabScreen(
                 // era gia' Hidden. Ora il tasto indietro lo gestiamo noi, e il
                 // pannello resta dov'e' finche' non si e' deciso.
                 properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
+                // Solo il margine in basso. Da Material3 1.4 quello in alto
+                // (la status bar) cresce man mano che il pannello ci sale sotto,
+                // e il contenuto, alto il 92% dello spazio che resta, si
+                // accorcia: la posizione di riposo si sposta, il rimbalzo
+                // dell'assestamento la insegue, e dopo uno swipe veloce verso
+                // l'alto il pannello oscillava all'infinito. Alla status bar
+                // non arriva mai, quindi quel margine non serve.
+                contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
                 dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.textMuted) }
             ) {
                 BackHandler {
