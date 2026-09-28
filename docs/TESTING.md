@@ -59,7 +59,7 @@ dei test prima di una release è in [CATALOGO_TEST.md](CATALOGO_TEST.md).
 
 | Workflow | Job | Trigger |
 |---|---|---|
-| `android-tests.yml` | `test` (unit test) | push su `master`, `R*`, `release/**`, `feature/**`, `fix/**`, `claude/**`; PR verso `master`/`release/**` |
+| `android-tests.yml` | `test` (unit test, poi `verifyR8Reflection` sul mapping di R8 della release) | push su `master`, `R*`, `release/**`, `feature/**`, `fix/**`, `claude/**`; PR verso `master`/`release/**` |
 | `test-integrazione.yml` | `integrazione` (collezione e import deck sull'emulatore Firebase) | push su `R*`, `release/**`; PR verso `master`/`release/**`; `workflow_dispatch` |
 | `verifica-catalogo.yml` | `verifica` (loghi, immagini e prezzi sul worker di produzione) | ogni giorno alle 07:00 UTC; push su `R*`, `release/**`; `workflow_dispatch` |
 

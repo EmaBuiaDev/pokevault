@@ -43,6 +43,15 @@
 -keep class com.emabuia.pokevault.data.billing.GiftCodeRepository$RedeemPayload { *; }
 -keep class com.emabuia.pokevault.data.billing.EntitlementRepository$EntitlementPayload { *; }
 
+# Le mani problematiche dell'Hand Simulator, salvate in JSON con Gson. Fino
+# alla 3.1.5 mancava questa regola e i campi uscivano rinominati a..g: il JSON
+# sul telefono dipendeva da come R8 assegnava le lettere in quella build. Le
+# chiavi vecchie restano leggibili grazie agli `alternate` sulla classe.
+-keep class com.emabuia.pokevault.data.simulator.SavedProblemHand { *; }
+
+# Chi aggiunge una classe letta per reflection fuori da questi package: il task
+# :app:verifyR8Reflection lo scopre sul mapping.txt e fallisce la build.
+
 # ── Attributi richiesti da Retrofit e Gson per i tipi generici ──
 -keepattributes Signature
 -keepattributes Exceptions

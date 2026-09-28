@@ -44,6 +44,15 @@ jobs:
       - name: Run Unit Tests
         run: ./gradlew testProdDebugUnitTest --no-daemon --stacktrace
 
+      # La release passa da R8, i test unitari no. Una classe letta da Gson o
+      # da Firestore che R8 rinomina o pota esce da una build verde e arriva
+      # sul telefono coi campi a null (i codici regalo il 16/09, le mani
+      # salvate dell'Hand Simulator il 28/09). Il controllo legge il
+      # mapping.txt della release: se una di quelle classi e' stata toccata,
+      # fallisce e dice quale -keep aggiungere.
+      - name: Verifica R8 sulle classi lette per reflection
+        run: ./gradlew :app:verifyR8Reflection --no-daemon --stacktrace
+
       - name: Upload Test Reports
         if: always()
         uses: actions/upload-artifact@v6
