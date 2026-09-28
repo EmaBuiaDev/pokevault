@@ -193,7 +193,7 @@ fun AddTournamentScreen(
                     onValueChange = {},
                     readOnly = true,
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showFormatDropdown) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     colors = tournamentTextFieldColors(),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -288,7 +288,7 @@ fun AddTournamentScreen(
                                 }
                             } else null,
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showDeckDropdown) },
-                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                             colors = tournamentTextFieldColors(),
                             shape = RoundedCornerShape(12.dp)
                         )

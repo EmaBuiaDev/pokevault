@@ -331,7 +331,7 @@ fun FormDropdown(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(AppColors.card)
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                     .clickable { expanded = true }
                     .padding(horizontal = 14.dp, vertical = 14.dp)
             ) {

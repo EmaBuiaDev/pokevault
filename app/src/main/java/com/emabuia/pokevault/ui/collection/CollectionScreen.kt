@@ -1099,6 +1099,10 @@ private fun FilterSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = AppColors.surface,
+        // Solo il margine in basso: con quello in alto, che da Material3 1.4
+        // cresce quando il pannello sale sotto la status bar, il contenuto al
+        // 92% si accorcia e il pannello oscilla senza fermarsi (vedi DeckLabScreen).
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
         dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.textMuted.copy(alpha = 0.45f)) }
     ) {
         Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f)) {

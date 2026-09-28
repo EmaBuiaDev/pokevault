@@ -605,7 +605,7 @@ fun CardDetailScreen(
                                     readOnly = true,
                                     label = { Text(AppLocale.gradingAgency, fontSize = 10.sp) },
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedGrading) },
-                                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedTextColor = AppColors.textPrimary, 
                                         unfocusedTextColor = AppColors.textPrimary,

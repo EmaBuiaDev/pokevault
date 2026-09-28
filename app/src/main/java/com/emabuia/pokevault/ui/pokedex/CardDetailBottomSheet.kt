@@ -1127,7 +1127,7 @@ fun OptionSelector(
                 // Vedi [FIELD_BORDER_ALPHA]: `surface` qui sparirebbe col tema chiaro.
                 .background(AppColors.background)
                 .border(1.dp, AppColors.textMuted.copy(alpha = FIELD_BORDER_ALPHA), RoundedCornerShape(12.dp))
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .clickable { expanded = true }
                 .padding(horizontal = 12.dp, vertical = 13.dp)
         ) {
