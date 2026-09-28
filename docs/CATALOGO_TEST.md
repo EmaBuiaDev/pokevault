@@ -133,11 +133,11 @@ invece di lasciar passare una release senza aver provato niente.
 - **Un 404 resta nella cache del worker per 24 ore.** Un'immagine caricata da
   poco può risultare mancante: il livello 3 lo segnala come avviso quando su
   R2 il file c'è ma il worker risponde 404.
-- **I test strumentati di `android-advanced-tests.yml` non girano davvero.**
-  In `app/build.gradle.kts` manca `testInstrumentationRunner`, quindi l'APK
-  di test usa il vecchio `android.test.InstrumentationTestRunner`, che non
-  esegue i test JUnit4. Quel job non è bloccante e nessuno se n'era accorto.
-  I test di integrazione qui sopra non ne hanno bisogno (usano Robolectric).
+- **I test strumentati di `android-advanced-tests.yml` non giravano davvero**
+  (mancava `testInstrumentationRunner`). Chiuso il 28/09/2026: il workflow è
+  stato cancellato, il segnaposto `ComposeUITest` pure, e il test di `SetDao`
+  è diventato `SetDaoTest` con Robolectric. I test di integrazione qui sopra
+  non ne avevano bisogno (usano Robolectric).
 
 ## Cosa hanno trovato al primo giro (27/09/2026)
 
