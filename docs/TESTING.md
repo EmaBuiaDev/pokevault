@@ -54,21 +54,22 @@ Da Android Studio: click destro sulla classe o sul singolo metodo di test → *R
 
 ## CI su GitHub Actions
 
-Quattro workflow di test, tutti in `.github/workflows/`. Cosa verifica ognuno
+Tre workflow di test, tutti in `.github/workflows/`. Cosa verifica ognuno
 dei test prima di una release è in [CATALOGO_TEST.md](CATALOGO_TEST.md).
 
 | Workflow | Job | Trigger |
 |---|---|---|
 | `android-tests.yml` | `test` (unit test) | push su `master`, `R*`, `release/**`, `feature/**`, `fix/**`, `claude/**`; PR verso `master`/`release/**` |
-| `android-advanced-tests.yml` | `unit-tests`, `instrumented-tests`, `lint-analysis`, `build` | push/PR su `master`/`release/**`; `workflow_dispatch`; schedule giornaliero |
 | `test-integrazione.yml` | `integrazione` (collezione e import deck sull'emulatore Firebase) | push su `R*`, `release/**`; PR verso `master`/`release/**`; `workflow_dispatch` |
 | `verifica-catalogo.yml` | `verifica` (loghi, immagini e prezzi sul worker di produzione) | ogni giorno alle 07:00 UTC; push su `R*`, `release/**`; `workflow_dispatch` |
 
-I due workflow hanno una portata diversa di proposito: i test unitari sono
-veloci e girano su tutti i branch su cui si lavora, mentre quello avanzato
-accende un emulatore per i test strumentati e resta un cancello di
-integrazione. Per lanciarlo a mano su un branch qualsiasi: tab *Actions* →
-*Advanced Android Testing with Coverage* → *Run workflow*.
+Non ci sono piu' test strumentati (androidTest) ne' un workflow che accenda
+un emulatore Android: `android-advanced-tests.yml` (creato il 05/05/2026) e'
+stato cancellato il 28/09/2026. Era disattivato a mano da maggio, e i suoi
+test strumentati non giravano comunque (mancava `testInstrumentationRunner`).
+L'unico test strumentato utile, quello di `SetDao`, e' diventato `SetDaoTest`
+con Robolectric e gira in `android-tests.yml`. Il report di copertura
+(`jacocoTestProdDebugUnitTestReport`) si lancia in locale.
 
 **Storia, per capire le diff vecchie**: fino al 20/09/2026 entrambi filtravano
 su `main` e `develop`, due branch che in questo repo non sono mai esistiti (il
@@ -81,8 +82,8 @@ usava inoltre JDK 11, incompatibile con AGP 8.13.2 (il task allora invocato,
 Prima di fidarsi di un verde CI, vale comunque la pena verificare nel tab
 *Actions* che il workflow sia effettivamente partito.
 
-Ogni run produce artifact scaricabili dal tab *Actions* → run → *Artifacts*:
-`unit-test-reports`, `instrumented-test-reports`, `lint-report`, `debug-apk`.
+I run dei test unitari producono l'artifact `unit-test-reports`, scaricabile
+dal tab *Actions* → run → *Artifacts*.
 
 ### Branch protection (setup una tantum, lato repository GitHub)
 

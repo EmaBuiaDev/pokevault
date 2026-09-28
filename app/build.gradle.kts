@@ -288,6 +288,8 @@ jacoco {
  * AGP non li crea da solo per variante. Di conseguenza
  * `jacocoTestDebugUnitTestReport`, invocato da android-advanced-tests.yml,
  * non esisteva e quel workflow falliva prima ancora di eseguire i test.
+ * Quel workflow e' stato cancellato il 28/09/2026 (era disattivato da maggio):
+ * il report resta per chi lo vuole lanciare in locale.
  *
  * Dall'introduzione dei flavor `prod`/`staging` la variante si chiama
  * prodDebug: `testDebugUnitTest` non esiste piu' (AGP genera un task per
