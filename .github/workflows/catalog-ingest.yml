@@ -50,16 +50,51 @@ jobs:
         # mismatch, but the step and the whole run still showed "success".
         run: |
           set -o pipefail
-          node scripts/discover-new-sets.mjs --ingest | tee ingest-output.log
+          node scripts/discover-new-sets.mjs --ingest --ingested-list=ingested-sets.txt | tee ingest-output.log
 
+      # L'ingest scrive nome, tipo, PS, stadio e attacchi, ma non rarita' e
+      # illustratore: senza questi due passi ogni set nuovo nasceva con le
+      # stelle verdi "Altro" e fuori dall'album per illustratore, finche'
+      # qualcuno non lanciava i backfill a mano. Girano solo sui set importati
+      # in questa run (quasi sempre nessuno) e scrivono solo i campi vuoti.
+      # Gli script non escono con errore se un set fallisce: lo dice il loro
+      # riepilogo, e qui lo si trasforma in un passo rosso.
+      - name: Backfill rarity of the ingested sets
+        id: rarity
+        if: ${{ !cancelled() && steps.ingest.outcome == 'success' && hashFiles('pokevault-proxy-worker/ingested-sets.txt') != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -o pipefail
+          SETS=$(cat ingested-sets.txt)
+          if [ -z "$SETS" ]; then echo "Nessun set importato, niente da fare"; exit 0; fi
+          node scripts/backfill-rarity-tcgdex.mjs $SETS --only-missing --apply | tee rarity-output.log
+          ! grep -q "Espansioni con errore" rarity-output.log
+
+      - name: Backfill illustrator of the ingested sets
+        id: illustrator
+        if: ${{ !cancelled() && steps.ingest.outcome == 'success' && hashFiles('pokevault-proxy-worker/ingested-sets.txt') != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -o pipefail
+          SETS=$(cat ingested-sets.txt)
+          if [ -z "$SETS" ]; then echo "Nessun set importato, niente da fare"; exit 0; fi
+          node scripts/backfill-illustratore-tcgdex.mjs $SETS --apply | tee illustrator-output.log
+          ! grep -q "Espansioni con errore" illustrator-output.log
+
+      # Parte anche se un backfill e' fallito: l'import e' comunque avvenuto,
+      # e la issue e' il posto dove lo si viene a sapere.
       - name: Open an issue if a new set was ingested
-        if: success()
+        if: always() && steps.ingest.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if grep -q "Set DAVVERO nuovi (usciti dopo" ingest-output.log && \
              ! grep -q "Set DAVVERO nuovi (usciti dopo .*: 0" ingest-output.log; then
             SUMMARY=$(grep -A2 "Set DAVVERO nuovi" ingest-output.log | head -3)
+            RARITY=$( { grep -E "^\[|Riepilogo|Carte totali|Espansioni con errore" rarity-output.log 2>/dev/null || echo "non eseguito"; } | head -20)
+            ILLUSTRATOR=$( { grep -E "^\[|Riepilogo|Carte totali|Espansioni con errore" illustrator-output.log 2>/dev/null || echo "non eseguito"; } | head -20)
             gh issue create \
               --title "Catalogo: nuova espansione rilevata e importata" \
               --body "Il job schedulato ha trovato e importato almeno un'espansione nuova.
@@ -68,6 +103,16 @@ jobs:
           $SUMMARY
           \`\`\`
 
-          Vedi il log completo nella run di Actions per i dettagli (copertura immagini, published/unpublished)." \
+          Backfill rarita' (esito: ${{ steps.rarity.outcome }}):
+          \`\`\`
+          $RARITY
+          \`\`\`
+
+          Backfill illustratore (esito: ${{ steps.illustrator.outcome }}):
+          \`\`\`
+          $ILLUSTRATOR
+          \`\`\`
+
+          Vedi il log completo nella run di Actions per i dettagli (copertura immagini, published/unpublished, carte rimaste senza rarita')." \
               --repo "${{ github.repository }}" || true
           fi

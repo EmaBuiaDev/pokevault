@@ -18,8 +18,11 @@
 //   node scripts/discover-new-sets.mjs --ingest        (list, then run
 //                                                        ingest-tcgdex-set.mjs
 //                                                        --apply on each)
+//   ... --ingested-list=<file>                          (scrive nel file i set
+//                                                        importati con successo)
 
 import { spawn } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -95,6 +98,8 @@ async function getTcgdexReleaseDate(setId) {
 
 async function main() {
   const ingest = process.argv.includes('--ingest');
+  const listFlag = process.argv.find((a) => a.startsWith('--ingested-list='));
+  const ingestedListPath = listFlag ? path.resolve(listFlag.slice('--ingested-list='.length)) : null;
 
   console.log('Recupero elenco set da D1...');
   const d1Ids = await getD1ExpansionIds();
@@ -133,13 +138,23 @@ async function main() {
   }
 
   console.log('\n=== Ingest automatico dei set nuovi ===');
+  const ingested = [];
   for (const setId of newSets) {
     console.log(`\n--- ${setId} ---`);
     try {
       await runNode(['scripts/ingest-tcgdex-set.mjs', setId, '--apply']);
+      ingested.push(setId);
     } catch (err) {
       console.error(`Ingest fallito per ${setId}: ${err.message}`);
     }
+  }
+
+  // I set appena importati, uno per riga, per i backfill che catalog-ingest.yml
+  // lancia dopo: l'ingest non scrive rarita' e illustratore, e senza questo
+  // elenco i backfill dovrebbero girare su tutto il catalogo.
+  if (ingestedListPath) {
+    await writeFile(ingestedListPath, ingested.map((id) => `${id}\n`).join(''), 'utf8');
+    console.log(`\nSet importati scritti in ${ingestedListPath}: ${ingested.length}`);
   }
 }
 
