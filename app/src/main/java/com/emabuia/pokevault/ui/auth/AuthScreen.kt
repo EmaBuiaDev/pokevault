@@ -282,21 +282,27 @@ fun AuthScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
-
-                PrimaryAuthButton(
-                    text = when {
-                        isLoading -> AppLocale.loadingAuth
-                        isLoginMode -> AppLocale.loginButton
-                        else -> AppLocale.registerButton
-                    },
-                    isLoading = isLoading,
-                    modifier = Modifier.enterItem(appeared, 4),
-                    onClick = submit
-                )
-
                 Spacer(modifier = Modifier.height(16.dp))
             }
+
+            // Il tasto principale sta fuori dallo scorrimento, come Google sotto.
+            // Dentro, in "Unisciti" il campo del nome in piu' allungava il modulo
+            // oltre lo spazio disponibile e "CREA PROFILO" restava tagliato a meta'
+            // sul bordo dell'area che scorre: raggiungibile, ma sembrava rotto.
+            // Qui e' sempre intero, e con la tastiera aperta resta sopra di lei.
+            PrimaryAuthButton(
+                text = when {
+                    isLoading -> AppLocale.loadingAuth
+                    isLoginMode -> AppLocale.loginButton
+                    else -> AppLocale.registerButton
+                },
+                isLoading = isLoading,
+                modifier = Modifier
+                    .enterItem(appeared, 4)
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 8.dp, bottom = 16.dp),
+                onClick = submit
+            )
 
             // Google sta fuori dallo scorrimento: e' sempre in vista, qualunque sia
             // l'altezza del telefono o la modalita' scelta. Con la tastiera aperta
