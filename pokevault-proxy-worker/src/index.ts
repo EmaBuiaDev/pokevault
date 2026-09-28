@@ -657,6 +657,13 @@ function buildItalianCardKeyCandidates(prefix: string, setCode: string, cardNumb
 function buildItalianSetLogoCandidates(prefix: string, setCode: string): string[] {
   const basePath = `${prefix}/${setCode}`;
   return [
+    // WebP first, same reason as the card candidates: the 28/09/2026 pass
+    // re-encoded 127 of the 132 logos as near-lossless WebP (max 800px wide,
+    // 12.9 MB -> 5.9 MB in total) and uploaded them next to the PNGs, which
+    // stay as the fallback. The 5 left as PNG only were already smaller that
+    // way, and a logo added later by backfill-set-logos-tcgdex.mjs (PNG) is
+    // still found below.
+    `${basePath}/logo.webp`,
     `${basePath}/set-logo.png`,
     `${basePath}/set_logo.png`,
     `${basePath}/logo.png`,
