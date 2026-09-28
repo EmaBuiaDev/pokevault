@@ -1,38 +1,44 @@
 package com.emabuia.pokevault.data.local
 
-import android.content.Context
+import android.app.Application
 import androidx.room.Room
-import androidx.test.core.app.ApplicationProvider
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.Assert.*
 import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 /**
- * Instrumented integration tests per SetDao
+ * Integration tests per SetDao, sul database Room vero in memoria.
  *
- * Usa AndroidJUnit4Runner e il database vero in memoria
+ * Era un test strumentato (androidTest), ma nessuno lo lanciava: mancava il
+ * testInstrumentationRunner e l'unico workflow che lo avrebbe eseguito e'
+ * disattivato. Con Robolectric, come [CardDaoTest], gira a ogni push insieme
+ * agli altri test unitari, senza telefono ne' emulatore.
+ *
  * Testa:
  * - Inserimento/aggiornamento set
  * - Recupero set
  * - Cancellazione dati scaduti
  */
-@RunWith(AndroidJUnit4::class)
-class SetDaoInstrumentedTest {
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], application = Application::class)
+class SetDaoTest {
 
     private lateinit var database: PokeVaultDatabase
     private lateinit var setDao: SetDao
 
     @Before
     fun setup() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val app = RuntimeEnvironment.getApplication()
         database = Room.inMemoryDatabaseBuilder(
-            context,
+            app,
             PokeVaultDatabase::class.java
-        ).build()
+        ).allowMainThreadQueries().build()
 
         setDao = database.setDao()
     }
