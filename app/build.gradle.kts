@@ -339,3 +339,131 @@ tasks.register<JacocoReport>("jacocoTestProdDebugUnitTestReport") {
         )
     )
 }
+
+/**
+ * Le classi lette per reflection devono uscire da R8 col loro nome.
+ *
+ * Gson e Firestore riempiono gli oggetti leggendo i nomi dei campi. Una classe
+ * che R8 rinomina o pota esce da una release verde e poi, sul telefono, arriva
+ * con i campi a null o sparisce: e' successo ai codici regalo (16/09/2026) e
+ * alle mani salvate dell'Hand Simulator (trovato il 28/09/2026). Nessun
+ * compilatore e nessun test sul sorgente se ne accorge: lo dice solo il
+ * mapping.txt, ed e' quello che questo task legge.
+ *
+ * Le classi da controllare si ricavano dal sorgente: i tipi dentro
+ * `TypeToken<...>`, quelli passati a `fromJson(..., X::class.java)` e a
+ * `toObject(X::class.java)`, e poi, di ognuno, i tipi dei campi del
+ * costruttore, che il lettore riempie allo stesso modo. Per ognuna il mapping
+ * deve avere la riga `nome -> nome:`, cioe' tenuta e non rinominata.
+ */
+tasks.register("verifyR8Reflection") {
+    group = "verification"
+    description = "Controlla sul mapping di R8 che le classi lette per reflection non siano rinominate o potate."
+    dependsOn("minifyProdReleaseWithR8")
+
+    val sourceRoot = file("src/main/java")
+    val mappingFile = layout.buildDirectory.file("outputs/mapping/prodRelease/mapping.txt")
+    inputs.dir(sourceRoot)
+    inputs.file(mappingFile)
+
+    doLast {
+        val notDomain = setOf(
+            "List", "MutableList", "Set", "MutableSet", "Map", "MutableMap", "Array",
+            "String", "Int", "Long", "Double", "Float", "Boolean", "Any", "Unit", "Timestamp"
+        )
+        val typeNames = Regex("""\b([A-Z][A-Za-z0-9_]*)\b""")
+
+        // Nome semplice -> nomi completi (con $ per le classi annidate), e il
+        // testo dei parametri del costruttore primario di ogni classe.
+        val fqcnBySimple = mutableMapOf<String, MutableList<String>>()
+        val ctorParamsByFqcn = mutableMapOf<String, String>()
+        val usedNames = mutableSetOf<String>()
+        // class, object e interface: anche un object o un'interfaccia puo'
+        // contenere classi annidate (GiftCodeRepository e' un object).
+        val declaration = Regex("""^(\s*)(?:[a-z]+\s+)*(?:class|object|interface)\s+([A-Z][A-Za-z0-9_]*)""")
+
+        sourceRoot.walkTopDown().filter { it.extension == "kt" }.forEach { file ->
+            val text = file.readText()
+            val pkg = Regex("""^package\s+([\w.]+)""", RegexOption.MULTILINE).find(text)?.groupValues?.get(1) ?: ""
+            // Pila delle dichiarazioni aperte, per indentazione: il nome
+            // completo di una classe annidata e' Esterna$Interna nel bytecode.
+            val enclosing = ArrayDeque<Pair<Int, String>>()
+            var offset = 0
+            text.lines().forEach { line ->
+                declaration.find(line)?.let { m ->
+                    val indent = m.groupValues[1].length
+                    val name = m.groupValues[2]
+                    while (enclosing.isNotEmpty() && enclosing.last().first >= indent) enclosing.removeLast()
+                    val fqcn = "$pkg." + (enclosing.map { it.second } + name).joinToString("$")
+                    enclosing.addLast(indent to name)
+                    fqcnBySimple.getOrPut(name) { mutableListOf() } += fqcn
+                    // Parametri del costruttore: dalla prima "(" dopo il nome
+                    // alla sua ")" corrispondente, se la classe ne ha una.
+                    val start = offset + m.range.last + 1
+                    val open = text.indexOf('(', start)
+                    val brace = text.indexOf('{', start).let { if (it < 0) Int.MAX_VALUE else it }
+                    val eol = text.indexOf('\n', start).let { if (it < 0) text.length else it }
+                    if (open in start..minOf(brace, eol)) {
+                        var depth = 0
+                        var i = open
+                        while (i < text.length) {
+                            if (text[i] == '(') depth++
+                            if (text[i] == ')') { depth--; if (depth == 0) break }
+                            i++
+                        }
+                        ctorParamsByFqcn[fqcn] = text.substring(open + 1, i.coerceAtMost(text.length))
+                    }
+                }
+                offset += line.length + 1
+            }
+
+            Regex("""TypeToken<(.+?)>\s*\(\)""").findAll(text).forEach { t ->
+                typeNames.findAll(t.groupValues[1]).forEach { usedNames += it.groupValues[1] }
+            }
+            Regex("""fromJson\s*\([^;]*?,\s*([A-Z][A-Za-z0-9_]*)::class\.java""").findAll(text).forEach { usedNames += it.groupValues[1] }
+            Regex("""toObjects?\s*\(\s*([A-Z][A-Za-z0-9_]*)::class\.java""").findAll(text).forEach { usedNames += it.groupValues[1] }
+        }
+
+        // Chiusura sui tipi dei campi: una classe letta per reflection porta
+        // con se' quelle dei suoi campi.
+        val toCheck = sortedSetOf<String>()
+        val queue = ArrayDeque(usedNames.filter { it !in notDomain })
+        while (queue.isNotEmpty()) {
+            val simple = queue.removeFirst()
+            val fqcns = fqcnBySimple[simple] ?: continue // tipo di libreria
+            fqcns.forEach { fqcn ->
+                if (toCheck.add(fqcn)) {
+                    val params = ctorParamsByFqcn[fqcn] ?: return@forEach
+                    Regex("""va[lr]\s+\w+\s*:\s*([^=,\n]+)""").findAll(params).forEach { p ->
+                        typeNames.findAll(p.groupValues[1]).map { it.groupValues[1] }
+                            .filter { it !in notDomain }
+                            .forEach { queue.addLast(it) }
+                    }
+                }
+            }
+        }
+
+        val mapping = mappingFile.get().asFile
+        check(mapping.exists()) { "Manca ${mapping.path}: il task dipende da minifyProdReleaseWithR8" }
+        val classLines = mapping.useLines { lines ->
+            lines.filter { !it.startsWith(" ") && !it.startsWith("#") && it.endsWith(":") }
+                .associate { it.substringBefore(" -> ") to it.substringAfter(" -> ").removeSuffix(":") }
+        }
+
+        val problems = toCheck.mapNotNull { fqcn ->
+            when (val mapped = classLines[fqcn]) {
+                null -> "$fqcn: potata da R8, non c'e' nel mapping"
+                fqcn -> null
+                else -> "$fqcn: rinominata in $mapped"
+            }
+        }
+        if (problems.isNotEmpty()) {
+            throw GradleException(
+                "Classi lette per reflection che R8 ha toccato (${problems.size} su ${toCheck.size}). " +
+                    "In release arriverebbero con i campi a null. Aggiungere un -keep in app/proguard-rules.pro:\n" +
+                    problems.joinToString("\n") { "  - $it" }
+            )
+        }
+        logger.lifecycle("verifyR8Reflection: ${toCheck.size} classi lette per reflection, tutte tenute col loro nome.")
+    }
+}

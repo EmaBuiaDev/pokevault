@@ -2,17 +2,28 @@ package com.emabuia.pokevault.data.simulator
 
 import android.content.Context
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import java.util.UUID
 
+/**
+ * Una mano problematica salvata, scritta in JSON con Gson nelle preferenze.
+ *
+ * Fino alla 3.1.5 questa classe era fuori dai package tenuti da
+ * proguard-rules.pro, e R8 ne rinominava i campi in `a`..`g`: il JSON sul
+ * telefono ha quelle chiavi (verificato sul mapping della 3.1.4, vc37, e
+ * della 3.1.5). Ora la classe e' tenuta e i campi si chiamano col loro nome;
+ * gli `alternate` servono a rileggere le mani salvate dalle versioni vecchie.
+ * Non toglierli finche' qualcuno puo' aggiornare da una di quelle.
+ */
 data class SavedProblemHand(
-    val id: String,
-    val deckId: String,
-    val deckName: String,
-    val cards: List<String>,
-    val tags: List<String>,
-    val note: String,
-    val createdAtMillis: Long
+    @SerializedName(value = "id", alternate = ["a"]) val id: String,
+    @SerializedName(value = "deckId", alternate = ["b"]) val deckId: String,
+    @SerializedName(value = "deckName", alternate = ["c"]) val deckName: String,
+    @SerializedName(value = "cards", alternate = ["d"]) val cards: List<String>,
+    @SerializedName(value = "tags", alternate = ["e"]) val tags: List<String>,
+    @SerializedName(value = "note", alternate = ["f"]) val note: String,
+    @SerializedName(value = "createdAtMillis", alternate = ["g"]) val createdAtMillis: Long
 )
 
 class HandSimulatorLocalStore(context: Context) {
