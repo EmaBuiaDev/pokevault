@@ -1,0 +1,48 @@
+name: Osserva listino Cardmarket
+
+# Solo osservazione, non usa i prezzi: misura se Cardmarket pubblica davvero
+# ogni giorno il listino pubblico (price_guide_6.json), prima di decidere se
+# farne la fonte dei prezzi al posto di PokeWallet.
+#
+# Legge i primi byte del file (createdAt) e l'intestazione Last-Modified, li
+# scrive nel Summary della run e fallisce se il file ha piu' di 26 ore: lo
+# storico e' l'elenco delle run nella tab Actions.
+#
+# Gira alle 09:30 UTC: il 30/09/2026 il file e' stato pubblicato alle 07:55
+# UTC. Le run pianificate partono solo da master.
+
+on:
+  schedule:
+    - cron: '30 9 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  osserva:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Data del listino
+        env:
+          URL: https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json
+        run: |
+          LAST_MODIFIED=$(curl -sfI "$URL" | grep -i '^last-modified:' | cut -d' ' -f2- | tr -d '\r')
+          CREATED_AT=$(curl -sf -r 0-200 "$URL" | grep -o '"createdAt":"[^"]*"' | cut -d'"' -f4)
+          if [ -z "$CREATED_AT" ]; then
+            echo "### Listino Cardmarket: file non raggiungibile o formato cambiato" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          AGE_H=$(( ( $(date -u +%s) - $(date -u -d "$CREATED_AT" +%s) ) / 3600 ))
+          {
+            echo "### Listino Cardmarket"
+            echo "| createdAt | Last-Modified | eta' |"
+            echo "|---|---|---|"
+            echo "| $CREATED_AT | $LAST_MODIFIED | ${AGE_H} h |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "createdAt=$CREATED_AT lastModified=$LAST_MODIFIED age=${AGE_H}h"
+          if [ "$AGE_H" -gt 26 ]; then
+            echo "Il listino non e' stato rinnovato: ha ${AGE_H} ore."
+            exit 1
+          fi
