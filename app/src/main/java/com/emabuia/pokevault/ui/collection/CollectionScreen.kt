@@ -272,11 +272,32 @@ fun CollectionScreen(
                     if (isSelectionMode) {
                         val allKeys = state.visibleGroups.map { it.key }.toSet()
                         val allSelected = allKeys.isNotEmpty() && selectedGroupKeys.containsAll(allKeys)
-                        IconButton(onClick = { selectedGroupKeys = if (allSelected) emptySet() else allKeys }) {
+                        // Con la scritta e non con la sola icona: il quadrato
+                        // tratteggiato di SelectAll non diceva a nessuno che da
+                        // qui si seleziona (e quindi si cancella) tutto. Stessa
+                        // pillola del menu di ordinamento.
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .padding(end = 12.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AppColors.searchBar)
+                                .clickable { selectedGroupKeys = if (allSelected) emptySet() else allKeys }
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
+                        ) {
                             Icon(
                                 imageVector = if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll,
-                                contentDescription = AppLocale.selectAll,
-                                tint = AppColors.textPrimary
+                                contentDescription = null,
+                                tint = AppColors.textSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                if (allSelected) AppLocale.deselectAll else AppLocale.selectAll,
+                                color = AppColors.textPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
                             )
                         }
                     } else {
