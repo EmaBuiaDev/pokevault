@@ -57,5 +57,13 @@ binding = "trade_db"
 database_name = "pokevault-trade-staging"
 database_id = "1fa0733d-144d-4acb-8925-397df933c138"
 
+# Il catalogo vero, ma solo in LETTURA: trade.ts ci fa una SELECT per sapere
+# quante carte ha ogni set (i "set quasi completi"). Nessuna rotta dello
+# staging ci scrive: TRADE_ONLY chiude tutte quelle del catalogo.
+[[env.staging.d1_databases]]
+binding = "pokevault_catalog"
+database_name = "pokevault-catalog"
+database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7"
+
 [env.staging.triggers]
 crons = []

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Solo per il flavor staging: TradeRadar e' in sviluppo e chiede la posizione
+    APPROSSIMATIVA (mai quella precisa, mai in background). Sta qui e non nel
+    manifest principale perche' l'app prod non deve chiedere niente di nuovo
+    finche' TradeRadar non esce: al lancio questo permesso si sposta in
+    src/main, insieme a Data Safety e informativa privacy.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+</manifest>

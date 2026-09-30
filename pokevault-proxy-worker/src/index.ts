@@ -2200,6 +2200,15 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestUrl = new URL(request.url);
 
+    // Il Worker di staging di TradeRadar risponde SOLO a /v1/trade/*, e deve
+    // deciderlo per primo: vede il catalogo D1 (in lettura, per trade.ts), e
+    // se billing o regali passassero di qui un account di test potrebbe
+    // scrivere entitlement nel database vero.
+    if (env.TRADE_ONLY === '1') {
+      const tradeOnly = await handleTradeRequest(request, requestUrl.pathname, env);
+      return tradeOnly ?? new Response('Not found', { status: 404 });
+    }
+
     // Le rotte di billing e regalo usano POST: vanno risolte PRIMA del filtro
     // sui GET, e non passano mai dalla cache.
     const billingResponse = await handleBillingRequest(request, requestUrl.pathname, env);
@@ -2208,14 +2217,10 @@ export default {
     const giftResponse = await handleGiftRequest(request, requestUrl.pathname, env);
     if (giftResponse) return giftResponse;
 
+    // In produzione TRADE_ENABLED non c'e': questa restituisce null e /v1/trade/*
+    // prosegue fino al 404 di sempre.
     const tradeResponse = await handleTradeRequest(request, requestUrl.pathname, env);
     if (tradeResponse) return tradeResponse;
-
-    // Il Worker di staging di TradeRadar non ha catalogo, cache ne' chiave
-    // PokeWallet: tutto il resto deve fermarsi qui, non arrivare a meta' strada.
-    if (env.TRADE_ONLY === '1') {
-      return new Response('Not found', { status: 404 });
-    }
 
     // Only cache GET requests
     if (request.method !== 'GET') {
