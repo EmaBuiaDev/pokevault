@@ -850,12 +850,32 @@ private fun BottomBarSpacing(content: @Composable () -> Unit) {
  * la' svuoterebbe la pila invece di tornare alla Home. Con saveState e
  * restoreState ogni tab si ritrova dove era stata lasciata, e la pila non
  * cresce mai oltre Home + tab corrente.
+ *
+ * La Home pero' non si raggiunge con navigate: ci si torna togliendo quello che
+ * le sta sopra. Un popUpTo non inclusivo con saveState, oltre alle schermate
+ * tolte, lega lo stato salvato anche alla destinazione del popUpTo, cioe' alla
+ * Home stessa (NavController.popBackStackInternal, Navigation 2.7.7). Il
+ * navigate verso la Home con restoreState trovava quindi uno stato "della
+ * Home", lo ripristinava, e rimetteva in cima la tab da cui si stava uscendo:
+ * il tocco su Home non faceva niente. Succedeva a volte si' e a volte no
+ * perche' il legame si scrive solo se la Home non ne ha gia' uno, e un
+ * passaggio Home -> tab dalla barra gliene lascia uno vuoto.
  */
-private fun NavHostController.navigateToBottomTab(tab: BottomTab) {
+internal fun NavHostController.navigateToBottomTab(tab: BottomTab) {
     // Confronto sulla parte prima di "?": le rotte con argomenti opzionali
     // (il Pokedex) hanno come pattern "pokedex?search={search}", che non
     // sarebbe mai uguale alla rotta nuda della voce di barra.
     if (currentDestination?.route?.substringBefore('?') == tab.route) return
+
+    if (tab == BottomTab.HOME) {
+        // saveState resta: la tab che si lascia deve ritrovarsi com'era.
+        // Il navigate e' solo il ripiego per una pila senza Home, che oggi
+        // non capita.
+        if (!popBackStack(Routes.HOME, inclusive = false, saveState = true)) {
+            navigate(Routes.HOME) { launchSingleTop = true }
+        }
+        return
+    }
 
     navigate(tab.route) {
         popUpTo(Routes.HOME) {

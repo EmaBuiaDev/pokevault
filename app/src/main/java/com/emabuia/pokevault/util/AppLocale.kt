@@ -337,7 +337,8 @@ object AppLocale {
     val retry: String get() = if (isItalian) "Riprova" else "Retry"
     val loading: String get() = if (isItalian) "Caricamento..." else "Loading..."
     val confirm: String get() = if (isItalian) "Conferma" else "Confirm"
-    val selectAll: String get() = if (isItalian) "Seleziona tutto" else "Select all"
+    val selectAll: String get() = if (isItalian) "Seleziona tutte" else "Select all"
+    val deselectAll: String get() = if (isItalian) "Deseleziona" else "Deselect all"
     val changeGridDensity: String get() = if (isItalian) "Cambia densita griglia" else "Change grid density"
     val changeView: String get() = if (isItalian) "Cambia vista" else "Change view"
     val filters: String get() = if (isItalian) "Filtri" else "Filters"
@@ -1613,7 +1614,7 @@ object AppLocale {
     val privacyPolicyUrl: String get() = "https://emabuiadev.github.io/pokevault/privacy-policy"
     val termsUrl: String get() = "https://emabuiadev.github.io/pokevault/terms"
     val copyrightUrl: String get() = "https://emabuiadev.github.io/pokevault/copyright"
-    val tikTokUrl: String get() = "https://www.tiktok.com/@pokemondo22?_r=1&_t=ZN-95pJ7LLQ7eh"
+    val tikTokUrl: String get() = "https://www.tiktok.com/@pokevault94"
 
     val ratingPromptTitle: String get() = if (isItalian) "Un Poké-messaggio per te" else "A Poké message for you"
     val ratingPromptTagline: String get() = if (isItalian)
@@ -1690,9 +1691,9 @@ object AppLocale {
     val termsSubtitle: String get() = if (isItalian) "Condizioni d'uso dell'app" else "App usage conditions"
     val tikTokLabel: String get() = if (isItalian) "Seguici su TikTok" else "Follow us on TikTok"
     val tikTokSubtitle: String get() = if (isItalian)
-        "Se vuoi essere aggiornato nel mondo Pokemon, seguici su @pokemondo22"
+        "Se vuoi essere aggiornato nel mondo Pokemon, seguici su @pokevault94"
     else
-        "Stay updated on the Pokemon world with @pokemondo22"
+        "Stay updated on the Pokemon world with @pokevault94"
     val dangerZone: String get() = if (isItalian) "Zona Pericolosa" else "Danger Zone"
     val deleteAccountButton: String get() = if (isItalian) "Elimina Account" else "Delete Account"
     val deleteAccountTitle: String get() = if (isItalian) "Eliminare l'account?" else "Delete account?"
