@@ -9,6 +9,7 @@
 
 import { handleBillingRequest } from './billing';
 import { handleGiftRequest } from './gift';
+import { handleTradeRequest } from './trade';
 
 interface Env {
   CACHE: KVNamespace;
@@ -36,6 +37,13 @@ interface Env {
   // quindi cambiarlo cambia il codice di tutti.
   GIFT_CODE_SECRET?: string;
   GIFT_ADMIN_SECRET?: string;
+
+  // TradeRadar (vedi src/trade.ts). In produzione queste tre non esistono e il
+  // modulo resta spento; oggi le imposta solo [env.staging] in wrangler.toml.
+  TRADE_ENABLED?: string;
+  /** "1" su un Worker che serve SOLO TradeRadar: ogni altra rotta e' 404. */
+  TRADE_ONLY?: string;
+  trade_db?: D1Database;
 }
 
 interface CachedResponse {
@@ -2199,6 +2207,15 @@ export default {
 
     const giftResponse = await handleGiftRequest(request, requestUrl.pathname, env);
     if (giftResponse) return giftResponse;
+
+    const tradeResponse = await handleTradeRequest(request, requestUrl.pathname, env);
+    if (tradeResponse) return tradeResponse;
+
+    // Il Worker di staging di TradeRadar non ha catalogo, cache ne' chiave
+    // PokeWallet: tutto il resto deve fermarsi qui, non arrivare a meta' strada.
+    if (env.TRADE_ONLY === '1') {
+      return new Response('Not found', { status: 404 });
+    }
 
     // Only cache GET requests
     if (request.method !== 'GET') {

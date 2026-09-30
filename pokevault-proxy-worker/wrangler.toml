@@ -31,3 +31,31 @@ IT_CATALOG_KEY = "it/catalog/cards.cleaned.json"
 # Triggers for the Worker
 [triggers]
 crons = ["*/30 * * * *"]
+
+# ── TradeRadar in staging ───────────────────────────────────────────────────
+# Un Worker a parte (pokevault-trade-staging), deployato con
+#   npx wrangler deploy --env staging
+# Stesso codice, ma di suo ha solo TradeRadar: TRADE_ONLY chiude ogni altra
+# rotta, e non riceve nessuna delle risorse qui sopra -- in wrangler vars e
+# binding non si ereditano negli ambienti, quindi niente KV della cache,
+# niente R2, niente catalogo D1, niente chiave PokeWallet.
+# I cron invece si erediterebbero: la lista vuota e' li' apposta, altrimenti
+# lo staging ricostruirebbe lo snapshot prezzi consumando le chiamate
+# PokeWallet della produzione.
+# L'ID token si verifica contro il progetto Firebase di staging, quindi da qui
+# passano solo gli account di test dell'app staging.
+[env.staging]
+name = "pokevault-trade-staging"
+
+[env.staging.vars]
+TRADE_ENABLED = "1"
+TRADE_ONLY = "1"
+FIREBASE_PROJECT_ID = "pokevault-staging"
+
+[[env.staging.d1_databases]]
+binding = "trade_db"
+database_name = "pokevault-trade-staging"
+database_id = "1fa0733d-144d-4acb-8925-397df933c138"
+
+[env.staging.triggers]
+crons = []

@@ -104,6 +104,7 @@ fun HomeScreen(
                         "competitive" -> Routes.COMPETITIVE
                         "collector_lab" -> Routes.ALBUM_LIST
                         "wishlist" -> Routes.WISHLIST_LIST
+                        "trade_radar" -> Routes.TRADE_RADAR
                         else -> Routes.HOME
                     }
                     onNavigate(route)

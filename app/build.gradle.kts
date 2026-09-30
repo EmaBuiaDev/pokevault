@@ -55,11 +55,23 @@ android {
             // Nessun suffisso, e va lasciato cosi': l'app su Play deve restare
             // esattamente com.emabuia.pokevault, altrimenti saltano insieme
             // billing, firma di Play e Google Sign-In.
+
+            // TradeRadar e' in sviluppo: in prod non esiste, ne' la tile ne'
+            // la rotta. TradeRadarFlagTest fallisce se qualcuno lo accende qui
+            // prima del lancio.
+            buildConfigField("Boolean", "TRADE_ENABLED", "false")
+            buildConfigField("String", "TRADE_API_URL", "\"\"")
         }
         create("staging") {
             dimension = "environment"
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
+
+            // Worker a parte (pokevault-trade-staging, vedi wrangler.toml):
+            // verifica i token del progetto Firebase di staging, quindi da qui
+            // passano solo gli account di test.
+            buildConfigField("Boolean", "TRADE_ENABLED", "true")
+            buildConfigField("String", "TRADE_API_URL", "\"https://pokevault-trade-staging.pokevault-emanu.workers.dev\"")
         }
     }
 

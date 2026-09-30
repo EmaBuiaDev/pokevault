@@ -82,6 +82,7 @@ import com.emabuia.pokevault.ui.deck.DeckLabScreen
 import com.emabuia.pokevault.ui.premium.GiftCodeScreen
 import com.emabuia.pokevault.ui.premium.PremiumScreen
 import com.emabuia.pokevault.ui.settings.SettingsScreen
+import com.emabuia.pokevault.ui.trade.TradeRadarScreen
 import com.emabuia.pokevault.ui.wishlist.WishlistDetailScreen
 import com.emabuia.pokevault.ui.wishlist.WishlistListScreen
 import com.emabuia.pokevault.viewmodel.AuthViewModel
@@ -132,6 +133,10 @@ object Routes {
     const val ADD_MATCH = "add_match/{tournamentId}?matchId={matchId}"
     const val GRADED = "graded"
     const val SETTINGS = "settings"
+
+    /** Registrata solo se BuildConfig.TRADE_ENABLED: oggi nel solo flavor staging. */
+    const val TRADE_RADAR = "trade_radar"
+
     const val PREMIUM = "premium"
     const val GIFT_CODES = "gift_codes"
     const val WISHLIST_LIST = "wishlist_list"
@@ -496,6 +501,16 @@ fun AppNavigation(
                 }
 
                 // ── Wishlist ──
+                // In prod la rotta non esiste proprio: nessun percorso, nemmeno
+                // un deep link, porta a TradeRadar prima del lancio. La costante di
+                // build (non TradeApi.isEnabled) fa si' che R8 tolga dall'APK prod
+                // anche la schermata: e' un if (false) che sparisce col suo contenuto.
+                if (BuildConfig.TRADE_ENABLED) {
+                    composable(Routes.TRADE_RADAR) {
+                        TradeRadarScreen(onBack = { navController.popBackStack() })
+                    }
+                }
+
                 composable(Routes.WISHLIST_LIST) {
                     WishlistListScreen(
                         onBack = { navController.popBackStack() },

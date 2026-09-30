@@ -25,6 +25,9 @@
 -keep class com.emabuia.pokevault.data.firebase.CollectionStats { *; }
 -keep class com.emabuia.pokevault.data.remote.** { *; }
 -keep class com.emabuia.pokevault.data.italian.** { *; }
+# TradeRadar: solo i DTO. Tenere tutto data.trade impedirebbe a R8 di togliere
+# TradeRadar dalla build prod, dove il flag e' spento.
+-keep class com.emabuia.pokevault.data.trade.dto.** { *; }
 
 # I DTO dei codici regalo stanno in data.billing, fuori dai package qui sopra.
 #

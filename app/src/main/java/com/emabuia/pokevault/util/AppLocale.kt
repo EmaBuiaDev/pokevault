@@ -1422,6 +1422,27 @@ object AppLocale {
     // Wishlist
     val wishlistTitle: String get() = if (isItalian) "Wishlist" else "Wishlist"
     val wishlistSubtitle: String get() = if (isItalian) "Le carte che ti mancano" else "The cards you are missing"
+
+    // TradeRadar: in sviluppo, visibile solo nell'app di staging.
+    val tradeRadarTitle: String get() = "TradeRadar"
+    val tradeRadarSubtitle: String get() = if (isItalian) "Scambia doppioni con chi è vicino" else "Trade duplicates with people nearby"
+    val tradeRadarPreview: String get() = if (isItalian)
+        "Anteprima di sviluppo, visibile solo nell'app di staging. Per ora controlla il collegamento al server degli scambi."
+    else
+        "Development preview, only in the staging app. For now it checks the connection to the trading server."
+    val tradeRadarChecking: String get() = if (isItalian) "Controllo il collegamento…" else "Checking the connection…"
+    fun tradeRadarConnected(uidPrefix: String, schemaVersion: Int?): String = if (isItalian)
+        "Collegato come $uidPrefix… (schema ${schemaVersion ?: "?"})"
+    else
+        "Connected as $uidPrefix… (schema ${schemaVersion ?: "?"})"
+    val tradeRadarUnauthorized: String get() = if (isItalian)
+        "Il server non riconosce l'account: serve un account del progetto di staging."
+    else
+        "The server does not recognise this account: a staging project account is needed."
+    fun tradeRadarUnavailable(httpCode: Int?): String = if (isItalian)
+        "Server non raggiungibile${httpCode?.let { " (HTTP $it)" } ?: ""}."
+    else
+        "Server unreachable${httpCode?.let { " (HTTP $it)" } ?: ""}."
     val wishlistCreate: String get() = if (isItalian) "Crea Wishlist" else "Create Wishlist"
     val wishlistEdit: String get() = if (isItalian) "Modifica Wishlist" else "Edit Wishlist"
     val wishlistName: String get() = if (isItalian) "Nome lista" else "List name"
