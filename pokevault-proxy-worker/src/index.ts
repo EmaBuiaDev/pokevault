@@ -224,6 +224,11 @@ const ITA_PRICE_MAX_PAGES_PER_SET = 4;
 // (set_code collides: PR, RR, BKP, CL...). Multiple ids merge sub-sets that the
 // catalog treats as one expansion (e.g. Generations + Radiant Collection).
 const ITA_EXPANSION_UPSTREAM_SET_IDS: Record<string, string[]> = {
+  // Both share set_code 30C upstream, so only the set_id tells them apart;
+  // the '30c' alias ends up on whichever runs last, and the app never looks
+  // prices up by it (it uses the expansion id).
+  '30th': ['24722'], // 30th Celebration
+  '30th-c': ['24837'], // 30th Celebration - Classic Collection
   bw1: ['1400'], // Black and White
   bw2: ['1424'], // Emerging Powers
   bw3: ['1385'], // Noble Victories
