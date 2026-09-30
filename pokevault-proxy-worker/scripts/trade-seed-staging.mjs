@@ -15,6 +15,8 @@
 //   A (Milano)          ha doppioni me02:1, me02:2; cerca sv01:5 in wishlist
 //   B (cella accanto)   ha doppioni sv01:5, me02:9; possiede me02:1
 //   C (Roma, lontano)   ha doppione sv01:5: non deve comparire per A
+//   In piu' A possiede 16 carte su 30 di 30th-c (oltre il 50%) e B ha un
+//   doppione di 30th-c:20: per A deve essere "cercata" col motivo "set".
 //
 // Attesi, per A: un solo match (B), reciproco, con sv01:5 "wanted"
 // (wishlist) da B, e me02:2 per B ("useful": B colleziona me02) mentre
@@ -70,8 +72,8 @@ const cellB = near ?? 'u0ndd';
 const cellC = 'sr2yk';
 
 const users = {
-  A: { cell: cellA, haves: [['me02:1', 1], ['me02:2', 1]], wants: ['sv01:5'], owned: ['me02:1', 'me02:2', 'me02:3'] },
-  B: { cell: cellB, haves: [['sv01:5', 1], ['me02:9', 2]], wants: [], owned: ['sv01:5', 'me02:9', 'me02:1', 'me02:4'] },
+  A: { cell: cellA, haves: [['me02:1', 1], ['me02:2', 1]], wants: ['sv01:5'], owned: ['me02:1', 'me02:2', 'me02:3', ...Array.from({ length: 16 }, (_, i) => `30th-c:${i + 1}`)] },
+  B: { cell: cellB, haves: [['sv01:5', 1], ['me02:9', 2], ['30th-c:20', 1]], wants: [], owned: ['sv01:5', 'me02:9', 'me02:1', 'me02:4', '30th-c:20'] },
   C: { cell: cellC, haves: [['sv01:5', 1]], wants: ['me02:1'], owned: ['sv01:5'] },
 };
 
@@ -95,7 +97,7 @@ for (const [name, user] of Object.entries(users)) {
 }
 
 const profileA = await api(tokens.A, 'GET', '/v1/trade/profile');
-check('profilo A con i conteggi', profileA.haves === 2 && profileA.wants === 1 && profileA.owned === 3, JSON.stringify(profileA));
+check('profilo A con i conteggi', profileA.haves === 2 && profileA.wants === 1 && profileA.owned === 19, JSON.stringify(profileA));
 
 const { matches } = await api(tokens.A, 'GET', '/v1/trade/matches');
 check('A vede un solo vicino (C a Roma escluso)', matches.length === 1, matches.map((m) => m.nickname).join(', '));
@@ -107,6 +109,8 @@ check('B da\' sv01:5 come cercata (wishlist)', sv015?.level === 'wanted' && sv01
 const me029 = b.theyGive.find((i) => i.key === 'me02:9');
 check('B da\' me02:9 come utile (A colleziona me02)', me029?.level === 'useful', JSON.stringify(me029));
 check('A non offre a B me02:1, che B ha gia\'', !b.iGive.some((i) => i.key === 'me02:1'));
+const set20 = b.theyGive.find((i) => i.key === '30th-c:20');
+check('B da\' 30th-c:20 come cercata: A ha oltre meta\' del set', set20?.level === 'wanted' && set20?.reason === 'set', JSON.stringify(set20));
 const me022 = b.iGive.find((i) => i.key === 'me02:2');
 check('A offre a B me02:2 come utile', me022?.level === 'useful', JSON.stringify(me022));
 
