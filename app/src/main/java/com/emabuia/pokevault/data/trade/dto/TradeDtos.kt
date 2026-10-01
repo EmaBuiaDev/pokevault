@@ -48,7 +48,10 @@ data class TradeProfilePayload(
     @SerializedName("leaderboardOptIn") val leaderboardOptIn: Boolean? = null,
     /** Il Pokemon del podio (numero di Pokedex), null = l'iniziale. */
     @SerializedName("avatar") val avatar: Int? = null,
-    @SerializedName("avatarAnimated") val avatarAnimated: Boolean? = null
+    @SerializedName("avatarAnimated") val avatarAnimated: Boolean? = null,
+    /** Sospeso fino a (ms), e perche': no_show | reports | admin. Null se non lo e' (fase 2f). */
+    @SerializedName("suspendedUntil") val suspendedUntil: Long? = null,
+    @SerializedName("suspensionReason") val suspensionReason: String? = null
 )
 
 data class TradeHaveItem(
@@ -152,6 +155,8 @@ data class TradeCardOffer(
 /** GET /v1/trade/matches */
 data class TradeMatchesPayload(
     @SerializedName("paused") val paused: Boolean? = null,
+    /** Sospeso: niente match finche' dura (fase 2f). */
+    @SerializedName("suspended") val suspended: Boolean? = null,
     /** Persone attive nella zona, anche senza carte per te. */
     @SerializedName("nearby") val nearby: Int? = null,
     /** Le migliori 100, gia' in ordine di punteggio. */
@@ -381,6 +386,8 @@ data class TradeSpotVoteRequest(
 
 data class TradeLeaderboardEntry(
     @SerializedName("rank") val rank: Int? = null,
+    /** L'id pubblico, per segnalare o bloccare dal mini profilo. */
+    @SerializedName("id") val id: String? = null,
     @SerializedName("nickname") val nickname: String? = null,
     /** bronze | silver | gold | platinum, o null */
     @SerializedName("tier") val tier: String? = null,
@@ -429,4 +436,25 @@ data class TradeAvatarRequest(
 /** PUT /v1/trade/leaderboard/optin */
 data class TradeOptInRequest(
     @SerializedName("optIn") val optIn: Boolean
+)
+
+// ── Segnala e blocca (fase 2f) ──────────────────────────────────────────────
+
+/** POST /v1/trade/users/:id/report. reason: behavior | scam | fake_cards | nickname | other */
+data class TradeReportRequest(
+    @SerializedName("reason") val reason: String,
+    @SerializedName("note") val note: String,
+    @SerializedName("proposalId") val proposalId: String?,
+    @SerializedName("block") val block: Boolean
+)
+
+data class TradeBlockedUser(
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("nickname") val nickname: String? = null,
+    @SerializedName("blockedAt") val blockedAt: Long? = null
+)
+
+/** GET /v1/trade/blocks */
+data class TradeBlocksPayload(
+    @SerializedName("items") val items: List<TradeBlockedUser>? = null
 )

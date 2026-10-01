@@ -5,6 +5,7 @@ import com.emabuia.pokevault.data.billing.WorkerApi
 import com.emabuia.pokevault.data.trade.dto.TradeAddSpotPayload
 import com.emabuia.pokevault.data.trade.dto.TradeAddSpotRequest
 import com.emabuia.pokevault.data.trade.dto.TradeAvatarRequest
+import com.emabuia.pokevault.data.trade.dto.TradeBlocksPayload
 import com.emabuia.pokevault.data.trade.dto.TradeCellUpload
 import com.emabuia.pokevault.data.trade.dto.TradeConfirmRequest
 import com.emabuia.pokevault.data.trade.dto.TradeCounterRequest
@@ -22,6 +23,7 @@ import com.emabuia.pokevault.data.trade.dto.TradeProfileRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposalRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposalsPayload
 import com.emabuia.pokevault.data.trade.dto.TradeRateRequest
+import com.emabuia.pokevault.data.trade.dto.TradeReportRequest
 import com.emabuia.pokevault.data.trade.dto.TradeSpotSearchPayload
 import com.emabuia.pokevault.data.trade.dto.TradeSpotsPayload
 import com.emabuia.pokevault.data.trade.dto.TradeSpotVoteRequest
@@ -92,7 +94,8 @@ object TradeApi {
                         response.code == 401 -> Result.Unauthorized
                         response.code == 404 && error == "no_profile" -> Result.NoProfile
                         // 409: proposta gia' aperta, carte non piu' offerte, non e' il tuo turno.
-                        response.code == 400 || response.code == 409 || response.code == 413 || response.code == 429 -> Result.Rejected(error)
+                        // 403: profilo sospeso (fase 2f).
+                        response.code == 400 || response.code == 403 || response.code == 409 || response.code == 413 || response.code == 429 -> Result.Rejected(error)
                         !response.isSuccessful -> Result.Unavailable(response.code)
                         else -> parse(text)?.let { Result.Ok(it) } ?: Result.Unavailable(response.code)
                     }
@@ -203,6 +206,20 @@ object TradeApi {
 
     suspend fun setLeaderboardOptIn(optIn: Boolean): Result<Unit> =
         call("PUT", "v1/trade/leaderboard/optin", TradeOptInRequest(optIn)) { Unit }
+
+    // ── Segnala e blocca ────────────────────────────────────────────────────
+
+    suspend fun block(publicId: String): Result<Unit> =
+        call("POST", "v1/trade/users/$publicId/block", null) { Unit }
+
+    suspend fun unblock(publicId: String): Result<Unit> =
+        call("DELETE", "v1/trade/users/$publicId/block", null) { Unit }
+
+    suspend fun blocks(): Result<TradeBlocksPayload> =
+        call("GET", "v1/trade/blocks", null, parser<TradeBlocksPayload>())
+
+    suspend fun report(publicId: String, request: TradeReportRequest): Result<Unit> =
+        call("POST", "v1/trade/users/$publicId/report", request) { Unit }
 
     /** Il Pokemon del podio; [avatar] null torna all'iniziale. */
     suspend fun setAvatar(avatar: Int?, animated: Boolean): Result<Unit> =

@@ -12,6 +12,7 @@ import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.trade.CoarseLocation
 import com.emabuia.pokevault.data.trade.dto.TradeAddSpotRequest
+import com.emabuia.pokevault.data.trade.dto.TradeBlockedUser
 import com.emabuia.pokevault.data.trade.dto.TradeCardOffer
 import com.emabuia.pokevault.data.trade.dto.TradeCellUpload
 import com.emabuia.pokevault.data.trade.dto.TradeCounterRequest
@@ -28,6 +29,7 @@ import com.emabuia.pokevault.data.trade.dto.TradeProfileRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposal
 import com.emabuia.pokevault.data.trade.dto.TradeProposalRequest
 import com.emabuia.pokevault.data.trade.dto.TradeRateRequest
+import com.emabuia.pokevault.data.trade.dto.TradeReportRequest
 import com.emabuia.pokevault.data.trade.dto.TradeSlot
 import com.emabuia.pokevault.data.trade.dto.TradeSpot
 import com.emabuia.pokevault.data.trade.dto.TradeSpotCandidate
@@ -61,12 +63,16 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         data class Error(val message: Problem) : Screen()
     }
 
-    enum class Problem { UNAUTHORIZED, UNAVAILABLE, REJECTED, NO_LOCATION, ALREADY_OPEN, NOT_AVAILABLE, TOO_EARLY }
+    enum class Problem {
+        UNAUTHORIZED, UNAVAILABLE, REJECTED, NO_LOCATION, ALREADY_OPEN, NOT_AVAILABLE, TOO_EARLY,
+        ALREADY_REPORTED, TOO_MANY_REPORTS, SUSPENDED, MEETING_PASSED
+    }
 
     /** Conferme da mostrare una volta, come [notice] ma non sono errori. */
     enum class Info {
         PROPOSAL_SENT, COUNTER_SENT, ACCEPTED, DECLINED, CANCELLED, MEETING_SENT, MEETING_CONFIRMED, SPOT_REPORTED,
-        DONE_WAITING, TRADE_DONE, NO_SHOW_SENT, COLLECTION_UPDATED, FEEDBACK_SENT, LEADERBOARD_JOINED, LEADERBOARD_LEFT
+        DONE_WAITING, TRADE_DONE, NO_SHOW_SENT, COLLECTION_UPDATED, FEEDBACK_SENT, LEADERBOARD_JOINED, LEADERBOARD_LEFT,
+        BLOCKED, UNBLOCKED, REPORTED
     }
 
     var screen by mutableStateOf<Screen>(Screen.Loading)
@@ -1056,6 +1062,102 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    // ── Segnala e blocca (fase 2f) ──────────────────────────────────────────
+
+    /** Il dialogo aperto su una persona: [report] segnala, altrimenti blocca. */
+    data class Safety(val id: String, val nickname: String, val proposalId: String?, val report: Boolean)
+
+    var safety by mutableStateOf<Safety?>(null)
+        private set
+
+    var safetyBusy by mutableStateOf(false)
+        private set
+
+    fun openSafety(id: String?, nickname: String?, proposalId: String?, report: Boolean) {
+        if (id.isNullOrBlank()) return
+        safety = Safety(id, nickname.orEmpty(), proposalId, report)
+    }
+
+    fun closeSafety() {
+        if (!safetyBusy) safety = null
+    }
+
+    fun block() {
+        val target = safety ?: return
+        viewModelScope.launch {
+            safetyBusy = true
+            val result = TradeApi.block(target.id)
+            safetyBusy = false
+            if (result is TradeApi.Result.Ok) {
+                safety = null
+                info = Info.BLOCKED
+                refreshMatches()
+                refreshProposals()
+            } else {
+                notice = problemOf(result)
+            }
+        }
+    }
+
+    fun report(reason: String, note: String, alsoBlock: Boolean) {
+        val target = safety ?: return
+        viewModelScope.launch {
+            safetyBusy = true
+            val result = TradeApi.report(target.id, TradeReportRequest(reason, note, target.proposalId, alsoBlock))
+            safetyBusy = false
+            if (result is TradeApi.Result.Ok) {
+                safety = null
+                info = Info.REPORTED
+                if (alsoBlock) {
+                    refreshMatches()
+                    refreshProposals()
+                }
+            } else {
+                // Gia' segnalata o troppe oggi: il dialogo si chiude, il motivo lo dice il messaggio.
+                if (result is TradeApi.Result.Rejected) safety = null
+                notice = problemOf(result)
+            }
+        }
+    }
+
+    /** Le persone bloccate: aperto con la lista che arriva, null mentre si carica. */
+    var blockedOpen by mutableStateOf(false)
+        private set
+
+    var blocked by mutableStateOf<List<TradeBlockedUser>?>(null)
+        private set
+
+    fun openBlocked() {
+        blockedOpen = true
+        blocked = null
+        viewModelScope.launch {
+            when (val result = TradeApi.blocks()) {
+                is TradeApi.Result.Ok -> blocked = result.value.items.orEmpty()
+                else -> {
+                    blockedOpen = false
+                    notice = problemOf(result)
+                }
+            }
+        }
+    }
+
+    fun closeBlocked() {
+        blockedOpen = false
+    }
+
+    fun unblock(id: String) {
+        viewModelScope.launch {
+            val result = TradeApi.unblock(id)
+            if (result is TradeApi.Result.Ok) {
+                blocked = blocked?.filterNot { it.id == id }
+                info = Info.UNBLOCKED
+                refreshMatches()
+            } else {
+                notice = problemOf(result)
+            }
+        }
+    }
+
     /** Il Pokemon del podio: si aggiorna il profilo e, se aperta, la classifica. */
     fun setAvatar(avatar: Int?, animated: Boolean) {
         viewModelScope.launch {
@@ -1163,7 +1265,13 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun problemOf(result: TradeApi.Result<*>): Problem = when (result) {
         TradeApi.Result.Unauthorized -> Problem.UNAUTHORIZED
-        is TradeApi.Result.Rejected -> Problem.REJECTED
+        is TradeApi.Result.Rejected -> when (result.error) {
+            "already_reported" -> Problem.ALREADY_REPORTED
+            "too_many_reports" -> Problem.TOO_MANY_REPORTS
+            "suspended" -> Problem.SUSPENDED
+            "meeting_passed" -> Problem.MEETING_PASSED
+            else -> Problem.REJECTED
+        }
         else -> Problem.UNAVAILABLE
     }
 }

@@ -275,6 +275,10 @@ fun TradeRadarScreen(onBack: () -> Unit, onPremiumRequired: () -> Unit = {}, vie
                                     onClick = { menuOpen = false; viewModel.refreshZone() }
                                 )
                                 DropdownMenuItem(
+                                    text = { Text(AppLocale.tradeRadarBlockedTitle) },
+                                    onClick = { menuOpen = false; viewModel.openBlocked() }
+                                )
+                                DropdownMenuItem(
                                     text = { Text(AppLocale.tradeRadarDeactivate, color = AppColors.red) },
                                     onClick = { menuOpen = false; confirmDeactivate = true }
                                 )
@@ -438,6 +442,9 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
             inviteToLeaderboard = (ready.profile.tradesDone ?: 0) >= 3 && ready.profile.leaderboardOptIn == null,
             onOpenLeaderboard = { viewModel.openLeaderboard() }
         )
+        ready.profile.suspendedUntil?.let { until ->
+            SuspensionBanner(until, ready.profile.suspensionReason, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
         SegmentedTabs(
             selected = tab,
             labels = listOf(AppLocale.tradeRadarTabMatches, AppLocale.tradeRadarTabProposals, AppLocale.tradeRadarTabMyCards),
@@ -468,6 +475,22 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
     viewModel.closing?.let { closing -> ClosingDialog(viewModel, closing) }
     viewModel.feedback?.let { feedback -> FeedbackDialog(viewModel, feedback) }
     viewModel.leaderboard?.let { board -> LeaderboardDialog(viewModel, board, ready.profile, onPremiumRequired) }
+    // Dopo la classifica: aperti da li' (mini profilo) devono starle sopra.
+    viewModel.safety?.let { target ->
+        if (target.report) {
+            ReportDialog(
+                nickname = target.nickname,
+                busy = viewModel.safetyBusy,
+                onSend = { reason, note, alsoBlock -> viewModel.report(reason, note, alsoBlock) },
+                onDismiss = { viewModel.closeSafety() }
+            )
+        } else {
+            BlockDialog(target.nickname, busy = viewModel.safetyBusy, onConfirm = { viewModel.block() }, onDismiss = { viewModel.closeSafety() })
+        }
+    }
+    if (viewModel.blockedOpen) {
+        BlockedListDialog(viewModel.blocked, onUnblock = { viewModel.unblock(it) }, onDismiss = { viewModel.closeBlocked() })
+    }
     // Fuori dalla classifica la festa va in un popup: qui si e' in coda a una colonna gia' piena.
     if (viewModel.leaderboard == null && viewModel.celebration != null) {
         Popup(onDismissRequest = { viewModel.consumeCelebration() }) { CelebrationOverlay(viewModel) }
@@ -756,7 +779,8 @@ private fun MatchesTab(
                             expanded = index in expanded,
                             onToggle = { expanded = if (index in expanded) expanded - index else expanded + index },
                             onCardClick = { card, theirs -> selectedCard = card to theirs },
-                            onPropose = { viewModel.openComposer(match) }
+                            onPropose = { viewModel.openComposer(match) },
+                            onSafety = { report -> viewModel.openSafety(match.id, match.nickname, null, report) }
                         )
                     }
                 }
@@ -772,6 +796,7 @@ private fun MatchesTab(
             onNavigate = { sheet = it },
             onCardClick = { card, theirs -> selectedCard = card to theirs },
             onPropose = { match, presetKey -> sheet = null; viewModel.openComposer(match, presetKey) },
+            onSafety = { match, report -> sheet = null; viewModel.openSafety(match.id, match.nickname, null, report) },
             onDismiss = { sheet = null }
         )
     }
@@ -994,7 +1019,8 @@ private fun CompactMatchRow(
     expanded: Boolean,
     onToggle: () -> Unit,
     onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
-    onPropose: () -> Unit
+    onPropose: () -> Unit,
+    onSafety: (report: Boolean) -> Unit
 ) {
     val motion = AppMotion.current
     val mutual = match.mutual == true
@@ -1043,7 +1069,7 @@ private fun CompactMatchRow(
             exit = shrinkVertically(tween(motion.state)) + fadeOut(tween(motion.state))
         ) {
             Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                MatchBody(match, level, onCardClick, onPropose)
+                MatchBody(match, level, onCardClick, onPropose, onSafety)
             }
         }
     }
@@ -1064,6 +1090,7 @@ private fun TradeSheet(
     onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
     /** La persona e, se si arriva da una carta, quella carta gia' nella proposta. */
     onPropose: (TradeMatch, presetKey: String?) -> Unit,
+    onSafety: (TradeMatch, report: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val motion = AppMotion.current
@@ -1089,7 +1116,8 @@ private fun TradeSheet(
                     level = level,
                     onBack = current.from?.let { card -> { onNavigate(SheetPage.Holders(card)) } },
                     onCardClick = onCardClick,
-                    onPropose = { match -> onPropose(match, current.from?.key) }
+                    onPropose = { match -> onPropose(match, current.from?.key) },
+                    onSafety = onSafety
                 )
             }
         }
@@ -1178,7 +1206,8 @@ private fun PersonPage(
     level: String,
     onBack: (() -> Unit)?,
     onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
-    onPropose: (TradeMatch) -> Unit
+    onPropose: (TradeMatch) -> Unit,
+    onSafety: (TradeMatch, report: Boolean) -> Unit
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1191,7 +1220,7 @@ private fun PersonPage(
                 Text(AppLocale.back)
             }
         }
-        if (match != null) MatchCard(match, level, onCardClick, onPropose = { onPropose(match) })
+        if (match != null) MatchCard(match, level, onCardClick, onPropose = { onPropose(match) }, onSafety = { onSafety(match, it) })
     }
 }
 
@@ -1372,7 +1401,8 @@ private fun MatchCard(
     match: TradeMatch,
     level: String,
     onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
-    onPropose: (() -> Unit)? = null
+    onPropose: (() -> Unit)? = null,
+    onSafety: ((report: Boolean) -> Unit)? = null
 ) {
     val mutual = match.mutual == true
     val shape = RoundedCornerShape(22.dp)
@@ -1404,7 +1434,7 @@ private fun MatchCard(
                 }
             }
         }
-        MatchBody(match, level, onCardClick, onPropose)
+        MatchBody(match, level, onCardClick, onPropose, onSafety)
     }
 }
 
@@ -1414,7 +1444,8 @@ private fun MatchBody(
     match: TradeMatch,
     level: String,
     onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
-    onPropose: (() -> Unit)? = null
+    onPropose: (() -> Unit)? = null,
+    onSafety: ((report: Boolean) -> Unit)? = null
 ) {
     val theyGive = match.theyGive.orEmpty().filter { level == "all" || it.level == level }
     val iGive = match.iGive.orEmpty()
@@ -1460,6 +1491,7 @@ private fun MatchBody(
             Text(AppLocale.tradeRadarPropose, fontWeight = FontWeight.Bold)
         }
     }
+    if (onSafety != null) PersonSafetyLink(onSafety)
 }
 
 @Composable
@@ -2048,7 +2080,11 @@ private fun ProposalSheet(
                     onDone = { viewModel.markDone(proposal) },
                     onNoShow = { viewModel.markNoShow(proposal) },
                     onCollection = { viewModel.openClosing(proposal) },
-                    onFeedback = { viewModel.openFeedback(proposal) }
+                    onFeedback = { viewModel.openFeedback(proposal) },
+                    // Una volta per persona: il gruppo e' tutto con lei.
+                    onSafety = if (index == 0) {
+                        { report -> viewModel.openSafety(proposal.counterpart?.id, proposal.counterpart?.nickname, proposal.id, report) }
+                    } else null
                 )
             }
         }
@@ -2078,7 +2114,8 @@ private fun ProposalCard(
     onDone: () -> Unit = {},
     onNoShow: () -> Unit = {},
     onCollection: () -> Unit = {},
-    onFeedback: () -> Unit = {}
+    onFeedback: () -> Unit = {},
+    onSafety: ((report: Boolean) -> Unit)? = null
 ) {
     val other = proposal.counterpart
     val status = proposalStatus(proposal)
@@ -2156,6 +2193,7 @@ private fun ProposalCard(
                 color = AppColors.textMuted
             )
         }
+        if (onSafety != null) PersonSafetyLink(onSafety)
     }
 }
 
@@ -2713,8 +2751,10 @@ private fun MeetingSection(
                 }
             }
         }
-        TextButton(onClick = onCancel, enabled = !acting, modifier = Modifier.align(Alignment.End)) {
-            Text(AppLocale.tradeRadarCancelDeal, color = AppColors.red)
+        if (!meetingTimePassed(proposal)) {
+            TextButton(onClick = onCancel, enabled = !acting, modifier = Modifier.align(Alignment.End)) {
+                Text(AppLocale.tradeRadarCancelDeal, color = AppColors.red)
+            }
         }
     }
 }
@@ -3303,6 +3343,15 @@ private fun reputationText(reputation: TradeReputation?, tradesDone: Int): Strin
  * "Non si e' presentato" dopo l'ora. Se l'altro ha gia' confermato lo si
  * dice, e se ho confermato io si aspetta lui.
  */
+/** L'ora dell'appuntamento confermato e' passata: resta solo chiudere (fatto o non presentato). */
+private fun meetingTimePassed(proposal: TradeProposal): Boolean {
+    if (proposal.status != "scheduled") return false
+    val slot = proposal.meeting?.slot ?: return false
+    val today = java.time.LocalDate.now().toString()
+    val now = java.time.LocalTime.now().toString().take(5)
+    return today > slot.day.orEmpty() || (today == slot.day && now >= (slot.time ?: slotPartTime(slot.part)))
+}
+
 @Composable
 private fun ClosingControls(proposal: TradeProposal, acting: Boolean, onDone: () -> Unit, onNoShow: () -> Unit) {
     val slot = proposal.meeting?.slot ?: return
@@ -3739,7 +3788,15 @@ private fun LeaderboardDialog(
             CelebrationOverlay(viewModel)
         }
     }
-    selected?.let { entry -> MiniProfileDialog(entry, onDismiss = { selected = null }) }
+    selected?.let { entry ->
+        MiniProfileDialog(
+            entry,
+            onDismiss = { selected = null },
+            onSafety = if (entry.isMe != true && entry.id != null) {
+                { report -> selected = null; viewModel.openSafety(entry.id, entry.nickname, null, report) }
+            } else null
+        )
+    }
     if (pickingAvatar) {
         AvatarPickerDialog(
             current = profile.avatar,
@@ -4042,7 +4099,7 @@ private fun LeaderboardRow(entry: TradeLeaderboardEntry, onClick: () -> Unit) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MiniProfileDialog(entry: TradeLeaderboardEntry, onDismiss: () -> Unit) {
+private fun MiniProfileDialog(entry: TradeLeaderboardEntry, onDismiss: () -> Unit, onSafety: ((report: Boolean) -> Unit)? = null) {
     val locale = if (AppLocale.isItalian) Locale.ITALIAN else Locale.ENGLISH
     val since = entry.memberSince?.let {
         java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
@@ -4616,7 +4673,7 @@ private fun CountBadge(count: Int, color: Color) {
 
 /** Iniziale del nickname su un gradiente scelto dal nickname stesso: ognuno ha sempre il suo. */
 @Composable
-private fun Avatar(nickname: String, size: Dp, pulse: Boolean = false) {
+internal fun Avatar(nickname: String, size: Dp, pulse: Boolean = false) {
     val palette = listOf(
         AppColors.blue to AppColors.purple,
         AppColors.green to AppColors.blue,
@@ -4821,6 +4878,10 @@ private fun problemText(problem: Problem): String = when (problem) {
     Problem.ALREADY_OPEN -> AppLocale.tradeRadarAlreadyOpen
     Problem.NOT_AVAILABLE -> AppLocale.tradeRadarNotAvailable
     Problem.TOO_EARLY -> AppLocale.tradeRadarTooEarly
+    Problem.ALREADY_REPORTED -> AppLocale.tradeRadarAlreadyReported
+    Problem.TOO_MANY_REPORTS -> AppLocale.tradeRadarTooManyReports
+    Problem.SUSPENDED -> AppLocale.tradeRadarSuspendedAction
+    Problem.MEETING_PASSED -> AppLocale.tradeRadarMeetingPassed
 }
 
 private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
@@ -4839,4 +4900,7 @@ private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
     TradeRadarViewModel.Info.FEEDBACK_SENT -> AppLocale.tradeRadarInfoFeedbackSent
     TradeRadarViewModel.Info.LEADERBOARD_JOINED -> AppLocale.tradeRadarInfoJoined
     TradeRadarViewModel.Info.LEADERBOARD_LEFT -> AppLocale.tradeRadarInfoLeft
+    TradeRadarViewModel.Info.BLOCKED -> AppLocale.tradeRadarInfoBlocked
+    TradeRadarViewModel.Info.UNBLOCKED -> AppLocale.tradeRadarInfoUnblocked
+    TradeRadarViewModel.Info.REPORTED -> AppLocale.tradeRadarInfoReported
 }
