@@ -10,6 +10,8 @@ import com.emabuia.pokevault.data.trade.dto.TradeCounterRequest
 import com.emabuia.pokevault.data.trade.dto.TradeCreatedPayload
 import com.emabuia.pokevault.data.trade.dto.TradeErrorPayload
 import com.emabuia.pokevault.data.trade.dto.TradeHavesPayload
+import com.emabuia.pokevault.data.trade.dto.TradeLeaderboardPayload
+import com.emabuia.pokevault.data.trade.dto.TradeOptInRequest
 import com.emabuia.pokevault.data.trade.dto.TradeMatchesPayload
 import com.emabuia.pokevault.data.trade.dto.TradeMePayload
 import com.emabuia.pokevault.data.trade.dto.TradeOwnedRequest
@@ -191,4 +193,13 @@ object TradeApi {
 
     suspend fun voteSpot(id: String, request: TradeSpotVoteRequest): Result<Unit> =
         call("POST", "v1/trade/proposals/$id/spotvote", request) { Unit }
+
+    // ── Classifica ──────────────────────────────────────────────────────────
+
+    /** [scope]: "zone" (le celle dei match) o "italy". */
+    suspend fun leaderboard(scope: String): Result<TradeLeaderboardPayload> =
+        call("GET", "v1/trade/leaderboard?scope=$scope", null, parser<TradeLeaderboardPayload>())
+
+    suspend fun setLeaderboardOptIn(optIn: Boolean): Result<Unit> =
+        call("PUT", "v1/trade/leaderboard/optin", TradeOptInRequest(optIn)) { Unit }
 }

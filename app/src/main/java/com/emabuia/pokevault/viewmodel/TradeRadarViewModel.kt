@@ -17,6 +17,7 @@ import com.emabuia.pokevault.data.trade.dto.TradeCellUpload
 import com.emabuia.pokevault.data.trade.dto.TradeCounterRequest
 import com.emabuia.pokevault.data.trade.dto.TradeHaveItem
 import com.emabuia.pokevault.data.trade.dto.TradeHavesPayload
+import com.emabuia.pokevault.data.trade.dto.TradeLeaderboardPayload
 import com.emabuia.pokevault.data.trade.dto.TradeMatch
 import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
 import com.emabuia.pokevault.data.trade.dto.TradeMeetingRequest
@@ -65,7 +66,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     /** Conferme da mostrare una volta, come [notice] ma non sono errori. */
     enum class Info {
         PROPOSAL_SENT, COUNTER_SENT, ACCEPTED, DECLINED, CANCELLED, MEETING_SENT, MEETING_CONFIRMED, SPOT_REPORTED,
-        DONE_WAITING, TRADE_DONE, NO_SHOW_SENT, COLLECTION_UPDATED, FEEDBACK_SENT
+        DONE_WAITING, TRADE_DONE, NO_SHOW_SENT, COLLECTION_UPDATED, FEEDBACK_SENT, LEADERBOARD_JOINED, LEADERBOARD_LEFT
     }
 
     var screen by mutableStateOf<Screen>(Screen.Loading)
@@ -968,6 +969,59 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             } else {
                 notice = problemOf(result)
                 feedback = feedback?.copy(sending = false)
+            }
+        }
+    }
+
+    // ── Classifica (fase 2e) ────────────────────────────────────────────────
+
+    /** La classifica aperta: zona o Italia, con l'ultima risposta del server. */
+    data class Leaderboard(
+        val scope: String = "zone",
+        val payload: TradeLeaderboardPayload? = null,
+        val loading: Boolean = true
+    )
+
+    var leaderboard by mutableStateOf<Leaderboard?>(null)
+        private set
+
+    fun openLeaderboard() {
+        leaderboard = Leaderboard()
+        loadLeaderboard("zone")
+    }
+
+    fun closeLeaderboard() {
+        leaderboard = null
+    }
+
+    fun setLeaderboardScope(scope: String) {
+        if (leaderboard?.scope == scope) return
+        leaderboard = leaderboard?.copy(scope = scope, loading = true)
+        loadLeaderboard(scope)
+    }
+
+    private fun loadLeaderboard(scope: String) {
+        viewModelScope.launch {
+            val result = TradeApi.leaderboard(scope)
+            if (result is TradeApi.Result.Ok) {
+                leaderboard = leaderboard?.takeIf { it.scope == scope }?.copy(payload = result.value, loading = false)
+            } else {
+                notice = problemOf(result)
+                leaderboard = leaderboard?.copy(loading = false)
+            }
+        }
+    }
+
+    /** Comparire in classifica o no; si cambia quando si vuole. Poi si rilegge, e il profilo con lei. */
+    fun setLeaderboardOptIn(optIn: Boolean) {
+        viewModelScope.launch {
+            val result = TradeApi.setLeaderboardOptIn(optIn)
+            if (result is TradeApi.Result.Ok) {
+                info = if (optIn) Info.LEADERBOARD_JOINED else Info.LEADERBOARD_LEFT
+                leaderboard?.let { loadLeaderboard(it.scope) }
+                (TradeApi.getProfile() as? TradeApi.Result.Ok)?.value?.let { screen = Screen.Ready(it) }
+            } else {
+                notice = problemOf(result)
             }
         }
     }

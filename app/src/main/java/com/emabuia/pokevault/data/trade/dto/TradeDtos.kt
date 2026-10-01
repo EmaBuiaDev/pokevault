@@ -42,7 +42,10 @@ data class TradeProfilePayload(
     @SerializedName("wants") val wants: Int? = null,
     @SerializedName("owned") val owned: Int? = null,
     /** I miei voti ricevuti (fase 2c). */
-    @SerializedName("reputation") val reputation: TradeReputation? = null
+    @SerializedName("reputation") val reputation: TradeReputation? = null,
+    /** Il mio livello e se compaio in classifica (null = mai chiesto) (fase 2e). */
+    @SerializedName("tier") val tier: String? = null,
+    @SerializedName("leaderboardOptIn") val leaderboardOptIn: Boolean? = null
 )
 
 data class TradeHaveItem(
@@ -108,6 +111,8 @@ data class TradeMatch(
     @SerializedName("tradesDone") val tradesDone: Int? = null,
     @SerializedName("memberSince") val memberSince: Long? = null,
     @SerializedName("reputation") val reputation: TradeReputation? = null,
+    /** Il livello: bronze | silver | gold | platinum, o null (fase 2e). */
+    @SerializedName("tier") val tier: String? = null,
     @SerializedName("level") val level: String? = null,
     @SerializedName("mutual") val mutual: Boolean? = null,
     @SerializedName("theyGive") val theyGive: List<TradeMatchItem>? = null,
@@ -199,7 +204,8 @@ data class TradeCounterpart(
     /** "lt5" | "lt15" | "far" */
     @SerializedName("distance") val distance: String? = null,
     @SerializedName("tradesDone") val tradesDone: Int? = null,
-    @SerializedName("reputation") val reputation: TradeReputation? = null
+    @SerializedName("reputation") val reputation: TradeReputation? = null,
+    @SerializedName("tier") val tier: String? = null
 )
 
 /** Una proposta vista da me: [give] e' cio' che do, [take] cio' che ricevo. */
@@ -366,4 +372,43 @@ data class TradeRateRequest(
 /** POST /v1/trade/proposals/:id/spotvote: tournaments | comics | card_shop */
 data class TradeSpotVoteRequest(
     @SerializedName("tags") val tags: List<String>
+)
+
+// ── Classifica (fase 2e) ────────────────────────────────────────────────────
+
+data class TradeLeaderboardEntry(
+    @SerializedName("rank") val rank: Int? = null,
+    @SerializedName("nickname") val nickname: String? = null,
+    /** bronze | silver | gold | platinum, o null */
+    @SerializedName("tier") val tier: String? = null,
+    @SerializedName("trades") val trades: Int? = null,
+    @SerializedName("positivePct") val positivePct: Int? = null,
+    @SerializedName("memberSince") val memberSince: Long? = null,
+    @SerializedName("isMe") val isMe: Boolean? = null
+)
+
+/** Io: posizione (null se fuori), adesione (null = mai chiesto) e cosa manca per entrare. */
+data class TradeLeaderboardMe(
+    @SerializedName("rank") val rank: Int? = null,
+    @SerializedName("optIn") val optIn: Boolean? = null,
+    @SerializedName("eligible") val eligible: Boolean? = null,
+    @SerializedName("trades") val trades: Int? = null,
+    @SerializedName("partners") val partners: Int? = null,
+    @SerializedName("positivePct") val positivePct: Int? = null,
+    @SerializedName("tier") val tier: String? = null,
+    @SerializedName("missingTrades") val missingTrades: Int? = null,
+    @SerializedName("missingPartners") val missingPartners: Int? = null
+)
+
+/** GET /v1/trade/leaderboard?scope=zone|italy */
+data class TradeLeaderboardPayload(
+    @SerializedName("scope") val scope: String? = null,
+    @SerializedName("entries") val entries: List<TradeLeaderboardEntry>? = null,
+    @SerializedName("total") val total: Int? = null,
+    @SerializedName("me") val me: TradeLeaderboardMe? = null
+)
+
+/** PUT /v1/trade/leaderboard/optin */
+data class TradeOptInRequest(
+    @SerializedName("optIn") val optIn: Boolean
 )

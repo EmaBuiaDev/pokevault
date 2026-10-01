@@ -171,6 +171,8 @@ import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.trade.CoarseLocation
 import com.emabuia.pokevault.data.trade.dto.TradeCardHolder
 import com.emabuia.pokevault.data.trade.dto.TradeCardOffer
+import com.emabuia.pokevault.data.trade.dto.TradeLeaderboardEntry
+import com.emabuia.pokevault.data.trade.dto.TradeLeaderboardMe
 import com.emabuia.pokevault.data.trade.dto.TradeMatch
 import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
 import com.emabuia.pokevault.data.trade.dto.TradeOfferItem
@@ -243,6 +245,9 @@ fun TradeRadarScreen(onBack: () -> Unit, viewModel: TradeRadarViewModel = viewMo
                 },
                 actions = {
                     if (ready != null) {
+                        IconButton(onClick = { viewModel.openLeaderboard() }) {
+                            Icon(Icons.Default.EmojiEvents, AppLocale.tradeRadarLeaderboard, tint = AppColors.gold)
+                        }
                         Box {
                             IconButton(onClick = { menuOpen = true }) {
                                 Icon(Icons.Default.MoreVert, null, tint = AppColors.textPrimary)
@@ -410,7 +415,11 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
             nickname = ready.profile.nickname.orEmpty(),
             paused = paused,
             onPausedChange = { viewModel.setPaused(it) },
-            reputation = reputationText(ready.profile.reputation, ready.profile.tradesDone ?: 0)
+            reputation = reputationText(ready.profile.reputation, ready.profile.tradesDone ?: 0),
+            tier = ready.profile.tier,
+            // Al terzo scambio si chiede se comparire in classifica (finche' non si risponde).
+            inviteToLeaderboard = (ready.profile.tradesDone ?: 0) >= 3 && ready.profile.leaderboardOptIn == null,
+            onOpenLeaderboard = { viewModel.openLeaderboard() }
         )
         SegmentedTabs(
             selected = tab,
@@ -441,10 +450,19 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
     viewModel.planner?.let { planner -> PlannerDialog(viewModel, planner) }
     viewModel.closing?.let { closing -> ClosingDialog(viewModel, closing) }
     viewModel.feedback?.let { feedback -> FeedbackDialog(viewModel, feedback) }
+    viewModel.leaderboard?.let { board -> LeaderboardDialog(viewModel, board) }
 }
 
 @Composable
-private fun ProfileHeader(nickname: String, paused: Boolean, onPausedChange: (Boolean) -> Unit, reputation: String = "") {
+private fun ProfileHeader(
+    nickname: String,
+    paused: Boolean,
+    onPausedChange: (Boolean) -> Unit,
+    reputation: String = "",
+    tier: String? = null,
+    inviteToLeaderboard: Boolean = false,
+    onOpenLeaderboard: () -> Unit = {}
+) {
     val statusColor by animateColorAsState(
         if (paused) AppColors.orange else AppColors.green,
         tween(AppMotion.current.state),
@@ -462,7 +480,10 @@ private fun ProfileHeader(nickname: String, paused: Boolean, onPausedChange: (Bo
         Avatar(nickname, size = 44.dp, pulse = !paused)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(nickname, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = AppColors.textPrimary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(nickname, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = AppColors.textPrimary)
+                TierBadge(tier)
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
                 Spacer(Modifier.width(6.dp))
@@ -473,6 +494,15 @@ private fun ProfileHeader(nickname: String, paused: Boolean, onPausedChange: (Bo
                 )
             }
             if (reputation.isNotBlank()) Text(reputation, fontSize = 11.sp, color = AppColors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (inviteToLeaderboard) {
+                Text(
+                    "🏆 " + AppLocale.tradeRadarInviteLeaderboard,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppColors.gold,
+                    modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onOpenLeaderboard)
+                )
+            }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Switch(checked = !paused, onCheckedChange = { onPausedChange(!it) })
@@ -822,7 +852,10 @@ private fun RecommendedCard(match: TradeMatch, onClick: () -> Unit) {
             Avatar(match.nickname.orEmpty(), size = 36.dp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(match.nickname.orEmpty(), fontWeight = FontWeight.Bold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(match.nickname.orEmpty(), fontWeight = FontWeight.Bold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TierBadge(match.tier, compact = true)
+                }
                 Text(distanceLabel(match.distance), fontSize = 11.sp, color = AppColors.textSecondary)
             }
             if (mutual) Icon(Icons.Default.SwapHoriz, AppLocale.tradeRadarMutual, tint = AppColors.green, modifier = Modifier.size(20.dp))
@@ -961,6 +994,7 @@ private fun CompactMatchRow(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(match.nickname.orEmpty(), fontWeight = FontWeight.Bold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TierBadge(match.tier, compact = true)
                     if (mutual) {
                         Spacer(Modifier.width(4.dp))
                         Icon(Icons.Default.SwapHoriz, AppLocale.tradeRadarMutual, tint = AppColors.green, modifier = Modifier.size(16.dp))
@@ -1333,7 +1367,10 @@ private fun MatchCard(
             Avatar(match.nickname.orEmpty(), size = 44.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(match.nickname.orEmpty(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = AppColors.textPrimary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(match.nickname.orEmpty(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = AppColors.textPrimary)
+                    TierBadge(match.tier)
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Place, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
                     Spacer(Modifier.width(3.dp))
@@ -2039,7 +2076,10 @@ private fun ProposalCard(
             Avatar(other?.nickname.orEmpty(), size = 40.dp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(other?.nickname.orEmpty(), fontWeight = FontWeight.Bold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(other?.nickname.orEmpty(), fontWeight = FontWeight.Bold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TierBadge(other?.tier, compact = true)
+                }
                 Text(
                     listOfNotNull(
                         distanceLabel(other?.distance),
@@ -3501,6 +3541,234 @@ private fun SelectChip(text: String, selected: Boolean, onClick: () -> Unit) {
     )
 }
 
+// ── Classifica e livelli (fase 2e) ──────────────────────────────────────────
+
+private data class TierStyle(val emoji: String, val label: String, val color: Color, val trades: Int)
+
+@Composable
+private fun tierStyle(tier: String?): TierStyle? = when (tier) {
+    "bronze" -> TierStyle("🥉", AppLocale.tradeRadarTierBronze, Color(0xFFCD7F32), 5)
+    "silver" -> TierStyle("🥈", AppLocale.tradeRadarTierSilver, Color(0xFF9EA3A8), 15)
+    "gold" -> TierStyle("🥇", AppLocale.tradeRadarTierGold, AppColors.gold, 40)
+    "platinum" -> TierStyle("💎", AppLocale.tradeRadarTierPlatinum, Color(0xFF4FC3F7), 100)
+    else -> null
+}
+
+/** Il livello accanto a un nickname: niente se non c'e'. */
+@Composable
+private fun TierBadge(tier: String?, compact: Boolean = false) {
+    val style = tierStyle(tier) ?: return
+    Text(
+        if (compact) style.emoji else "${style.emoji} ${style.label}",
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        color = style.color,
+        modifier = Modifier
+            .padding(start = 6.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(style.color.copy(alpha = 0.15f))
+            .padding(horizontal = 6.dp, vertical = 1.dp)
+    )
+}
+
+/**
+ * La classifica dei piu' affidabili, a schermo intero: nella tua zona o in
+ * Italia. In cima la tua situazione (posizione, o cosa manca, o la domanda se
+ * vuoi comparire), poi le prime 50 posizioni e come funzionano i livelli.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LeaderboardDialog(viewModel: TradeRadarViewModel, board: TradeRadarViewModel.Leaderboard) {
+    val payload = board.payload
+    val me = payload?.me
+    Dialog(onDismissRequest = { viewModel.closeLeaderboard() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Scaffold(
+            containerColor = AppColors.background,
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                TopAppBar(
+                    title = { Text(AppLocale.tradeRadarLeaderboard, fontWeight = FontWeight.Bold, color = AppColors.textPrimary) },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.closeLeaderboard() }) {
+                            Icon(Icons.Default.Close, AppLocale.tradeRadarClose, tint = AppColors.textPrimary)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
+                )
+            }
+        ) { padding ->
+            LazyColumn(
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 4.dp, bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item(key = "scope") {
+                    SegmentedTabs(
+                        selected = if (board.scope == "italy") 1 else 0,
+                        labels = listOf(AppLocale.tradeRadarLeaderboardZone, AppLocale.tradeRadarLeaderboardItaly),
+                        badges = listOf(0, 0),
+                        onSelect = { viewModel.setLeaderboardScope(if (it == 1) "italy" else "zone") },
+                        modifier = Modifier
+                    )
+                }
+                if (me != null) {
+                    item(key = "me") { MyStanding(me, total = payload.total ?: 0, onOptIn = { viewModel.setLeaderboardOptIn(it) }) }
+                }
+                when {
+                    board.loading && payload == null -> item(key = "loading") {
+                        Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                            RadarScope(blips = emptyList(), scanning = true, modifier = Modifier.size(90.dp))
+                        }
+                    }
+                    payload?.entries.isNullOrEmpty() -> item(key = "empty") {
+                        EmptyState(text = AppLocale.tradeRadarLeaderboardEmpty, radar = false)
+                    }
+                    else -> items(payload!!.entries.orEmpty(), key = { "rank|${it.rank}|${it.nickname}" }) { entry ->
+                        LeaderboardRow(entry, modifier = Modifier.animateItem())
+                    }
+                }
+                item(key = "how") { TiersExplained() }
+            }
+        }
+    }
+}
+
+/** La mia situazione: in classifica (posizione), fuori per scelta, da invitare, o cosa manca per entrare. */
+@Composable
+private fun MyStanding(me: TradeLeaderboardMe, total: Int, onOptIn: (Boolean) -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(AppColors.gold.copy(alpha = 0.18f), AppColors.card)))
+            .background(AppColors.card.copy(alpha = 0.45f))
+            .border(1.dp, AppColors.gold.copy(alpha = 0.4f), shape)
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(AppLocale.tradeRadarYouInLeaderboard, fontWeight = FontWeight.Bold, color = AppColors.textPrimary, modifier = Modifier.weight(1f))
+            TierBadge(me.tier)
+        }
+        Text(
+            listOfNotNull(
+                AppLocale.tradeRadarValidTrades(me.trades ?: 0),
+                AppLocale.tradeRadarPartners(me.partners ?: 0),
+                me.positivePct?.let { "😊 $it%" }
+            ).joinToString(" · "),
+            fontSize = 13.sp,
+            color = AppColors.textSecondary
+        )
+        when {
+            me.eligible != true -> {
+                Text(AppLocale.tradeRadarMissingForLeaderboard(me.missingTrades ?: 0, me.missingPartners ?: 0), fontSize = 13.sp, color = AppColors.textPrimary)
+                LinearProgressIndicator(
+                    progress = { ((me.partners ?: 0).coerceAtMost(3)) / 3f },
+                    color = AppColors.gold,
+                    trackColor = innerColor(),
+                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                )
+            }
+            me.optIn == null -> {
+                Text(AppLocale.tradeRadarJoinQuestion, fontSize = 13.sp, color = AppColors.textPrimary)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onOptIn(false) }, shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
+                        Text(AppLocale.tradeRadarJoinNo)
+                    }
+                    Button(
+                        onClick = { onOptIn(true) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.green),
+                        modifier = Modifier.weight(1f)
+                    ) { Text(AppLocale.tradeRadarJoinYes, fontWeight = FontWeight.Bold) }
+                }
+            }
+            me.optIn == false -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(AppLocale.tradeRadarNotJoined, fontSize = 13.sp, color = AppColors.textSecondary, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onOptIn(true) }) { Text(AppLocale.tradeRadarJoinYes) }
+            }
+            else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    me.rank?.let { AppLocale.tradeRadarYourRank(it, total) } ?: AppLocale.tradeRadarNotInThisZone,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppColors.textPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { onOptIn(false) }) { Text(AppLocale.tradeRadarLeaveLeaderboard, color = AppColors.textMuted, fontSize = 12.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LeaderboardRow(entry: TradeLeaderboardEntry, modifier: Modifier = Modifier) {
+    val mine = entry.isMe == true
+    val rank = entry.rank ?: 0
+    val shape = RoundedCornerShape(16.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (mine) AppColors.blue.copy(alpha = 0.12f) else AppColors.card)
+            .then(if (mine) Modifier.border(1.dp, AppColors.blue.copy(alpha = 0.5f), shape) else Modifier)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Box(Modifier.width(36.dp), contentAlignment = Alignment.Center) {
+            when (rank) {
+                1 -> Text("🥇", fontSize = 24.sp)
+                2 -> Text("🥈", fontSize = 24.sp)
+                3 -> Text("🥉", fontSize = 24.sp)
+                else -> Text("$rank", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.textSecondary)
+            }
+        }
+        Spacer(Modifier.width(6.dp))
+        Avatar(entry.nickname.orEmpty(), size = 36.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (mine) AppLocale.tradeRadarYouName(entry.nickname.orEmpty()) else entry.nickname.orEmpty(),
+                    fontWeight = FontWeight.Bold,
+                    color = AppColors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                TierBadge(entry.tier, compact = true)
+            }
+            Text(
+                listOfNotNull(AppLocale.tradeRadarTradesDone(entry.trades ?: 0), entry.positivePct?.let { "😊 $it%" }).joinToString(" · "),
+                fontSize = 12.sp,
+                color = AppColors.textSecondary
+            )
+        }
+    }
+}
+
+/** Come si sale: i livelli, e le regole che impediscono di gonfiarsi a vicenda. */
+@Composable
+private fun TiersExplained() {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(20.dp)).background(AppColors.card).padding(14.dp)
+    ) {
+        Text(AppLocale.tradeRadarTiersTitle, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+        listOf("bronze", "silver", "gold", "platinum").forEach { tier ->
+            val style = tierStyle(tier) ?: return@forEach
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(style.emoji, fontSize = 20.sp)
+                Spacer(Modifier.width(8.dp))
+                Text(style.label, fontWeight = FontWeight.SemiBold, color = style.color, modifier = Modifier.width(80.dp))
+                Text(AppLocale.tradeRadarTierRule(style.trades), fontSize = 12.sp, color = AppColors.textSecondary)
+            }
+        }
+        Text(AppLocale.tradeRadarTiersRules, fontSize = 12.sp, color = AppColors.textMuted)
+    }
+}
+
 // ── Le mie carte ────────────────────────────────────────────────────────────
 
 @Composable
@@ -4147,4 +4415,6 @@ private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
     TradeRadarViewModel.Info.NO_SHOW_SENT -> AppLocale.tradeRadarInfoNoShow
     TradeRadarViewModel.Info.COLLECTION_UPDATED -> AppLocale.tradeRadarInfoCollectionUpdated
     TradeRadarViewModel.Info.FEEDBACK_SENT -> AppLocale.tradeRadarInfoFeedbackSent
+    TradeRadarViewModel.Info.LEADERBOARD_JOINED -> AppLocale.tradeRadarInfoJoined
+    TradeRadarViewModel.Info.LEADERBOARD_LEFT -> AppLocale.tradeRadarInfoLeft
 }
