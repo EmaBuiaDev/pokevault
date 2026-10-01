@@ -5,18 +5,16 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
@@ -25,52 +23,44 @@ import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
-import androidx.navigation.NavType
+import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
-import com.emabuia.pokevault.util.AppLocale
-import com.emabuia.pokevault.util.PokemonSpriteResolver
-import com.emabuia.pokevault.ui.theme.AppColors
-import com.emabuia.pokevault.ui.theme.AppMotion
-import com.emabuia.pokevault.ui.auth.AuthScreen
-import com.emabuia.pokevault.ui.collection.AddCardScreen
-import com.emabuia.pokevault.ui.collection.CardDetailScreen
-import com.emabuia.pokevault.ui.collection.CollectionScreen
-import com.emabuia.pokevault.ui.home.HomeScreen
-import com.emabuia.pokevault.ui.pokedex.SetDetailScreen
-import com.emabuia.pokevault.ui.pokedex.SetsListScreen
-import com.emabuia.pokevault.ui.graded.GradedCardsScreen
-import com.emabuia.pokevault.ui.scanner.ScannerScreen
-import com.emabuia.pokevault.ui.stats.StatsScreen
-import com.emabuia.pokevault.ui.album.AlbumDetailScreen
-import com.emabuia.pokevault.ui.illustrator.IllustratorDetailScreen
-import com.emabuia.pokevault.ui.illustrator.IllustratorListScreen
-import com.emabuia.pokevault.ui.album.AlbumListScreen
+import com.emabuia.pokevault.data.trade.TradePush
 import com.emabuia.pokevault.ui.album.AlbumCollectionListScreen
+import com.emabuia.pokevault.ui.album.AlbumDetailScreen
+import com.emabuia.pokevault.ui.album.AlbumListScreen
 import com.emabuia.pokevault.ui.album.ChaseListScreen
 import com.emabuia.pokevault.ui.album.CreateAlbumScreen
 import com.emabuia.pokevault.ui.album.CreateGoalAlbumScreen
 import com.emabuia.pokevault.ui.album.GoalAlbumDetailScreen
+import com.emabuia.pokevault.ui.auth.AuthScreen
+import com.emabuia.pokevault.ui.collection.AddCardScreen
+import com.emabuia.pokevault.ui.collection.CardDetailScreen
+import com.emabuia.pokevault.ui.collection.CollectionScreen
 import com.emabuia.pokevault.ui.competitive.AddMatchScreen
 import com.emabuia.pokevault.ui.competitive.AddTournamentScreen
 import com.emabuia.pokevault.ui.competitive.CompetitiveHubScreen
@@ -79,14 +69,25 @@ import com.emabuia.pokevault.ui.competitive.MatchLogScreen
 import com.emabuia.pokevault.ui.competitive.TournamentDetailScreen
 import com.emabuia.pokevault.ui.components.ReviewPromptBanner
 import com.emabuia.pokevault.ui.deck.DeckLabScreen
+import com.emabuia.pokevault.ui.graded.GradedCardsScreen
+import com.emabuia.pokevault.ui.home.HomeScreen
+import com.emabuia.pokevault.ui.illustrator.IllustratorDetailScreen
+import com.emabuia.pokevault.ui.illustrator.IllustratorListScreen
+import com.emabuia.pokevault.ui.pokedex.SetDetailScreen
+import com.emabuia.pokevault.ui.pokedex.SetsListScreen
 import com.emabuia.pokevault.ui.premium.GiftCodeScreen
 import com.emabuia.pokevault.ui.premium.PremiumScreen
+import com.emabuia.pokevault.ui.scanner.ScannerScreen
 import com.emabuia.pokevault.ui.settings.SettingsScreen
+import com.emabuia.pokevault.ui.stats.StatsScreen
+import com.emabuia.pokevault.ui.theme.AppColors
+import com.emabuia.pokevault.ui.theme.AppMotion
 import com.emabuia.pokevault.ui.trade.TradeRadarScreen
 import com.emabuia.pokevault.ui.wishlist.WishlistDetailScreen
 import com.emabuia.pokevault.ui.wishlist.WishlistListScreen
+import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.emabuia.pokevault.viewmodel.AuthViewModel
-import androidx.compose.ui.platform.LocalContext
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -191,6 +192,17 @@ fun AppNavigation(
     }
 
     val startDestination = if (authViewModel.uiState.isLoggedIn) Routes.HOME else Routes.AUTH
+
+    // Una notifica di TradeRadar toccata: si va li', e il pannello apre la tab giusta.
+    if (BuildConfig.TRADE_ENABLED) {
+        val tradeOpen = TradePush.pendingOpen
+        val loggedIn = authViewModel.uiState.isLoggedIn
+        LaunchedEffect(tradeOpen, loggedIn) {
+            if (tradeOpen != null && loggedIn && navController.currentDestination?.route != Routes.TRADE_RADAR) {
+                navController.navigate(Routes.TRADE_RADAR) { launchSingleTop = true }
+            }
+        }
+    }
     var showReviewPrompt by remember { mutableStateOf(false) }
     var navigationCount by remember { mutableIntStateOf(0) }
     var lastTrackedRoute by remember { mutableStateOf<String?>(null) }

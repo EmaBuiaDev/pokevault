@@ -40,6 +40,7 @@ import com.emabuia.pokevault.data.trade.OverpassClient
 import com.emabuia.pokevault.data.trade.TradeApi
 import com.emabuia.pokevault.data.trade.TradeCardKey
 import com.emabuia.pokevault.data.trade.TradeLists
+import com.emabuia.pokevault.data.trade.TradePush
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
@@ -230,6 +231,8 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             busy = false
             if (result is TradeApi.Result.Ok) {
                 pushJob?.cancel()
+                TradePush.forget()
+                pushRegistered = false
                 duplicates = emptyList()
                 singles = emptyList()
                 offers = emptyMap()
@@ -1062,6 +1065,48 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    // ── Notifiche (fase 3) ──────────────────────────────────────────────────
+
+    private var pushRegistered = false
+
+    /** Una volta per sessione: il telefono riceve le notifiche di questo utente. */
+    fun registerPush() {
+        if (pushRegistered) return
+        pushRegistered = true
+        viewModelScope.launch {
+            if (!TradePush.register(getApplication())) pushRegistered = false
+        }
+    }
+
+    /** Il permesso di Android 13 si chiede una volta sola: poi si cambia dalle impostazioni. */
+    fun shouldAskPushPermission(): Boolean = !prefs.getBoolean(KEY_PUSH_ASKED, false)
+
+    fun markPushPermissionAsked() {
+        prefs.edit().putBoolean(KEY_PUSH_ASKED, true).apply()
+    }
+
+    var notifyOpen by mutableStateOf(false)
+        private set
+
+    fun openNotify() {
+        notifyOpen = true
+    }
+
+    fun closeNotify() {
+        notifyOpen = false
+    }
+
+    fun setNotifyPref(kind: String, enabled: Boolean) {
+        viewModelScope.launch {
+            when (val result = TradeApi.setNotifyPrefs(mapOf(kind to enabled))) {
+                is TradeApi.Result.Ok -> (screen as? Screen.Ready)?.let { ready ->
+                    screen = Screen.Ready(ready.profile.copy(notify = result.value))
+                }
+                else -> notice = problemOf(result)
+            }
+        }
+    }
+
     // ── Segnala e blocca (fase 2f) ──────────────────────────────────────────
 
     /** Il dialogo aperto su una persona: [report] segnala, altrimenti blocca. */
@@ -1255,6 +1300,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     private companion object {
         const val PREFS = "trade_radar"
         const val KEY_LEVELS_EXPLAINED = "levels_explained"
+        const val KEY_PUSH_ASKED = "push_permission_asked"
         const val KEY_APPLIED_CLOSINGS = "applied_closings"
         const val KEY_LAST_TIER = "last_tier"
         const val PUSH_DEBOUNCE_MS = 600L

@@ -1,8 +1,10 @@
 package com.emabuia.pokevault.ui.trade
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.Manifest
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -176,6 +178,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -197,6 +200,7 @@ import com.emabuia.pokevault.data.trade.dto.TradeSlot
 import com.emabuia.pokevault.data.trade.dto.TradeSpot
 import com.emabuia.pokevault.data.trade.TradeCardKey
 import com.emabuia.pokevault.data.trade.TradeLists
+import com.emabuia.pokevault.data.trade.TradePush
 import com.emabuia.pokevault.ui.components.CardImageSkeleton
 import com.emabuia.pokevault.ui.components.CascadeIn
 import com.emabuia.pokevault.ui.components.pressScale
@@ -273,6 +277,10 @@ fun TradeRadarScreen(onBack: () -> Unit, onPremiumRequired: () -> Unit = {}, vie
                                 DropdownMenuItem(
                                     text = { Text(AppLocale.tradeRadarRefreshZone) },
                                     onClick = { menuOpen = false; viewModel.refreshZone() }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(AppLocale.tradeRadarNotifyTitle) },
+                                    onClick = { menuOpen = false; viewModel.openNotify() }
                                 )
                                 DropdownMenuItem(
                                     text = { Text(AppLocale.tradeRadarBlockedTitle) },
@@ -431,6 +439,29 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
         if (viewModel.focusProposals > 0) tab = 1
     }
 
+    // Notifiche: il telefono si registra entrando, e il permesso di Android 13
+    // si chiede qui e una volta sola, non all'apertura dell'app.
+    val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        viewModel.registerPush()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && viewModel.shouldAskPushPermission() &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            viewModel.markPushPermissionAsked()
+            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    // Arrivati da una notifica: la tab giusta, con i dati freschi.
+    val opened = TradePush.pendingOpen
+    LaunchedEffect(opened) {
+        TradePush.consumeOpen()?.let { open ->
+            tab = if (open.screen == "proposals") 1 else 0
+            viewModel.refreshProposals()
+            viewModel.refreshMatches()
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         ProfileHeader(
             nickname = ready.profile.nickname.orEmpty(),
@@ -444,6 +475,10 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
         )
         ready.profile.suspendedUntil?.let { until ->
             SuspensionBanner(until, ready.profile.suspensionReason, ready.profile.nickname.orEmpty(), modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
+        // La domanda sulle carte cercate, finche' non si risponde (si cambia poi da ⋮ → Notifiche).
+        if (ready.profile.notify != null && ready.profile.notify.wants == null && !paused && ready.profile.suspendedUntil == null) {
+            WantsAlertsCard(onAnswer = { viewModel.setNotifyPref("wants", it) }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
         SegmentedTabs(
             selected = tab,
@@ -487,6 +522,9 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
         } else {
             BlockDialog(target.nickname, busy = viewModel.safetyBusy, onConfirm = { viewModel.block() }, onDismiss = { viewModel.closeSafety() })
         }
+    }
+    if (viewModel.notifyOpen) {
+        NotifySettingsDialog(ready.profile.notify, onChange = { kind, enabled -> viewModel.setNotifyPref(kind, enabled) }, onDismiss = { viewModel.closeNotify() })
     }
     if (viewModel.blockedOpen) {
         BlockedListDialog(viewModel.blocked, onUnblock = { viewModel.unblock(it) }, onDismiss = { viewModel.closeBlocked() })

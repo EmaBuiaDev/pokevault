@@ -16,12 +16,14 @@ import com.emabuia.pokevault.data.trade.dto.TradeLeaderboardPayload
 import com.emabuia.pokevault.data.trade.dto.TradeMatchesPayload
 import com.emabuia.pokevault.data.trade.dto.TradeMeetingRequest
 import com.emabuia.pokevault.data.trade.dto.TradeMePayload
+import com.emabuia.pokevault.data.trade.dto.TradeNotifyPrefs
 import com.emabuia.pokevault.data.trade.dto.TradeOptInRequest
 import com.emabuia.pokevault.data.trade.dto.TradeOwnedRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProfilePayload
 import com.emabuia.pokevault.data.trade.dto.TradeProfileRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposalRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposalsPayload
+import com.emabuia.pokevault.data.trade.dto.TradePushRequest
 import com.emabuia.pokevault.data.trade.dto.TradeRateRequest
 import com.emabuia.pokevault.data.trade.dto.TradeReportRequest
 import com.emabuia.pokevault.data.trade.dto.TradeSpotSearchPayload
@@ -223,6 +225,15 @@ object TradeApi {
 
     suspend fun report(publicId: String, request: TradeReportRequest): Result<Unit> =
         call("POST", "v1/trade/users/$publicId/report", request) { Unit }
+
+    // ── Notifiche ───────────────────────────────────────────────────────────
+
+    suspend fun putPushToken(token: String, lang: String): Result<Unit> =
+        call("PUT", "v1/trade/push", TradePushRequest(token, lang)) { Unit }
+
+    /** Solo i campi presenti cambiano: es. mapOf("wants" to true). */
+    suspend fun setNotifyPrefs(changes: Map<String, Boolean>): Result<TradeNotifyPrefs> =
+        call("PUT", "v1/trade/notify", changes, parser<TradeNotifyPrefs>())
 
     /** Il Pokemon del podio; [avatar] null torna all'iniziale. */
     suspend fun setAvatar(avatar: Int?, animated: Boolean): Result<Unit> =

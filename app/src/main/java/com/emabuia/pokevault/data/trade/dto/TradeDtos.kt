@@ -51,7 +51,9 @@ data class TradeProfilePayload(
     @SerializedName("avatarAnimated") val avatarAnimated: Boolean? = null,
     /** Sospeso fino a (ms), e perche': no_show | reports | admin. Null se non lo e' (fase 2f). */
     @SerializedName("suspendedUntil") val suspendedUntil: Long? = null,
-    @SerializedName("suspensionReason") val suspensionReason: String? = null
+    @SerializedName("suspensionReason") val suspensionReason: String? = null,
+    /** Le categorie di notifiche (fase 3). */
+    @SerializedName("notify") val notify: TradeNotifyPrefs? = null
 )
 
 data class TradeHaveItem(
@@ -457,4 +459,21 @@ data class TradeBlockedUser(
 /** GET /v1/trade/blocks */
 data class TradeBlocksPayload(
     @SerializedName("items") val items: List<TradeBlockedUser>? = null
+)
+
+// ── Notifiche (fase 3) ──────────────────────────────────────────────────────
+
+/** wants null = mai chiesto: niente avvisi sulle carte cercate finche' non si risponde. */
+data class TradeNotifyPrefs(
+    @SerializedName("proposals") val proposals: Boolean? = null,
+    @SerializedName("meetings") val meetings: Boolean? = null,
+    @SerializedName("reminders") val reminders: Boolean? = null,
+    @SerializedName("after") val after: Boolean? = null,
+    @SerializedName("wants") val wants: Boolean? = null
+)
+
+/** PUT /v1/trade/push */
+data class TradePushRequest(
+    @SerializedName("token") val token: String,
+    @SerializedName("lang") val lang: String
 )

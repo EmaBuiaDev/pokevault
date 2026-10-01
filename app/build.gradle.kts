@@ -215,6 +215,10 @@ dependencies {
     implementation(libs.firebase.auth.ktx)
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.firebase.storage.ktx)
+    // Notifiche di TradeRadar: SOLO nello staging. In prod la libreria
+    // aggiungerebbe il permesso per le notifiche e un ricevitore che non
+    // servono (vedi src/prod/.../TradePush.kt). Al lancio torna implementation.
+    "stagingImplementation"(libs.firebase.messaging.ktx)
 
     // ── Navigation Compose ──
     implementation(libs.androidx.navigation.compose)
