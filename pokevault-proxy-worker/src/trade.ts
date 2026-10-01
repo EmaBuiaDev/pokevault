@@ -1753,6 +1753,12 @@ async function markDone(db: D1Database, uid: string, id: string, push: Pusher): 
       .prepare(`UPDATE trade_profiles SET trades_done = trades_done + 1 WHERE uid IN (?, ?)`)
       .bind(proposal.from_uid, proposal.to_uid),
   ]);
+  // Chi aveva segnato per primo lo scopre qui: e' il momento di aggiornare la collezione e votare.
+  const first = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
+  await push([{
+    id: `closed:${id}:${first}`, uid: first, kind: 'after', template: 'trade_closed',
+    args: { nick: await nicknameOf(db, uid) }, data: { screen: 'proposals', proposalId: id }, tag: `proposal:${id}`,
+  }]);
   return json({ status: 'done' });
 }
 

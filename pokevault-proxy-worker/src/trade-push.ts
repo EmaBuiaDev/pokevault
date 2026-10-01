@@ -125,6 +125,9 @@ const TEMPLATES: Record<string, (a: Args, lang: Lang) => { title: string; body: 
   done_by_other: (a, l) => l === 'it'
     ? { title: `${a.nick} ha segnato lo scambio fatto`, body: 'Confermalo anche tu per chiuderlo.' }
     : { title: `${a.nick} marked the trade as done`, body: 'Confirm it too to close it.' },
+  trade_closed: (a, l) => l === 'it'
+    ? { title: `Scambio con ${a.nick} chiuso!`, body: 'Aggiorna la collezione e lascia il tuo voto.' }
+    : { title: `Trade with ${a.nick} closed!`, body: 'Update your collection and leave your rating.' },
   wants: (a, l) => {
     const total = Number(a.count);
     const list = Array.isArray(a.names) ? a.names : [];
