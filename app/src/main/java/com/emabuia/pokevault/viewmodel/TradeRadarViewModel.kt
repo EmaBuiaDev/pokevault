@@ -10,6 +10,7 @@ import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.trade.CoarseLocation
 import com.emabuia.pokevault.data.trade.TradeApi
 import com.emabuia.pokevault.data.trade.TradeLists
+import com.emabuia.pokevault.data.trade.dto.TradeCardOffer
 import com.emabuia.pokevault.data.trade.dto.TradeHaveItem
 import com.emabuia.pokevault.data.trade.dto.TradeHavesPayload
 import com.emabuia.pokevault.data.trade.dto.TradeMatch
@@ -79,7 +80,12 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     var wantsCount by mutableStateOf(0)
         private set
 
+    /** In ordine di punteggio: il server manda i migliori per primi. */
     var matches by mutableStateOf<List<TradeMatch>>(emptyList())
+        private set
+
+    /** La vista per carta: ogni carta che puoi ricevere, con chi ce l'ha. */
+    var cards by mutableStateOf<List<TradeCardOffer>>(emptyList())
         private set
 
     var busy by mutableStateOf(false)
@@ -191,6 +197,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                 offers = emptyMap()
                 notifyIds = emptySet()
                 matches = emptyList()
+                cards = emptyList()
                 screen = Screen.Onboarding
             } else {
                 notice = problemOf(result)
@@ -254,6 +261,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                 when (val result = TradeApi.matches()) {
                     is TradeApi.Result.Ok -> {
                         matches = result.value.matches.orEmpty()
+                        cards = result.value.cards.orEmpty()
                         matchesLoaded = true
                     }
                     else -> notice = problemOf(result)

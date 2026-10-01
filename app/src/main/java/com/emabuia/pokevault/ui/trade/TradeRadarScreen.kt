@@ -53,13 +53,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
@@ -129,6 +135,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.trade.CoarseLocation
+import com.emabuia.pokevault.data.trade.dto.TradeCardHolder
+import com.emabuia.pokevault.data.trade.dto.TradeCardOffer
 import com.emabuia.pokevault.data.trade.dto.TradeMatch
 import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
 import com.emabuia.pokevault.data.trade.TradeCardKey
@@ -415,12 +423,17 @@ private fun ProfileHeader(nickname: String, paused: Boolean, onPausedChange: (Bo
 
 /** Due pillole con l'indicatore che scorre sotto quella scelta. */
 @Composable
-private fun SegmentedTabs(selected: Int, labels: List<String>, badges: List<Int>, onSelect: (Int) -> Unit) {
+private fun SegmentedTabs(
+    selected: Int,
+    labels: List<String>,
+    badges: List<Int>,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+) {
     val motion = AppMotion.current
     BoxWithConstraints(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
             .height(46.dp)
             .clip(RoundedCornerShape(23.dp))
             .background(innerColor())
@@ -470,6 +483,28 @@ private fun SegmentedTabs(selected: Int, labels: List<String>, badges: List<Int>
 
 // ── Match ───────────────────────────────────────────────────────────────────
 
+/** Come si guardano i match: dalle carte (quali posso avere e da chi) o dalle persone. */
+private enum class MatchView { CARDS, PEOPLE }
+
+/** Ordine della vista per persona. BEST e' quello del server (punteggio). */
+private enum class PeopleSort { BEST, NEAR, MOST }
+
+/** Cosa mostra il pannello dal basso: chi ha una carta, o la scheda di una persona. */
+private sealed class SheetPage {
+    data class Holders(val card: TradeCardOffer) : SheetPage()
+    /** [from]: la carta da cui si e' arrivati, per tornarci con la freccia. */
+    data class Person(val index: Int, val from: TradeCardOffer?) : SheetPage()
+}
+
+/**
+ * La tab Match pensata per molte persone vicine.
+ *
+ * Con cento collezionisti una scheda a testa non si legge: si parte dalle
+ * carte. In cima gli scambi consigliati (i primi per punteggio del server),
+ * poi la vista "Per carta" -- ogni carta che puoi ricevere con chi ce l'ha --
+ * o "Per persona", a righe compatte che si aprono al tocco. Ricerca e
+ * filtri per etichetta valgono per entrambe.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MatchesTab(
@@ -479,6 +514,11 @@ private fun MatchesTab(
     onGoToMyCards: () -> Unit
 ) {
     var level by rememberSaveable { mutableStateOf("all") }
+    var view by rememberSaveable { mutableStateOf(MatchView.CARDS) }
+    var sort by rememberSaveable { mutableStateOf(PeopleSort.BEST) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var expanded by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var sheet by remember { mutableStateOf<SheetPage?>(null) }
     var showLegend by remember { mutableStateOf(false) }
     /** La carta toccata, e se e' una di quelle che dai (le etichette allora parlano dell'altro). */
     var selectedCard by remember { mutableStateOf<Pair<TradeMatchItem, Boolean>?>(null) }
@@ -488,8 +528,35 @@ private fun MatchesTab(
     LaunchedEffect(viewModel.refreshing) { if (!viewModel.refreshing) pulled = false }
 
     val matches = viewModel.matches
-    val shown = matches.filter { match -> level == "all" || match.theyGive.orEmpty().any { it.level == level } }
-    val counts = Levels.associateWith { key -> matches.count { m -> m.theyGive.orEmpty().any { it.level == key } } }
+    val cards = viewModel.cards
+    val needle = query.trim()
+    fun hit(vararg texts: String?) = needle.isEmpty() || texts.any { it?.contains(needle, ignoreCase = true) == true }
+
+    val shownCards = cards.filter { card ->
+        (level == "all" || card.level == level) && hit(card.name, card.setName, card.key)
+    }
+    val shownPeople = matches.withIndex()
+        .filter { (_, match) ->
+            (level == "all" || match.theyGive.orEmpty().any { it.level == level }) &&
+                (hit(match.nickname) || match.theyGive.orEmpty().any { hit(it.name, it.setName) })
+        }
+        .let { list ->
+            when (sort) {
+                PeopleSort.BEST -> list
+                PeopleSort.NEAR -> list.sortedBy { if (it.value.distance == "lt5") 0 else 1 }
+                PeopleSort.MOST -> list.sortedByDescending { it.value.theyGiveCount ?: it.value.theyGive.orEmpty().size }
+            }
+        }
+    val counts = if (view == MatchView.CARDS) {
+        Levels.associateWith { key -> cards.count { it.level == key } }
+    } else {
+        Levels.associateWith { key -> matches.count { m -> m.theyGive.orEmpty().any { it.level == key } } }
+    }
+    // Con poche persone i consigliati ripeterebbero la lista: compaiono da quattro in su.
+    val recommended = if (matches.size >= 4) {
+        matches.withIndex().filter { it.value.mutual == true || it.value.level == "wanted" }.take(4)
+            .ifEmpty { matches.withIndex().take(3) }
+    } else emptyList()
     val scanning = viewModel.refreshing || viewModel.busy
 
     PullToRefreshBox(
@@ -499,7 +566,7 @@ private fun MatchesTab(
     ) {
         LazyColumn(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             item(key = "radar") {
@@ -515,15 +582,35 @@ private fun MatchesTab(
                     LevelsIntro(onDismiss = { viewModel.dismissLevelsIntro() }, modifier = Modifier.animateItem())
                 }
             }
+            if (!paused && recommended.isNotEmpty() && needle.isEmpty()) {
+                item(key = "recommended") {
+                    RecommendedRow(recommended, onOpen = { sheet = SheetPage.Person(it, null) }, modifier = Modifier.animateItem())
+                }
+            }
             if (!paused && matches.isNotEmpty()) {
-                item(key = "filters") {
-                    FilterRow(
-                        selected = level,
-                        total = matches.size,
-                        counts = counts,
-                        onSelect = { level = it },
-                        onHelp = { showLegend = true }
-                    )
+                item(key = "controls") {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
+                        SegmentedTabs(
+                            selected = view.ordinal,
+                            labels = listOf(AppLocale.tradeRadarViewByCard, AppLocale.tradeRadarViewByPerson),
+                            badges = listOf(cards.size, matches.size),
+                            onSelect = { view = MatchView.entries[it] },
+                            modifier = Modifier
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            SearchField(query, onChange = { query = it }, modifier = Modifier.weight(1f))
+                            AnimatedVisibility(visible = view == MatchView.PEOPLE) {
+                                SortButton(sort, onChange = { sort = it })
+                            }
+                        }
+                        FilterRow(
+                            selected = level,
+                            total = if (view == MatchView.CARDS) cards.size else matches.size,
+                            counts = counts,
+                            onSelect = { level = it },
+                            onHelp = { showLegend = true }
+                        )
+                    }
                 }
             }
             when {
@@ -537,18 +624,43 @@ private fun MatchesTab(
                         action = if (noHaves) AppLocale.tradeRadarGoToMyCards to onGoToMyCards else null
                     )
                 }
-                shown.isEmpty() && matches.isNotEmpty() -> item(key = "filtered") {
-                    EmptyState(text = AppLocale.tradeRadarNoneForFilter, radar = false)
+                matches.isEmpty() -> Unit
+                view == MatchView.CARDS && shownCards.isEmpty() -> item(key = "noCards") {
+                    EmptyState(text = if (needle.isNotEmpty()) AppLocale.tradeRadarNoSearchResults else AppLocale.tradeRadarNoneForFilter, radar = false)
                 }
-                else -> itemsIndexed(shown, key = { index, match -> match.nickname ?: "match-$index" }) { index, match ->
-                    CascadeIn(index = index, visible = cascadeStarted, modifier = Modifier.animateItem()) {
-                        MatchCard(match, level, onCardClick = { card, theirs -> selectedCard = card to theirs })
+                view == MatchView.PEOPLE && shownPeople.isEmpty() -> item(key = "noPeople") {
+                    EmptyState(text = if (needle.isNotEmpty()) AppLocale.tradeRadarNoSearchResults else AppLocale.tradeRadarNoneForFilter, radar = false)
+                }
+                view == MatchView.CARDS -> itemsIndexed(shownCards, key = { _, card -> "card|${card.key}" }) { position, card ->
+                    CascadeIn(index = position, visible = cascadeStarted, modifier = Modifier.animateItem()) {
+                        CardOfferRow(card, matches, onClick = { sheet = SheetPage.Holders(card) })
+                    }
+                }
+                else -> itemsIndexed(shownPeople, key = { _, entry -> "person|${entry.index}" }) { position, (index, match) ->
+                    CascadeIn(index = position, visible = cascadeStarted, modifier = Modifier.animateItem()) {
+                        CompactMatchRow(
+                            match = match,
+                            level = level,
+                            expanded = index in expanded,
+                            onToggle = { expanded = if (index in expanded) expanded - index else expanded + index },
+                            onCardClick = { card, theirs -> selectedCard = card to theirs }
+                        )
                     }
                 }
             }
         }
     }
 
+    sheet?.let { page ->
+        TradeSheet(
+            page = page,
+            matches = matches,
+            level = level,
+            onNavigate = { sheet = it },
+            onCardClick = { card, theirs -> selectedCard = card to theirs },
+            onDismiss = { sheet = null }
+        )
+    }
     if (showLegend) {
         AlertDialog(
             onDismissRequest = { showLegend = false },
@@ -558,6 +670,406 @@ private fun MatchesTab(
         )
     }
     selectedCard?.let { (card, theirs) -> CardDetailDialog(card, theirs, onDismiss = { selectedCard = null }) }
+}
+
+@Composable
+private fun SearchField(query: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onChange,
+        placeholder = { Text(AppLocale.tradeRadarSearchHint, fontSize = 14.sp) },
+        leadingIcon = { Icon(Icons.Default.Search, null, tint = AppColors.textMuted) },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onChange("") }) { Icon(Icons.Default.Close, null, tint = AppColors.textMuted) }
+            }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun SortButton(sort: PeopleSort, onChange: (PeopleSort) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.AutoMirrored.Filled.Sort, AppLocale.tradeRadarSort, tint = AppColors.textSecondary)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            PeopleSort.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            when (option) {
+                                PeopleSort.BEST -> AppLocale.tradeRadarSortBest
+                                PeopleSort.NEAR -> AppLocale.tradeRadarSortNear
+                                PeopleSort.MOST -> AppLocale.tradeRadarSortMost
+                            },
+                            fontWeight = if (option == sort) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    onClick = { open = false; onChange(option) }
+                )
+            }
+        }
+    }
+}
+
+/** I primi scambi per punteggio, in orizzontale: spesso basta guardare questi. */
+@Composable
+private fun RecommendedRow(recommended: List<IndexedValue<TradeMatch>>, onOpen: (Int) -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.AutoAwesome, null, tint = AppColors.orange, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(AppLocale.tradeRadarRecommended, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(recommended, key = { it.index }) { (index, match) ->
+                RecommendedCard(match, onClick = { onOpen(index) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecommendedCard(match: TradeMatch, onClick: () -> Unit) {
+    val mutual = match.mutual == true
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .width(232.dp)
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        (if (mutual) AppColors.green else AppColors.orange).copy(alpha = 0.16f),
+                        AppColors.card
+                    )
+                )
+            )
+            .background(AppColors.card.copy(alpha = 0.5f))
+            .then(if (mutual) Modifier.border(1.dp, AppColors.green.copy(alpha = 0.45f), shape) else Modifier)
+            .pressScale(scaleDown = 0.97f, onClick = onClick)
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(match.nickname.orEmpty(), size = 36.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(match.nickname.orEmpty(), fontWeight = FontWeight.Bold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(distanceLabel(match.distance), fontSize = 11.sp, color = AppColors.textSecondary)
+            }
+            if (mutual) Icon(Icons.Default.SwapHoriz, AppLocale.tradeRadarMutual, tint = AppColors.green, modifier = Modifier.size(20.dp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            match.theyGive.orEmpty().take(4).forEach { item -> MiniCard(item, width = 44.dp) }
+        }
+        Text(
+            AppLocale.tradeRadarGiveTake(match.theyGiveCount ?: match.theyGive.orEmpty().size, match.iGiveCount ?: match.iGive.orEmpty().size),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (mutual) AppColors.green else AppColors.textSecondary
+        )
+    }
+}
+
+/** Una miniatura di carta con il filo colorato del livello sotto. */
+@Composable
+private fun MiniCard(item: TradeMatchItem, width: Dp) {
+    val key = item.key.orEmpty()
+    val style = levelStyle(item.level)
+    Box(Modifier.width(width).aspectRatio(0.716f).clip(RoundedCornerShape(4.dp))) {
+        CardImageSkeleton()
+        AsyncImage(
+            model = TradeCardKey.imageUrl(key, PokeVaultApiClient.imageBaseUrl),
+            contentDescription = item.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp).background(style.color))
+    }
+}
+
+/** Una riga della vista per carta: la carta, perche' ti interessa, e chi ce l'ha. */
+@Composable
+private fun CardOfferRow(card: TradeCardOffer, matches: List<TradeMatch>, onClick: () -> Unit) {
+    val key = card.key.orEmpty()
+    val style = levelStyle(card.level)
+    val holders = card.holders.orEmpty()
+    val count = card.holderCount ?: holders.size
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.card)
+            .pressScale(scaleDown = 0.98f, onClick = onClick)
+            .padding(10.dp)
+    ) {
+        Box(Modifier.width(48.dp).height(67.dp).clip(RoundedCornerShape(5.dp))) {
+            CardImageSkeleton()
+            AsyncImage(
+                model = TradeCardKey.imageUrl(key, PokeVaultApiClient.imageBaseUrl),
+                contentDescription = card.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp).background(style.color))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(card.name ?: TradeCardKey.label(key), fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(card.setName ?: TradeCardKey.setCodeOf(key).uppercase(), fontSize = 12.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(style.icon, null, tint = style.color, modifier = Modifier.size(12.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    reasonText(card.reason, card.setOwned, card.setSize) ?: style.label,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = style.color,
+                    maxLines = 1
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            StackedAvatars(
+                nicknames = holders.take(3).mapNotNull { matches.getOrNull(it.match ?: -1)?.nickname },
+                extra = (count - 3).coerceAtLeast(0)
+            )
+            Text(AppLocale.tradeRadarHolders(count), fontSize = 11.sp, color = AppColors.textMuted)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.textMuted)
+    }
+}
+
+/** Le iniziali una sopra l'altra, come le facce di un gruppo, con "+N" per il resto. */
+@Composable
+private fun StackedAvatars(nicknames: List<String>, extra: Int) {
+    val ring = AppColors.card
+    Row(horizontalArrangement = Arrangement.spacedBy((-8).dp), verticalAlignment = Alignment.CenterVertically) {
+        nicknames.forEach { nickname ->
+            Box(Modifier.size(28.dp).clip(CircleShape).background(ring), contentAlignment = Alignment.Center) {
+                Avatar(nickname, size = 28.dp)
+            }
+        }
+        if (extra > 0) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(28.dp).clip(CircleShape).background(ring).padding(2.dp).clip(CircleShape).background(innerColor())
+            ) {
+                Text("+$extra", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AppColors.textSecondary)
+            }
+        }
+    }
+}
+
+/** Una persona nella vista per persona: una riga che si apre sulla scheda intera. */
+@Composable
+private fun CompactMatchRow(
+    match: TradeMatch,
+    level: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit
+) {
+    val motion = AppMotion.current
+    val mutual = match.mutual == true
+    val shape = RoundedCornerShape(20.dp)
+    val arrow by animateFloatAsState(if (expanded) 180f else 0f, tween(motion.chevron), label = "rowChevron")
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(AppColors.card)
+            .then(if (mutual) Modifier.border(1.dp, AppColors.green.copy(alpha = 0.4f), shape) else Modifier)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(12.dp)
+        ) {
+            Avatar(match.nickname.orEmpty(), size = 40.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(match.nickname.orEmpty(), fontWeight = FontWeight.Bold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (mutual) {
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Default.SwapHoriz, AppLocale.tradeRadarMutual, tint = AppColors.green, modifier = Modifier.size(16.dp))
+                    }
+                }
+                Text(
+                    "${distanceLabel(match.distance)} · ${AppLocale.tradeRadarGiveTake(match.theyGiveCount ?: match.theyGive.orEmpty().size, match.iGiveCount ?: match.iGive.orEmpty().size)}",
+                    fontSize = 12.sp,
+                    color = AppColors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            AnimatedVisibility(visible = !expanded, enter = fadeIn(), exit = fadeOut()) {
+                Row(horizontalArrangement = Arrangement.spacedBy((-10).dp)) {
+                    match.theyGive.orEmpty().take(3).forEach { MiniCard(it, width = 26.dp) }
+                }
+            }
+            Icon(Icons.Default.ExpandMore, null, tint = AppColors.textMuted, modifier = Modifier.rotate(arrow))
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(tween(motion.content)) + fadeIn(tween(motion.content)),
+            exit = shrinkVertically(tween(motion.state)) + fadeOut(tween(motion.state))
+        ) {
+            Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                MatchBody(match, level, onCardClick)
+            }
+        }
+    }
+}
+
+/**
+ * Il pannello dal basso: chi ha una carta, e da li' la scheda di una persona,
+ * con la freccia per tornare alla carta. Contenuto a misura (niente altezza
+ * in frazione), quindi niente rimbalzo; gli insets restano solo in basso.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TradeSheet(
+    page: SheetPage,
+    matches: List<TradeMatch>,
+    level: String,
+    onNavigate: (SheetPage) -> Unit,
+    onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val motion = AppMotion.current
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AppColors.background,
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) }
+    ) {
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                val forward = targetState is SheetPage.Person
+                (fadeIn(tween(motion.content)) + slideInHorizontally(tween(motion.content)) { if (forward) it / 6 else -it / 6 }) togetherWith
+                    fadeOut(tween(motion.state))
+            },
+            label = "sheetPage"
+        ) { current ->
+            when (current) {
+                is SheetPage.Holders -> HoldersPage(current.card, matches, onOpen = { onNavigate(SheetPage.Person(it, current.card)) })
+                is SheetPage.Person -> PersonPage(
+                    match = matches.getOrNull(current.index),
+                    level = level,
+                    onBack = current.from?.let { card -> { onNavigate(SheetPage.Holders(card)) } },
+                    onCardClick = onCardClick
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HoldersPage(card: TradeCardOffer, matches: List<TradeMatch>, onOpen: (Int) -> Unit) {
+    val key = card.key.orEmpty()
+    val style = levelStyle(card.level)
+    val holders = card.holders.orEmpty()
+    val count = card.holderCount ?: holders.size
+    LazyColumn(
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                Box(Modifier.width(72.dp).height(100.dp).clip(RoundedCornerShape(8.dp))) {
+                    CardImageSkeleton()
+                    AsyncImage(
+                        model = TradeCardKey.imageUrl(key, PokeVaultApiClient.imageBaseUrl),
+                        contentDescription = card.name,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(card.name ?: TradeCardKey.label(key), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+                    Text(card.setName ?: TradeCardKey.setCodeOf(key).uppercase(), fontSize = 13.sp, color = AppColors.textSecondary)
+                    InfoPill(reasonText(card.reason, card.setOwned, card.setSize) ?: style.label, style.color)
+                }
+            }
+            Text(AppLocale.tradeRadarHoldersTitle(count), fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+        }
+        items(holders, key = { it.match ?: -1 }) { holder ->
+            val match = matches.getOrNull(holder.match ?: -1) ?: return@items
+            HolderRow(match, holder, onClick = { holder.match?.let(onOpen) })
+        }
+        if (count > holders.size) {
+            item { Text(AppLocale.tradeRadarMoreHolders(count - holders.size), fontSize = 12.sp, color = AppColors.textMuted) }
+        }
+    }
+}
+
+@Composable
+private fun HolderRow(match: TradeMatch, holder: TradeCardHolder, onClick: () -> Unit) {
+    val mutual = match.mutual == true
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(AppColors.card)
+            .pressScale(scaleDown = 0.98f, onClick = onClick)
+            .padding(10.dp)
+    ) {
+        Avatar(match.nickname.orEmpty(), size = 38.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(match.nickname.orEmpty(), fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                listOfNotNull(
+                    distanceLabel(match.distance),
+                    holder.qty?.takeIf { it > 1 }?.let { "×$it" },
+                    holder.condition?.takeIf { it.isNotBlank() }
+                ).joinToString(" · "),
+                fontSize = 12.sp,
+                color = AppColors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (mutual) {
+            InfoPill(AppLocale.tradeRadarMutualShort, AppColors.green)
+            Spacer(Modifier.width(4.dp))
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.textMuted)
+    }
+}
+
+@Composable
+private fun PersonPage(
+    match: TradeMatch?,
+    level: String,
+    onBack: (() -> Unit)?,
+    onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
+    ) {
+        if (onBack != null) {
+            TextButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(AppLocale.back)
+            }
+        }
+        if (match != null) MatchCard(match, level, onCardClick)
+    }
 }
 
 /** Il radar in cima: quanti sono vicini, quanti reciproci, e il tasto per aggiornare. */
@@ -731,10 +1243,9 @@ private fun FilterChip(text: String, count: Int, style: LevelStyle?, selected: B
     }
 }
 
+/** La scheda intera di una persona: intestazione e [MatchBody]. */
 @Composable
 private fun MatchCard(match: TradeMatch, level: String, onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit) {
-    val theyGive = match.theyGive.orEmpty().filter { level == "all" || it.level == level }
-    val iGive = match.iGive.orEmpty()
     val mutual = match.mutual == true
     val shape = RoundedCornerShape(22.dp)
     Column(
@@ -763,34 +1274,44 @@ private fun MatchCard(match: TradeMatch, level: String, onCardClick: (TradeMatch
                 }
             }
         }
+        MatchBody(match, level, onCardClick)
+    }
+}
 
-        if (mutual) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(AppColors.green.copy(alpha = 0.13f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Icon(Icons.Default.SwapHoriz, null, tint = AppColors.green, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(AppLocale.tradeRadarMutual, fontSize = 13.sp, color = AppColors.green, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text("${match.theyGive.orEmpty().size} ⇄ ${iGive.size}", fontSize = 13.sp, color = AppColors.green, fontWeight = FontWeight.Bold)
-            }
+/** Fascia "Scambio reciproco" e le due file di carte: cosa ti da', cosa vuole da te. */
+@Composable
+private fun MatchBody(match: TradeMatch, level: String, onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit) {
+    val theyGive = match.theyGive.orEmpty().filter { level == "all" || it.level == level }
+    val iGive = match.iGive.orEmpty()
+    if (match.mutual == true) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(AppColors.green.copy(alpha = 0.13f))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Icon(Icons.Default.SwapHoriz, null, tint = AppColors.green, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(AppLocale.tradeRadarMutual, fontSize = 13.sp, color = AppColors.green, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(
+                "${match.theyGiveCount ?: match.theyGive.orEmpty().size} ⇄ ${match.iGiveCount ?: iGive.size}",
+                fontSize = 13.sp, color = AppColors.green, fontWeight = FontWeight.Bold
+            )
         }
+    }
 
-        SectionTitle(AppLocale.tradeRadarTheyGive, theyGive.size)
-        CardStrip(theyGive, theirs = false) { onCardClick(it, false) }
+    SectionTitle(AppLocale.tradeRadarTheyGive, theyGive.size)
+    CardStrip(theyGive, theirs = false) { onCardClick(it, false) }
 
-        if (iGive.isNotEmpty()) {
-            SwapDivider()
-            SectionTitle(AppLocale.tradeRadarYouGive, iGive.size)
-            // Qui le etichette dicono quanto la carta interessa all'ALTRO.
-            CardStrip(iGive, theirs = true) { onCardClick(it, true) }
-        } else {
-            Text(AppLocale.tradeRadarOneWay, fontSize = 12.sp, color = AppColors.textMuted)
-        }
+    if (iGive.isNotEmpty()) {
+        SwapDivider()
+        SectionTitle(AppLocale.tradeRadarYouGive, iGive.size)
+        // Qui le etichette dicono quanto la carta interessa all'ALTRO.
+        CardStrip(iGive, theirs = true) { onCardClick(it, true) }
+    } else {
+        Text(AppLocale.tradeRadarOneWay, fontSize = 12.sp, color = AppColors.textMuted)
     }
 }
 
@@ -1562,15 +2083,14 @@ private fun levelStyle(level: String?, theirs: Boolean = false): LevelStyle = wh
 }
 
 /** Il motivo preciso, quando c'e'; null per "Ti manca" e "Altre carte", che non ne hanno uno. */
-private fun reasonLabel(item: TradeMatchItem, theirs: Boolean = false): String? = when (item.reason) {
+private fun reasonLabel(item: TradeMatchItem, theirs: Boolean = false): String? =
+    reasonText(item.reason, item.setOwned, item.setSize, theirs)
+
+private fun reasonText(reason: String?, setOwned: Int?, setSize: Int?, theirs: Boolean = false): String? = when (reason) {
     "wishlist" -> if (theirs) AppLocale.tradeRadarTheirReasonWishlist else AppLocale.tradeRadarReasonWishlist
     "album" -> if (theirs) AppLocale.tradeRadarTheirReasonAlbum else AppLocale.tradeRadarReasonAlbum
-    "set" -> {
-        val owned = item.setOwned
-        val size = item.setSize
-        if (owned != null && size != null && size > 0) AppLocale.tradeRadarReasonSetProgress(owned, size)
+    "set" -> if (setOwned != null && setSize != null && setSize > 0) AppLocale.tradeRadarReasonSetProgress(setOwned, setSize)
         else AppLocale.tradeRadarReasonSet
-    }
     else -> null
 }
 

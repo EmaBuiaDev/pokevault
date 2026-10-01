@@ -1484,6 +1484,20 @@ object AppLocale {
     val tradeRadarNotifyOn: String get() = if (isItalian) "Avvisi accesi" else "Alerts on"
     val tradeRadarNotifyOff: String get() = if (isItalian) "Senza avvisi" else "No alerts"
     val tradeRadarNotifyToggle: String get() = if (isItalian) "Avvisami quando qualcuno vicino la cerca" else "Alert me when someone nearby wants it"
+    val tradeRadarRecommended: String get() = if (isItalian) "Scambi consigliati" else "Suggested trades"
+    val tradeRadarViewByCard: String get() = if (isItalian) "Per carta" else "By card"
+    val tradeRadarViewByPerson: String get() = if (isItalian) "Per persona" else "By person"
+    val tradeRadarSearchHint: String get() = if (isItalian) "Cerca carta, set o persona" else "Search card, set or person"
+    val tradeRadarNoSearchResults: String get() = if (isItalian) "Niente per questa ricerca." else "Nothing for this search."
+    fun tradeRadarHolders(count: Int): String = if (isItalian) (if (count == 1) "1 vicino" else "$count vicini") else (if (count == 1) "1 nearby" else "$count nearby")
+    fun tradeRadarHoldersTitle(count: Int): String = if (isItalian) (if (count == 1) "Ce l'ha 1 persona vicina" else "Ce l'hanno $count persone vicine") else (if (count == 1) "1 person nearby has it" else "$count people nearby have it")
+    fun tradeRadarMoreHolders(count: Int): String = if (isItalian) "E altre $count persone, meno in alto nella classifica dei match." else "And $count more people, lower in the match ranking."
+    val tradeRadarSort: String get() = if (isItalian) "Ordina" else "Sort"
+    val tradeRadarSortBest: String get() = if (isItalian) "Consigliati" else "Suggested"
+    val tradeRadarSortNear: String get() = if (isItalian) "Più vicini" else "Closest"
+    val tradeRadarSortMost: String get() = if (isItalian) "Più carte per te" else "Most cards for you"
+    fun tradeRadarGiveTake(forYou: Int, fromYou: Int): String = if (isItalian) "$forYou per te · $fromYou da te" else "$forYou for you · $fromYou from you"
+    val tradeRadarMutualShort: String get() = if (isItalian) "Reciproco" else "Two-way"
     val tradeRadarReasonWishlist: String get() = if (isItalian) "In wishlist" else "In wishlist"
     val tradeRadarReasonAlbum: String get() = if (isItalian) "Per un album" else "For an album"
     // Le stesse etichette sulle carte che dai: parlano dell'altra persona.

@@ -104,13 +104,44 @@ data class TradeMatch(
     @SerializedName("level") val level: String? = null,
     @SerializedName("mutual") val mutual: Boolean? = null,
     @SerializedName("theyGive") val theyGive: List<TradeMatchItem>? = null,
-    @SerializedName("iGive") val iGive: List<TradeMatchItem>? = null
+    @SerializedName("iGive") val iGive: List<TradeMatchItem>? = null,
+    /** Quante carte in tutto per lato: le liste sopra ne portano al massimo 60. */
+    @SerializedName("theyGiveCount") val theyGiveCount: Int? = null,
+    @SerializedName("iGiveCount") val iGiveCount: Int? = null
+)
+
+/** Chi ha una carta, nella vista per carta. */
+data class TradeCardHolder(
+    /** Posizione del match in [TradeMatchesPayload.matches]. */
+    @SerializedName("match") val match: Int? = null,
+    @SerializedName("qty") val qty: Int? = null,
+    @SerializedName("variant") val variant: String? = null,
+    @SerializedName("condition") val condition: String? = null,
+    @SerializedName("language") val language: String? = null
+)
+
+/** Una carta che posso ricevere e chi ce l'ha: la vista per carta. */
+data class TradeCardOffer(
+    @SerializedName("key") val key: String? = null,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("setName") val setName: String? = null,
+    @SerializedName("level") val level: String? = null,
+    @SerializedName("reason") val reason: String? = null,
+    @SerializedName("setOwned") val setOwned: Int? = null,
+    @SerializedName("setSize") val setSize: Int? = null,
+    /** Persone che ce l'hanno; [holders] ne elenca al massimo 50. */
+    @SerializedName("holderCount") val holderCount: Int? = null,
+    @SerializedName("holders") val holders: List<TradeCardHolder>? = null
 )
 
 /** GET /v1/trade/matches */
 data class TradeMatchesPayload(
     @SerializedName("paused") val paused: Boolean? = null,
-    @SerializedName("matches") val matches: List<TradeMatch>? = null
+    /** Persone attive nella zona, anche senza carte per te. */
+    @SerializedName("nearby") val nearby: Int? = null,
+    /** Le migliori 100, gia' in ordine di punteggio. */
+    @SerializedName("matches") val matches: List<TradeMatch>? = null,
+    @SerializedName("cards") val cards: List<TradeCardOffer>? = null
 )
 
 /** Corpo delle risposte d'errore: { "error": "no_profile" } e simili. */
