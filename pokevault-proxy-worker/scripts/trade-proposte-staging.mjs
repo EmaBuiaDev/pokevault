@@ -50,6 +50,38 @@ async function call(tok, method, route, body) {
 const short = (items) => items.map((i) => `${i.name ?? i.key}${i.qty > 1 ? ` x${i.qty}` : ''}`).join(', ') || '-';
 const asItem = ({ key, variant, condition, language, qty }) => ({ key, variant, condition, language, qty });
 
+// ── Tante proposte verso una persona ────────────────────────────────────────
+// --manda-a <id pubblico> [--quanti 10] [--ritirate 3]: folla01.. mandano
+// ciascuno una proposta (1-2 carte loro contro 1-2 di quella persona); le
+// ultime --ritirate le ritirano subito, cosi' finiscono fra le chiuse.
+if (arg('--manda-a')) {
+  const to = arg('--manda-a');
+  const quanti = Number(arg('--quanti') ?? 10);
+  const ritirate = Number(arg('--ritirate') ?? 3);
+  let sent = 0;
+  for (let i = 1; i <= quanti; i++) {
+    const label = `folla${String(i).padStart(2, '0')}`;
+    const tok = await token(label);
+    const { data: theirs } = await call(tok, 'GET', `/v1/trade/users/${to}/haves`);
+    const { data: mine } = await call(tok, 'GET', '/v1/trade/haves');
+    const wanted = (theirs.items ?? []).slice(0, 1 + (i % 2));
+    const offered = (mine.items ?? []).slice(i % 3, (i % 3) + 1 + ((i + 1) % 2));
+    if (wanted.length === 0 || offered.length === 0) { console.log(`${label}: niente da proporre`); continue; }
+    const res = await call(tok, 'POST', '/v1/trade/proposals', {
+      to,
+      give: offered.map((h) => asItem({ ...h, qty: 1 })),
+      take: wanted.map((h) => asItem({ ...h, qty: 1 })),
+    });
+    if (res.status !== 201) { console.log(`${label}: ${res.status} ${JSON.stringify(res.data)}`); continue; }
+    sent++;
+    const withdraw = i > quanti - ritirate;
+    if (withdraw) await call(tok, 'POST', `/v1/trade/proposals/${res.data.id}/cancel`);
+    console.log(`${label}: da' ${offered.map((h) => h.key).join(', ')} per ${wanted.map((h) => h.key).join(', ')}${withdraw ? '  (ritirata)' : ''}`);
+  }
+  console.log(`\nMandate ${sent} proposte.`);
+  process.exit(0);
+}
+
 // ── Rispondere come un utente finto ─────────────────────────────────────────
 if (arg('--as')) {
   const label = arg('--as');
