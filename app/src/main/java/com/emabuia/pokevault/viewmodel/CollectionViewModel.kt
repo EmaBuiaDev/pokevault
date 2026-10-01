@@ -1,10 +1,11 @@
 package com.emabuia.pokevault.viewmodel
 
+import android.app.Application
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.CollectionStats
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
@@ -12,6 +13,7 @@ import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.collectionCardKey
 import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.data.remote.CatalogRepository
+import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.CardCategory
 import com.emabuia.pokevault.util.CardGroup
@@ -30,6 +32,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 data class CollectionUiState(
     val cards: List<PokemonCard> = emptyList(),
@@ -56,10 +59,11 @@ data class CollectionUiState(
     val visibleValue: Double get() = visibleGroups.sumOf { it.totalValue }
 }
 
-class CollectionViewModel : ViewModel() {
+class CollectionViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = FirestoreRepository()
     private val tcgRepository = CatalogRepository()
+    private val italianPriceSnapshotRepository = RepositoryProvider.italianPriceSnapshotRepository
     // Synchronized perché emissioni rapide del Flow possono lanciare hydration concorrenti
     // e questi insiemi tracciano lo stato condiviso fra di esse.
     private val hydratedPriceCardIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
@@ -246,6 +250,8 @@ class CollectionViewModel : ViewModel() {
                 try {
                     val remoteCard = tcgRepository.getCard(card.apiCardId).getOrNull()
                     val eurPrice = remoteCard?.cardmarket?.prices.minimumEurPriceOrZero()
+                        .takeIf { it > 0.0 }
+                        ?: italianSnapshotPrice(card.apiCardId)
 
                     if (eurPrice > 0.0) {
                         repository.updateCard(card.id, card.copy(estimatedValue = eurPrice))
@@ -256,6 +262,29 @@ class CollectionViewModel : ViewModel() {
                 }
             }
         }
+    }
+
+    /**
+     * Il prezzo di una carta italiana ("ita:<set>:<numero>") dallo snapshot
+     * italiano, 0 se non c'e'. Serve perche' la carta italiana del catalogo
+     * prende il prezzo Cardmarket solo dalla carta inglese di appoggio, che
+     * quasi sempre manca: senza, una carta italiana salvata a 0 (dagli scambi,
+     * per esempio) non veniva mai recuperata. Lo snapshot e' quello del
+     * worker, per set e in cache: nessuna chiamata a PokeWallet. Il minimo
+     * prima di tutto, come nel resto dell'app.
+     */
+    private suspend fun italianSnapshotPrice(apiCardId: String): Double {
+        if (!apiCardId.startsWith("ita:", ignoreCase = true)) return 0.0
+        val parts = apiCardId.substring(4).split(':')
+        if (parts.size != 2) return 0.0
+        val setCode = parts[0].trim()
+        val rawNumber = parts[1].trim()
+        val number = rawNumber.toIntOrNull()?.toString() ?: rawNumber.uppercase(Locale.ROOT)
+        val data = runCatching { italianPriceSnapshotRepository.getPriceMap(getApplication(), setCode) }
+            .getOrNull()
+            ?.get(number)
+            ?: return 0.0
+        return listOf(data.eurLow, data.eurTrend, data.eurAvg).firstOrNull { (it ?: 0.0) > 0.0 } ?: 0.0
     }
 
     /**
