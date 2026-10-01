@@ -39,8 +39,9 @@ crons = ["*/30 * * * *"]
 # rotta, e non riceve nessuna delle risorse qui sopra -- in wrangler vars e
 # binding non si ereditano negli ambienti, quindi niente KV della cache,
 # niente R2, niente catalogo D1, niente chiave PokeWallet.
-# I cron invece si erediterebbero: la lista vuota e' li' apposta, altrimenti
-# lo staging ricostruirebbe lo snapshot prezzi consumando le chiamate
+# I cron invece si erediterebbero: per questo lo staging ha il suo. Ogni 15
+# minuti gira SOLO la parte TradeRadar (notifiche): scheduled() esce prima
+# dei prezzi perche' qui non c'e' la cache KV, quindi nessuna chiamata
 # PokeWallet della produzione.
 # L'ID token si verifica contro il progetto Firebase di staging, quindi da qui
 # passano solo gli account di test dell'app staging.
@@ -66,4 +67,4 @@ database_name = "pokevault-catalog"
 database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7"
 
 [env.staging.triggers]
-crons = []
+crons = ["*/15 * * * *"]

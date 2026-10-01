@@ -15,10 +15,12 @@
  * vedi schema-trade/002_fondamenta.sql e TradeCardKey nell'app.
  */
 
+import { romeNow, slotTime, romeToEpoch, addDays, type Slot } from './trade-time';
+import { enqueue, deliver, prefsOf, type Outgoing, type PushEnv } from './trade-push';
 import { verifyFirebaseIdToken } from './billing';
 import { GEOHASH5_REGEX, cellAndNeighbors, cellCenter, encode } from './geohash';
 
-export interface TradeEnv {
+export interface TradeEnv extends PushEnv {
   /** "1" accende il modulo. Assente in produzione. */
   TRADE_ENABLED?: string;
   /** D1 degli scambi (staging: pokevault-trade-staging). */
@@ -216,13 +218,15 @@ interface ProfileRow {
   /** Fino a quando e' fuori dai match (ms), e perche': no_show | reports | admin (schema 10). */
   suspended_until: number | null;
   suspension_reason: string | null;
+  /** Le categorie di notifiche, in JSON (schema 11). */
+  notify_prefs: string | null;
 }
 
 async function loadProfile(db: D1Database, uid: string): Promise<ProfileRow | null> {
   return db
     .prepare(
       `SELECT uid, nickname, geohash5, paused, owned_hash, trades_done, created_at, leaderboard_opt_in, leaderboard_asked_at,
-              avatar, avatar_animated, suspended_until, suspension_reason
+              avatar, avatar_animated, suspended_until, suspension_reason, notify_prefs
        FROM trade_profiles WHERE uid = ?`
     )
     .bind(uid)
@@ -242,6 +246,7 @@ function profileJson(row: ProfileRow, counts?: { haves: number; wants: number; o
     // Chi e' sospeso lo deve sapere, e perche': altrimenti vede solo un radar vuoto.
     suspendedUntil: (row.suspended_until ?? 0) > Date.now() ? row.suspended_until : null,
     suspensionReason: (row.suspended_until ?? 0) > Date.now() ? row.suspension_reason : null,
+    notify: prefsOf(row.notify_prefs),
     ...(counts ?? {}),
   };
 }
@@ -333,6 +338,9 @@ async function deleteProfile(db: D1Database, uid: string): Promise<Response> {
       )
       .bind(uid, now),
     db.prepare(`DELETE FROM trade_blocks WHERE blocker_uid = ?`).bind(uid),
+    db.prepare(`DELETE FROM trade_push_tokens WHERE uid = ?`).bind(uid),
+    db.prepare(`DELETE FROM trade_notifications WHERE uid = ?`).bind(uid),
+    db.prepare(`DELETE FROM trade_wants_seen WHERE uid = ?1 OR holder_uid = ?1`).bind(uid),
     // I luoghi segnalati: quelli approvati restano (sono pubblici) ma senza
     // legame con chi li ha segnalati; quelli ancora in verifica se ne vanno.
     db.prepare(`DELETE FROM trade_spots WHERE added_by = ? AND approved = 0`).bind(uid),
@@ -898,7 +906,7 @@ async function getUserHaves(db: D1Database, uid: string, publicId: string, env: 
  * vista di chi manda. Almeno una carta per parte, tutte fra le offerte di chi
  * le da'. Fra due persone c'e' una sola proposta aperta alla volta.
  */
-async function createProposal(request: Request, db: D1Database, uid: string): Promise<Response> {
+async function createProposal(request: Request, db: D1Database, uid: string, push: Pusher): Promise<Response> {
   const body = await readJson<{ to?: string; give?: unknown; take?: unknown }>(request);
   if (!body) return json({ error: 'bad_json' }, 400);
   if (await isSuspended(db, uid)) return json({ error: 'suspended' }, 403);
@@ -941,6 +949,12 @@ async function createProposal(request: Request, db: D1Database, uid: string): Pr
     ...itemStatements(db, id, 1, uid, give),
     ...itemStatements(db, id, 1, target.uid, take),
   ]);
+  // Per chi la riceve: give e take sono visti da chi manda.
+  await push([{
+    id: `proposal:${id}:1:${target.uid}`, uid: target.uid, kind: 'proposals', template: 'proposal_new',
+    args: { nick: await nicknameOf(db, uid), give: quantity(give), take: quantity(take) },
+    data: { screen: 'proposals', proposalId: id }, tag: `proposal:${id}`,
+  }]);
   return json({ id }, 201);
 }
 
@@ -962,7 +976,7 @@ interface ProposalRow {
  * aspetta la risposta, oppure uno dei due dopo l'accordo. Accettando si
  * ricontrolla che le carte ci siano ancora.
  */
-async function actOnProposal(request: Request, db: D1Database, uid: string, id: string, action: string): Promise<Response> {
+async function actOnProposal(request: Request, db: D1Database, uid: string, id: string, action: string, push: Pusher): Promise<Response> {
   const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow>();
   if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return json({ error: 'no_proposal' }, 404);
   const other = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
@@ -990,6 +1004,13 @@ async function actOnProposal(request: Request, db: D1Database, uid: string, id: 
       return json({ error: 'meeting_passed' }, 409);
     }
     await close('cancelled');
+    // Ritirare una proposta ancora aperta non avvisa; annullare un accordo si'.
+    if (proposal.status === 'accepted' || proposal.status === 'scheduled') {
+      await push([{
+        id: `cancelled:${id}:${other}`, uid: other, kind: 'meetings', template: 'deal_cancelled',
+        args: { nick: await nicknameOf(db, uid) }, data: { screen: 'proposals', proposalId: id }, tag: `proposal:${id}`,
+      }]);
+    }
     return json({ status: 'cancelled' });
   }
 
@@ -1014,6 +1035,10 @@ async function actOnProposal(request: Request, db: D1Database, uid: string, id: 
       .prepare(`UPDATE trade_proposals SET status = 'accepted', updated_at = ? WHERE id = ?`)
       .bind(now, id)
       .run();
+    await push([{
+      id: `accepted:${id}:${other}`, uid: other, kind: 'proposals', template: 'proposal_accepted',
+      args: { nick: await nicknameOf(db, uid) }, data: { screen: 'proposals', proposalId: id }, tag: `proposal:${id}`,
+    }]);
     return json({ status: 'accepted' });
   }
 
@@ -1034,6 +1059,10 @@ async function actOnProposal(request: Request, db: D1Database, uid: string, id: 
       ...itemStatements(db, id, revision, uid, give),
       ...itemStatements(db, id, revision, other, take),
     ]);
+    await push([{
+      id: `proposal:${id}:${revision}:${other}`, uid: other, kind: 'proposals', template: 'proposal_counter',
+      args: { nick: await nicknameOf(db, uid) }, data: { screen: 'proposals', proposalId: id }, tag: `proposal:${id}`,
+    }]);
     return json({ status: 'open', revision });
   }
 
@@ -1575,13 +1604,6 @@ interface MeetingColumns {
   meet_slot: string | null;
 }
 
-interface Slot {
-  day: string;
-  /** "HH:mm", dalle 07:00 alle 23:00. Le prime prove (01/10) avevano solo la fascia. */
-  time?: string;
-  part: string;
-}
-
 /** La fascia di un orario, per chi la legge ancora: prima delle 13 mattina, dalle 19 sera. */
 function partOfTime(time: string): string {
   const hour = Number(time.slice(0, 2));
@@ -1624,7 +1646,7 @@ function parseSlots(raw: unknown): Slot[] | null {
  * POST /v1/trade/proposals/:id/meeting/confirm — { slot }: l'altro sceglie
  * una delle fasce e l'appuntamento e' fissato.
  */
-async function meetingAction(request: Request, db: D1Database, uid: string, id: string, confirm: boolean): Promise<Response> {
+async function meetingAction(request: Request, db: D1Database, uid: string, id: string, confirm: boolean, push: Pusher): Promise<Response> {
   const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow & MeetingColumns>();
   if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return json({ error: 'no_proposal' }, 404);
   if (proposal.status !== 'accepted' && proposal.status !== 'scheduled') return json({ error: 'not_agreed' }, 409);
@@ -1640,6 +1662,15 @@ async function meetingAction(request: Request, db: D1Database, uid: string, id: 
       .prepare(`UPDATE trade_proposals SET meet_status = 'confirmed', meet_slot = ?, status = 'scheduled', updated_at = ? WHERE id = ?`)
       .bind(JSON.stringify(chosen), now, id)
       .run();
+    if (proposal.meet_by) {
+      const spot = await db.prepare(`SELECT name FROM trade_spots WHERE id = ?`).bind(proposal.meet_spot_id).first<{ name: string }>();
+      const time = slotTime(chosen);
+      await push([{
+        id: `confirmed:${id}:${chosen.day}T${time}:${proposal.meet_by}`, uid: proposal.meet_by, kind: 'meetings', template: 'meeting_confirmed',
+        args: { nick: await nicknameOf(db, uid), day: chosen.day, time, spot: spot?.name ?? '' },
+        data: { screen: 'proposals', proposalId: id }, tag: `proposal:${id}`,
+      }]);
+    }
     return json({ status: 'scheduled', slot: chosen });
   }
 
@@ -1659,6 +1690,11 @@ async function meetingAction(request: Request, db: D1Database, uid: string, id: 
     )
     .bind(uid, spot.id, JSON.stringify(slots), now, id)
     .run();
+  await push([{
+    id: `meeting:${id}:${now}:${other}`, uid: other, kind: 'meetings', template: 'meeting_proposed',
+    args: { nick: await nicknameOf(db, uid), change: proposal.meet_status !== 'none' },
+    data: { screen: 'proposals', proposalId: id }, tag: `proposal:${id}`,
+  }]);
   return json({ status: 'accepted', meeting: 'proposed' });
 }
 
@@ -1678,21 +1714,6 @@ const SPOT_VOTE_TAGS = ['tournaments', 'comics', 'card_shop'];
 /** Persone diverse che servono perche' un luogo prenda un badge. */
 const SPOT_BADGE_VOTES = 3;
 
-/** Giorno ("2026-10-02") e ora ("10:30") in Italia, per gli appuntamenti. */
-function romeNow(): { day: string; time: string } {
-  const parts = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).format(new Date());
-  const [day, time] = parts.split(' ');
-  return { day, time };
-}
-
-/** L'ora di un appuntamento: quella scelta, o la fine della fascia per le prime prove senza ora. */
-function slotTime(slot: Slot): string {
-  if (slot.time) return slot.time;
-  return slot.part === 'morning' ? '13:00' : slot.part === 'afternoon' ? '19:00' : '23:00';
-}
-
 interface ClosingColumns {
   done_from: number | null;
   done_to: number | null;
@@ -1705,7 +1726,7 @@ interface ClosingColumns {
  * tutti e due lo scambio e' chiuso: status 'done' e uno scambio in piu' a
  * testa. La collezione la aggiorna l'app, con il riepilogo carta per carta.
  */
-async function markDone(db: D1Database, uid: string, id: string): Promise<Response> {
+async function markDone(db: D1Database, uid: string, id: string, push: Pusher): Promise<Response> {
   const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow & MeetingColumns & ClosingColumns>();
   if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return json({ error: 'no_proposal' }, 404);
   if (proposal.status !== 'scheduled' || !proposal.meet_slot) return json({ error: 'not_scheduled' }, 409);
@@ -1717,6 +1738,11 @@ async function markDone(db: D1Database, uid: string, id: string): Promise<Respon
   const otherDone = proposal.from_uid === uid ? proposal.done_to : proposal.done_from;
   if (!otherDone) {
     await db.prepare(`UPDATE trade_proposals SET ${column} = ?, updated_at = ? WHERE id = ?`).bind(now, now, id).run();
+    const other = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
+    await push([{
+      id: `done:${id}:${other}`, uid: other, kind: 'after', template: 'done_by_other',
+      args: { nick: await nicknameOf(db, uid) }, data: { screen: 'proposals', proposalId: id }, tag: `proposal:${id}`,
+    }]);
     return json({ status: 'scheduled', waitingOther: true });
   }
   await db.batch([
@@ -1929,6 +1955,9 @@ async function purgeExpired(db: D1Database): Promise<void> {
     db.prepare(`DELETE FROM trade_reports WHERE created_at < ?`).bind(before),
     db.prepare(`DELETE FROM trade_no_shows WHERE created_at < ?`).bind(before),
     db.prepare(`DELETE FROM trade_sanctions WHERE suspended_until < ?`).bind(now),
+    // Le notifiche spedite servono solo a non rimandarle: un mese basta.
+    db.prepare(`DELETE FROM trade_notifications WHERE created_at < ?`).bind(now - 30 * 24 * 60 * 60 * 1000),
+    db.prepare(`DELETE FROM trade_wants_seen WHERE seen_at < ?`).bind(now - 90 * 24 * 60 * 60 * 1000),
     db
       .prepare(
         `DELETE FROM trade_ratings WHERE created_at < ?
@@ -2338,6 +2367,215 @@ async function reportUser(request: Request, db: D1Database, uid: string, publicI
   return json({ reported: true, blocked: block });
 }
 
+// ── Notifiche (fase 3) ──────────────────────────────────────────────────────
+//
+// Qui le regole: chi avvisare e quando. La consegna (coda, notte, testi,
+// Firebase) sta in trade-push.ts.
+
+/** Mette in coda e, se puo' partire subito, spedisce dopo la risposta: la richiesta non aspetta Firebase. */
+type Pusher = (items: Outgoing[]) => Promise<void>;
+
+function pusherFor(db: D1Database, env: TradeEnv, ctx?: ExecutionContext): Pusher {
+  return async (items) => {
+    const work = enqueue(db, items)
+      .then((ready) => deliver(db, env, ready))
+      .then(() => undefined)
+      .catch((error) => console.warn('traderadar push', error));
+    if (ctx) ctx.waitUntil(work);
+    else await work;
+  };
+}
+
+async function nicknameOf(db: D1Database, uid: string): Promise<string> {
+  const row = await db.prepare(`SELECT nickname FROM trade_profiles WHERE uid = ?`).bind(uid).first<{ nickname: string }>();
+  return row?.nickname ?? '';
+}
+
+function quantity(items: ProposalItem[]): number {
+  return items.reduce((sum, item) => sum + item.qty, 0);
+}
+
+const MAX_PUSH_TOKENS = 5;
+const NOTIFY_KINDS = ['proposals', 'meetings', 'reminders', 'after', 'wants'] as const;
+
+/** PUT /v1/trade/push — { token, lang }: questo telefono riceve le notifiche di questo utente. */
+async function putPushToken(request: Request, db: D1Database, uid: string): Promise<Response> {
+  const body = await readJson<{ token?: string; lang?: string }>(request);
+  const token = typeof body?.token === 'string' ? body.token.trim() : '';
+  if (!/^[A-Za-z0-9:_-]{20,4096}$/.test(token)) return json({ error: 'bad_token' }, 400);
+  const now = Date.now();
+  await db.batch([
+    // Un token e' di un telefono: se ci entra un altro account, passa a lui.
+    db
+      .prepare(
+        `INSERT INTO trade_push_tokens (token, uid, lang, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)
+         ON CONFLICT(token) DO UPDATE SET uid = excluded.uid, lang = excluded.lang, updated_at = excluded.updated_at`
+      )
+      .bind(token, uid, body?.lang === 'en' ? 'en' : 'it', now),
+    db
+      .prepare(
+        `DELETE FROM trade_push_tokens WHERE uid = ?1 AND token NOT IN
+           (SELECT token FROM trade_push_tokens WHERE uid = ?1 ORDER BY updated_at DESC LIMIT ${MAX_PUSH_TOKENS})`
+      )
+      .bind(uid),
+  ]);
+  return json({ ok: true });
+}
+
+/** DELETE /v1/trade/push — { token }: questo telefono non riceve piu'. */
+async function deletePushToken(request: Request, db: D1Database, uid: string): Promise<Response> {
+  const body = await readJson<{ token?: string }>(request);
+  if (typeof body?.token !== 'string') return json({ error: 'bad_token' }, 400);
+  await db.prepare(`DELETE FROM trade_push_tokens WHERE token = ? AND uid = ?`).bind(body.token.trim(), uid).run();
+  return json({ ok: true });
+}
+
+/** PUT /v1/trade/notify — { proposals?, meetings?, reminders?, after?, wants? }: solo i campi presenti cambiano. */
+async function putNotifyPrefs(request: Request, db: D1Database, uid: string): Promise<Response> {
+  const body = await readJson<Record<string, unknown>>(request);
+  if (!body) return json({ error: 'bad_json' }, 400);
+  const me = await loadProfile(db, uid);
+  if (!me) return json({ error: 'no_profile' }, 404);
+  const prefs = prefsOf(me.notify_prefs);
+  for (const kind of NOTIFY_KINDS) {
+    if (typeof body[kind] === 'boolean') prefs[kind] = body[kind] as boolean;
+  }
+  await db.prepare(`UPDATE trade_profiles SET notify_prefs = ? WHERE uid = ?`).bind(JSON.stringify(prefs), uid).run();
+  return json(prefs);
+}
+
+/** Il promemoria: 2 ore prima; per gli appuntamenti del mattino presto, la sera prima alle 21. */
+const REMINDER_BEFORE_MS = 2 * 60 * 60 * 1000;
+const EARLY_MEETING = '10:00';
+const EVENING_BEFORE = '21:00';
+/** "Com'e' andata?": 2 ore dopo l'ora fissata, finche' entro una settimana. */
+const AFTER_MS = 2 * 60 * 60 * 1000;
+const AFTER_UNTIL_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function enqueueMeetingNotifications(db: D1Database): Promise<void> {
+  const today = romeNow().day;
+  const { results } = await db
+    .prepare(
+      `SELECT p.id, p.from_uid, p.to_uid, p.meet_slot, p.done_from, p.done_to,
+              f.nickname AS from_nick, t.nickname AS to_nick, s.name AS spot
+       FROM trade_proposals p
+       JOIN trade_profiles f ON f.uid = p.from_uid
+       JOIN trade_profiles t ON t.uid = p.to_uid
+       LEFT JOIN trade_spots s ON s.id = p.meet_spot_id
+       WHERE p.status = 'scheduled' AND p.meet_slot IS NOT NULL`
+    )
+    .all<{ id: string; from_uid: string; to_uid: string; meet_slot: string; done_from: number | null; done_to: number | null; from_nick: string; to_nick: string; spot: string | null }>();
+  const now = Date.now();
+  const items: Outgoing[] = [];
+  for (const p of results) {
+    const slot = JSON.parse(p.meet_slot) as Slot;
+    if (slot.day < addDays(today, -8) || slot.day > addDays(today, 1)) continue;
+    const time = slotTime(slot);
+    const at = romeToEpoch(slot.day, time);
+    const remindAt = time < EARLY_MEETING ? romeToEpoch(addDays(slot.day, -1), EVENING_BEFORE) : at - REMINDER_BEFORE_MS;
+    const data = { screen: 'proposals', proposalId: p.id };
+    const parties = [
+      { uid: p.from_uid, nick: p.to_nick, done: p.done_from },
+      { uid: p.to_uid, nick: p.from_nick, done: p.done_to },
+    ];
+    for (const party of parties) {
+      if (now >= remindAt && now < at) {
+        items.push({
+          // Con l'ora nella chiave: se l'appuntamento cambia, il promemoria nuovo parte.
+          id: `reminder:${p.id}:${slot.day}T${time}:${party.uid}`, uid: party.uid, kind: 'reminders', template: 'reminder',
+          args: { nick: party.nick, day: slot.day, time, spot: p.spot ?? '' }, data, tag: `proposal:${p.id}`,
+        });
+      }
+      if (!party.done && now >= at + AFTER_MS && now < at + AFTER_UNTIL_MS) {
+        items.push({
+          id: `after:${p.id}:${party.uid}`, uid: party.uid, kind: 'after', template: 'after',
+          args: { nick: party.nick }, data, tag: `proposal:${p.id}`,
+        });
+      }
+    }
+  }
+  await enqueue(db, items);
+}
+
+/** Le carte cercate: una volta al giorno, la sera (18-21), solo a chi l'ha chiesto. */
+const WANTS_FROM = '18:00';
+const WANTS_TO = '21:00';
+const WANTS_USERS_PER_RUN = 100;
+
+async function enqueueWantsDigest(db: D1Database, env: TradeEnv): Promise<void> {
+  const { day, time } = romeNow();
+  if (time < WANTS_FROM || time >= WANTS_TO) return;
+  const now = Date.now();
+  const { results: users } = await db
+    .prepare(
+      `SELECT p.uid, p.geohash5 FROM trade_profiles p
+       WHERE p.paused = 0 AND (p.suspended_until IS NULL OR p.suspended_until < ?1)
+         AND json_extract(p.notify_prefs, '$.wants') = 1
+         AND NOT EXISTS (SELECT 1 FROM trade_notifications n WHERE n.id = 'wants:' || p.uid || ':' || ?2)
+       LIMIT ${WANTS_USERS_PER_RUN}`
+    )
+    .bind(now, day)
+    .all<{ uid: string; geohash5: string }>();
+  if (users.length === 0) return;
+  const labels = await catalogCardLabels(env);
+  for (const user of users) {
+    const cells = cellAndNeighbors(user.geohash5);
+    // Le carte cercate che qualcuno vicino offre con la campanella accesa, non
+    // gia' possedute, non gia' segnalate da quella persona, fra chi non si e' bloccato.
+    const { results: found } = await db
+      .prepare(
+        `SELECT DISTINCT h.card_key, h.uid AS holder FROM trade_haves h JOIN trade_profiles o ON o.uid = h.uid
+         WHERE o.geohash5 IN (${cells.map(() => '?').join(', ')}) AND o.uid <> ? AND o.paused = 0
+           AND (o.suspended_until IS NULL OR o.suspended_until < ?)
+           AND h.notify = 1
+           AND h.card_key IN (SELECT card_key FROM trade_wants WHERE uid = ?)
+           AND NOT EXISTS (SELECT 1 FROM trade_owned w WHERE w.uid = ? AND w.card_key = h.card_key)
+           AND NOT EXISTS (SELECT 1 FROM trade_wants_seen s WHERE s.uid = ? AND s.card_key = h.card_key AND s.holder_uid = h.uid)
+           AND o.uid NOT IN (SELECT blocked_uid FROM trade_blocks WHERE blocker_uid = ?)
+           AND o.uid NOT IN (SELECT blocker_uid FROM trade_blocks WHERE blocked_uid = ?)
+         LIMIT 200`
+      )
+      .bind(...cells, user.uid, now, user.uid, user.uid, user.uid, user.uid, user.uid)
+      .all<{ card_key: string; holder: string }>();
+    const id = `wants:${user.uid}:${day}`;
+    if (found.length === 0) {
+      // Segnato lo stesso: oggi questa persona e' gia' stata controllata.
+      await db
+        .prepare(`INSERT OR IGNORE INTO trade_notifications (id, uid, kind, payload, created_at, send_after, sent_at, status) VALUES (?, ?, 'wants', '{}', ?, ?, ?, 'empty')`)
+        .bind(id, user.uid, now, now, now)
+        .run();
+      continue;
+    }
+    const keys = [...new Set(found.map((f) => f.card_key))];
+    await enqueue(db, [{
+      id, uid: user.uid, kind: 'wants', template: 'wants',
+      args: { count: keys.length, names: keys.slice(0, 3).map((k) => labels.get(k)?.name ?? k) },
+      data: { screen: 'matches' }, tag: 'wants',
+    }]);
+    await db.batch(
+      found.map((f) =>
+        db.prepare(`INSERT OR IGNORE INTO trade_wants_seen (uid, card_key, holder_uid, seen_at) VALUES (?, ?, ?, ?)`).bind(user.uid, f.card_key, f.holder, now)
+      )
+    );
+  }
+}
+
+/**
+ * Il cron di TradeRadar (ogni 15 minuti): promemoria e "com'e' andata",
+ * carte cercate la sera, poi spedisce quello che e' pronto (anche cio' che
+ * di notte era stato rimandato al mattino).
+ */
+export async function tradeScheduled(env: TradeEnv): Promise<void> {
+  const db = env.trade_db;
+  if (!db || env.TRADE_ENABLED !== '1') return;
+  try {
+    await enqueueMeetingNotifications(db);
+    await enqueueWantsDigest(db, env);
+  } finally {
+    await deliver(db, env);
+  }
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 /**
@@ -2347,7 +2585,8 @@ async function reportUser(request: Request, db: D1Database, uid: string, publicI
 export async function handleTradeRequest(
   request: Request,
   pathname: string,
-  env: TradeEnv
+  env: TradeEnv,
+  ctx?: ExecutionContext
 ): Promise<Response | null> {
   if (!pathname.startsWith('/v1/trade/')) return null;
   if (env.TRADE_ENABLED !== '1') return null;
@@ -2379,6 +2618,13 @@ export async function handleTradeRequest(
 
   // Tutto il resto richiede un profilo attivato.
   if (!(await loadProfile(db, uid))) return json({ error: 'no_profile' }, 404);
+  const push = pusherFor(db, env, ctx);
+
+  if (pathname === '/v1/trade/push') {
+    if (method === 'PUT') return putPushToken(request, db, uid);
+    if (method === 'DELETE') return deletePushToken(request, db, uid);
+  }
+  if (pathname === '/v1/trade/notify' && method === 'PUT') return putNotifyPrefs(request, db, uid);
 
   if (pathname === '/v1/trade/haves') {
     if (method === 'GET') return getHaves(db, uid);
@@ -2390,19 +2636,19 @@ export async function handleTradeRequest(
 
   if (pathname === '/v1/trade/proposals') {
     if (method === 'GET') return listProposals(db, uid, env);
-    if (method === 'POST') return createProposal(request, db, uid);
+    if (method === 'POST') return createProposal(request, db, uid, push);
   }
   const action = /^\/v1\/trade\/proposals\/([0-9a-f-]{36})\/(accept|decline|cancel|counter)$/.exec(pathname);
-  if (action && method === 'POST') return actOnProposal(request, db, uid, action[1], action[2]);
+  if (action && method === 'POST') return actOnProposal(request, db, uid, action[1], action[2], push);
   const meeting = /^\/v1\/trade\/proposals\/([0-9a-f-]{36})\/(spots|meeting|meeting\/confirm)$/.exec(pathname);
   if (meeting) {
     if (meeting[2] === 'spots' && method === 'GET') return getProposalSpots(db, uid, meeting[1]);
-    if (meeting[2] === 'meeting' && method === 'POST') return meetingAction(request, db, uid, meeting[1], false);
-    if (meeting[2] === 'meeting/confirm' && method === 'POST') return meetingAction(request, db, uid, meeting[1], true);
+    if (meeting[2] === 'meeting' && method === 'POST') return meetingAction(request, db, uid, meeting[1], false, push);
+    if (meeting[2] === 'meeting/confirm' && method === 'POST') return meetingAction(request, db, uid, meeting[1], true, push);
   }
   const closing = /^\/v1\/trade\/proposals\/([0-9a-f-]{36})\/(done|noshow|rate|spotvote)$/.exec(pathname);
   if (closing && method === 'POST') {
-    if (closing[2] === 'done') return markDone(db, uid, closing[1]);
+    if (closing[2] === 'done') return markDone(db, uid, closing[1], push);
     if (closing[2] === 'noshow') return markNoShow(db, uid, closing[1]);
     if (closing[2] === 'rate') return rateTrade(request, db, uid, closing[1]);
     return voteSpot(request, db, uid, closing[1]);

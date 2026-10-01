@@ -9,7 +9,7 @@
 
 import { handleBillingRequest } from './billing';
 import { handleGiftRequest } from './gift';
-import { handleTradeRequest } from './trade';
+import { handleTradeRequest, tradeScheduled } from './trade';
 
 interface Env {
   CACHE: KVNamespace;
@@ -2244,7 +2244,7 @@ export default {
     // se billing o regali passassero di qui un account di test potrebbe
     // scrivere entitlement nel database vero.
     if (env.TRADE_ONLY === '1') {
-      const tradeOnly = await handleTradeRequest(request, requestUrl.pathname, env);
+      const tradeOnly = await handleTradeRequest(request, requestUrl.pathname, env, ctx);
       return tradeOnly ?? new Response('Not found', { status: 404 });
     }
 
@@ -2258,7 +2258,7 @@ export default {
 
     // In produzione TRADE_ENABLED non c'e': questa restituisce null e /v1/trade/*
     // prosegue fino al 404 di sempre.
-    const tradeResponse = await handleTradeRequest(request, requestUrl.pathname, env);
+    const tradeResponse = await handleTradeRequest(request, requestUrl.pathname, env, ctx);
     if (tradeResponse) return tradeResponse;
 
     // Only cache GET requests
@@ -2482,6 +2482,9 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // TradeRadar (solo dove e' acceso): promemoria, carte cercate, coda delle notifiche.
+    if (env.TRADE_ENABLED === '1') ctx.waitUntil(tradeScheduled(env));
+
     if (!env.CACHE) {
       return;
     }
