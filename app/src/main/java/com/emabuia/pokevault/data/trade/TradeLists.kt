@@ -12,8 +12,11 @@ import java.security.MessageDigest
 object TradeLists {
 
     /**
-     * Un doppione che si puo' offrire: una stampa in una condizione e lingua,
-     * con le copie oltre la prima.
+     * Una carta che si puo' offrire: una stampa in una condizione e lingua.
+     *
+     * [spare] e' il massimo di copie offribili: per un doppione le copie oltre
+     * la prima, per una carta singola quella sola (vedi [singles]). Quante se
+     * ne offrono davvero lo sceglie l'utente.
      */
     data class Duplicate(
         val key: String,
@@ -40,8 +43,20 @@ object TradeLists {
      * volo) e le carte senza id italiano del catalogo.
      */
     fun duplicates(cards: List<PokemonCard>): List<Duplicate> =
+        offerable(cards).filter { it.second > 1 }.map { (card, total) -> card.copy(spare = total - 1) }
+
+    /**
+     * Le carte possedute in una copia sola. Non sono doppioni e TradeRadar non
+     * le propone mai da solo: entrano nella lista solo se l'utente le aggiunge a
+     * mano. Stesse esclusioni di [duplicates].
+     */
+    fun singles(cards: List<PokemonCard>): List<Duplicate> =
+        offerable(cards).filter { it.second == 1 }.map { (card, _) -> card.copy(spare = 1) }
+
+    /** Ogni stampa offribile con le copie possedute in tutto: due documenti per la stessa stampa si sommano. */
+    private fun offerable(cards: List<PokemonCard>): List<Pair<Duplicate, Int>> =
         cards.asSequence()
-            .filter { !it.deckOnly && !it.isGraded && it.quantity > 1 }
+            .filter { !it.deckOnly && !it.isGraded && it.quantity > 0 }
             .mapNotNull { card ->
                 val key = TradeCardKey.fromApiCardId(card.apiCardId) ?: return@mapNotNull null
                 Duplicate(
@@ -49,17 +64,16 @@ object TradeLists {
                     variant = card.variant,
                     condition = card.condition,
                     language = card.language,
-                    spare = card.quantity - 1,
+                    spare = card.quantity,
                     name = card.name,
                     setName = card.set,
                     cardNumber = card.cardNumber,
                     imageUrl = card.imageUrl
                 )
             }
-            // Due documenti per la stessa stampa e condizione si sommano.
             .groupBy { it.id }
-            .map { (_, same) -> same.first().copy(spare = same.sumOf { it.spare }) }
-            .sortedWith(compareBy({ it.setName }, { it.cardNumber.toIntOrNull() ?: Int.MAX_VALUE }, { it.cardNumber }))
+            .map { (_, same) -> same.first() to same.sumOf { it.spare } }
+            .sortedWith(compareBy({ it.first.setName }, { it.first.cardNumber.toIntOrNull() ?: Int.MAX_VALUE }, { it.first.cardNumber }))
 
     /** Le chiavi di tutte le carte possedute (solo-deck esclusi). */
     fun ownedKeys(cards: List<PokemonCard>): Set<String> =

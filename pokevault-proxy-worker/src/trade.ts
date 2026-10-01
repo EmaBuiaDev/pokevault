@@ -295,23 +295,33 @@ async function putHaves(request: Request, db: D1Database, uid: string): Promise<
     if (!CARD_KEY_REGEX.test(key) || !Number.isInteger(qty) || qty < 1 || qty > 99) {
       return json({ error: 'bad_item', key }, 400);
     }
+    // Le carte a mano partono senza avvisi; i doppioni li hanno sempre (schema 3).
+    const manual = item.manual === true;
+    const notify = manual ? item.notify === true : true;
     rows.push([
       uid, key, setCodeOf(key),
       cleanText(item.variant, 30), cleanText(item.condition, 30), cleanText(item.language, 30),
-      qty,
+      qty, manual ? 1 : 0, notify ? 1 : 0,
     ]);
   }
-  await replaceRows(db, 'trade_haves', uid, ['uid', 'card_key', 'set_code', 'variant', 'condition', 'language', 'qty'], rows);
+  await replaceRows(
+    db, 'trade_haves', uid,
+    ['uid', 'card_key', 'set_code', 'variant', 'condition', 'language', 'qty', 'manual', 'notify'],
+    rows
+  );
   return json({ haves: rows.length });
 }
 
 async function getHaves(db: D1Database, uid: string): Promise<Response> {
   const { results } = await db
-    .prepare(`SELECT card_key, variant, condition, language, qty FROM trade_haves WHERE uid = ?`)
+    .prepare(`SELECT card_key, variant, condition, language, qty, manual, notify FROM trade_haves WHERE uid = ?`)
     .bind(uid)
-    .all<{ card_key: string; variant: string; condition: string; language: string; qty: number }>();
+    .all<{ card_key: string; variant: string; condition: string; language: string; qty: number; manual: number; notify: number }>();
   return json({
-    items: results.map((r) => ({ key: r.card_key, variant: r.variant, condition: r.condition, language: r.language, qty: r.qty })),
+    items: results.map((r) => ({
+      key: r.card_key, variant: r.variant, condition: r.condition, language: r.language, qty: r.qty,
+      manual: r.manual === 1, notify: r.notify === 1,
+    })),
   });
 }
 

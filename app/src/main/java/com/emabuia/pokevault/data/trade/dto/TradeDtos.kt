@@ -48,7 +48,11 @@ data class TradeHaveItem(
     @SerializedName("variant") val variant: String? = null,
     @SerializedName("condition") val condition: String? = null,
     @SerializedName("language") val language: String? = null,
-    @SerializedName("qty") val qty: Int? = null
+    @SerializedName("qty") val qty: Int? = null,
+    /** Carta singola messa in lista a mano (schema 3). */
+    @SerializedName("manual") val manual: Boolean? = null,
+    /** Partecipa agli avvisi: sempre per i doppioni, a scelta per le carte a mano. */
+    @SerializedName("notify") val notify: Boolean? = null
 )
 
 /** GET e PUT /v1/trade/haves */

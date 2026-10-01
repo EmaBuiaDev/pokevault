@@ -18,6 +18,8 @@ import com.emabuia.pokevault.data.trade.dto.TradeProfilePayload
 import com.emabuia.pokevault.data.trade.dto.TradeProfileRequest
 import com.emabuia.pokevault.data.trade.dto.TradeWantItem
 import com.emabuia.pokevault.data.trade.dto.TradeWantsRequest
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -48,9 +50,31 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     var duplicates by mutableStateOf<List<TradeLists.Duplicate>>(emptyList())
         private set
 
-    /** Gli id ([TradeLists.Duplicate.id]) dei doppioni accesi per lo scambio. */
-    var enabledIds by mutableStateOf<Set<String>>(emptySet())
+    /** Le carte in una copia sola: si offrono solo se l'utente le aggiunge a mano. */
+    var singles by mutableStateOf<List<TradeLists.Duplicate>>(emptyList())
         private set
+
+    /**
+     * Cosa si offre: id ([TradeLists.Duplicate.id]) -> quante copie. Vale per
+     * i doppioni accesi e per le carte singole aggiunte a mano.
+     */
+    var offers by mutableStateOf<Map<String, Int>>(emptyMap())
+        private set
+
+    /**
+     * Le carte a mano con la campanella accesa: partecipano agli avvisi come i
+     * doppioni. Senza, restano in lista ma nessuno viene avvisato.
+     */
+    var notifyIds by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** Gli id delle carte offerte. */
+    val enabledIds: Set<String> get() = offers.keys
+
+    /** Le carte singole che l'utente ha messo nella lista. */
+    val manualOffers: List<TradeLists.Duplicate> get() = singles.filter { it.id in offers }
+
+    private var pushJob: Job? = null
 
     var wantsCount by mutableStateOf(0)
         private set
@@ -161,8 +185,11 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             val result = TradeApi.deleteProfile()
             busy = false
             if (result is TradeApi.Result.Ok) {
+                pushJob?.cancel()
                 duplicates = emptyList()
-                enabledIds = emptySet()
+                singles = emptyList()
+                offers = emptyMap()
+                notifyIds = emptySet()
                 matches = emptyList()
                 screen = Screen.Onboarding
             } else {
@@ -171,14 +198,52 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /**
+     * Accende o spegne un'offerta: un doppione, o una carta singola aggiunta a
+     * mano. Si parte da una copia; quante offrirne lo dice [setQuantity].
+     */
     fun setEnabled(id: String, enabled: Boolean) {
-        enabledIds = if (enabled) enabledIds + id else enabledIds - id
-        viewModelScope.launch { pushHaves() }
+        offers = if (enabled) offers + (id to (offers[id] ?: 1)) else offers - id
+        if (!enabled) notifyIds = notifyIds - id
+        schedulePush()
     }
 
+    /** La campanella di una carta aggiunta a mano. */
+    fun setNotify(id: String, notify: Boolean) {
+        if (id !in offers) return
+        notifyIds = if (notify) notifyIds + id else notifyIds - id
+        schedulePush()
+    }
+
+    /** Quante copie offrire, fra 1 e quelle che si possono dare. */
+    fun setQuantity(id: String, quantity: Int) {
+        if (id !in offers) return
+        val max = (duplicates + singles).firstOrNull { it.id == id }?.spare ?: return
+        val clamped = quantity.coerceIn(1, max)
+        if (offers[id] == clamped) return
+        offers = offers + (id to clamped)
+        schedulePush()
+    }
+
+    /** "Tutti" / "Nessuno": tocca solo i doppioni, mai le carte aggiunte a mano. */
     fun setAllEnabled(enabled: Boolean) {
-        enabledIds = if (enabled) duplicates.map { it.id }.toSet() else emptySet()
-        viewModelScope.launch { pushHaves() }
+        val ids = duplicates.map { it.id }
+        offers = if (enabled) offers + ids.associateWith { offers[it] ?: 1 } else offers - ids.toSet()
+        schedulePush()
+    }
+
+    /**
+     * Il server si aggiorna dopo una breve pausa: chi preme "+" tre volte di
+     * fila manda una richiesta sola. Poi si rileggono i match, che dipendono
+     * da cosa si offre.
+     */
+    private fun schedulePush() {
+        pushJob?.cancel()
+        pushJob = viewModelScope.launch {
+            delay(PUSH_DEBOUNCE_MS)
+            pushHaves()
+            refreshMatches()
+        }
     }
 
     fun refreshMatches() {
@@ -212,9 +277,9 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
      * Manda al server possedute, cercate e doppioni accesi, poi chiede i match.
      *
      * Le possedute si rimandano solo se l'impronta e' cambiata rispetto a
-     * quella che il server ha gia'. I doppioni accesi si leggono dal server
-     * (e' lui a ricordarli fra un'installazione e l'altra) e si tengono solo
-     * quelli che esistono ancora in collezione.
+     * quella che il server ha gia'. Le offerte si leggono dal server (e' lui a
+     * ricordarle fra un'installazione e l'altra) e si tengono solo quelle che
+     * esistono ancora in collezione, con le copie ridotte a quelle che restano.
      */
     private suspend fun syncAndRefresh() {
         val profile = (screen as? Screen.Ready)?.profile ?: return
@@ -237,9 +302,17 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             if (wantsResult !is TradeApi.Result.Ok) { notice = problemOf(wantsResult); return }
 
             duplicates = TradeLists.duplicates(cards)
+            singles = TradeLists.singles(cards)
             val serverHaves = (TradeApi.getHaves() as? TradeApi.Result.Ok)?.value?.items.orEmpty()
-            val serverIds = serverHaves.map { listOf(it.key, it.variant, it.condition, it.language).joinToString("|") }.toSet()
-            enabledIds = duplicates.map { it.id }.filter { it in serverIds }.toSet()
+            val serverQuantities = serverHaves.associate {
+                listOf(it.key, it.variant, it.condition, it.language).joinToString("|") to (it.qty ?: 1)
+            }
+            offers = (duplicates + singles).mapNotNull { offer ->
+                serverQuantities[offer.id]?.let { offer.id to it.coerceIn(1, offer.spare) }
+            }.toMap()
+            val serverNotify = serverHaves.filter { it.notify == true }
+                .map { listOf(it.key, it.variant, it.condition, it.language).joinToString("|") }.toSet()
+            notifyIds = singles.map { it.id }.filter { it in offers && it in serverNotify }.toSet()
             // Riallinea le quantita' (un doppione venduto non si offre piu').
             pushHaves()
 
@@ -250,8 +323,14 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private suspend fun pushHaves() {
-        val items = duplicates.filter { it.id in enabledIds }.map {
-            TradeHaveItem(key = it.key, variant = it.variant, condition = it.condition, language = it.language, qty = it.spare)
+        val singleIds = singles.map { it.id }.toSet()
+        val items = (duplicates + singles).mapNotNull { offer ->
+            val quantity = offers[offer.id] ?: return@mapNotNull null
+            val manual = offer.id in singleIds
+            TradeHaveItem(
+                key = offer.key, variant = offer.variant, condition = offer.condition, language = offer.language, qty = quantity,
+                manual = manual, notify = !manual || offer.id in notifyIds
+            )
         }
         val result = TradeApi.putHaves(TradeHavesPayload(items))
         if (result !is TradeApi.Result.Ok) notice = problemOf(result)
@@ -260,6 +339,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     private companion object {
         const val PREFS = "trade_radar"
         const val KEY_LEVELS_EXPLAINED = "levels_explained"
+        const val PUSH_DEBOUNCE_MS = 600L
     }
 
     private fun problemOf(result: TradeApi.Result<*>): Problem = when (result) {

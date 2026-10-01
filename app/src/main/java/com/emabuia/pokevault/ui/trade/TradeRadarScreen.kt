@@ -3,60 +3,76 @@ package com.emabuia.pokevault.ui.trade
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -69,8 +85,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -79,42 +98,41 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.trade.CoarseLocation
-import com.emabuia.pokevault.data.trade.TradeCardKey
-import com.emabuia.pokevault.data.trade.TradeLists
 import com.emabuia.pokevault.data.trade.dto.TradeMatch
 import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
+import com.emabuia.pokevault.data.trade.TradeCardKey
+import com.emabuia.pokevault.data.trade.TradeLists
 import com.emabuia.pokevault.ui.components.CardImageSkeleton
 import com.emabuia.pokevault.ui.components.CascadeIn
 import com.emabuia.pokevault.ui.components.pressScale
@@ -946,10 +964,13 @@ private fun CardDetailDialog(item: TradeMatchItem, onDismiss: () -> Unit) {
 @Composable
 private fun MyCardsTab(viewModel: TradeRadarViewModel) {
     val duplicates = viewModel.duplicates
-    val onCount = duplicates.count { it.id in viewModel.enabledIds }
-    val allOn = duplicates.isNotEmpty() && onCount == duplicates.size
+    val offers = viewModel.offers
+    val manual = viewModel.manualOffers
+    val duplicatesOn = duplicates.count { it.id in offers }
+    val allOn = duplicates.isNotEmpty() && duplicatesOn == duplicates.size
+    var picking by remember { mutableStateOf(false) }
     val progress by animateFloatAsState(
-        if (duplicates.isEmpty()) 0f else onCount.toFloat() / duplicates.size,
+        if (duplicates.isEmpty()) 0f else duplicatesOn.toFloat() / duplicates.size,
         tween(AppMotion.current.bar, easing = AppMotion.standardEasing),
         label = "offered"
     )
@@ -959,15 +980,28 @@ private fun MyCardsTab(viewModel: TradeRadarViewModel) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        item {
+        item(key = "summary") {
             Column(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(AppColors.card).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(AppLocale.tradeRadarOfferTitle, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = AppColors.textPrimary)
+                AnimatedContent(targetState = offers.size to offers.values.sum(), label = "offerSummary") { (cards, copies) ->
+                    Text(AppLocale.tradeRadarOfferSummary(cards, copies), fontSize = 13.sp, color = AppColors.textSecondary)
+                }
+                Text(AppLocale.tradeRadarWantsSummary(viewModel.wantsCount), fontSize = 12.sp, color = AppColors.textMuted)
+            }
+        }
+
+        // Doppioni: li trova l'app, l'utente sceglie quali e quante copie.
+        item(key = "dupHeader") {
+            Column(Modifier.padding(top = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.weight(1f)) {
-                        Text(AppLocale.tradeRadarDuplicatesTitle(duplicates.size), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = AppColors.textPrimary)
-                        Text(AppLocale.tradeRadarOffered(onCount, duplicates.size), fontSize = 12.sp, color = AppColors.textSecondary)
+                        Text(AppLocale.tradeRadarDuplicatesTitle(duplicates.size), fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+                        if (duplicates.isNotEmpty()) {
+                            Text(AppLocale.tradeRadarOffered(duplicatesOn, duplicates.size), fontSize = 12.sp, color = AppColors.textSecondary)
+                        }
                     }
                     if (duplicates.isNotEmpty()) {
                         TextButton(onClick = { viewModel.setAllEnabled(!allOn) }) {
@@ -975,68 +1009,336 @@ private fun MyCardsTab(viewModel: TradeRadarViewModel) {
                         }
                     }
                 }
-                LinearProgressIndicator(
-                    progress = { progress },
-                    color = AppColors.green,
-                    trackColor = innerColor(),
-                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
-                )
-                Text(AppLocale.tradeRadarWantsSummary(viewModel.wantsCount), fontSize = 12.sp, color = AppColors.textMuted)
+                if (duplicates.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        color = AppColors.green,
+                        trackColor = AppColors.card,
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                    )
+                }
             }
         }
         if (duplicates.isEmpty()) {
-            item { EmptyState(text = AppLocale.tradeRadarNoDuplicates) }
+            item(key = "dupEmpty") { EmptyState(text = AppLocale.tradeRadarNoDuplicates, radar = false) }
         } else {
-            items(duplicates, key = { it.id }) { duplicate ->
-                DuplicateRow(duplicate, duplicate.id in viewModel.enabledIds) { viewModel.setEnabled(duplicate.id, it) }
+            items(duplicates, key = { "dup|${it.id}" }) { duplicate ->
+                OfferRow(
+                    offer = duplicate,
+                    quantity = offers[duplicate.id],
+                    onToggle = { viewModel.setEnabled(duplicate.id, it) },
+                    onQuantity = { viewModel.setQuantity(duplicate.id, it) },
+                    modifier = Modifier.animateItem()
+                )
+            }
+        }
+
+        // Carte singole: entrano solo se l'utente le aggiunge.
+        item(key = "manualHeader") {
+            Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(AppLocale.tradeRadarManualTitle, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+                Text(AppLocale.tradeRadarManualHint, fontSize = 12.sp, color = AppColors.textSecondary)
+            }
+        }
+        items(manual, key = { "manual|${it.id}" }) { single ->
+            OfferRow(
+                offer = single,
+                quantity = offers[single.id],
+                onToggle = { viewModel.setEnabled(single.id, it) },
+                onQuantity = {},
+                manual = true,
+                notify = single.id in viewModel.notifyIds,
+                onNotify = { viewModel.setNotify(single.id, it) },
+                modifier = Modifier.animateItem()
+            )
+        }
+        item(key = "manualAdd") {
+            OutlinedButton(
+                onClick = { picking = true },
+                enabled = viewModel.singles.size > manual.size,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp).animateItem()
+            ) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(AppLocale.tradeRadarAddCard, fontWeight = FontWeight.SemiBold)
             }
         }
     }
+
+    if (picking) {
+        SinglesPicker(
+            singles = viewModel.singles.filter { it.id !in offers },
+            onPick = { viewModel.setEnabled(it.id, true) },
+            onDismiss = { picking = false }
+        )
+    }
 }
 
+/**
+ * Una carta offribile. Con l'interruttore acceso, se ci sono piu' copie da
+ * dare, compare il selettore: di default se ne offre una, le altre restano.
+ * Le carte aggiunte a mano hanno la X al posto dell'interruttore e la
+ * campanella, che le fa entrare negli avvisi come i doppioni.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DuplicateRow(duplicate: TradeLists.Duplicate, enabled: Boolean, onChange: (Boolean) -> Unit) {
+private fun OfferRow(
+    offer: TradeLists.Duplicate,
+    quantity: Int?,
+    onToggle: (Boolean) -> Unit,
+    onQuantity: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    manual: Boolean = false,
+    notify: Boolean = false,
+    onNotify: (Boolean) -> Unit = {}
+) {
     val motion = AppMotion.current
+    val enabled = quantity != null
     val border by animateColorAsState(
         if (enabled) AppColors.green.copy(alpha = 0.5f) else Color.Transparent,
         tween(motion.state),
-        label = "dupBorder"
+        label = "offerBorder"
     )
-    val imageAlpha by animateFloatAsState(if (enabled) 1f else 0.55f, tween(motion.state), label = "dupAlpha")
+    val imageAlpha by animateFloatAsState(if (enabled) 1f else 0.55f, tween(motion.state), label = "offerAlpha")
     val shape = RoundedCornerShape(16.dp)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+    Column(
+        modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .background(AppColors.card)
             .border(1.dp, border, shape)
-            .clickable { onChange(!enabled) }
-            .padding(10.dp)
     ) {
-        AsyncImage(
-            model = duplicate.imageUrl,
-            contentDescription = duplicate.name,
-            contentScale = ContentScale.Fit,
-            alpha = imageAlpha,
-            modifier = Modifier.width(48.dp).height(67.dp).clip(RoundedCornerShape(5.dp))
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(duplicate.name, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                "${duplicate.setName} · ${duplicate.cardNumber}",
-                fontSize = 12.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (manual) Modifier else Modifier.clickable { onToggle(!enabled) })
+                .padding(10.dp)
+        ) {
+            AsyncImage(
+                model = offer.imageUrl,
+                contentDescription = offer.name,
+                contentScale = ContentScale.Fit,
+                alpha = imageAlpha,
+                modifier = Modifier.width(48.dp).height(67.dp).clip(RoundedCornerShape(5.dp))
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                InfoPill(duplicate.variant)
-                InfoPill(duplicate.condition)
-                InfoPill(AppLocale.tradeRadarSpare(duplicate.spare), AppColors.green)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(offer.name, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${offer.setName} · ${offer.cardNumber}",
+                    fontSize = 12.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    InfoPill(offer.variant)
+                    InfoPill(offer.condition)
+                    if (manual) {
+                        InfoPill(AppLocale.tradeRadarOnlyCopy, AppColors.orange)
+                        InfoPill(
+                            if (notify) AppLocale.tradeRadarNotifyOn else AppLocale.tradeRadarNotifyOff,
+                            if (notify) AppColors.blue else null
+                        )
+                    } else {
+                        InfoPill(AppLocale.tradeRadarSpare(offer.spare), AppColors.green)
+                    }
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            if (manual) {
+                BellButton(on = notify, onChange = onNotify)
+                IconButton(onClick = { onToggle(false) }) {
+                    Icon(Icons.Default.Close, AppLocale.tradeRadarRemove, tint = AppColors.textSecondary)
+                }
+            } else {
+                Switch(checked = enabled, onCheckedChange = onToggle)
             }
         }
+        AnimatedVisibility(
+            visible = enabled && offer.spare > 1,
+            enter = expandVertically(tween(motion.content)) + fadeIn(tween(motion.content)),
+            exit = shrinkVertically(tween(motion.state)) + fadeOut(tween(motion.state))
+        ) {
+            QuantityStepper(
+                quantity = quantity ?: 1,
+                max = offer.spare,
+                onChange = onQuantity
+            )
+        }
+    }
+}
+
+/** La campanella: accesa e' piena e blu, e all'accensione fa un piccolo scatto. */
+@Composable
+private fun BellButton(on: Boolean, onChange: (Boolean) -> Unit) {
+    val motion = AppMotion.current
+    val tint by animateColorAsState(if (on) AppColors.blue else AppColors.textMuted, tween(motion.state), label = "bellTint")
+    val background by animateColorAsState(
+        if (on) AppColors.blue.copy(alpha = 0.14f) else Color.Transparent,
+        tween(motion.state),
+        label = "bellBg"
+    )
+    val ring = remember { Animatable(0f) }
+    LaunchedEffect(on) {
+        if (on && motion.enabled) {
+            ring.snapTo(0f)
+            ring.animateTo(1f, tween(motion.celebration, easing = LinearEasing))
+        }
+    }
+    // Oscilla due volte e si ferma: sin su due giri, smorzato verso la fine.
+    val swing = if (ring.value in 0f..0.999f && ring.value > 0f) {
+        (sin(ring.value * 4 * Math.PI) * 18 * (1 - ring.value)).toFloat()
+    } else 0f
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(background)
+            .pressScale(scaleDown = 0.88f) { onChange(!on) }
+    ) {
+        Icon(
+            if (on) Icons.Default.NotificationsActive else Icons.Outlined.NotificationsOff,
+            AppLocale.tradeRadarNotifyToggle,
+            tint = tint,
+            modifier = Modifier.size(20.dp).rotate(swing)
+        )
+    }
+}
+
+@Composable
+private fun QuantityStepper(quantity: Int, max: Int, onChange: (Int) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 10.dp, end = 10.dp, bottom = 10.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(innerColor())
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(AppLocale.tradeRadarCopiesToOffer, fontSize = 13.sp, color = AppColors.textSecondary, modifier = Modifier.weight(1f))
+        StepButton(Icons.Default.Remove, enabled = quantity > 1) { onChange(quantity - 1) }
+        val duration = AppMotion.current.state
+        AnimatedContent(
+            targetState = quantity,
+            transitionSpec = {
+                val up = targetState > initialState
+                (slideInVertically(tween(duration)) { if (up) it else -it } + fadeIn(tween(duration))) togetherWith
+                    (slideOutVertically(tween(duration)) { if (up) -it else it } + fadeOut(tween(duration)))
+            },
+            label = "quantity",
+            modifier = Modifier.width(36.dp)
+        ) { value ->
+            Text(
+                value.toString(),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppColors.textPrimary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        StepButton(Icons.Default.Add, enabled = quantity < max) { onChange(quantity + 1) }
         Spacer(Modifier.width(8.dp))
-        Switch(checked = enabled, onCheckedChange = onChange)
+        Text(AppLocale.tradeRadarOutOf(max), fontSize = 12.sp, color = AppColors.textMuted)
+    }
+}
+
+@Composable
+private fun StepButton(icon: ImageVector, enabled: Boolean, onClick: () -> Unit) {
+    val tint by animateColorAsState(
+        if (enabled) AppColors.textPrimary else AppColors.textMuted.copy(alpha = 0.4f),
+        tween(AppMotion.current.state),
+        label = "stepTint"
+    )
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(AppColors.card)
+            .pressScale(enabled = enabled, scaleDown = 0.88f, onClick = onClick)
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
+    }
+}
+
+/**
+ * Il pannello da cui si aggiungono a mano le carte singole. Resta aperto
+ * dopo ogni scelta: la carta aggiunta sparisce dalla lista e si puo'
+ * continuare.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SinglesPicker(singles: List<TradeLists.Duplicate>, onPick: (TradeLists.Duplicate) -> Unit, onDismiss: () -> Unit) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val shown = remember(singles, query) {
+        val needle = query.trim()
+        if (needle.isEmpty()) singles
+        else singles.filter { it.name.contains(needle, ignoreCase = true) || it.setName.contains(needle, ignoreCase = true) }
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AppColors.background,
+        // Altezza in frazione: senza questi insets il pannello rimbalza dopo un fling (vedi DeckLabScreen).
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) }
+    ) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 16.dp)) {
+            Text(AppLocale.tradeRadarPickerTitle, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+            Text(AppLocale.tradeRadarManualHint, fontSize = 12.sp, color = AppColors.textSecondary)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text(AppLocale.tradeRadarPickerSearch) },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(12.dp))
+            if (shown.isEmpty()) {
+                EmptyState(text = if (singles.isEmpty()) AppLocale.tradeRadarPickerNoSingles else AppLocale.tradeRadarPickerEmpty, radar = false)
+            }
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+                items(shown, key = { it.id }) { single ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .animateItem()
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AppColors.card)
+                            .clickable { onPick(single) }
+                            .padding(10.dp)
+                    ) {
+                        AsyncImage(
+                            model = single.imageUrl,
+                            contentDescription = single.name,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.width(40.dp).height(56.dp).clip(RoundedCornerShape(4.dp))
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(single.name, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "${single.setName} · ${single.cardNumber} · ${single.variant}",
+                                fontSize = 12.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(32.dp).clip(CircleShape).background(AppColors.green.copy(alpha = 0.15f))
+                        ) {
+                            Icon(Icons.Default.Add, AppLocale.tradeRadarAddCard, tint = AppColors.green, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

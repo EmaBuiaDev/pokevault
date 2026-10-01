@@ -115,6 +115,28 @@ class TradeListsTest {
     }
 
     @Test
+    fun `due documenti con una copia ciascuno fanno un doppione`() {
+        val cards = listOf(card("ita:me02:1", 1), card("ita:me02:1", 1))
+        assertEquals(1, TradeLists.duplicates(cards).single().spare)
+        assertTrue(TradeLists.singles(cards).isEmpty())
+    }
+
+    @Test
+    fun `le singole sono le carte in una copia, con le stesse esclusioni`() {
+        val singles = TradeLists.singles(
+            listOf(
+                card("ita:me02:1", 1),
+                card("ita:me02:2", 3),
+                card("ita:me02:3", 1, graded = true),
+                card("ita:me02:4", 1, deckOnly = true),
+                card("sv3pt5-199", 1)
+            )
+        )
+        assertEquals(listOf("me02:1"), singles.map { it.key })
+        assertEquals(1, singles[0].spare)
+    }
+
+    @Test
     fun `le possedute escludono le solo-deck`() {
         val owned = TradeLists.ownedKeys(listOf(card("ita:me02:1", 1), card("ita:me02:2", 1, deckOnly = true)))
         assertEquals(setOf("me02:1"), owned)
