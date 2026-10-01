@@ -205,12 +205,16 @@ interface ProfileRow {
   owned_hash: string | null;
   trades_done: number;
   created_at: number;
+  /** 0 = no, 1 = si' (dallo schema 2, NOT NULL DEFAULT 0). */
+  leaderboard_opt_in: number;
+  /** Quando ha risposto alla domanda sulla classifica; NULL = mai chiesto (schema 8). */
+  leaderboard_asked_at: number | null;
 }
 
 async function loadProfile(db: D1Database, uid: string): Promise<ProfileRow | null> {
   return db
     .prepare(
-      `SELECT uid, nickname, geohash5, paused, owned_hash, trades_done, created_at
+      `SELECT uid, nickname, geohash5, paused, owned_hash, trades_done, created_at, leaderboard_opt_in, leaderboard_asked_at
        FROM trade_profiles WHERE uid = ?`
     )
     .bind(uid)
@@ -278,7 +282,14 @@ async function getProfile(db: D1Database, uid: string): Promise<Response> {
     .bind(uid)
     .first<{ haves: number; wants: number; owned: number }>();
   const reputation = (await reputationOf(db, '?', [uid])).get(uid) ?? null;
-  return json({ ...profileJson(row, counts ?? { haves: 0, wants: 0, owned: 0 }), reputation });
+  await refreshLeaderboard(db);
+  const tier = (await tiersOf(db, '?', [uid])).get(uid) ?? null;
+  return json({
+    ...profileJson(row, counts ?? { haves: 0, wants: 0, owned: 0 }),
+    reputation,
+    tier,
+    leaderboardOptIn: row.leaderboard_asked_at === null ? null : row.leaderboard_opt_in === 1,
+  });
 }
 
 /** Disattivazione: via tutto quello che il server sa dell'utente. */
@@ -674,6 +685,7 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
   const theirWishes = await loadTheirWishes(db, nearby, [...new Set(myHaves.map((h) => h.card_key))], setSizes);
 
   const reputation = await reputationOf(db, nearby.sql, nearby.params);
+  const tiers = await tiersOf(db, nearby.sql, nearby.params);
   const scored = [];
   for (const neighbor of neighbors) {
     const theyGive: MatchItem[] = [];
@@ -703,6 +715,7 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
       tradesDone: neighbor.trades_done,
       memberSince: neighbor.created_at,
       reputation: reputation.get(neighbor.uid) ?? null,
+      tier: tiers.get(neighbor.uid) ?? null,
       level: bestLevel(theyGive),
       mutual: iGive.length > 0,
       theyGive,
@@ -1003,6 +1016,7 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
   const voted = new Set(myVotes.map((v) => v.spot_id));
   const otherUids = [...new Set(proposals.map((p) => (p.from_uid === uid ? p.to_uid : p.from_uid)))];
   const reputation = await reputationOf(db, 'SELECT value FROM json_each(?)', [JSON.stringify(otherUids)]);
+  const tiers = await tiersOf(db, 'SELECT value FROM json_each(?)', [JSON.stringify(otherUids)]);
 
   const spotIds = [...new Set(proposals.map((p) => p.meet_spot_id).filter((id): id is string => !!id))];
   const spots = spotIds.length === 0
@@ -1073,6 +1087,7 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
           distance: me && p.other_cell === me.geohash5 ? 'lt5' : near.includes(p.other_cell) ? 'lt15' : 'far',
           tradesDone: p.other_trades,
           reputation: reputation.get(iAmFrom ? p.to_uid : p.from_uid) ?? null,
+          tier: tiers.get(iAmFrom ? p.to_uid : p.from_uid) ?? null,
         },
         give: own.filter((i) => i.giver_uid === uid).map(shape),
         take: own.filter((i) => i.giver_uid !== uid).map(shape),
@@ -1807,6 +1822,204 @@ async function spotStats(db: D1Database, spotIds: string[]): Promise<Map<string,
   return stats;
 }
 
+// ── Classifica e livelli (fase 2e) ──────────────────────────────────────────
+
+/** La classifica si ricalcola al massimo con questa frequenza (al lancio: una volta al giorno, dal cron). */
+const LEADERBOARD_TTL_MS = 10 * 60 * 1000;
+/** La stessa coppia conta al massimo una volta in questo periodo: due amici non si gonfiano a vicenda. */
+const PAIR_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+/** Per entrare in classifica: tanti scambi validi, con almeno tante persone diverse. */
+const LEADERBOARD_MIN_TRADES = 3;
+const LEADERBOARD_MIN_PARTNERS = 3;
+const LEADERBOARD_SIZE = 50;
+/** I livelli: scambi validi minimi, con almeno il 90% di 😊 fra 😊 e 😞. */
+const TIERS: Array<{ tier: string; trades: number }> = [
+  { tier: 'platinum', trades: 100 },
+  { tier: 'gold', trades: 40 },
+  { tier: 'silver', trades: 15 },
+  { tier: 'bronze', trades: 5 },
+];
+const TIER_MIN_POSITIVE = 0.9;
+
+/**
+ * Limite inferiore dell'intervallo di Wilson (95%) per [good] su [total]:
+ * chi ha 3 voti tutti buoni sta sotto chi ne ha 30 al 97%. Pochi voti non
+ * bastano per salire.
+ */
+function wilsonLower(good: number, total: number): number {
+  if (total === 0) return 0;
+  const z = 1.96;
+  const p = good / total;
+  const denominator = 1 + (z * z) / total;
+  const center = p + (z * z) / (2 * total);
+  const margin = z * Math.sqrt((p * (1 - p)) / total + (z * z) / (4 * total * total));
+  return (center - margin) / denominator;
+}
+
+/**
+ * Ricalcola trade_leaderboard per tutti, se e' piu' vecchia di
+ * LEADERBOARD_TTL_MS. Conta solo scambi chiusi da entrambi e voti gia'
+ * visibili; per ogni coppia, uno ogni 30 giorni.
+ */
+async function refreshLeaderboard(db: D1Database, force = false): Promise<void> {
+  if (!force) {
+    const last = await db.prepare(`SELECT MAX(computed_at) AS at FROM trade_leaderboard`).first<{ at: number | null }>();
+    if (last?.at && Date.now() - last.at < LEADERBOARD_TTL_MS) return;
+  }
+  const now = Date.now();
+  const { results: done } = await db
+    .prepare(`SELECT from_uid, to_uid, COALESCE(closed_at, updated_at) AS at FROM trade_proposals WHERE status = 'done' ORDER BY at`)
+    .all<{ from_uid: string; to_uid: string; at: number }>();
+  const { results: ratings } = await db
+    .prepare(
+      `SELECT r.from_uid, r.to_uid, r.mood, r.created_at AS at FROM trade_ratings r
+       WHERE r.created_at < ? OR EXISTS (SELECT 1 FROM trade_ratings o WHERE o.proposal_id = r.proposal_id AND o.from_uid = r.to_uid)
+       ORDER BY r.created_at`
+    )
+    .bind(now - RATING_REVEAL_MS)
+    .all<{ from_uid: string; to_uid: string; mood: string; at: number }>();
+  const { results: profiles } = await db
+    .prepare(`SELECT uid, suspended_until FROM trade_profiles`)
+    .all<{ uid: string; suspended_until: number | null }>();
+
+  type Stats = { trades: number; partners: Set<string>; good: number; ok: number; bad: number };
+  const stats = new Map<string, Stats>();
+  const of = (uid: string) => {
+    let entry = stats.get(uid);
+    if (!entry) {
+      entry = { trades: 0, partners: new Set(), good: 0, ok: 0, bad: 0 };
+      stats.set(uid, entry);
+    }
+    return entry;
+  };
+
+  // Scambi: per ogni coppia, uno ogni 30 giorni (in ordine di tempo).
+  const lastPairTrade = new Map<string, number>();
+  for (const trade of done) {
+    const pair = [trade.from_uid, trade.to_uid].sort().join('|');
+    const last = lastPairTrade.get(pair);
+    if (last !== undefined && trade.at - last < PAIR_WINDOW_MS) continue;
+    lastPairTrade.set(pair, trade.at);
+    for (const [me, other] of [[trade.from_uid, trade.to_uid], [trade.to_uid, trade.from_uid]]) {
+      const entry = of(me);
+      entry.trades += 1;
+      entry.partners.add(other);
+    }
+  }
+  // Voti: la stessa regola, per chi vota e chi riceve.
+  const lastPairRating = new Map<string, number>();
+  for (const rating of ratings) {
+    const pair = `${rating.from_uid}>${rating.to_uid}`;
+    const last = lastPairRating.get(pair);
+    if (last !== undefined && rating.at - last < PAIR_WINDOW_MS) continue;
+    lastPairRating.set(pair, rating.at);
+    const entry = of(rating.to_uid);
+    if (rating.mood === 'good' || rating.mood === 'ok' || rating.mood === 'bad') entry[rating.mood] += 1;
+  }
+
+  const suspended = new Set(profiles.filter((p) => (p.suspended_until ?? 0) > now).map((p) => p.uid));
+  const rows: unknown[][] = [];
+  for (const [uid, entry] of stats) {
+    const judged = entry.good + entry.bad;
+    const positive = judged === 0 ? 1 : entry.good / judged;
+    const tier = positive >= TIER_MIN_POSITIVE ? TIERS.find((t) => entry.trades >= t.trades)?.tier ?? null : null;
+    const eligible = entry.trades >= LEADERBOARD_MIN_TRADES && entry.partners.size >= LEADERBOARD_MIN_PARTNERS && !suspended.has(uid);
+    rows.push([uid, entry.trades, entry.partners.size, entry.good, entry.ok, entry.bad, wilsonLower(entry.good, judged), tier, eligible ? 1 : 0, now]);
+  }
+  const columns = ['uid', 'trades', 'partners', 'good', 'ok', 'bad', 'score', 'tier', 'eligible', 'computed_at'];
+  const statements: D1PreparedStatement[] = [db.prepare(`DELETE FROM trade_leaderboard`)];
+  const perInsert = Math.floor(MAX_PARAMS_PER_STATEMENT / columns.length);
+  for (let i = 0; i < rows.length; i += perInsert) {
+    const chunk = rows.slice(i, i + perInsert);
+    statements.push(
+      db
+        .prepare(`INSERT INTO trade_leaderboard (${columns.join(', ')}) VALUES ${chunk.map(() => `(${columns.map(() => '?').join(', ')})`).join(', ')}`)
+        .bind(...chunk.flat())
+    );
+  }
+  // Una riga segnaposto se non c'e' ancora nessuno, cosi' MAX(computed_at) vale e non si ricalcola a ogni richiesta.
+  if (rows.length === 0) {
+    statements.push(db.prepare(`INSERT INTO trade_leaderboard (${columns.join(', ')}) VALUES ('', 0, 0, 0, 0, 0, 0, NULL, 0, ?)`).bind(now));
+  }
+  await db.batch(statements);
+}
+
+/** Il livello delle persone in [uidSql], dall'ultima classifica calcolata. */
+async function tiersOf(db: D1Database, uidSql: string, params: unknown[]): Promise<Map<string, string>> {
+  const { results } = await db
+    .prepare(`SELECT uid, tier FROM trade_leaderboard WHERE tier IS NOT NULL AND uid IN (${uidSql})`)
+    .bind(...params)
+    .all<{ uid: string; tier: string }>();
+  return new Map(results.map((r) => [r.uid, r.tier]));
+}
+
+/**
+ * GET /v1/trade/leaderboard?scope=zone|italy — le prime 50 posizioni fra chi
+ * ha scelto di comparire e ne ha diritto, e sempre la mia, anche fuori dai
+ * 50 o fuori classifica (con cosa manca). La zona e' quella dei match.
+ */
+async function getLeaderboard(db: D1Database, uid: string, url: URL): Promise<Response> {
+  await refreshLeaderboard(db);
+  const me = await loadProfile(db, uid);
+  if (!me) return json({ error: 'no_profile' }, 404);
+  const scope = url.searchParams.get('scope') === 'italy' ? 'italy' : 'zone';
+  const cells = cellAndNeighbors(me.geohash5);
+  const zoneFilter = scope === 'zone' ? `AND p.geohash5 IN (${cells.map(() => '?').join(', ')})` : '';
+  const { results } = await db
+    .prepare(
+      `SELECT p.uid, p.nickname, p.created_at, l.trades, l.partners, l.good, l.ok, l.bad, l.score, l.tier
+       FROM trade_leaderboard l JOIN trade_profiles p ON p.uid = l.uid
+       WHERE l.eligible = 1 AND p.leaderboard_opt_in = 1 ${zoneFilter}
+       ORDER BY l.score DESC, l.trades DESC, p.created_at ASC`
+    )
+    .bind(...(scope === 'zone' ? cells : []))
+    .all<{ uid: string; nickname: string; created_at: number; trades: number; partners: number; good: number; ok: number; bad: number; score: number; tier: string | null }>();
+
+  const entry = (row: (typeof results)[number], rank: number) => ({
+    rank,
+    nickname: row.nickname,
+    tier: row.tier,
+    trades: row.trades,
+    positivePct: row.good + row.bad > 0 ? Math.round((row.good * 100) / (row.good + row.bad)) : null,
+    memberSince: row.created_at,
+    isMe: row.uid === uid,
+  });
+  const myIndex = results.findIndex((row) => row.uid === uid);
+  const mine = await db.prepare(`SELECT * FROM trade_leaderboard WHERE uid = ?`).bind(uid).first<{
+    trades: number; partners: number; good: number; bad: number; tier: string | null; eligible: number;
+  }>();
+  // null finche' non ha risposto: l'app chiede quando si entra in classifica.
+  const optIn = me.leaderboard_asked_at === null ? null : me.leaderboard_opt_in;
+  return json({
+    scope,
+    entries: results.slice(0, LEADERBOARD_SIZE).map((row, index) => entry(row, index + 1)),
+    total: results.length,
+    me: {
+      rank: myIndex >= 0 ? myIndex + 1 : null,
+      optIn: optIn === null ? null : optIn === 1,
+      eligible: mine?.eligible === 1,
+      trades: mine?.trades ?? 0,
+      partners: mine?.partners ?? 0,
+      positivePct: mine && mine.good + mine.bad > 0 ? Math.round((mine.good * 100) / (mine.good + mine.bad)) : null,
+      tier: mine?.tier ?? null,
+      // Quanto manca per entrare: scambi validi e persone diverse.
+      missingTrades: Math.max(0, LEADERBOARD_MIN_TRADES - (mine?.trades ?? 0)),
+      missingPartners: Math.max(0, LEADERBOARD_MIN_PARTNERS - (mine?.partners ?? 0)),
+    },
+  });
+}
+
+/** PUT /v1/trade/leaderboard/optin — { optIn }: comparire in classifica o no. Si cambia quando si vuole. */
+async function putLeaderboardOptIn(request: Request, db: D1Database, uid: string): Promise<Response> {
+  const body = await readJson<{ optIn?: boolean }>(request);
+  if (typeof body?.optIn !== 'boolean') return json({ error: 'bad_json' }, 400);
+  await db
+    .prepare(`UPDATE trade_profiles SET leaderboard_opt_in = ?, leaderboard_asked_at = ? WHERE uid = ?`)
+    .bind(body.optIn ? 1 : 0, Date.now(), uid)
+    .run();
+  return json({ optIn: body.optIn });
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 /**
@@ -1876,6 +2089,8 @@ export async function handleTradeRequest(
     if (closing[2] === 'rate') return rateTrade(request, db, uid, closing[1]);
     return voteSpot(request, db, uid, closing[1]);
   }
+  if (pathname === '/v1/trade/leaderboard' && method === 'GET') return getLeaderboard(db, uid, new URL(request.url));
+  if (pathname === '/v1/trade/leaderboard/optin' && method === 'PUT') return putLeaderboardOptIn(request, db, uid);
   if (pathname === '/v1/trade/spots/search' && method === 'GET') return searchSpots(db, uid, new URL(request.url));
   if (pathname === '/v1/trade/spots' && method === 'POST') return addSpot(request, db, uid);
   if (pathname === '/v1/trade/spots/cell' && method === 'POST') return putCellSpots(request, db);
