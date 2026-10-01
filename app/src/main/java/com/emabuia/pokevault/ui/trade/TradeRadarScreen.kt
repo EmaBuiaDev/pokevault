@@ -83,6 +83,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.material.icons.filled.LocalMall
 import androidx.compose.material.icons.filled.Mail
@@ -91,6 +92,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
@@ -98,10 +100,12 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Toys
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.Icons
@@ -148,6 +152,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
@@ -170,6 +175,7 @@ import com.emabuia.pokevault.data.trade.dto.TradeMatch
 import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
 import com.emabuia.pokevault.data.trade.dto.TradeOfferItem
 import com.emabuia.pokevault.data.trade.dto.TradeProposal
+import com.emabuia.pokevault.data.trade.dto.TradeReputation
 import com.emabuia.pokevault.data.trade.dto.TradeSlot
 import com.emabuia.pokevault.data.trade.dto.TradeSpot
 import com.emabuia.pokevault.data.trade.TradeCardKey
@@ -403,7 +409,8 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
         ProfileHeader(
             nickname = ready.profile.nickname.orEmpty(),
             paused = paused,
-            onPausedChange = { viewModel.setPaused(it) }
+            onPausedChange = { viewModel.setPaused(it) },
+            reputation = reputationText(ready.profile.reputation, ready.profile.tradesDone ?: 0)
         )
         SegmentedTabs(
             selected = tab,
@@ -432,10 +439,12 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
 
     viewModel.composer?.let { composer -> ComposerDialog(viewModel, composer) }
     viewModel.planner?.let { planner -> PlannerDialog(viewModel, planner) }
+    viewModel.closing?.let { closing -> ClosingDialog(viewModel, closing) }
+    viewModel.feedback?.let { feedback -> FeedbackDialog(viewModel, feedback) }
 }
 
 @Composable
-private fun ProfileHeader(nickname: String, paused: Boolean, onPausedChange: (Boolean) -> Unit) {
+private fun ProfileHeader(nickname: String, paused: Boolean, onPausedChange: (Boolean) -> Unit, reputation: String = "") {
     val statusColor by animateColorAsState(
         if (paused) AppColors.orange else AppColors.green,
         tween(AppMotion.current.state),
@@ -463,6 +472,7 @@ private fun ProfileHeader(nickname: String, paused: Boolean, onPausedChange: (Bo
                     color = AppColors.textSecondary
                 )
             }
+            if (reputation.isNotBlank()) Text(reputation, fontSize = 11.sp, color = AppColors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Switch(checked = !paused, onCheckedChange = { onPausedChange(!it) })
@@ -1327,9 +1337,8 @@ private fun MatchCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Place, null, tint = AppColors.textMuted, modifier = Modifier.size(13.dp))
                     Spacer(Modifier.width(3.dp))
-                    val trades = match.tradesDone ?: 0
                     Text(
-                        "${distanceLabel(match.distance)} · ${if (trades == 0) AppLocale.tradeRadarNewMember else AppLocale.tradeRadarTradesDone(trades)}",
+                        "${distanceLabel(match.distance)} · ${reputationText(match.reputation, match.tradesDone ?: 0)}",
                         fontSize = 12.sp,
                         color = AppColors.textSecondary
                     )
@@ -1568,8 +1577,9 @@ private fun CardDetailDialog(item: TradeMatchItem, theirs: Boolean, onDismiss: (
 /** I contenitori della tab Proposte, nell'ordine in cui si mostrano. */
 private enum class ProposalBucket { TO_ANSWER, MEETINGS, AGREED, WAITING, CLOSED }
 
-private fun bucketOf(proposal: TradeProposal): ProposalBucket = when {
+private fun bucketOf(proposal: TradeProposal, applied: Set<String> = emptySet()): ProposalBucket = when {
     proposal.actionNeeded == true || (proposal.status == "open" && proposal.myTurn == true) -> ProposalBucket.TO_ANSWER
+    proposal.status == "done" && proposal.id !in applied -> ProposalBucket.TO_ANSWER
     proposal.status == "open" -> ProposalBucket.WAITING
     proposal.status == "scheduled" -> ProposalBucket.MEETINGS
     proposal.status == "accepted" -> ProposalBucket.AGREED
@@ -1609,7 +1619,8 @@ private fun slotPartTime(part: String?): String = when (part) {
 private fun ProposalsTab(viewModel: TradeRadarViewModel, onGoToMatches: () -> Unit) {
     LaunchedEffect(Unit) { viewModel.refreshProposals() }
     val proposals = viewModel.proposals
-    val byBucket = proposals.groupBy(::bucketOf)
+    val applied = viewModel.appliedClosings
+    val byBucket = proposals.groupBy { bucketOf(it, applied) }
     val automatic = listOf(ProposalBucket.TO_ANSWER, ProposalBucket.MEETINGS, ProposalBucket.AGREED, ProposalBucket.WAITING, ProposalBucket.CLOSED)
         .firstOrNull { !byBucket[it].isNullOrEmpty() } ?: ProposalBucket.TO_ANSWER
     val bucket = viewModel.proposalsBucket?.let { name -> ProposalBucket.entries.firstOrNull { it.name == name } } ?: automatic
@@ -1685,6 +1696,7 @@ private fun ProposalsTab(viewModel: TradeRadarViewModel, onGoToMatches: () -> Un
                         ProposalRow(
                             group = group,
                             prices = viewModel.prices,
+                            applied = applied,
                             onClick = { detail = group.mapNotNull { it.id } },
                             modifier = Modifier.animateItem()
                         )
@@ -1805,14 +1817,20 @@ private data class RowTag(val text: String, val icon: ImageVector, val color: Co
 
 /** Che cos'e' una riga, a colpo d'occhio: proposta, controproposta, accordo, appuntamento... */
 @Composable
-private fun rowTag(proposal: TradeProposal, groupSize: Int): RowTag {
+private fun rowTag(proposal: TradeProposal, groupSize: Int, applied: Set<String> = emptySet()): RowTag {
     val meeting = proposal.meeting
     return when {
         proposal.status == "open" && proposal.myTurn == true && (proposal.revision ?: 1) > 1 ->
             RowTag(AppLocale.tradeRadarTagCounter, Icons.AutoMirrored.Filled.Reply, AppColors.orange)
         proposal.status == "open" && proposal.myTurn == true -> RowTag(AppLocale.tradeRadarTagNew, Icons.Default.Mail, AppColors.orange)
         proposal.status == "open" -> RowTag(AppLocale.tradeRadarTagSent, Icons.AutoMirrored.Filled.Send, AppColors.blue)
+        proposal.status == "scheduled" && proposal.doneByOther == true && proposal.doneByMe != true ->
+            RowTag(AppLocale.tradeRadarTagConfirmDone, Icons.Default.Verified, AppColors.orange)
         proposal.status == "scheduled" -> RowTag(AppLocale.tradeRadarTagMeeting, Icons.Default.Event, AppColors.green)
+        proposal.status == "done" && proposal.id !in applied -> RowTag(AppLocale.tradeRadarUpdateCollection, Icons.Default.Inventory2, AppColors.orange)
+        proposal.status == "done" && proposal.myRating == null -> RowTag(AppLocale.tradeRadarTagRate, Icons.Default.Star, AppColors.orange)
+        proposal.status == "done" -> RowTag(AppLocale.tradeRadarStatusDone, Icons.Default.Verified, AppColors.green)
+        proposal.status == "no_show" -> RowTag(AppLocale.tradeRadarStatusNoShow, Icons.Default.PersonOff, AppColors.red)
         proposal.status == "accepted" && meeting?.status == "proposed" && meeting.byMe != true ->
             RowTag(AppLocale.tradeRadarTagPickTime, Icons.Default.Schedule, AppColors.orange)
         proposal.status == "accepted" && meeting?.status == "proposed" -> RowTag(AppLocale.tradeRadarTagTimeProposed, Icons.Default.Schedule, AppColors.blue)
@@ -1829,14 +1847,20 @@ private fun rowTag(proposal: TradeProposal, groupSize: Int): RowTag {
  * Nelle chiuse la riga e' la persona, con quante proposte chiuse ci sono.
  */
 @Composable
-private fun ProposalRow(group: List<TradeProposal>, prices: Map<String, Double>, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ProposalRow(
+    group: List<TradeProposal>,
+    prices: Map<String, Double>,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    applied: Set<String> = emptySet()
+) {
     val proposal = group.first()
-    val bucket = bucketOf(proposal)
+    val bucket = bucketOf(proposal, applied)
     val shape = RoundedCornerShape(18.dp)
     val take = proposal.take.orEmpty()
     val give = proposal.give.orEmpty()
     val verdict = balanceVerdict(give, take, prices)
-    val tag = rowTag(proposal, group.size)
+    val tag = rowTag(proposal, group.size, applied)
     val scheduled = proposal.status == "scheduled"
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1960,7 +1984,12 @@ private fun ProposalSheet(
                         else viewModel.answer(proposal.id.orEmpty(), "cancel")
                     },
                     onPlan = { onPlan(proposal) },
-                    onConfirmMeeting = { index -> viewModel.confirmMeeting(proposal.id.orEmpty(), index) }
+                    onConfirmMeeting = { index -> viewModel.confirmMeeting(proposal.id.orEmpty(), index) },
+                    needsCollection = viewModel.needsCollectionUpdate(proposal),
+                    onDone = { viewModel.markDone(proposal) },
+                    onNoShow = { viewModel.markNoShow(proposal) },
+                    onCollection = { viewModel.openClosing(proposal) },
+                    onFeedback = { viewModel.openFeedback(proposal) }
                 )
             }
         }
@@ -1985,7 +2014,12 @@ private fun ProposalCard(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     onPlan: () -> Unit = {},
-    onConfirmMeeting: (Int) -> Unit = {}
+    onConfirmMeeting: (Int) -> Unit = {},
+    needsCollection: Boolean = false,
+    onDone: () -> Unit = {},
+    onNoShow: () -> Unit = {},
+    onCollection: () -> Unit = {},
+    onFeedback: () -> Unit = {}
 ) {
     val other = proposal.counterpart
     val status = proposalStatus(proposal)
@@ -2009,7 +2043,8 @@ private fun ProposalCard(
                 Text(
                     listOfNotNull(
                         distanceLabel(other?.distance),
-                        (proposal.revision ?: 1).takeIf { it > 1 && open }?.let { AppLocale.tradeRadarCounterNote(it) }
+                        (proposal.revision ?: 1).takeIf { it > 1 && open }?.let { AppLocale.tradeRadarCounterNote(it) },
+                        reputationText(other?.reputation, other?.tradesDone ?: 0)
                     ).joinToString(" · "),
                     fontSize = 12.sp,
                     color = AppColors.textSecondary
@@ -2048,7 +2083,15 @@ private fun ProposalCard(
                 acting = acting,
                 onPlan = onPlan,
                 onConfirm = onConfirmMeeting,
-                onCancel = onCancel
+                onCancel = onCancel,
+                onDone = onDone,
+                onNoShow = onNoShow
+            )
+            proposal.status == "done" -> DoneSection(proposal, needsCollection, onCollection = onCollection, onFeedback = onFeedback)
+            proposal.status == "no_show" -> Text(
+                if (proposal.closedByMe == true) AppLocale.tradeRadarNoShowByMe(other?.nickname.orEmpty()) else AppLocale.tradeRadarNoShowByOther,
+                fontSize = 12.sp,
+                color = AppColors.textMuted
             )
         }
     }
@@ -2100,6 +2143,8 @@ private fun proposalStatus(proposal: TradeProposal): StatusStyle = when (proposa
         StatusStyle(AppLocale.tradeRadarStatusPickSlot, AppColors.orange)
     } else StatusStyle(AppLocale.tradeRadarStatusAccepted, AppColors.green)
     "scheduled" -> StatusStyle(AppLocale.tradeRadarStatusScheduled, AppColors.green)
+    "done" -> StatusStyle(AppLocale.tradeRadarStatusDone, AppColors.green)
+    "no_show" -> StatusStyle(AppLocale.tradeRadarStatusNoShow, AppColors.red)
     "declined" -> StatusStyle(
         if (proposal.closedByMe == true) AppLocale.tradeRadarStatusDeclinedByMe else AppLocale.tradeRadarStatusDeclined,
         AppColors.textMuted
@@ -2480,7 +2525,9 @@ private fun MeetingSection(
     acting: Boolean,
     onPlan: () -> Unit,
     onConfirm: (Int) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    onDone: () -> Unit = {},
+    onNoShow: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val meeting = proposal.meeting
@@ -2519,6 +2566,7 @@ private fun MeetingSection(
                         Text(AppLocale.tradeRadarChangeMeeting)
                     }
                 }
+                ClosingControls(proposal, acting, onDone = onDone, onNoShow = onNoShow)
             }
             status == "proposed" && meeting?.byMe == true -> {
                 Column(
@@ -2637,6 +2685,13 @@ private fun SpotSummary(spot: TradeSpot) {
             }
             spot.openingHours?.takeIf { it.isNotBlank() }?.let {
                 Text(AppLocale.tradeRadarOpeningHours(it), fontSize = 11.sp, color = AppColors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            val badges = spot.badges.orEmpty()
+            if (badges.isNotEmpty() || (spot.trades ?: 0) > 0) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 2.dp)) {
+                    badges.forEach { InfoPill((if (it == "tournaments") "🏆 " else "") + spotBadgeLabel(it), AppColors.purple) }
+                    (spot.trades ?: 0).takeIf { it > 0 }?.let { InfoPill(AppLocale.tradeRadarTradesHere(it), AppColors.green) }
+                }
             }
             if (spot.pending == true) {
                 Text(AppLocale.tradeRadarPendingExplain, fontSize = 11.sp, color = AppColors.orange)
@@ -3134,6 +3189,316 @@ private fun DayChip(date: java.time.LocalDate, today: java.time.LocalDate, selec
                 .background(if (slotsOnDay > 0) (if (selected) AppColors.onAccent else AppColors.blue) else Color.Transparent)
         )
     }
+}
+
+// ── Chiusura e feedback (fase 2c) ───────────────────────────────────────────
+
+private val GoodTags = listOf("punctual", "as_described", "kind")
+private val BadTags = listOf("late", "worse_condition", "different_card", "rude")
+private val SpotVoteTags = listOf("tournaments", "comics", "card_shop")
+
+private fun ratingTagLabel(tag: String): String = when (tag) {
+    "punctual" -> AppLocale.tradeRadarTagPunctual
+    "as_described" -> AppLocale.tradeRadarTagAsDescribed
+    "kind" -> AppLocale.tradeRadarTagKind
+    "late" -> AppLocale.tradeRadarTagLate
+    "worse_condition" -> AppLocale.tradeRadarTagWorseCondition
+    "different_card" -> AppLocale.tradeRadarTagDifferentCard
+    else -> AppLocale.tradeRadarTagRude
+}
+
+private fun spotBadgeLabel(tag: String): String = when (tag) {
+    "tournaments" -> AppLocale.tradeRadarBadgeTournaments
+    "comics" -> AppLocale.tradeRadarKindComics
+    else -> AppLocale.tradeRadarKindCardShop
+}
+
+private fun moodEmoji(mood: String?): String = when (mood) {
+    "good" -> "😊"
+    "ok" -> "😐"
+    "bad" -> "😞"
+    else -> ""
+}
+
+/**
+ * La reputazione in una riga: "Nuovo su TradeRadar", oppure "5 scambi · 😊 100%
+ * · Puntuale ×3". La percentuale e' sui 😊 e 😞: i 😐 contano come scambi ma
+ * non la abbassano.
+ */
+private fun reputationText(reputation: TradeReputation?, tradesDone: Int): String {
+    if (tradesDone == 0 && reputation == null) return AppLocale.tradeRadarNewMember
+    val good = reputation?.good ?: 0
+    val bad = reputation?.bad ?: 0
+    return listOfNotNull(
+        AppLocale.tradeRadarTradesDone(tradesDone),
+        (good + bad).takeIf { it > 0 }?.let { "😊 ${(good * 100) / it}%" },
+        reputation?.topTags?.firstOrNull()?.let { top -> "${ratingTagLabel(top.tag.orEmpty())} ×${top.count ?: 0}" }
+    ).joinToString(" · ")
+}
+
+/**
+ * Sotto l'appuntamento fissato: "Scambio fatto" dal giorno dell'incontro,
+ * "Non si e' presentato" dopo l'ora. Se l'altro ha gia' confermato lo si
+ * dice, e se ho confermato io si aspetta lui.
+ */
+@Composable
+private fun ClosingControls(proposal: TradeProposal, acting: Boolean, onDone: () -> Unit, onNoShow: () -> Unit) {
+    val slot = proposal.meeting?.slot ?: return
+    val nickname = proposal.counterpart?.nickname.orEmpty()
+    val today = java.time.LocalDate.now().toString()
+    val now = java.time.LocalTime.now().toString().take(5)
+    val isDay = today >= slot.day
+    val afterTime = today > slot.day || (today == slot.day && now >= (slot.time ?: slotPartTime(slot.part)))
+    var askNoShow by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        when {
+            !isDay -> Text(AppLocale.tradeRadarDoneFromDay, fontSize = 12.sp, color = AppColors.textMuted)
+            proposal.doneByMe == true -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.CheckCircle, null, tint = AppColors.green, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(AppLocale.tradeRadarDoneWaiting(nickname), fontSize = 12.sp, color = AppColors.textSecondary)
+            }
+            else -> {
+                if (proposal.doneByOther == true) {
+                    Text(AppLocale.tradeRadarOtherDone(nickname), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.orange)
+                }
+                Button(
+                    onClick = onDone,
+                    enabled = !acting,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.green),
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    if (acting) CircularProgressIndicator(Modifier.size(18.dp), color = AppColors.onAccent, strokeWidth = 2.dp)
+                    else {
+                        Icon(Icons.Default.Verified, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(AppLocale.tradeRadarMarkDone, fontWeight = FontWeight.Bold)
+                    }
+                }
+                if (afterTime && proposal.doneByOther != true) {
+                    TextButton(onClick = { askNoShow = true }, enabled = !acting, modifier = Modifier.align(Alignment.End)) {
+                        Text(AppLocale.tradeRadarNoShow(nickname), color = AppColors.red)
+                    }
+                }
+            }
+        }
+    }
+    if (askNoShow) {
+        AlertDialog(
+            onDismissRequest = { askNoShow = false },
+            title = { Text(AppLocale.tradeRadarNoShow(nickname)) },
+            text = { Text(AppLocale.tradeRadarNoShowText) },
+            confirmButton = {
+                TextButton(onClick = { askNoShow = false; onNoShow() }) { Text(AppLocale.confirm, color = AppColors.red) }
+            },
+            dismissButton = { TextButton(onClick = { askNoShow = false }) { Text(AppLocale.cancel) } }
+        )
+    }
+}
+
+/** Uno scambio chiuso: la collezione da aggiornare, il voto da dare, e quello dell'altro quando si vede. */
+@Composable
+private fun DoneSection(proposal: TradeProposal, needsCollection: Boolean, onCollection: () -> Unit, onFeedback: () -> Unit) {
+    val nickname = proposal.counterpart?.nickname.orEmpty()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AppColors.green.copy(alpha = 0.12f)).padding(10.dp)
+        ) {
+            Text("🎉", fontSize = 18.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(AppLocale.tradeRadarTradeCompleted(nickname), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary)
+        }
+        if (needsCollection) {
+            Button(
+                onClick = onCollection,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.orange),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Inventory2, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(AppLocale.tradeRadarUpdateCollection, fontWeight = FontWeight.Bold)
+            }
+        }
+        val mine = proposal.myRating
+        if (mine == null) {
+            OutlinedButton(onClick = onFeedback, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Text(AppLocale.tradeRadarHowDidItGo(nickname), fontWeight = FontWeight.SemiBold)
+            }
+        } else {
+            Text(
+                AppLocale.tradeRadarYourRating("${moodEmoji(mine.mood)} ${mine.tags.orEmpty().joinToString(", ") { ratingTagLabel(it) }}".trim()),
+                fontSize = 12.sp,
+                color = AppColors.textSecondary
+            )
+            val theirs = proposal.theirRating
+            Text(
+                if (theirs != null) AppLocale.tradeRadarTheirRating(nickname, "${moodEmoji(theirs.mood)} ${theirs.tags.orEmpty().joinToString(", ") { ratingTagLabel(it) }}".trim())
+                else AppLocale.tradeRadarTheirRatingHidden(nickname),
+                fontSize = 12.sp,
+                color = if (theirs != null) AppColors.textSecondary else AppColors.textMuted
+            )
+        }
+    }
+}
+
+/**
+ * Il riepilogo della collezione, carta per carta: gia' tutto spuntato, si
+ * toglie la spunta a cio' che non si vuole toccare. Le carte da dare che in
+ * collezione non ci sono piu' restano senza spunta, con il motivo.
+ */
+@Composable
+private fun ClosingDialog(viewModel: TradeRadarViewModel, closing: TradeRadarViewModel.Closing) {
+    AlertDialog(
+        onDismissRequest = { if (!closing.applying) viewModel.closeClosing() },
+        title = { Text(AppLocale.tradeRadarUpdateCollection) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(AppLocale.tradeRadarClosingText(closing.nickname), fontSize = 13.sp, color = AppColors.textSecondary)
+                if (closing.loading) {
+                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                }
+                closing.lines.forEachIndexed { index, line ->
+                    val color = if (line.giving) AppColors.red else AppColors.green
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(innerColor())
+                            .clickable(enabled = !line.missing) { viewModel.toggleClosingLine(index) }
+                            .padding(end = 10.dp)
+                    ) {
+                        Checkbox(checked = line.checked, onCheckedChange = { viewModel.toggleClosingLine(index) }, enabled = !line.missing)
+                        Box(Modifier.width(30.dp).height(42.dp).clip(RoundedCornerShape(3.dp))) {
+                            CardImageSkeleton()
+                            AsyncImage(
+                                model = TradeCardKey.imageUrl(line.item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+                                contentDescription = line.item.name,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${if (line.giving) "−" else "+"}${line.item.qty ?: 1} ${line.item.name ?: TradeCardKey.label(line.item.key.orEmpty())}",
+                                fontWeight = FontWeight.SemiBold,
+                                color = color,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                listOfNotNull(line.item.variant, line.item.condition).filter { it.isNotBlank() }.joinToString(" · "),
+                                fontSize = 11.sp,
+                                color = AppColors.textMuted
+                            )
+                            when {
+                                line.missing -> Text(AppLocale.tradeRadarNotInCollection, fontSize = 11.sp, color = AppColors.orange)
+                                line.inWishlist -> Text(AppLocale.tradeRadarLeavesWishlist, fontSize = 11.sp, color = AppColors.blue)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { viewModel.applyClosing() }, enabled = !closing.loading && !closing.applying) {
+                if (closing.applying) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                else Text(AppLocale.confirm, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { viewModel.closeClosing() }, enabled = !closing.applying) { Text(AppLocale.tradeRadarLater) }
+        }
+    )
+}
+
+/**
+ * Il voto alla cieca: tre faccine grandi, poi i chip che vanno con la faccina
+ * scelta, e una domanda veloce sul luogo. Niente testo libero.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FeedbackDialog(viewModel: TradeRadarViewModel, feedback: TradeRadarViewModel.Feedback) {
+    AlertDialog(
+        onDismissRequest = { if (!feedback.sending) viewModel.closeFeedback() },
+        title = { Text(AppLocale.tradeRadarHowDidItGo(feedback.nickname)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(AppLocale.tradeRadarBlindNote(feedback.nickname), fontSize = 12.sp, color = AppColors.textMuted)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf(
+                        "good" to AppLocale.tradeRadarMoodGood,
+                        "ok" to AppLocale.tradeRadarMoodOk,
+                        "bad" to AppLocale.tradeRadarMoodBad
+                    ).forEach { (mood, label) ->
+                        val selected = feedback.mood == mood
+                        val color = when (mood) { "good" -> AppColors.green; "ok" -> AppColors.orange; else -> AppColors.red }
+                        val scale by animateFloatAsState(if (selected) 1.08f else 1f, AppMotion.pressSpring(), label = "mood")
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .weight(1f)
+                                .graphicsLayer { scaleX = scale; scaleY = scale }
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (selected) color.copy(alpha = 0.18f) else innerColor())
+                                .border(1.5.dp, if (selected) color else Color.Transparent, RoundedCornerShape(16.dp))
+                                .clickable { viewModel.setMood(mood) }
+                                .padding(vertical = 10.dp)
+                        ) {
+                            Text(moodEmoji(mood), fontSize = 30.sp)
+                            Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+                feedback.mood?.let { mood ->
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        (if (mood == "good") GoodTags else BadTags).forEach { tag ->
+                            SelectChip(ratingTagLabel(tag), tag in feedback.tags) { viewModel.toggleFeedbackTag(tag) }
+                        }
+                    }
+                }
+                if (feedback.askSpot && feedback.spotName != null) {
+                    HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.2f))
+                    Text(AppLocale.tradeRadarSpotQuestion(feedback.spotName), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SpotVoteTags.forEach { tag ->
+                            SelectChip(spotBadgeLabel(tag), tag in feedback.spotTags) { viewModel.toggleSpotTag(tag) }
+                        }
+                    }
+                    Text(AppLocale.tradeRadarSpotQuestionHint, fontSize = 11.sp, color = AppColors.textMuted)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { viewModel.sendFeedback() }, enabled = feedback.mood != null && !feedback.sending) {
+                if (feedback.sending) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                else Text(AppLocale.tradeRadarReportSend, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { viewModel.closeFeedback() }, enabled = !feedback.sending) { Text(AppLocale.tradeRadarLater) }
+        }
+    )
+}
+
+@Composable
+private fun SelectChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    val background by animateColorAsState(if (selected) AppColors.blue else innerColor(), tween(AppMotion.current.state), label = "selectChip")
+    Text(
+        text,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = if (selected) AppColors.onAccent else AppColors.textPrimary,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(background)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    )
 }
 
 // ── Le mie carte ────────────────────────────────────────────────────────────
@@ -3765,6 +4130,7 @@ private fun problemText(problem: Problem): String = when (problem) {
     Problem.UNAVAILABLE -> AppLocale.tradeRadarUnavailable(null)
     Problem.ALREADY_OPEN -> AppLocale.tradeRadarAlreadyOpen
     Problem.NOT_AVAILABLE -> AppLocale.tradeRadarNotAvailable
+    Problem.TOO_EARLY -> AppLocale.tradeRadarTooEarly
 }
 
 private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
@@ -3776,4 +4142,9 @@ private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
     TradeRadarViewModel.Info.MEETING_SENT -> AppLocale.tradeRadarInfoMeetingSent
     TradeRadarViewModel.Info.MEETING_CONFIRMED -> AppLocale.tradeRadarInfoMeetingConfirmed
     TradeRadarViewModel.Info.SPOT_REPORTED -> AppLocale.tradeRadarInfoSpotReported
+    TradeRadarViewModel.Info.DONE_WAITING -> AppLocale.tradeRadarInfoDoneWaiting
+    TradeRadarViewModel.Info.TRADE_DONE -> AppLocale.tradeRadarInfoTradeDone
+    TradeRadarViewModel.Info.NO_SHOW_SENT -> AppLocale.tradeRadarInfoNoShow
+    TradeRadarViewModel.Info.COLLECTION_UPDATED -> AppLocale.tradeRadarInfoCollectionUpdated
+    TradeRadarViewModel.Info.FEEDBACK_SENT -> AppLocale.tradeRadarInfoFeedbackSent
 }

@@ -17,6 +17,8 @@ import com.emabuia.pokevault.data.trade.dto.TradeProfilePayload
 import com.emabuia.pokevault.data.trade.dto.TradeProfileRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposalRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposalsPayload
+import com.emabuia.pokevault.data.trade.dto.TradeRateRequest
+import com.emabuia.pokevault.data.trade.dto.TradeSpotVoteRequest
 import com.emabuia.pokevault.data.trade.dto.TradeMeetingRequest
 import com.emabuia.pokevault.data.trade.dto.TradeSpotSearchPayload
 import com.emabuia.pokevault.data.trade.dto.TradeSpotsPayload
@@ -173,4 +175,20 @@ object TradeApi {
 
     suspend fun confirmMeeting(id: String, slotIndex: Int): Result<Unit> =
         call("POST", "v1/trade/proposals/$id/meeting/confirm", TradeConfirmRequest(slotIndex)) { Unit }
+
+    // ── Chiusura e feedback ─────────────────────────────────────────────────
+
+    /** "Scambio fatto": dal giorno dell'appuntamento; con entrambi lo scambio e' chiuso. */
+    suspend fun markDone(id: String): Result<Unit> =
+        call("POST", "v1/trade/proposals/$id/done", emptyMap<String, String>()) { Unit }
+
+    /** "Non si e' presentato": dopo l'ora dell'appuntamento. */
+    suspend fun markNoShow(id: String): Result<Unit> =
+        call("POST", "v1/trade/proposals/$id/noshow", emptyMap<String, String>()) { Unit }
+
+    suspend fun rate(id: String, request: TradeRateRequest): Result<Unit> =
+        call("POST", "v1/trade/proposals/$id/rate", request) { Unit }
+
+    suspend fun voteSpot(id: String, request: TradeSpotVoteRequest): Result<Unit> =
+        call("POST", "v1/trade/proposals/$id/spotvote", request) { Unit }
 }

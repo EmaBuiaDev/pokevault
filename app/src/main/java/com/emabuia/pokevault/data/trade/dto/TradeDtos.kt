@@ -40,7 +40,9 @@ data class TradeProfilePayload(
     @SerializedName("memberSince") val memberSince: Long? = null,
     @SerializedName("haves") val haves: Int? = null,
     @SerializedName("wants") val wants: Int? = null,
-    @SerializedName("owned") val owned: Int? = null
+    @SerializedName("owned") val owned: Int? = null,
+    /** I miei voti ricevuti (fase 2c). */
+    @SerializedName("reputation") val reputation: TradeReputation? = null
 )
 
 data class TradeHaveItem(
@@ -105,6 +107,7 @@ data class TradeMatch(
     @SerializedName("distance") val distance: String? = null,
     @SerializedName("tradesDone") val tradesDone: Int? = null,
     @SerializedName("memberSince") val memberSince: Long? = null,
+    @SerializedName("reputation") val reputation: TradeReputation? = null,
     @SerializedName("level") val level: String? = null,
     @SerializedName("mutual") val mutual: Boolean? = null,
     @SerializedName("theyGive") val theyGive: List<TradeMatchItem>? = null,
@@ -195,7 +198,8 @@ data class TradeCounterpart(
     @SerializedName("nickname") val nickname: String? = null,
     /** "lt5" | "lt15" | "far" */
     @SerializedName("distance") val distance: String? = null,
-    @SerializedName("tradesDone") val tradesDone: Int? = null
+    @SerializedName("tradesDone") val tradesDone: Int? = null,
+    @SerializedName("reputation") val reputation: TradeReputation? = null
 )
 
 /** Una proposta vista da me: [give] e' cio' che do, [take] cio' che ricevo. */
@@ -208,6 +212,15 @@ data class TradeProposal(
     @SerializedName("myTurn") val myTurn: Boolean? = null,
     /** Serve una mia mossa: rispondere, o confermare l'appuntamento. */
     @SerializedName("actionNeeded") val actionNeeded: Boolean? = null,
+    /** Chi ha gia' segnato "Scambio fatto" (fase 2c). */
+    @SerializedName("doneByMe") val doneByMe: Boolean? = null,
+    @SerializedName("doneByOther") val doneByOther: Boolean? = null,
+    @SerializedName("closedAt") val closedAt: Long? = null,
+    @SerializedName("myRating") val myRating: TradeRating? = null,
+    /** Il voto dell'altro: null finche' non ho votato anch'io (o non passano 7 giorni). */
+    @SerializedName("theirRating") val theirRating: TradeRating? = null,
+    /** Il luogo dell'appuntamento l'ho gia' votato. */
+    @SerializedName("spotVoted") val spotVoted: Boolean? = null,
     @SerializedName("meeting") val meeting: TradeMeeting? = null,
     @SerializedName("iStarted") val iStarted: Boolean? = null,
     @SerializedName("closedByMe") val closedByMe: Boolean? = null,
@@ -239,7 +252,10 @@ data class TradeSpot(
     /** Dal punto a meta' strada fra le due zone. */
     @SerializedName("distanceKm") val distanceKm: Double? = null,
     /** Segnalato da un utente e non ancora approvato. */
-    @SerializedName("pending") val pending: Boolean? = null
+    @SerializedName("pending") val pending: Boolean? = null,
+    /** Scambi chiusi qui, e i badge votati da almeno tre persone (tournaments | comics | card_shop). */
+    @SerializedName("trades") val trades: Int? = null,
+    @SerializedName("badges") val badges: List<String>? = null
 )
 
 data class TradeSlot(
@@ -318,4 +334,36 @@ data class TradeMeetingRequest(
 /** POST /v1/trade/proposals/:id/meeting/confirm */
 data class TradeConfirmRequest(
     @SerializedName("slot") val slot: Int
+)
+
+// ── Chiusura e feedback (fase 2c) ───────────────────────────────────────────
+
+/** Un voto: mood good | ok | bad, chip come "punctual" o "late". */
+data class TradeRating(
+    @SerializedName("mood") val mood: String? = null,
+    @SerializedName("tags") val tags: List<String>? = null
+)
+
+data class TradeTagCount(
+    @SerializedName("tag") val tag: String? = null,
+    @SerializedName("count") val count: Int? = null
+)
+
+/** I voti ricevuti gia' visibili, e i chip positivi piu' ricevuti (i negativi non si mostrano). */
+data class TradeReputation(
+    @SerializedName("good") val good: Int? = null,
+    @SerializedName("ok") val ok: Int? = null,
+    @SerializedName("bad") val bad: Int? = null,
+    @SerializedName("topTags") val topTags: List<TradeTagCount>? = null
+)
+
+/** POST /v1/trade/proposals/:id/rate */
+data class TradeRateRequest(
+    @SerializedName("mood") val mood: String,
+    @SerializedName("tags") val tags: List<String>
+)
+
+/** POST /v1/trade/proposals/:id/spotvote: tournaments | comics | card_shop */
+data class TradeSpotVoteRequest(
+    @SerializedName("tags") val tags: List<String>
 )

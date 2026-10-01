@@ -7,35 +7,39 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
-import com.emabuia.pokevault.data.trade.CoarseLocation
-import com.emabuia.pokevault.data.trade.TradeApi
-import com.emabuia.pokevault.data.trade.TradeLists
+import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.remote.RepositoryProvider
-import com.emabuia.pokevault.data.trade.TradeCardKey
-import com.emabuia.pokevault.data.trade.OverpassClient
+import com.emabuia.pokevault.data.trade.CoarseLocation
 import com.emabuia.pokevault.data.trade.dto.TradeAddSpotRequest
 import com.emabuia.pokevault.data.trade.dto.TradeCardOffer
 import com.emabuia.pokevault.data.trade.dto.TradeCellUpload
-import com.emabuia.pokevault.data.trade.dto.TradeMeetingRequest
-import com.emabuia.pokevault.data.trade.dto.TradeSlot
-import com.emabuia.pokevault.data.trade.dto.TradeSpot
-import com.emabuia.pokevault.data.trade.dto.TradeSpotCandidate
 import com.emabuia.pokevault.data.trade.dto.TradeCounterRequest
-import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
-import com.emabuia.pokevault.data.trade.dto.TradeOfferItem
-import com.emabuia.pokevault.data.trade.dto.TradeProposal
-import com.emabuia.pokevault.data.trade.dto.TradeProposalRequest
 import com.emabuia.pokevault.data.trade.dto.TradeHaveItem
 import com.emabuia.pokevault.data.trade.dto.TradeHavesPayload
 import com.emabuia.pokevault.data.trade.dto.TradeMatch
+import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
+import com.emabuia.pokevault.data.trade.dto.TradeMeetingRequest
+import com.emabuia.pokevault.data.trade.dto.TradeOfferItem
 import com.emabuia.pokevault.data.trade.dto.TradeOwnedRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProfilePayload
 import com.emabuia.pokevault.data.trade.dto.TradeProfileRequest
+import com.emabuia.pokevault.data.trade.dto.TradeProposal
+import com.emabuia.pokevault.data.trade.dto.TradeProposalRequest
+import com.emabuia.pokevault.data.trade.dto.TradeRateRequest
+import com.emabuia.pokevault.data.trade.dto.TradeSlot
+import com.emabuia.pokevault.data.trade.dto.TradeSpot
+import com.emabuia.pokevault.data.trade.dto.TradeSpotCandidate
+import com.emabuia.pokevault.data.trade.dto.TradeSpotVoteRequest
 import com.emabuia.pokevault.data.trade.dto.TradeWantItem
 import com.emabuia.pokevault.data.trade.dto.TradeWantsRequest
-import kotlinx.coroutines.Job
+import com.emabuia.pokevault.data.trade.OverpassClient
+import com.emabuia.pokevault.data.trade.TradeApi
+import com.emabuia.pokevault.data.trade.TradeCardKey
+import com.emabuia.pokevault.data.trade.TradeLists
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -56,10 +60,13 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         data class Error(val message: Problem) : Screen()
     }
 
-    enum class Problem { UNAUTHORIZED, UNAVAILABLE, REJECTED, NO_LOCATION, ALREADY_OPEN, NOT_AVAILABLE }
+    enum class Problem { UNAUTHORIZED, UNAVAILABLE, REJECTED, NO_LOCATION, ALREADY_OPEN, NOT_AVAILABLE, TOO_EARLY }
 
     /** Conferme da mostrare una volta, come [notice] ma non sono errori. */
-    enum class Info { PROPOSAL_SENT, COUNTER_SENT, ACCEPTED, DECLINED, CANCELLED, MEETING_SENT, MEETING_CONFIRMED, SPOT_REPORTED }
+    enum class Info {
+        PROPOSAL_SENT, COUNTER_SENT, ACCEPTED, DECLINED, CANCELLED, MEETING_SENT, MEETING_CONFIRMED, SPOT_REPORTED,
+        DONE_WAITING, TRADE_DONE, NO_SHOW_SENT, COLLECTION_UPDATED, FEEDBACK_SENT
+    }
 
     var screen by mutableStateOf<Screen>(Screen.Loading)
         private set
@@ -308,7 +315,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         private set
 
     /** Quelle in cui tocca a me rispondere: il numero sulla tab. */
-    val proposalsToAnswer: Int get() = proposals.count { it.actionNeeded == true || it.myTurn == true }
+    val proposalsToAnswer: Int get() = proposals.count { it.actionNeeded == true || it.myTurn == true || needsCollectionUpdate(it) }
 
     /** La proposta su cui si sta agendo (accetta, rifiuta...), per il caricamento sul tasto. */
     var actingOn by mutableStateOf<String?>(null)
@@ -745,6 +752,226 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    // ── Chiusura e feedback (fase 2c) ───────────────────────────────────────
+
+    /** Gli scambi chiusi di cui ho gia' aggiornato la collezione: una volta sola, anche riaprendo l'app. */
+    var appliedClosings by mutableStateOf(prefs.getStringSet(KEY_APPLIED_CLOSINGS, emptySet()).orEmpty())
+        private set
+
+    /** Uno scambio chiuso che aspetta il riepilogo della collezione. */
+    fun needsCollectionUpdate(proposal: TradeProposal): Boolean =
+        proposal.status == "done" && proposal.id != null && proposal.id !in appliedClosings
+
+    /** "Scambio fatto". Con entrambi lo scambio e' chiuso e si apre il riepilogo della collezione. */
+    fun markDone(proposal: TradeProposal) {
+        val id = proposal.id ?: return
+        if (actingOn != null) return
+        viewModelScope.launch {
+            actingOn = id
+            val result = TradeApi.markDone(id)
+            actingOn = null
+            if (result is TradeApi.Result.Ok) {
+                info = if (proposal.doneByOther == true) Info.TRADE_DONE else Info.DONE_WAITING
+            } else {
+                notice = if (result is TradeApi.Result.Rejected && result.error == "too_early") Problem.TOO_EARLY else problemOf(result)
+            }
+            refreshProposals()
+            if (proposal.doneByOther == true && result is TradeApi.Result.Ok) {
+                // Chiuso adesso: si apre subito il riepilogo, con i dati appena riletti.
+                proposals.firstOrNull { it.id == id }?.let { openClosing(it) }
+            }
+        }
+    }
+
+    fun markNoShow(proposal: TradeProposal) {
+        val id = proposal.id ?: return
+        if (actingOn != null) return
+        viewModelScope.launch {
+            actingOn = id
+            val result = TradeApi.markNoShow(id)
+            actingOn = null
+            if (result is TradeApi.Result.Ok) info = Info.NO_SHOW_SENT else notice = problemOf(result)
+            refreshProposals()
+        }
+    }
+
+    /**
+     * Una riga del riepilogo: una carta che esce dalla collezione (le copie
+     * date) o che entra (quelle ricevute). [docIds] sono i documenti della
+     * collezione da cui togliere; vuoto se la carta non c'e' piu'.
+     */
+    data class ClosingLine(
+        val item: TradeOfferItem,
+        val giving: Boolean,
+        val checked: Boolean = true,
+        val docIds: List<String> = emptyList(),
+        /** Ricevuta e in wishlist: esce dalla wishlist. */
+        val inWishlist: Boolean = false
+    ) {
+        val apiCardId: String get() = "ita:${item.key.orEmpty()}"
+        /** Una carta da togliere che in collezione non c'e': non si puo' spuntare. */
+        val missing: Boolean get() = giving && docIds.isEmpty()
+    }
+
+    data class Closing(
+        val proposalId: String,
+        val nickname: String,
+        val lines: List<ClosingLine> = emptyList(),
+        val loading: Boolean = true,
+        val applying: Boolean = false
+    )
+
+    var closing by mutableStateOf<Closing?>(null)
+        private set
+
+    /**
+     * Il riepilogo carta per carta, gia' tutto spuntato: si toglie la spunta a
+     * cio' che non si vuole toccare (aggiornato a mano, condizione diversa).
+     */
+    fun openClosing(proposal: TradeProposal) {
+        val id = proposal.id ?: return
+        closing = Closing(id, proposal.counterpart?.nickname.orEmpty())
+        viewModelScope.launch {
+            val cards = repository.getCards().first()
+            val wished = repository.getWishlists().first().flatMap { it.cardIds }.toSet()
+            fun docsFor(item: TradeOfferItem): List<String> = cards.filter {
+                TradeCardKey.fromApiCardId(it.apiCardId) == item.key &&
+                    it.variant == item.variant && it.condition == item.condition && it.language == item.language
+            }.map { it.id }
+            val lines = proposal.give.orEmpty().map { ClosingLine(it, giving = true, docIds = docsFor(it)) }
+                .map { if (it.missing) it.copy(checked = false) else it } +
+                proposal.take.orEmpty().map { ClosingLine(it, giving = false, inWishlist = "ita:${it.key}" in wished) }
+            closing = closing?.takeIf { it.proposalId == id }?.copy(lines = lines, loading = false)
+        }
+    }
+
+    fun toggleClosingLine(index: Int) {
+        val current = closing ?: return
+        val line = current.lines.getOrNull(index) ?: return
+        if (line.missing) return
+        closing = current.copy(lines = current.lines.toMutableList().also { it[index] = line.copy(checked = !line.checked) })
+    }
+
+    /** Si chiude senza toccare la collezione: il riepilogo resta da fare. */
+    fun closeClosing() {
+        closing = null
+    }
+
+    /**
+     * Applica il riepilogo: toglie le copie date, aggiunge quelle ricevute con
+     * i dati del catalogo (come un'aggiunta a mano) e le toglie dalla
+     * wishlist. Poi lo segna fatto, una volta per tutte, e riallinea le offerte.
+     */
+    fun applyClosing() {
+        val current = closing ?: return
+        if (current.applying) return
+        closing = current.copy(applying = true)
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val chosen = current.lines.filter { it.checked && !it.missing }
+            for (line in chosen.filter { it.giving }) {
+                var left = line.item.qty ?: 1
+                for (docId in line.docIds) {
+                    while (left > 0 && repository.removeOneCopy(docId).isSuccess) left--
+                    if (left == 0) break
+                }
+            }
+            val received = chosen.filter { !it.giving }
+            val catalog = RepositoryProvider.tcgRepository.italianCardsByApiIds(context, received.map { it.apiCardId }.toSet())
+            for (line in received) {
+                val card = catalog[line.apiCardId]
+                repository.addCard(
+                    PokemonCard(
+                        name = card?.name ?: line.item.name.orEmpty(),
+                        imageUrl = card?.images?.small ?: TradeCardKey.imageUrl(line.item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+                        set = card?.set?.name ?: line.item.setName.orEmpty(),
+                        rarity = card?.rarity.orEmpty(),
+                        type = card?.types?.firstOrNull().orEmpty(),
+                        hp = card?.hp?.toIntOrNull() ?: 0,
+                        supertype = card?.supertype?.ifBlank { null } ?: "Pokémon",
+                        subtypes = card?.subtypes.orEmpty(),
+                        apiCardId = line.apiCardId,
+                        cardNumber = card?.number ?: line.item.key.orEmpty().substringAfter(':'),
+                        variant = line.item.variant?.ifBlank { null } ?: "Normal",
+                        quantity = line.item.qty ?: 1,
+                        condition = line.item.condition?.ifBlank { null } ?: "Near Mint",
+                        language = line.item.language?.ifBlank { null } ?: "🇮🇹 Italiano"
+                    )
+                )
+                if (line.inWishlist) repository.removeCardFromAllWishlists(line.apiCardId)
+            }
+            appliedClosings = appliedClosings + current.proposalId
+            prefs.edit().putStringSet(KEY_APPLIED_CLOSINGS, appliedClosings).apply()
+            closing = null
+            info = Info.COLLECTION_UPDATED
+            syncAndRefresh()
+            // Subito dopo il voto, se manca.
+            proposals.firstOrNull { it.id == current.proposalId && it.myRating == null }?.let { openFeedback(it) }
+        }
+    }
+
+    /** Il voto: faccina, chip, e cosa e' il luogo dove ci si e' visti. */
+    data class Feedback(
+        val proposalId: String,
+        val nickname: String,
+        val spotName: String?,
+        /** Il luogo l'ho gia' votato (o non c'e'): la domanda non si fa. */
+        val askSpot: Boolean,
+        val mood: String? = null,
+        val tags: Set<String> = emptySet(),
+        val spotTags: Set<String> = emptySet(),
+        val sending: Boolean = false
+    )
+
+    var feedback by mutableStateOf<Feedback?>(null)
+        private set
+
+    fun openFeedback(proposal: TradeProposal) {
+        val id = proposal.id ?: return
+        feedback = Feedback(
+            proposalId = id,
+            nickname = proposal.counterpart?.nickname.orEmpty(),
+            spotName = proposal.meeting?.spot?.name,
+            askSpot = proposal.spotVoted != true && proposal.meeting?.spot != null
+        )
+    }
+
+    fun closeFeedback() {
+        feedback = null
+    }
+
+    /** Cambiando faccina i chip ripartono: quelli positivi vanno solo con 😊. */
+    fun setMood(mood: String) {
+        feedback = feedback?.let { if (it.mood == mood) it else it.copy(mood = mood, tags = emptySet()) }
+    }
+
+    fun toggleFeedbackTag(tag: String) {
+        feedback = feedback?.let { it.copy(tags = if (tag in it.tags) it.tags - tag else it.tags + tag) }
+    }
+
+    fun toggleSpotTag(tag: String) {
+        feedback = feedback?.let { it.copy(spotTags = if (tag in it.spotTags) it.spotTags - tag else it.spotTags + tag) }
+    }
+
+    fun sendFeedback() {
+        val current = feedback ?: return
+        val mood = current.mood ?: return
+        if (current.sending) return
+        feedback = current.copy(sending = true)
+        viewModelScope.launch {
+            val result = TradeApi.rate(current.proposalId, TradeRateRequest(mood, current.tags.toList()))
+            if (result is TradeApi.Result.Ok || (result is TradeApi.Result.Rejected && result.error == "already_rated")) {
+                if (current.spotTags.isNotEmpty()) TradeApi.voteSpot(current.proposalId, TradeSpotVoteRequest(current.spotTags.toList()))
+                feedback = null
+                info = Info.FEEDBACK_SENT
+                refreshProposals()
+            } else {
+                notice = problemOf(result)
+                feedback = feedback?.copy(sending = false)
+            }
+        }
+    }
+
     // ── Sincronizzazione ────────────────────────────────────────────────────
 
     private suspend fun updateProfile(profile: TradeProfilePayload, cell: String, paused: Boolean) {
@@ -827,6 +1054,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     private companion object {
         const val PREFS = "trade_radar"
         const val KEY_LEVELS_EXPLAINED = "levels_explained"
+        const val KEY_APPLIED_CLOSINGS = "applied_closings"
         const val PUSH_DEBOUNCE_MS = 600L
         const val SEARCH_DEBOUNCE_MS = 450L
         const val MAX_SLOTS = 3
