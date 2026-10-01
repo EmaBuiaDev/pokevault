@@ -251,8 +251,8 @@ async function putProfile(request: Request, db: D1Database, uid: string): Promis
   await db
     .prepare(
       `INSERT INTO trade_profiles
-         (uid, nickname, geohash5, adult_confirmed_at, collection_consent_at, paused, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?4, ?4)
+         (uid, nickname, geohash5, adult_confirmed_at, collection_consent_at, paused, created_at, updated_at, public_id)
+       VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?4, ?4, lower(hex(randomblob(8))))
        ON CONFLICT(uid) DO UPDATE SET
          nickname = excluded.nickname,
          geohash5 = excluded.geohash5,
@@ -283,6 +283,12 @@ async function getProfile(db: D1Database, uid: string): Promise<Response> {
 /** Disattivazione: via tutto quello che il server sa dell'utente. */
 async function deleteProfile(db: D1Database, uid: string): Promise<Response> {
   await db.batch([
+    // Le proposte se ne vanno con il profilo, anche per l'altra persona.
+    db.prepare(
+      `DELETE FROM trade_proposal_items WHERE proposal_id IN
+         (SELECT id FROM trade_proposals WHERE from_uid = ?1 OR to_uid = ?1)`
+    ).bind(uid),
+    db.prepare(`DELETE FROM trade_proposals WHERE from_uid = ?1 OR to_uid = ?1`).bind(uid),
     db.prepare(`DELETE FROM trade_haves WHERE uid = ?`).bind(uid),
     db.prepare(`DELETE FROM trade_wants WHERE uid = ?`).bind(uid),
     db.prepare(`DELETE FROM trade_owned WHERE uid = ?`).bind(uid),
@@ -623,9 +629,9 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
   const cells = cellAndNeighbors(me.geohash5);
   const nearby = nearbyOf(cells, uid);
   const neighborRows = await db
-    .prepare(`SELECT uid, nickname, geohash5, trades_done, created_at FROM trade_profiles WHERE uid IN (${nearby.sql})`)
+    .prepare(`SELECT uid, public_id, nickname, geohash5, trades_done, created_at FROM trade_profiles WHERE uid IN (${nearby.sql})`)
     .bind(...nearby.params)
-    .all<{ uid: string; nickname: string; geohash5: string; trades_done: number; created_at: number }>();
+    .all<{ uid: string; public_id: string; nickname: string; geohash5: string; trades_done: number; created_at: number }>();
   const neighbors = neighborRows.results;
   if (neighbors.length === 0) return json({ cells: cells.length, nearby: 0, matches: [], cards: [] });
 
@@ -678,6 +684,8 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
     sortItems(iGive);
     scored.push({
       score: matchScore(theyGive, iGive, near),
+      // L'id pubblico: con questo l'app manda una proposta o legge le sue offerte.
+      id: neighbor.public_id,
       nickname: neighbor.nickname,
       distance: near ? 'lt5' : 'lt15',
       tradesDone: neighbor.trades_done,
@@ -713,6 +721,296 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
     iGive: match.iGive.slice(0, MAX_ITEMS_PER_SIDE),
   }));
   return json({ cells: cells.length, nearby: neighbors.length, matches, cards });
+}
+
+// ── Proposte (fase 2a) ──────────────────────────────────────────────────────
+
+/** Carte per lato in una proposta. */
+const MAX_PROPOSAL_ITEMS = 30;
+/** Proposte aperte mandate da una persona: oltre, si aspetta qualche risposta. */
+const MAX_OPEN_SENT = 20;
+/** Le proposte chiuse restano in elenco per questo tempo. */
+const CLOSED_VISIBLE_MS = 30 * 24 * 60 * 60 * 1000;
+
+interface ProposalItem {
+  key: string;
+  variant: string;
+  condition: string;
+  language: string;
+  qty: number;
+}
+
+function itemId(item: { key: string; variant: string; condition: string; language: string }): string {
+  return [item.key, item.variant, item.condition, item.language].join('|');
+}
+
+/**
+ * Le carte di un lato, ripulite: chiave valida, quantita' da 1 a 99, le
+ * righe uguali sommate. Null se qualcosa non va.
+ */
+function parseItems(raw: unknown): ProposalItem[] | null {
+  if (!Array.isArray(raw) || raw.length > MAX_PROPOSAL_ITEMS) return null;
+  const byId = new Map<string, ProposalItem>();
+  for (const value of raw as Array<Record<string, unknown>>) {
+    const key = cleanText(value?.key, 41);
+    const qty = Number(value?.qty);
+    if (!CARD_KEY_REGEX.test(key) || !Number.isInteger(qty) || qty < 1 || qty > 99) return null;
+    const item = {
+      key,
+      variant: cleanText(value.variant, 30),
+      condition: cleanText(value.condition, 30),
+      language: cleanText(value.language, 30),
+      qty,
+    };
+    const existing = byId.get(itemId(item));
+    if (existing) existing.qty += qty;
+    else byId.set(itemId(item), item);
+  }
+  return [...byId.values()];
+}
+
+/** Ogni carta che [giverUid] dovrebbe dare e' fra le sue offerte, nella quantita' chiesta? */
+async function itemsAvailable(db: D1Database, giverUid: string, items: ProposalItem[]): Promise<boolean> {
+  if (items.length === 0) return true;
+  const { results } = await db
+    .prepare(`SELECT card_key, variant, condition, language, qty FROM trade_haves WHERE uid = ?`)
+    .bind(giverUid)
+    .all<{ card_key: string; variant: string; condition: string; language: string; qty: number }>();
+  const offered = new Map(results.map((r) => [itemId({ key: r.card_key, ...r }), r.qty]));
+  return items.every((item) => (offered.get(itemId(item)) ?? 0) >= item.qty);
+}
+
+async function uidOfPublicId(db: D1Database, publicId: string): Promise<{ uid: string; paused: number } | null> {
+  if (!/^[0-9a-f]{16}$/.test(publicId)) return null;
+  return db
+    .prepare(`SELECT uid, paused FROM trade_profiles WHERE public_id = ?`)
+    .bind(publicId)
+    .first<{ uid: string; paused: number }>();
+}
+
+function itemStatements(db: D1Database, proposalId: string, revision: number, giverUid: string, items: ProposalItem[]) {
+  return items.map((item) =>
+    db
+      .prepare(
+        `INSERT INTO trade_proposal_items (proposal_id, revision, giver_uid, card_key, variant, condition, language, qty)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(proposalId, revision, giverUid, item.key, item.variant, item.condition, item.language, item.qty)
+  );
+}
+
+/** GET /v1/trade/users/:publicId/haves — le carte che una persona offre, per comporre una proposta. */
+async function getUserHaves(db: D1Database, publicId: string, env: TradeEnv): Promise<Response> {
+  const user = await uidOfPublicId(db, publicId);
+  if (!user || user.paused === 1) return json({ error: 'no_user' }, 404);
+  const { results } = await db
+    .prepare(`SELECT card_key, variant, condition, language, qty FROM trade_haves WHERE uid = ?`)
+    .bind(user.uid)
+    .all<{ card_key: string; variant: string; condition: string; language: string; qty: number }>();
+  const labels = await catalogCardLabels(env);
+  return json({
+    items: results.map((r) => ({
+      key: r.card_key, variant: r.variant, condition: r.condition, language: r.language, qty: r.qty,
+      name: labels.get(r.card_key)?.name, setName: labels.get(r.card_key)?.setName,
+    })),
+  });
+}
+
+/**
+ * POST /v1/trade/proposals — { to, give, take }, con give e take dal punto di
+ * vista di chi manda. Almeno una carta per parte, tutte fra le offerte di chi
+ * le da'. Fra due persone c'e' una sola proposta aperta alla volta.
+ */
+async function createProposal(request: Request, db: D1Database, uid: string): Promise<Response> {
+  const body = await readJson<{ to?: string; give?: unknown; take?: unknown }>(request);
+  if (!body) return json({ error: 'bad_json' }, 400);
+  const target = await uidOfPublicId(db, cleanText(body.to, 16));
+  if (!target || target.paused === 1 || target.uid === uid) return json({ error: 'no_user' }, 404);
+  const give = parseItems(body.give);
+  const take = parseItems(body.take);
+  if (!give || !take || give.length === 0 || take.length === 0) return json({ error: 'bad_items' }, 400);
+
+  const open = await db
+    .prepare(
+      `SELECT id FROM trade_proposals
+       WHERE status = 'open' AND ((from_uid = ?1 AND to_uid = ?2) OR (from_uid = ?2 AND to_uid = ?1))`
+    )
+    .bind(uid, target.uid)
+    .first<{ id: string }>();
+  if (open) return json({ error: 'already_open', id: open.id }, 409);
+
+  const sent = await db
+    .prepare(`SELECT COUNT(*) AS n FROM trade_proposals WHERE from_uid = ? AND status = 'open'`)
+    .bind(uid)
+    .first<{ n: number }>();
+  if ((sent?.n ?? 0) >= MAX_OPEN_SENT) return json({ error: 'too_many_open', max: MAX_OPEN_SENT }, 429);
+
+  if (!(await itemsAvailable(db, uid, give)) || !(await itemsAvailable(db, target.uid, take))) {
+    return json({ error: 'not_offered' }, 409);
+  }
+
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO trade_proposals (id, from_uid, to_uid, status, revision, turn_uid, created_at, updated_at)
+         VALUES (?, ?, ?, 'open', 1, ?, ?, ?)`
+      )
+      .bind(id, uid, target.uid, target.uid, now, now),
+    ...itemStatements(db, id, 1, uid, give),
+    ...itemStatements(db, id, 1, target.uid, take),
+  ]);
+  return json({ id }, 201);
+}
+
+interface ProposalRow {
+  id: string;
+  from_uid: string;
+  to_uid: string;
+  status: string;
+  revision: number;
+  turn_uid: string;
+  closed_by: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+/**
+ * POST /v1/trade/proposals/:id/{accept|decline|cancel|counter}.
+ * Accetta, rifiuta o controproponi: solo chi deve rispondere. Ritira: chi
+ * aspetta la risposta, oppure uno dei due dopo l'accordo. Accettando si
+ * ricontrolla che le carte ci siano ancora.
+ */
+async function actOnProposal(request: Request, db: D1Database, uid: string, id: string, action: string): Promise<Response> {
+  const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow>();
+  if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return json({ error: 'no_proposal' }, 404);
+  const other = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
+  const myTurn = proposal.status === 'open' && proposal.turn_uid === uid;
+  const now = Date.now();
+
+  const close = (status: string) =>
+    db
+      .prepare(`UPDATE trade_proposals SET status = ?, closed_by = ?, updated_at = ? WHERE id = ?`)
+      .bind(status, uid, now, id)
+      .run();
+
+  if (action === 'decline') {
+    if (!myTurn) return json({ error: 'not_your_turn' }, 409);
+    await close('declined');
+    return json({ status: 'declined' });
+  }
+
+  if (action === 'cancel') {
+    const waiting = proposal.status === 'open' && proposal.turn_uid !== uid;
+    if (!waiting && proposal.status !== 'accepted') return json({ error: 'not_cancellable' }, 409);
+    await close('cancelled');
+    return json({ status: 'cancelled' });
+  }
+
+  if (action === 'accept') {
+    if (!myTurn) return json({ error: 'not_your_turn' }, 409);
+    const { results } = await db
+      .prepare(
+        `SELECT giver_uid, card_key AS key, variant, condition, language, qty FROM trade_proposal_items
+         WHERE proposal_id = ? AND revision = ?`
+      )
+      .bind(id, proposal.revision)
+      .all<ProposalItem & { giver_uid: string }>();
+    const mine = results.filter((r) => r.giver_uid === uid);
+    const theirs = results.filter((r) => r.giver_uid === other);
+    if (!(await itemsAvailable(db, uid, mine)) || !(await itemsAvailable(db, other, theirs))) {
+      return json({ error: 'items_changed' }, 409);
+    }
+    await db
+      .prepare(`UPDATE trade_proposals SET status = 'accepted', updated_at = ? WHERE id = ?`)
+      .bind(now, id)
+      .run();
+    return json({ status: 'accepted' });
+  }
+
+  if (action === 'counter') {
+    if (!myTurn) return json({ error: 'not_your_turn' }, 409);
+    const body = await readJson<{ give?: unknown; take?: unknown }>(request);
+    const give = parseItems(body?.give);
+    const take = parseItems(body?.take);
+    if (!give || !take || give.length === 0 || take.length === 0) return json({ error: 'bad_items' }, 400);
+    if (!(await itemsAvailable(db, uid, give)) || !(await itemsAvailable(db, other, take))) {
+      return json({ error: 'not_offered' }, 409);
+    }
+    const revision = proposal.revision + 1;
+    await db.batch([
+      db
+        .prepare(`UPDATE trade_proposals SET revision = ?, turn_uid = ?, updated_at = ? WHERE id = ?`)
+        .bind(revision, other, now, id),
+      ...itemStatements(db, id, revision, uid, give),
+      ...itemStatements(db, id, revision, other, take),
+    ]);
+    return json({ status: 'open', revision });
+  }
+
+  return json({ error: 'unknown_action' }, 404);
+}
+
+/**
+ * GET /v1/trade/proposals — le mie, aperte e chiuse da poco, dal mio punto di
+ * vista: give = cosa do io, take = cosa ricevo, myTurn = tocca a me.
+ */
+async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promise<Response> {
+  const me = await loadProfile(db, uid);
+  const since = Date.now() - CLOSED_VISIBLE_MS;
+  const { results: proposals } = await db
+    .prepare(
+      `SELECT p.*, o.public_id AS other_public_id, o.nickname AS other_nickname, o.geohash5 AS other_cell,
+              o.trades_done AS other_trades
+       FROM trade_proposals p
+       JOIN trade_profiles o ON o.uid = CASE WHEN p.from_uid = ?1 THEN p.to_uid ELSE p.from_uid END
+       WHERE (p.from_uid = ?1 OR p.to_uid = ?1) AND (p.status IN ('open', 'accepted') OR p.updated_at > ?2)
+       ORDER BY p.updated_at DESC LIMIT 100`
+    )
+    .bind(uid, since)
+    .all<ProposalRow & { other_public_id: string; other_nickname: string; other_cell: string; other_trades: number }>();
+  if (proposals.length === 0) return json({ proposals: [] });
+
+  // Le carte dell'ultima revisione di ognuna, in una query sola.
+  const { results: items } = await db
+    .prepare(
+      `SELECT i.proposal_id, i.giver_uid, i.card_key, i.variant, i.condition, i.language, i.qty
+       FROM trade_proposal_items i JOIN trade_proposals p ON p.id = i.proposal_id AND p.revision = i.revision
+       WHERE p.id IN (SELECT value FROM json_each(?))`
+    )
+    .bind(JSON.stringify(proposals.map((p) => p.id)))
+    .all<{ proposal_id: string; giver_uid: string; card_key: string; variant: string; condition: string; language: string; qty: number }>();
+  const labels = await catalogCardLabels(env);
+  const near = me ? cellAndNeighbors(me.geohash5) : [];
+
+  return json({
+    proposals: proposals.map((p) => {
+      const own = items.filter((i) => i.proposal_id === p.id);
+      const shape = (i: (typeof own)[number]) => ({
+        key: i.card_key, variant: i.variant, condition: i.condition, language: i.language, qty: i.qty,
+        name: labels.get(i.card_key)?.name, setName: labels.get(i.card_key)?.setName,
+      });
+      return {
+        id: p.id,
+        status: p.status,
+        revision: p.revision,
+        myTurn: p.status === 'open' && p.turn_uid === uid,
+        iStarted: p.from_uid === uid,
+        closedByMe: p.closed_by === uid,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        counterpart: {
+          id: p.other_public_id,
+          nickname: p.other_nickname,
+          distance: me && p.other_cell === me.geohash5 ? 'lt5' : near.includes(p.other_cell) ? 'lt15' : 'far',
+          tradesDone: p.other_trades,
+        },
+        give: own.filter((i) => i.giver_uid === uid).map(shape),
+        take: own.filter((i) => i.giver_uid !== uid).map(shape),
+      };
+    }),
+  });
 }
 
 // ── Router ──────────────────────────────────────────────────────────────────
@@ -764,6 +1062,15 @@ export async function handleTradeRequest(
   if (pathname === '/v1/trade/wants' && method === 'PUT') return putWants(request, db, uid);
   if (pathname === '/v1/trade/owned' && method === 'PUT') return putOwned(request, db, uid);
   if (pathname === '/v1/trade/matches' && method === 'GET') return getMatches(db, uid, env);
+
+  if (pathname === '/v1/trade/proposals') {
+    if (method === 'GET') return listProposals(db, uid, env);
+    if (method === 'POST') return createProposal(request, db, uid);
+  }
+  const action = /^\/v1\/trade\/proposals\/([0-9a-f-]{36})\/(accept|decline|cancel|counter)$/.exec(pathname);
+  if (action && method === 'POST') return actOnProposal(request, db, uid, action[1], action[2]);
+  const userHaves = /^\/v1\/trade\/users\/([0-9a-f]{16})\/haves$/.exec(pathname);
+  if (userHaves && method === 'GET') return getUserHaves(db, userHaves[1], env);
 
   return json({ error: 'unknown /v1/trade route' }, 404);
 }
