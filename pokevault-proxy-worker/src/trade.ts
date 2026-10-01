@@ -209,12 +209,17 @@ interface ProfileRow {
   leaderboard_opt_in: number;
   /** Quando ha risposto alla domanda sulla classifica; NULL = mai chiesto (schema 8). */
   leaderboard_asked_at: number | null;
+  /** Numero di Pokedex dell'avatar (1-1025), NULL = l'iniziale (schema 9). */
+  avatar: number | null;
+  /** 1 = sprite animato (Premium, fino al 649). */
+  avatar_animated: number;
 }
 
 async function loadProfile(db: D1Database, uid: string): Promise<ProfileRow | null> {
   return db
     .prepare(
-      `SELECT uid, nickname, geohash5, paused, owned_hash, trades_done, created_at, leaderboard_opt_in, leaderboard_asked_at
+      `SELECT uid, nickname, geohash5, paused, owned_hash, trades_done, created_at, leaderboard_opt_in, leaderboard_asked_at,
+              avatar, avatar_animated
        FROM trade_profiles WHERE uid = ?`
     )
     .bind(uid)
@@ -229,6 +234,8 @@ function profileJson(row: ProfileRow, counts?: { haves: number; wants: number; o
     ownedHash: row.owned_hash,
     tradesDone: row.trades_done,
     memberSince: row.created_at,
+    avatar: row.avatar,
+    avatarAnimated: row.avatar_animated === 1,
     ...(counts ?? {}),
   };
 }
@@ -1967,13 +1974,13 @@ async function getLeaderboard(db: D1Database, uid: string, url: URL): Promise<Re
   const zoneFilter = scope === 'zone' ? `AND p.geohash5 IN (${cells.map(() => '?').join(', ')})` : '';
   const { results } = await db
     .prepare(
-      `SELECT p.uid, p.nickname, p.created_at, l.trades, l.partners, l.good, l.ok, l.bad, l.score, l.tier
+      `SELECT p.uid, p.nickname, p.created_at, p.avatar, p.avatar_animated, l.trades, l.partners, l.good, l.ok, l.bad, l.score, l.tier
        FROM trade_leaderboard l JOIN trade_profiles p ON p.uid = l.uid
        WHERE l.eligible = 1 AND p.leaderboard_opt_in = 1 ${zoneFilter}
        ORDER BY l.score DESC, l.trades DESC, p.created_at ASC`
     )
     .bind(...(scope === 'zone' ? cells : []))
-    .all<{ uid: string; nickname: string; created_at: number; trades: number; partners: number; good: number; ok: number; bad: number; score: number; tier: string | null }>();
+    .all<{ uid: string; nickname: string; created_at: number; avatar: number | null; avatar_animated: number; trades: number; partners: number; good: number; ok: number; bad: number; score: number; tier: string | null }>();
 
   // I chip piu' ricevuti dei primi 50, per il mini profilo che si apre toccandoli.
   const shown = results.slice(0, LEADERBOARD_SIZE);
@@ -1990,6 +1997,8 @@ async function getLeaderboard(db: D1Database, uid: string, url: URL): Promise<Re
     bad: row.bad,
     topTags: reputation.get(row.uid)?.topTags ?? [],
     memberSince: row.created_at,
+    avatar: row.avatar,
+    avatarAnimated: row.avatar_animated === 1,
     isMe: row.uid === uid,
   });
   const myIndex = results.findIndex((row) => row.uid === uid);
@@ -2026,6 +2035,29 @@ async function putLeaderboardOptIn(request: Request, db: D1Database, uid: string
     .bind(body.optIn ? 1 : 0, Date.now(), uid)
     .run();
   return json({ optIn: body.optIn });
+}
+
+/** Gli sprite animati (Nero e Bianco) arrivano fino a Genesect. */
+const AVATAR_MAX = 1025;
+const AVATAR_ANIMATED_MAX = 649;
+
+/**
+ * PUT /v1/trade/avatar — { avatar: 1..1025 | null, animated }: il Pokemon
+ * che compare sul podio al posto dell'iniziale. Quali sono gratis e quali
+ * Premium lo decide l'app per ora; al lancio va controllato anche qui.
+ */
+async function putAvatar(request: Request, db: D1Database, uid: string): Promise<Response> {
+  const body = await readJson<{ avatar?: number | null; animated?: boolean }>(request);
+  if (!body) return json({ error: 'bad_json' }, 400);
+  const avatar = body.avatar ?? null;
+  if (avatar !== null && (!Number.isInteger(avatar) || avatar < 1 || avatar > AVATAR_MAX)) return json({ error: 'bad_avatar' }, 400);
+  const animated = avatar !== null && avatar <= AVATAR_ANIMATED_MAX && body.animated === true;
+  const result = await db
+    .prepare(`UPDATE trade_profiles SET avatar = ?, avatar_animated = ?, updated_at = ? WHERE uid = ?`)
+    .bind(avatar, animated ? 1 : 0, Date.now(), uid)
+    .run();
+  if (!result.meta.changes) return json({ error: 'no_profile' }, 404);
+  return json({ avatar, avatarAnimated: animated });
 }
 
 // ── Router ──────────────────────────────────────────────────────────────────
@@ -2099,6 +2131,7 @@ export async function handleTradeRequest(
   }
   if (pathname === '/v1/trade/leaderboard' && method === 'GET') return getLeaderboard(db, uid, new URL(request.url));
   if (pathname === '/v1/trade/leaderboard/optin' && method === 'PUT') return putLeaderboardOptIn(request, db, uid);
+  if (pathname === '/v1/trade/avatar' && method === 'PUT') return putAvatar(request, db, uid);
   if (pathname === '/v1/trade/spots/search' && method === 'GET') return searchSpots(db, uid, new URL(request.url));
   if (pathname === '/v1/trade/spots' && method === 'POST') return addSpot(request, db, uid);
   if (pathname === '/v1/trade/spots/cell' && method === 'POST') return putCellSpots(request, db);

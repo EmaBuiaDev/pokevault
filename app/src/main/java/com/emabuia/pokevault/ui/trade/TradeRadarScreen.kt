@@ -176,8 +176,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.ImageLoader
+import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.trade.CoarseLocation
 import com.emabuia.pokevault.data.trade.dto.TradeCardHolder
@@ -187,6 +190,7 @@ import com.emabuia.pokevault.data.trade.dto.TradeLeaderboardMe
 import com.emabuia.pokevault.data.trade.dto.TradeMatch
 import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
 import com.emabuia.pokevault.data.trade.dto.TradeOfferItem
+import com.emabuia.pokevault.data.trade.dto.TradeProfilePayload
 import com.emabuia.pokevault.data.trade.dto.TradeProposal
 import com.emabuia.pokevault.data.trade.dto.TradeReputation
 import com.emabuia.pokevault.data.trade.dto.TradeSlot
@@ -223,7 +227,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TradeRadarScreen(onBack: () -> Unit, viewModel: TradeRadarViewModel = viewModel()) {
+fun TradeRadarScreen(onBack: () -> Unit, onPremiumRequired: () -> Unit = {}, viewModel: TradeRadarViewModel = viewModel()) {
     val snackbar = remember { SnackbarHostState() }
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDeactivate by remember { mutableStateOf(false) }
@@ -290,7 +294,7 @@ fun TradeRadarScreen(onBack: () -> Unit, viewModel: TradeRadarViewModel = viewMo
                     RadarScope(blips = emptyList(), scanning = true, modifier = Modifier.size(140.dp))
                 }
                 Screen.Onboarding -> Onboarding(viewModel)
-                is Screen.Ready -> Hub(viewModel, screen)
+                is Screen.Ready -> Hub(viewModel, screen, onPremiumRequired)
                 is Screen.Error -> Column(
                     modifier = Modifier.fillMaxSize().padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -408,7 +412,7 @@ private fun CheckRow(checked: Boolean, onChange: (Boolean) -> Unit, text: String
 // ── Pannello ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
+private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRequired: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val paused = ready.profile.paused == true
     val motion = AppMotion.current
@@ -463,7 +467,7 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
     viewModel.planner?.let { planner -> PlannerDialog(viewModel, planner) }
     viewModel.closing?.let { closing -> ClosingDialog(viewModel, closing) }
     viewModel.feedback?.let { feedback -> FeedbackDialog(viewModel, feedback) }
-    viewModel.leaderboard?.let { board -> LeaderboardDialog(viewModel, board) }
+    viewModel.leaderboard?.let { board -> LeaderboardDialog(viewModel, board, ready.profile, onPremiumRequired) }
     // Fuori dalla classifica la festa va in un popup: qui si e' in coda a una colonna gia' piena.
     if (viewModel.leaderboard == null && viewModel.celebration != null) {
         Popup(onDismissRequest = { viewModel.consumeCelebration() }) { CelebrationOverlay(viewModel) }
@@ -3598,8 +3602,16 @@ private fun TierBadge(tier: String?, compact: Boolean = false) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LeaderboardDialog(viewModel: TradeRadarViewModel, board: TradeRadarViewModel.Leaderboard) {
+private fun LeaderboardDialog(
+    viewModel: TradeRadarViewModel,
+    board: TradeRadarViewModel.Leaderboard,
+    profile: TradeProfilePayload,
+    onPremiumRequired: () -> Unit
+) {
     val payload = board.payload
+    val isPremium by PremiumManager.getInstance().isPremium.collectAsStateWithLifecycle()
+    var pickingAvatar by rememberSaveable { mutableStateOf(false) }
+    val spriteLoader = rememberSpriteLoader()
     val me = payload?.me
     val entries = payload?.entries.orEmpty()
     // "Come si sale" e' a portata di mano ma chiuso: si apre dalla i in alto.
@@ -3692,7 +3704,16 @@ private fun LeaderboardDialog(viewModel: TradeRadarViewModel, board: TradeRadarV
                         )
                     }
                     if (me != null) {
-                        item(key = "me") { MyStanding(me, total = payload.total ?: 0, onOptIn = { viewModel.setLeaderboardOptIn(it) }) }
+                        item(key = "me") {
+                            MyStanding(
+                                me,
+                                total = payload.total ?: 0,
+                                onOptIn = { viewModel.setLeaderboardOptIn(it) },
+                                nickname = profile.nickname.orEmpty(),
+                                avatar = profile.avatar,
+                                onPickAvatar = { pickingAvatar = true }
+                            )
+                        }
                     }
                     when {
                         board.loading && payload == null -> item(key = "loading") {
@@ -3704,7 +3725,7 @@ private fun LeaderboardDialog(viewModel: TradeRadarViewModel, board: TradeRadarV
                             EmptyState(text = AppLocale.tradeRadarLeaderboardEmpty, radar = false)
                         }
                         else -> {
-                            item(key = "podium|${board.scope}") { Podium(podium, onSelect = { selected = it }) }
+                            item(key = "podium|${board.scope}") { Podium(podium, spriteLoader, onSelect = { selected = it }) }
                             itemsIndexed(rest, key = { _, entry -> "rank|${entry.rank}|${entry.nickname}" }) { index, entry ->
                                 CascadeIn(index = index, visible = cascade, modifier = Modifier.animateItem()) {
                                     LeaderboardRow(entry, onClick = { selected = entry })
@@ -3719,6 +3740,22 @@ private fun LeaderboardDialog(viewModel: TradeRadarViewModel, board: TradeRadarV
         }
     }
     selected?.let { entry -> MiniProfileDialog(entry, onDismiss = { selected = null }) }
+    if (pickingAvatar) {
+        AvatarPickerDialog(
+            current = profile.avatar,
+            currentAnimated = profile.avatarAnimated == true,
+            isPremium = isPremium,
+            onPick = { avatar, animated ->
+                pickingAvatar = false
+                viewModel.setAvatar(avatar, animated)
+            },
+            onPremiumRequired = {
+                pickingAvatar = false
+                onPremiumRequired()
+            },
+            onDismiss = { pickingAvatar = false }
+        )
+    }
 }
 
 /** Le soglie dei livelli, in ordine. */
@@ -3768,7 +3805,14 @@ private fun TierProgress(trades: Int, tier: String?, positivePct: Int?) {
 
 /** La mia situazione: progresso di livello, e in classifica (posizione), fuori per scelta, da invitare, o cosa manca. */
 @Composable
-private fun MyStanding(me: TradeLeaderboardMe, total: Int, onOptIn: (Boolean) -> Unit) {
+private fun MyStanding(
+    me: TradeLeaderboardMe,
+    total: Int,
+    onOptIn: (Boolean) -> Unit,
+    nickname: String,
+    avatar: Int?,
+    onPickAvatar: () -> Unit
+) {
     val shape = RoundedCornerShape(20.dp)
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -3827,6 +3871,7 @@ private fun MyStanding(me: TradeLeaderboardMe, total: Int, onOptIn: (Boolean) ->
                 TextButton(onClick = { onOptIn(false) }) { Text(AppLocale.tradeRadarLeaveLeaderboard, color = AppColors.textMuted, fontSize = 12.sp) }
             }
         }
+        AvatarChoiceRow(nickname, avatar, onPickAvatar)
     }
 }
 
@@ -3835,7 +3880,7 @@ private fun MyStanding(me: TradeLeaderboardMe, total: Int, onOptIn: (Boolean) ->
  * l'altro. Con le animazioni di sistema spente sono gia' alti.
  */
 @Composable
-private fun Podium(top: List<TradeLeaderboardEntry>, onSelect: (TradeLeaderboardEntry) -> Unit) {
+private fun Podium(top: List<TradeLeaderboardEntry>, loader: ImageLoader, onSelect: (TradeLeaderboardEntry) -> Unit) {
     val motion = AppMotion.current
     // Ordine sul podio: 2°, 1°, 3°.
     val order = listOfNotNull(top.getOrNull(1), top.getOrNull(0), top.getOrNull(2))
@@ -3860,7 +3905,7 @@ private fun Podium(top: List<TradeLeaderboardEntry>, onSelect: (TradeLeaderboard
                 modifier = Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable { onSelect(entry) }
             ) {
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    Avatar(entry.nickname.orEmpty(), size = if (rank == 1) 56.dp else 46.dp)
+                    PodiumFace(entry, rank, loader)
                     Text(if (rank == 1) "👑" else "", fontSize = 16.sp)
                 }
                 Spacer(Modifier.height(4.dp))
@@ -3895,6 +3940,52 @@ private fun Podium(top: List<TradeLeaderboardEntry>, onSelect: (TradeLeaderboard
                 }
             }
         }
+    }
+}
+
+/**
+ * Sul podio, sopra il nome: il Pokemon scelto (animato se Premium), o
+ * l'iniziale se non l'ha scelto o se lo sprite non arriva.
+ */
+@Composable
+private fun PodiumFace(entry: TradeLeaderboardEntry, rank: Int, loader: ImageLoader) {
+    val initial: @Composable () -> Unit = { Avatar(entry.nickname.orEmpty(), size = if (rank == 1) 56.dp else 46.dp) }
+    val id = entry.avatar
+    if (id == null) {
+        initial()
+        return
+    }
+    PokemonSprite(id, animated = entry.avatarAnimated == true, size = if (rank == 1) 76.dp else 62.dp, loader = loader, fallback = initial)
+}
+
+/** In fondo alla mia situazione: il Pokemon che avrei sul podio, e il tasto per cambiarlo. */
+@Composable
+private fun AvatarChoiceRow(nickname: String, avatar: Int?, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(AppColors.card.copy(alpha = 0.6f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        if (avatar != null) {
+            PokemonSprite(avatar, animated = false, size = 44.dp, fallback = { Avatar(nickname, size = 36.dp) })
+        } else {
+            Avatar(nickname, size = 36.dp)
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(AppLocale.tradeRadarAvatarTitle, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary)
+            Text(AppLocale.tradeRadarAvatarHint, fontSize = 11.sp, color = AppColors.textMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Text(
+            if (avatar == null) AppLocale.tradeRadarAvatarChoose else AppLocale.tradeRadarAvatarChange,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = AppColors.blue
+        )
     }
 }
 

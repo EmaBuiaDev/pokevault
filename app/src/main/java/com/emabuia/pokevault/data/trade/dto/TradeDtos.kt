@@ -45,7 +45,10 @@ data class TradeProfilePayload(
     @SerializedName("reputation") val reputation: TradeReputation? = null,
     /** Il mio livello e se compaio in classifica (null = mai chiesto) (fase 2e). */
     @SerializedName("tier") val tier: String? = null,
-    @SerializedName("leaderboardOptIn") val leaderboardOptIn: Boolean? = null
+    @SerializedName("leaderboardOptIn") val leaderboardOptIn: Boolean? = null,
+    /** Il Pokemon del podio (numero di Pokedex), null = l'iniziale. */
+    @SerializedName("avatar") val avatar: Int? = null,
+    @SerializedName("avatarAnimated") val avatarAnimated: Boolean? = null
 )
 
 data class TradeHaveItem(
@@ -390,7 +393,10 @@ data class TradeLeaderboardEntry(
     @SerializedName("good") val good: Int? = null,
     @SerializedName("ok") val ok: Int? = null,
     @SerializedName("bad") val bad: Int? = null,
-    @SerializedName("topTags") val topTags: List<TradeTagCount>? = null
+    @SerializedName("topTags") val topTags: List<TradeTagCount>? = null,
+    /** Il Pokemon scelto per il podio, null = l'iniziale. */
+    @SerializedName("avatar") val avatar: Int? = null,
+    @SerializedName("avatarAnimated") val avatarAnimated: Boolean? = null
 )
 
 /** Io: posizione (null se fuori), adesione (null = mai chiesto) e cosa manca per entrare. */
@@ -412,6 +418,12 @@ data class TradeLeaderboardPayload(
     @SerializedName("entries") val entries: List<TradeLeaderboardEntry>? = null,
     @SerializedName("total") val total: Int? = null,
     @SerializedName("me") val me: TradeLeaderboardMe? = null
+)
+
+/** PUT /v1/trade/avatar: avatar null = torna l'iniziale. */
+data class TradeAvatarRequest(
+    @SerializedName("avatar") val avatar: Int?,
+    @SerializedName("animated") val animated: Boolean
 )
 
 /** PUT /v1/trade/leaderboard/optin */

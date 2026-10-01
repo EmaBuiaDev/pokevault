@@ -4,6 +4,7 @@ import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.billing.WorkerApi
 import com.emabuia.pokevault.data.trade.dto.TradeAddSpotPayload
 import com.emabuia.pokevault.data.trade.dto.TradeAddSpotRequest
+import com.emabuia.pokevault.data.trade.dto.TradeAvatarRequest
 import com.emabuia.pokevault.data.trade.dto.TradeCellUpload
 import com.emabuia.pokevault.data.trade.dto.TradeConfirmRequest
 import com.emabuia.pokevault.data.trade.dto.TradeCounterRequest
@@ -11,19 +12,19 @@ import com.emabuia.pokevault.data.trade.dto.TradeCreatedPayload
 import com.emabuia.pokevault.data.trade.dto.TradeErrorPayload
 import com.emabuia.pokevault.data.trade.dto.TradeHavesPayload
 import com.emabuia.pokevault.data.trade.dto.TradeLeaderboardPayload
-import com.emabuia.pokevault.data.trade.dto.TradeOptInRequest
 import com.emabuia.pokevault.data.trade.dto.TradeMatchesPayload
+import com.emabuia.pokevault.data.trade.dto.TradeMeetingRequest
 import com.emabuia.pokevault.data.trade.dto.TradeMePayload
+import com.emabuia.pokevault.data.trade.dto.TradeOptInRequest
 import com.emabuia.pokevault.data.trade.dto.TradeOwnedRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProfilePayload
 import com.emabuia.pokevault.data.trade.dto.TradeProfileRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposalRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposalsPayload
 import com.emabuia.pokevault.data.trade.dto.TradeRateRequest
-import com.emabuia.pokevault.data.trade.dto.TradeSpotVoteRequest
-import com.emabuia.pokevault.data.trade.dto.TradeMeetingRequest
 import com.emabuia.pokevault.data.trade.dto.TradeSpotSearchPayload
 import com.emabuia.pokevault.data.trade.dto.TradeSpotsPayload
+import com.emabuia.pokevault.data.trade.dto.TradeSpotVoteRequest
 import com.emabuia.pokevault.data.trade.dto.TradeUserHavesPayload
 import com.emabuia.pokevault.data.trade.dto.TradeWantsRequest
 import com.google.gson.Gson
@@ -202,4 +203,8 @@ object TradeApi {
 
     suspend fun setLeaderboardOptIn(optIn: Boolean): Result<Unit> =
         call("PUT", "v1/trade/leaderboard/optin", TradeOptInRequest(optIn)) { Unit }
+
+    /** Il Pokemon del podio; [avatar] null torna all'iniziale. */
+    suspend fun setAvatar(avatar: Int?, animated: Boolean): Result<Unit> =
+        call("PUT", "v1/trade/avatar", TradeAvatarRequest(avatar, animated)) { Unit }
 }

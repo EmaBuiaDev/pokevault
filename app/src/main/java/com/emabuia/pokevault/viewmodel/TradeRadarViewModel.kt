@@ -1056,6 +1056,21 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /** Il Pokemon del podio: si aggiorna il profilo e, se aperta, la classifica. */
+    fun setAvatar(avatar: Int?, animated: Boolean) {
+        viewModelScope.launch {
+            val result = TradeApi.setAvatar(avatar, animated)
+            if (result is TradeApi.Result.Ok) {
+                (screen as? Screen.Ready)?.let { ready ->
+                    screen = Screen.Ready(ready.profile.copy(avatar = avatar, avatarAnimated = avatar != null && animated))
+                }
+                leaderboard?.let { loadLeaderboard(it.scope) }
+            } else {
+                notice = problemOf(result)
+            }
+        }
+    }
+
     // ── Sincronizzazione ────────────────────────────────────────────────────
 
     private suspend fun updateProfile(profile: TradeProfilePayload, cell: String, paused: Boolean) {

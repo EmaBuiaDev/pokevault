@@ -507,7 +507,10 @@ fun AppNavigation(
                 // anche la schermata: e' un if (false) che sparisce col suo contenuto.
                 if (BuildConfig.TRADE_ENABLED) {
                     composable(Routes.TRADE_RADAR) {
-                        TradeRadarScreen(onBack = { navController.popBackStack() })
+                        TradeRadarScreen(
+                            onBack = { navController.popBackStack() },
+                            onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
+                        )
                     }
                 }
 
