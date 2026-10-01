@@ -19,8 +19,9 @@ import kotlin.coroutines.resume
  *
  * Niente librerie nuove: basta il LocationManager di Android con il provider
  * di rete, che con ACCESS_COARSE_LOCATION da' una precisione di qualche
- * centinaio di metri, piu' che sufficiente per una cella di ~5 km. Del
- * risultato si usa solo [Geohash.encode]: le coordinate non escono da qui.
+ * centinaio di metri, piu' che sufficiente per una cella di ~5 km. Al server
+ * va solo [Geohash.encode] della posizione: le coordinate restano sul
+ * telefono, dove al massimo servono a dire quanto e' lontano un luogo.
  */
 object CoarseLocation {
 
@@ -29,10 +30,27 @@ object CoarseLocation {
             PackageManager.PERMISSION_GRANTED
 
     /** La cella geohash di 5 caratteri, o null se la posizione non arriva entro [timeoutMs]. */
-    suspend fun currentCell(context: Context, timeoutMs: Long = 15_000): String? {
+    suspend fun currentCell(context: Context, timeoutMs: Long = 15_000): String? =
+        currentPoint(context, timeoutMs)?.let { (lat, lon) -> Geohash.encode(lat, lon) }
+
+    /**
+     * Latitudine e longitudine approssimative, o null. SOLO per calcoli sul
+     * telefono (la distanza dai luoghi d'incontro): non vanno mai al server.
+     */
+    suspend fun currentPoint(context: Context, timeoutMs: Long = 15_000): Pair<Double, Double>? {
         if (!hasPermission(context)) return null
         val location = withTimeoutOrNull(timeoutMs) { read(context) } ?: lastKnown(context)
-        return location?.let { Geohash.encode(it.latitude, it.longitude) }
+        return location?.let { it.latitude to it.longitude }
+    }
+
+    /** Distanza in km fra due punti (formula dell'emisenoverso). */
+    fun distanceKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val r = Math.PI / 180
+        val dLat = (lat2 - lat1) * r
+        val dLon = (lon2 - lon1) * r
+        val h = Math.sin(dLat / 2).let { it * it } +
+            Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLon / 2).let { it * it }
+        return 6371 * 2 * Math.asin(Math.sqrt(h))
     }
 
     @SuppressLint("MissingPermission") // verificato in currentCell

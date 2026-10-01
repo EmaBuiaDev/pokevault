@@ -88,6 +88,7 @@ import androidx.compose.material.icons.filled.LocalMall
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Place
@@ -2829,12 +2830,35 @@ private fun PlannerDialog(viewModel: TradeRadarViewModel, planner: TradeRadarVie
                 if (!planner.loading && planner.spots.isEmpty()) {
                     item(key = "noSpots") { Text(AppLocale.tradeRadarNoSpots, fontSize = 13.sp, color = AppColors.textSecondary) }
                 }
-                val visible = if (showAllSpots) planner.spots else planner.spots.take(3)
+                // Distanza da me: calcolata qui con la posizione del telefono, che non va al server.
+                val me = planner.myPosition
+                fun fromMe(spot: TradeSpot): Double? =
+                    if (me != null && spot.lat != null && spot.lon != null) CoarseLocation.distanceKm(me.first, me.second, spot.lat, spot.lon) else null
+                val ordered = if (planner.nearestFirst && me != null) planner.spots.sortedBy { fromMe(it) ?: Double.MAX_VALUE } else planner.spots
+                val visible = if (showAllSpots) ordered else ordered.take(3)
                 if (planner.spots.isNotEmpty()) {
-                    item(key = "suggested") { Text(AppLocale.tradeRadarSuggestedSpots, fontSize = 12.sp, color = AppColors.textMuted) }
+                    item(key = "suggested") {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (me != null) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    SortChip(AppLocale.tradeRadarSortSuggestedSpots, Icons.Default.AutoAwesome, selected = !planner.nearestFirst) {
+                                        viewModel.setNearestFirst(false)
+                                    }
+                                    SortChip(AppLocale.tradeRadarSortNearMe, Icons.Default.NearMe, selected = planner.nearestFirst) {
+                                        viewModel.setNearestFirst(true)
+                                    }
+                                }
+                            }
+                            Text(
+                                if (planner.nearestFirst && me != null) AppLocale.tradeRadarNearestSpots else AppLocale.tradeRadarSuggestedSpots,
+                                fontSize = 12.sp,
+                                color = AppColors.textMuted
+                            )
+                        }
+                    }
                 }
                 items(visible, key = { "spot|" + it.id.orEmpty() }) { spot ->
-                    SpotOption(spot, selected = spot.id == planner.selectedSpot, modifier = Modifier.animateItem()) {
+                    SpotOption(spot, selected = spot.id == planner.selectedSpot, fromMeKm = fromMe(spot), modifier = Modifier.animateItem()) {
                         spot.id?.let(viewModel::selectSpot)
                     }
                 }
@@ -3018,9 +3042,28 @@ private fun TimeGrid(day: java.time.LocalDate, today: java.time.LocalDate, chose
     }
 }
 
+/** Un interruttore piccolo per l'ordine dei luoghi. */
+@Composable
+private fun SortChip(text: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
+    val background by animateColorAsState(if (selected) AppColors.blue else AppColors.card, tween(AppMotion.current.state), label = "sortChip")
+    val content = if (selected) AppColors.onAccent else AppColors.textPrimary
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(background)
+            .pressScale(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    ) {
+        Icon(icon, null, tint = content, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = content)
+    }
+}
+
 /** Un luogo da scegliere, con il segno di spunta quando e' quello scelto. */
 @Composable
-private fun SpotOption(spot: TradeSpot, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun SpotOption(spot: TradeSpot, selected: Boolean, fromMeKm: Double? = null, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val shape = RoundedCornerShape(16.dp)
     val border by animateColorAsState(if (selected) AppColors.green else Color.Transparent, tween(AppMotion.current.state), label = "spotBorder")
     Row(
@@ -3035,7 +3078,12 @@ private fun SpotOption(spot: TradeSpot, selected: Boolean, modifier: Modifier = 
     ) {
         Box(Modifier.weight(1f)) { SpotSummary(spot) }
         Column(horizontalAlignment = Alignment.End) {
-            spot.distanceKm?.let { Text(AppLocale.tradeRadarKmAway(it), fontSize = 11.sp, color = AppColors.textMuted) }
+            // Da me, se il telefono sa dove sono; altrimenti dal punto a meta' strada.
+            if (fromMeKm != null) {
+                Text(AppLocale.tradeRadarKmFromYou(fromMeKm), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = AppColors.textSecondary)
+            } else {
+                spot.distanceKm?.let { Text(AppLocale.tradeRadarKmAway(it), fontSize = 11.sp, color = AppColors.textMuted) }
+            }
             if (spot.pending == true) InfoPill(AppLocale.tradeRadarPendingSpot, AppColors.orange)
         }
         Spacer(Modifier.width(8.dp))

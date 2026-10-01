@@ -547,7 +547,11 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         val searching: Boolean = false,
         /** La ricerca e' finita senza risultati: si puo' segnalare il negozio. */
         val searchedEmpty: Boolean = false,
-        val sending: Boolean = false
+        val sending: Boolean = false,
+        /** La posizione del telefono, solo per le distanze sul telefono: non va al server. */
+        val myPosition: Pair<Double, Double>? = null,
+        /** Luoghi dal piu' vicino a me invece che "consigliati" (a meta' strada). */
+        val nearestFirst: Boolean = false
     )
 
     var planner by mutableStateOf<Planner?>(null)
@@ -567,6 +571,10 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             slots = meeting?.slots.orEmpty().filter { it.time != null && it.day >= java.time.LocalDate.now().toString() }
         )
         viewModelScope.launch { loadSpots(id) }
+        viewModelScope.launch {
+            val position = CoarseLocation.currentPoint(getApplication(), timeoutMs = 8_000)
+            planner = planner?.takeIf { it.proposalId == id }?.copy(myPosition = position)
+        }
     }
 
     /**
@@ -601,6 +609,10 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     fun closePlanner() {
         searchJob?.cancel()
         planner = null
+    }
+
+    fun setNearestFirst(nearest: Boolean) {
+        planner = planner?.copy(nearestFirst = nearest)
     }
 
     fun selectSpot(id: String) {
