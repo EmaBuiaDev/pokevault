@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tre persone finte che rispondono da sole, in STAGING, per provare
+// Quattro persone finte che rispondono da sole, in STAGING, per provare
 // TradeRadar fuori casa senza nessuno al computer:
 //
 //   Bot Si'     accetta le proposte, conferma il primo orario, segna lo
@@ -7,6 +7,8 @@
 //   Bot No      rifiuta tutte le proposte
 //   Bot Cambia  la prima volta fa una controproposta e sposta l'appuntamento
 //               di un'ora; dalla seconda accetta (e vota 😐)
+//   Bot Propone ogni 30 minuti ti manda una proposta, se fra voi non ce n'e'
+//               gia' una in corso; poi si comporta come Bot Si'
 //
 //   node scripts/trade-bot-staging.mjs [--segui ema994]
 //
@@ -32,11 +34,13 @@ const arg = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1
 const FOLLOW = arg('--segui') ?? 'ema994';
 const ACT_EVERY_MS = 20_000;
 const SYNC_EVERY_MS = 120_000;
+const PROPOSE_EVERY_MS = 30 * 60_000;
 
 const BOTS = [
   { label: 'bot-si', nickname: 'Bot Sì', mode: 'yes', avatar: 25 },
   { label: 'bot-no', nickname: 'Bot No', mode: 'no', avatar: 143 },
   { label: 'bot-cambia', nickname: 'Bot Cambia', mode: 'change', avatar: 133 },
+  { label: 'bot-propone', nickname: 'Bot Propone', mode: 'propose', avatar: 6 },
 ];
 
 const log = (...m) => console.log(new Date().toLocaleTimeString('it-IT'), ...m);
@@ -99,6 +103,19 @@ async function sync() {
     });
   }
   if (moved) log(`seguo ${FOLLOW} nella zona ${me.geohash5}: i bot offrono ${wants.length} carte cercate (+ qualche altra) e cercano le sue ${haves.length}`);
+}
+
+/** Bot Propone: una proposta nuova solo se fra voi non ce n'e' gia' una in corso. */
+async function propose(bot) {
+  if (!follow) return;
+  const open = ((await call(bot, 'GET', '/v1/trade/proposals')).data.proposals ?? [])
+    .some((p) => p.counterpart?.id === follow.public_id && ['open', 'accepted', 'scheduled'].includes(p.status));
+  if (open) return;
+  const mine = (await call(bot, 'GET', '/v1/trade/haves')).data.items ?? [];
+  const theirs = (await call(bot, 'GET', `/v1/trade/users/${follow.public_id}/haves`)).data.items ?? [];
+  if (!mine.length || !theirs.length) { log('Bot Propone: niente da scambiare per ora'); return; }
+  const r = await call(bot, 'POST', '/v1/trade/proposals', { to: follow.public_id, give: [item({ ...mine[0], qty: 1 })], take: [item({ ...theirs[0], qty: 1 })] });
+  log(`Bot Propone -> ${FOLLOW}: nuova proposta (${r.status}${r.data?.error ? ` ${r.data.error}` : ''})`);
 }
 
 // ── Rispondere ──
@@ -173,8 +190,13 @@ log(`bot di prova su STAGING, seguono "${FOLLOW}". Ctrl+C per fermarli.`);
 for (const bot of BOTS) await login(bot);
 await sync().catch((e) => log('sync:', e.message));
 let lastSync = Date.now();
+let lastPropose = 0;
 for (;;) {
   for (const bot of BOTS) await act(bot).catch((e) => log(`${bot.nickname}:`, e.message));
+  if (Date.now() - lastPropose > PROPOSE_EVERY_MS) {
+    await propose(BOTS.find((b) => b.mode === 'propose')).catch((e) => log('Bot Propone:', e.message));
+    lastPropose = Date.now();
+  }
   if (Date.now() - lastSync > SYNC_EVERY_MS) {
     await sync().catch((e) => log('sync:', e.message));
     lastSync = Date.now();
