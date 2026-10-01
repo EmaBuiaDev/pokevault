@@ -122,6 +122,8 @@ interface ItalianPriceExpansionEntry {
   baseSetCode: string;
   updatedAt: number;
   prices: Record<string, ItalianPriceEntry>;
+  /** Set once the keys went through ITA_EXPANSION_NUMBER_REMAP. */
+  numbering?: 'catalog';
 }
 
 interface ItalianPriceSnapshot {
@@ -340,6 +342,21 @@ const ITA_EXPANSION_UPSTREAM_SET_IDS: Record<string, string[]> = {
   xy11: ['1815'], // Steam Siege
   xy12: ['1842'], // Evolutions
   xyp: ['1451'], // XY Promos
+};
+// Upstream card number -> catalog card number, for expansions whose catalog
+// numbers the cards differently from Cardmarket. 30th-c is 1..30 in the
+// Italian release, while Cardmarket files each reprint under the number of
+// the original card (Charizard 30CBS-4, Lugia 30CAQ-149): unmapped, the app
+// showed Charizard's price on Genesect EX (n.4). Paired by name on 2026-10-01;
+// Genesect EX (4), Palkia (22) and M Gardevoir EX (23) are not listed upstream.
+const ITA_EXPANSION_NUMBER_REMAP: Record<string, Record<string, string>> = {
+  '30th-c': {
+    '4': '1', '5': '2', '11': '3', '18': '5', '19': '6', '25': '7', '33': '8',
+    '41': '9', '43': '10', '47': '11', '50': '12', '57': '13', '58': '14',
+    '69': '15', '85': '16', '89': '17', '94': '18', '99': '19', '100': '20',
+    '101': '21', '106': '24', '108': '25', '114': '26', '123': '27',
+    '138': '28', '149': '29', '203': '30',
+  },
 };
 // Search query overrides for sets whose derived name queries return nothing upstream.
 const ITA_EXPANSION_QUERY_OVERRIDE: Record<string, string[]> = {
@@ -1634,16 +1651,24 @@ async function buildItalianPriceSnapshot(
   const budget = { remaining: ITA_PRICE_MAX_UPSTREAM_FETCHES };
   const now = Date.now();
 
+  // An entry built before its remap existed is keyed by upstream numbers:
+  // wrong, not just old, so it is rebuilt first regardless of age.
+  const needsRenumber = (expansionId: string): boolean =>
+    !!ITA_EXPANSION_NUMBER_REMAP[expansionId]
+    && !!snapshot.expansions[expansionId]
+    && snapshot.expansions[expansionId].numbering !== 'catalog';
+
   // Process stalest expansions first so refresh effort is spread fairly.
   const orderedExpansions = [...rawCodeCountsByExpansion.entries()].sort((a, b) => {
-    const updatedA = snapshot.expansions[a[0]]?.updatedAt ?? 0;
-    const updatedB = snapshot.expansions[b[0]]?.updatedAt ?? 0;
+    const updatedA = needsRenumber(a[0]) ? 0 : snapshot.expansions[a[0]]?.updatedAt ?? 0;
+    const updatedB = needsRenumber(b[0]) ? 0 : snapshot.expansions[b[0]]?.updatedAt ?? 0;
     return updatedA - updatedB;
   });
 
   for (const [expansionId, rawCodeCounts] of orderedExpansions) {
     const existingEntry = snapshot.expansions[expansionId];
-    if (!options.force && existingEntry && now - existingEntry.updatedAt < ITA_PRICE_EXPANSION_STALE_MS) {
+    const renumber = needsRenumber(expansionId);
+    if (!options.force && !renumber && existingEntry && now - existingEntry.updatedAt < ITA_PRICE_EXPANSION_STALE_MS) {
       continue;
     }
 
@@ -1706,14 +1731,28 @@ async function buildItalianPriceSnapshot(
       }
     }
 
-    const mergedPrices = { ...(existingEntry?.prices ?? {}), ...prices };
+    const remap = ITA_EXPANSION_NUMBER_REMAP[expansionId];
+    if (remap) {
+      const renumbered: Record<string, ItalianPriceEntry> = {};
+      for (const [upstreamNumber, entry] of Object.entries(prices)) {
+        const catalogNumber = remap[upstreamNumber];
+        if (catalogNumber) renumbered[catalogNumber] = entry;
+      }
+      prices = renumbered;
+    }
+    // Upstream-keyed leftovers would land on the wrong cards: drop, never merge.
+    const mergedPrices = { ...(renumber ? {} : existingEntry?.prices ?? {}), ...prices };
     const baseCode = resolvedBase || existingEntry?.baseSetCode || '';
+    if (renumber && Object.keys(prices).length === 0) {
+      delete snapshot.expansions[expansionId]; // no price beats a wrong one
+    }
     if (baseCode && Object.keys(mergedPrices).length > 0) {
       snapshot.expansions[expansionId] = {
         baseSetCode: baseCode,
         // Incomplete runs stay stale so the next run resumes (KV pages are warm).
         updatedAt: complete ? now : (existingEntry?.updatedAt ?? 0),
         prices: mergedPrices,
+        ...(remap ? { numbering: 'catalog' as const } : {}),
       };
       snapshot.aliases[expansionId] = expansionId;
       snapshot.aliases[baseCode.toLowerCase()] = expansionId;
