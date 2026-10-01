@@ -277,7 +277,8 @@ async function getProfile(db: D1Database, uid: string): Promise<Response> {
     )
     .bind(uid)
     .first<{ haves: number; wants: number; owned: number }>();
-  return json(profileJson(row, counts ?? { haves: 0, wants: 0, owned: 0 }));
+  const reputation = (await reputationOf(db, '?', [uid])).get(uid) ?? null;
+  return json({ ...profileJson(row, counts ?? { haves: 0, wants: 0, owned: 0 }), reputation });
 }
 
 /** Disattivazione: via tutto quello che il server sa dell'utente. */
@@ -482,6 +483,7 @@ function nearbyOf(cells: string[], uid: string): Nearby {
   return {
     sql: `SELECT uid FROM trade_profiles
           WHERE geohash5 IN (${cells.map(() => '?').join(', ')}) AND uid <> ? AND paused = 0
+            AND (suspended_until IS NULL OR suspended_until < ${Date.now()})
           ORDER BY updated_at DESC LIMIT ${MAX_CANDIDATES}`,
     params: [...cells, uid],
   };
@@ -671,6 +673,7 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
   const myWishes = await loadMyWishes(db, uid, setSizes);
   const theirWishes = await loadTheirWishes(db, nearby, [...new Set(myHaves.map((h) => h.card_key))], setSizes);
 
+  const reputation = await reputationOf(db, nearby.sql, nearby.params);
   const scored = [];
   for (const neighbor of neighbors) {
     const theyGive: MatchItem[] = [];
@@ -699,6 +702,7 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
       distance: near ? 'lt5' : 'lt15',
       tradesDone: neighbor.trades_done,
       memberSince: neighbor.created_at,
+      reputation: reputation.get(neighbor.uid) ?? null,
       level: bestLevel(theyGive),
       mutual: iGive.length > 0,
       theyGive,
@@ -793,7 +797,8 @@ async function itemsAvailable(db: D1Database, giverUid: string, items: ProposalI
 async function uidOfPublicId(db: D1Database, publicId: string): Promise<{ uid: string; paused: number } | null> {
   if (!/^[0-9a-f]{16}$/.test(publicId)) return null;
   return db
-    .prepare(`SELECT uid, paused FROM trade_profiles WHERE public_id = ?`)
+    // Un profilo sospeso (due "non si e' presentato") conta come in pausa.
+    .prepare(`SELECT uid, CASE WHEN suspended_until > ${Date.now()} THEN 1 ELSE paused END AS paused FROM trade_profiles WHERE public_id = ?`)
     .bind(publicId)
     .first<{ uid: string; paused: number }>();
 }
@@ -983,13 +988,27 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
        ORDER BY p.updated_at DESC LIMIT 100`
     )
     .bind(uid, since)
-    .all<ProposalRow & MeetingColumns & { other_public_id: string; other_nickname: string; other_cell: string; other_trades: number }>();
+    .all<ProposalRow & MeetingColumns & ClosingColumns & { other_public_id: string; other_nickname: string; other_cell: string; other_trades: number }>();
   if (proposals.length === 0) return json({ proposals: [] });
+
+  const ids = JSON.stringify(proposals.map((p) => p.id));
+  const { results: ratings } = await db
+    .prepare(`SELECT proposal_id, from_uid, mood, tags, created_at FROM trade_ratings WHERE proposal_id IN (SELECT value FROM json_each(?))`)
+    .bind(ids)
+    .all<{ proposal_id: string; from_uid: string; mood: string; tags: string; created_at: number }>();
+  const { results: myVotes } = await db
+    .prepare(`SELECT DISTINCT spot_id FROM trade_spot_votes WHERE uid = ?`)
+    .bind(uid)
+    .all<{ spot_id: string }>();
+  const voted = new Set(myVotes.map((v) => v.spot_id));
+  const otherUids = [...new Set(proposals.map((p) => (p.from_uid === uid ? p.to_uid : p.from_uid)))];
+  const reputation = await reputationOf(db, 'SELECT value FROM json_each(?)', [JSON.stringify(otherUids)]);
 
   const spotIds = [...new Set(proposals.map((p) => p.meet_spot_id).filter((id): id is string => !!id))];
   const spots = spotIds.length === 0
     ? []
     : (await db.prepare(`SELECT * FROM trade_spots WHERE id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(spotIds)).all<SpotRow>()).results;
+  const stats = await spotStats(db, spotIds);
 
   // Le carte dell'ultima revisione di ognuna, in una query sola.
   const { results: items } = await db
@@ -1013,17 +1032,34 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
       const spot = spots.find((s) => s.id === p.meet_spot_id);
       const center = me ? cellCenter(me.geohash5) : { lat: 0, lon: 0 };
       const meetingToConfirm = p.status === 'accepted' && p.meet_status === 'proposed' && p.meet_by !== uid;
+      const iAmFrom = p.from_uid === uid;
+      const doneByMe = !!(iAmFrom ? p.done_from : p.done_to);
+      const doneByOther = !!(iAmFrom ? p.done_to : p.done_from);
+      const mine = ratings.find((r) => r.proposal_id === p.id && r.from_uid === uid);
+      const theirs = ratings.find((r) => r.proposal_id === p.id && r.from_uid !== uid);
+      // Il voto dell'altro si vede quando ho votato anch'io, o dopo 7 giorni.
+      const theirsVisible = theirs && (mine || theirs.created_at < Date.now() - RATING_REVEAL_MS);
+      const rating = (r: { mood: string; tags: string }) => ({ mood: r.mood, tags: JSON.parse(r.tags || '[]') });
       return {
         id: p.id,
         status: p.status,
         revision: p.revision,
         myTurn: p.status === 'open' && p.turn_uid === uid,
-        // Serve una mia mossa: rispondere alla proposta, o confermare l'appuntamento.
-        actionNeeded: (p.status === 'open' && p.turn_uid === uid) || meetingToConfirm,
+        // Serve una mia mossa: rispondere, confermare l'appuntamento, confermare
+        // lo scambio che l'altro ha gia' segnato, o votare a scambio chiuso.
+        actionNeeded: (p.status === 'open' && p.turn_uid === uid) || meetingToConfirm ||
+          (p.status === 'scheduled' && doneByOther && !doneByMe) || (p.status === 'done' && !mine),
+        doneByMe,
+        doneByOther,
+        closedAt: p.closed_at,
+        myRating: mine ? rating(mine) : null,
+        theirRating: theirsVisible ? rating(theirs!) : null,
+        // Il luogo l'ho gia' votato?
+        spotVoted: p.meet_spot_id ? voted.has(p.meet_spot_id) : true,
         meeting: {
           status: p.meet_status,
           byMe: p.meet_by === uid,
-          spot: spot ? spotJson(spot, center.lat, center.lon) : null,
+          spot: spot ? spotJson(spot, center.lat, center.lon, stats.get(spot.id)) : null,
           slots: p.meet_slots ? JSON.parse(p.meet_slots) : [],
           slot: p.meet_slot ? JSON.parse(p.meet_slot) : null,
         },
@@ -1036,6 +1072,7 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
           nickname: p.other_nickname,
           distance: me && p.other_cell === me.geohash5 ? 'lt5' : near.includes(p.other_cell) ? 'lt15' : 'far',
           tradesDone: p.other_trades,
+          reputation: reputation.get(iAmFrom ? p.to_uid : p.from_uid) ?? null,
         },
         give: own.filter((i) => i.giver_uid === uid).map(shape),
         take: own.filter((i) => i.giver_uid !== uid).map(shape),
@@ -1244,7 +1281,7 @@ async function putCellSpots(request: Request, db: D1Database): Promise<Response>
   return json({ stored });
 }
 
-function spotJson(spot: SpotRow, fromLat: number, fromLon: number) {
+function spotJson(spot: SpotRow, fromLat: number, fromLon: number, stats?: { trades: number; badges: string[] }) {
   return {
     id: spot.id,
     name: spot.name,
@@ -1257,6 +1294,9 @@ function spotJson(spot: SpotRow, fromLat: number, fromLon: number) {
     // Dal punto a meta' strada fra le due zone, non da una persona.
     distanceKm: Math.round(distanceKm(fromLat, fromLon, spot.lat, spot.lon) * 10) / 10,
     pending: spot.approved !== 1,
+    // Scambi chiusi qui, e i badge votati da almeno tre persone (fase 2c).
+    trades: stats?.trades ?? 0,
+    badges: stats?.badges ?? [],
   };
 }
 
@@ -1296,8 +1336,15 @@ async function getProposalSpots(db: D1Database, uid: string, id: string): Promis
     )
     .bind(lat - 0.15, lat + 0.15, lon - 0.2, lon + 0.2, uid, parties.other)
     .all<SpotRow>();
-  const score = (spot: SpotRow) => (SPOT_KIND_RANK[spot.kind] ?? 1) - distanceKm(lat, lon, spot.lat, spot.lon) / 3;
-  const spots = results.sort((a, b) => score(b) - score(a)).slice(0, 25).map((spot) => spotJson(spot, lat, lon));
+  // Dove si scambia davvero sale: mezzo gradino ogni scambio chiuso (fino a
+  // 5) e uno per badge, oltre a tipo e distanza.
+  const stats = await spotStats(db, results.map((spot) => spot.id));
+  const score = (spot: SpotRow) => {
+    const extra = stats.get(spot.id);
+    return (SPOT_KIND_RANK[spot.kind] ?? 1) - distanceKm(lat, lon, spot.lat, spot.lon) / 3 +
+      Math.min(extra?.trades ?? 0, 10) * 0.5 + (extra?.badges.length ?? 0);
+  };
+  const spots = results.sort((a, b) => score(b) - score(a)).slice(0, 25).map((spot) => spotJson(spot, lat, lon, stats.get(spot.id)));
   return json({ spots, missingCells: missing.map((cell) => ({ cell, query: overpassQuery(cell) })) });
 }
 
@@ -1544,6 +1591,222 @@ async function meetingAction(request: Request, db: D1Database, uid: string, id: 
   return json({ status: 'accepted', meeting: 'proposed' });
 }
 
+// ── Chiusura e feedback (fase 2c) ───────────────────────────────────────────
+
+/** Un voto si vede comunque dopo questo tempo, anche se l'altro non ha votato. */
+const RATING_REVEAL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Due "non si e' presentato" da persone diverse in questo periodo... */
+const NO_SHOW_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
+/** ...tolgono il profilo dai match per questo tempo. */
+const NO_SHOW_SUSPENSION_MS = 30 * 24 * 60 * 60 * 1000;
+const RATING_MOODS = ['good', 'ok', 'bad'];
+/** I chip: i primi dopo 😊, gli altri dopo 😐 o 😞. */
+const GOOD_TAGS = ['punctual', 'as_described', 'kind'];
+const BAD_TAGS = ['late', 'worse_condition', 'different_card', 'rude'];
+const SPOT_VOTE_TAGS = ['tournaments', 'comics', 'card_shop'];
+/** Persone diverse che servono perche' un luogo prenda un badge. */
+const SPOT_BADGE_VOTES = 3;
+
+/** Giorno ("2026-10-02") e ora ("10:30") in Italia, per gli appuntamenti. */
+function romeNow(): { day: string; time: string } {
+  const parts = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(new Date());
+  const [day, time] = parts.split(' ');
+  return { day, time };
+}
+
+/** L'ora di un appuntamento: quella scelta, o la fine della fascia per le prime prove senza ora. */
+function slotTime(slot: Slot): string {
+  if (slot.time) return slot.time;
+  return slot.part === 'morning' ? '13:00' : slot.part === 'afternoon' ? '19:00' : '23:00';
+}
+
+interface ClosingColumns {
+  done_from: number | null;
+  done_to: number | null;
+  closed_at: number | null;
+}
+
+/**
+ * POST /v1/trade/proposals/:id/done — "Scambio fatto". Solo ad appuntamento
+ * fissato e dal suo giorno in poi (ora italiana). Quando l'hanno segnato
+ * tutti e due lo scambio e' chiuso: status 'done' e uno scambio in piu' a
+ * testa. La collezione la aggiorna l'app, con il riepilogo carta per carta.
+ */
+async function markDone(db: D1Database, uid: string, id: string): Promise<Response> {
+  const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow & MeetingColumns & ClosingColumns>();
+  if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return json({ error: 'no_proposal' }, 404);
+  if (proposal.status !== 'scheduled' || !proposal.meet_slot) return json({ error: 'not_scheduled' }, 409);
+  const slot = JSON.parse(proposal.meet_slot) as Slot;
+  if (romeNow().day < slot.day) return json({ error: 'too_early', day: slot.day }, 409);
+
+  const now = Date.now();
+  const column = proposal.from_uid === uid ? 'done_from' : 'done_to';
+  const otherDone = proposal.from_uid === uid ? proposal.done_to : proposal.done_from;
+  if (!otherDone) {
+    await db.prepare(`UPDATE trade_proposals SET ${column} = ?, updated_at = ? WHERE id = ?`).bind(now, now, id).run();
+    return json({ status: 'scheduled', waitingOther: true });
+  }
+  await db.batch([
+    db
+      .prepare(`UPDATE trade_proposals SET ${column} = ?, status = 'done', closed_at = ?, updated_at = ? WHERE id = ?`)
+      .bind(now, now, now, id),
+    db
+      .prepare(`UPDATE trade_profiles SET trades_done = trades_done + 1 WHERE uid IN (?, ?)`)
+      .bind(proposal.from_uid, proposal.to_uid),
+  ]);
+  return json({ status: 'done' });
+}
+
+/**
+ * POST /v1/trade/proposals/:id/noshow — "Non si e' presentato", solo dopo
+ * l'ora dell'appuntamento. Lo scambio non c'e' stato: niente percentuale, ma
+ * due segnalazioni da persone diverse in 60 giorni sospendono il profilo
+ * dai match per 30 giorni.
+ */
+async function markNoShow(db: D1Database, uid: string, id: string): Promise<Response> {
+  const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow & MeetingColumns & ClosingColumns>();
+  if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return json({ error: 'no_proposal' }, 404);
+  if (proposal.status !== 'scheduled' || !proposal.meet_slot) return json({ error: 'not_scheduled' }, 409);
+  const slot = JSON.parse(proposal.meet_slot) as Slot;
+  const now = romeNow();
+  if (now.day < slot.day || (now.day === slot.day && now.time < slotTime(slot))) return json({ error: 'too_early' }, 409);
+
+  const target = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
+  const ts = Date.now();
+  await db.batch([
+    db
+      .prepare(`INSERT OR IGNORE INTO trade_no_shows (proposal_id, reporter_uid, target_uid, created_at) VALUES (?, ?, ?, ?)`)
+      .bind(id, uid, target, ts),
+    db
+      .prepare(`UPDATE trade_proposals SET status = 'no_show', closed_by = ?, closed_at = ?, updated_at = ? WHERE id = ?`)
+      .bind(uid, ts, ts, id),
+  ]);
+  const reporters = await db
+    .prepare(`SELECT COUNT(DISTINCT reporter_uid) AS n FROM trade_no_shows WHERE target_uid = ? AND created_at > ?`)
+    .bind(target, ts - NO_SHOW_WINDOW_MS)
+    .first<{ n: number }>();
+  if ((reporters?.n ?? 0) >= 2) {
+    await db.prepare(`UPDATE trade_profiles SET suspended_until = ? WHERE uid = ?`).bind(ts + NO_SHOW_SUSPENSION_MS, target).run();
+  }
+  return json({ status: 'no_show' });
+}
+
+/**
+ * POST /v1/trade/proposals/:id/rate — { mood, tags }: il voto sull'altro,
+ * una volta sola e solo a scambio chiuso. I chip devono andare con la
+ * faccina: quelli positivi solo con 😊, gli altri con 😐 o 😞.
+ */
+async function rateTrade(request: Request, db: D1Database, uid: string, id: string): Promise<Response> {
+  const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow>();
+  if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return json({ error: 'no_proposal' }, 404);
+  if (proposal.status !== 'done') return json({ error: 'not_done' }, 409);
+  const body = await readJson<{ mood?: string; tags?: unknown }>(request);
+  const mood = cleanText(body?.mood, 10);
+  if (!RATING_MOODS.includes(mood)) return json({ error: 'bad_mood' }, 400);
+  const allowed = mood === 'good' ? GOOD_TAGS : BAD_TAGS;
+  const tags = [...new Set(Array.isArray(body?.tags) ? (body!.tags as unknown[]).map((t) => cleanText(t, 30)) : [])];
+  if (tags.some((tag) => !allowed.includes(tag))) return json({ error: 'bad_tags' }, 400);
+  const other = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
+  const result = await db
+    .prepare(`INSERT OR IGNORE INTO trade_ratings (proposal_id, from_uid, to_uid, mood, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(id, uid, other, mood, JSON.stringify(tags), Date.now())
+    .run();
+  if ((result.meta?.changes ?? 0) === 0) return json({ error: 'already_rated' }, 409);
+  return json({ rated: true });
+}
+
+/**
+ * POST /v1/trade/proposals/:id/spotvote — { tags }: dopo uno scambio chiuso,
+ * cosa e' il luogo dove ci si e' visti. Solo chi ci ha scambiato vota, una
+ * volta per tipo.
+ */
+async function voteSpot(request: Request, db: D1Database, uid: string, id: string): Promise<Response> {
+  const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow & MeetingColumns>();
+  if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return json({ error: 'no_proposal' }, 404);
+  if (proposal.status !== 'done' || !proposal.meet_spot_id) return json({ error: 'not_done' }, 409);
+  const body = await readJson<{ tags?: unknown }>(request);
+  const tags = [...new Set(Array.isArray(body?.tags) ? (body!.tags as unknown[]).map((t) => cleanText(t, 20)) : [])];
+  if (tags.some((tag) => !SPOT_VOTE_TAGS.includes(tag))) return json({ error: 'bad_tags' }, 400);
+  const now = Date.now();
+  if (tags.length > 0) {
+    await db.batch(
+      tags.map((tag) =>
+        db
+          .prepare(`INSERT OR IGNORE INTO trade_spot_votes (spot_id, uid, tag, created_at) VALUES (?, ?, ?, ?)`)
+          .bind(proposal.meet_spot_id, uid, tag, now)
+      )
+    );
+  }
+  return json({ voted: tags.length });
+}
+
+interface Reputation {
+  good: number;
+  ok: number;
+  bad: number;
+  /** I chip positivi piu' ricevuti, al massimo tre. I negativi non si mostrano. */
+  topTags: Array<{ tag: string; count: number }>;
+}
+
+/**
+ * La reputazione delle persone in [uidSql]: i voti ricevuti che si possono
+ * gia' vedere (hanno votato entrambi, o sono passati 7 giorni).
+ */
+async function reputationOf(db: D1Database, uidSql: string, params: unknown[]): Promise<Map<string, Reputation>> {
+  const { results } = await db
+    .prepare(
+      `SELECT r.to_uid, r.mood, r.tags FROM trade_ratings r
+       WHERE r.to_uid IN (${uidSql})
+         AND (r.created_at < ? OR EXISTS (SELECT 1 FROM trade_ratings o WHERE o.proposal_id = r.proposal_id AND o.from_uid = r.to_uid))`
+    )
+    .bind(...params, Date.now() - RATING_REVEAL_MS)
+    .all<{ to_uid: string; mood: string; tags: string }>();
+  const byUid = new Map<string, { good: number; ok: number; bad: number; tags: Map<string, number> }>();
+  for (const row of results) {
+    const entry = byUid.get(row.to_uid) ?? { good: 0, ok: 0, bad: 0, tags: new Map<string, number>() };
+    if (row.mood === 'good' || row.mood === 'ok' || row.mood === 'bad') entry[row.mood] += 1;
+    for (const tag of JSON.parse(row.tags || '[]') as string[]) {
+      if (GOOD_TAGS.includes(tag)) entry.tags.set(tag, (entry.tags.get(tag) ?? 0) + 1);
+    }
+    byUid.set(row.to_uid, entry);
+  }
+  const out = new Map<string, Reputation>();
+  for (const [uid, entry] of byUid) {
+    out.set(uid, {
+      good: entry.good,
+      ok: entry.ok,
+      bad: entry.bad,
+      topTags: [...entry.tags.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([tag, count]) => ({ tag, count })),
+    });
+  }
+  return out;
+}
+
+/** Per i luoghi: quanti scambi chiusi ci sono stati e quali badge hanno (3 voti da persone diverse). */
+async function spotStats(db: D1Database, spotIds: string[]): Promise<Map<string, { trades: number; badges: string[] }>> {
+  const stats = new Map<string, { trades: number; badges: string[] }>();
+  if (spotIds.length === 0) return stats;
+  const ids = JSON.stringify(spotIds);
+  const trades = await db
+    .prepare(`SELECT meet_spot_id AS id, COUNT(*) AS n FROM trade_proposals WHERE status = 'done' AND meet_spot_id IN (SELECT value FROM json_each(?)) GROUP BY meet_spot_id`)
+    .bind(ids)
+    .all<{ id: string; n: number }>();
+  const votes = await db
+    .prepare(`SELECT spot_id AS id, tag, COUNT(DISTINCT uid) AS n FROM trade_spot_votes WHERE spot_id IN (SELECT value FROM json_each(?)) GROUP BY spot_id, tag`)
+    .bind(ids)
+    .all<{ id: string; tag: string; n: number }>();
+  for (const row of trades.results) stats.set(row.id, { trades: Number(row.n), badges: [] });
+  for (const row of votes.results) {
+    if (Number(row.n) < SPOT_BADGE_VOTES) continue;
+    const entry = stats.get(row.id) ?? { trades: 0, badges: [] };
+    entry.badges.push(row.tag);
+    stats.set(row.id, entry);
+  }
+  return stats;
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 /**
@@ -1605,6 +1868,13 @@ export async function handleTradeRequest(
     if (meeting[2] === 'spots' && method === 'GET') return getProposalSpots(db, uid, meeting[1]);
     if (meeting[2] === 'meeting' && method === 'POST') return meetingAction(request, db, uid, meeting[1], false);
     if (meeting[2] === 'meeting/confirm' && method === 'POST') return meetingAction(request, db, uid, meeting[1], true);
+  }
+  const closing = /^\/v1\/trade\/proposals\/([0-9a-f-]{36})\/(done|noshow|rate|spotvote)$/.exec(pathname);
+  if (closing && method === 'POST') {
+    if (closing[2] === 'done') return markDone(db, uid, closing[1]);
+    if (closing[2] === 'noshow') return markNoShow(db, uid, closing[1]);
+    if (closing[2] === 'rate') return rateTrade(request, db, uid, closing[1]);
+    return voteSpot(request, db, uid, closing[1]);
   }
   if (pathname === '/v1/trade/spots/search' && method === 'GET') return searchSpots(db, uid, new URL(request.url));
   if (pathname === '/v1/trade/spots' && method === 'POST') return addSpot(request, db, uid);

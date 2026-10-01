@@ -115,6 +115,24 @@ if (arg('--as')) {
     console.log(`${label} ${args.includes('--conferma') ? 'conferma' : 'propone'} su ${deal.id.slice(0, 8)} (con ${deal.counterpart.nickname}) -> ${res.status} ${JSON.stringify(res.data)}`);
     process.exit(res.status < 300 ? 0 : 1);
   }
+  // Chiusura: --fatto segna "Scambio fatto" sul primo appuntamento fissato;
+  // --vota good|ok|bad vota il primo scambio chiuso senza voto (chip a caso).
+  if (args.includes('--fatto')) {
+    const deal = list.find((p) => p.status === 'scheduled' && !p.doneByMe);
+    if (!deal) { console.log('Nessun appuntamento da segnare.'); process.exit(1); }
+    const res = await call(tok, 'POST', `/v1/trade/proposals/${deal.id}/done`);
+    console.log(`${label} scambio fatto su ${deal.id.slice(0, 8)} (con ${deal.counterpart.nickname}) -> ${res.status} ${JSON.stringify(res.data)}`);
+    process.exit(res.status < 300 ? 0 : 1);
+  }
+  if (arg('--vota')) {
+    const mood = arg('--vota');
+    const deal = list.find((p) => p.status === 'done' && !p.myRating);
+    if (!deal) { console.log('Nessuno scambio chiuso da votare.'); process.exit(1); }
+    const tags = mood === 'good' ? ['punctual', 'as_described'] : ['late'];
+    const res = await call(tok, 'POST', `/v1/trade/proposals/${deal.id}/rate`, { mood, tags });
+    console.log(`${label} vota ${mood} su ${deal.id.slice(0, 8)} (con ${deal.counterpart.nickname}) -> ${res.status} ${JSON.stringify(res.data)}`);
+    process.exit(res.status < 300 ? 0 : 1);
+  }
   const action = ['--accept', '--decline', '--counter', '--cancel'].find((a) => args.includes(a));
   if (!action) {
     for (const p of list) {
@@ -144,6 +162,94 @@ if (arg('--as')) {
   const res = await call(tok, 'POST', `/v1/trade/proposals/${target.id}/${action.slice(2)}`, body);
   console.log(`${label} ${action.slice(2)} su ${target.id.slice(0, 8)} (con ${target.counterpart.nickname}) -> ${res.status} ${JSON.stringify(res.data)}`);
   process.exit(res.status < 300 ? 0 : 1);
+}
+
+// ── Prova della chiusura (fase 2c) ──────────────────────────────────────────
+// Luca e Giulia: accordo, appuntamento oggi alle 07:00, "Scambio fatto" da
+// tutti e due, voti alla cieca, voto sul luogo; poi un secondo accordo
+// chiuso con "Non si e' presentato".
+if (args.includes('--prova-chiusura')) {
+  let failures = 0;
+  const check = (label, ok, detail = '') => {
+    console.log(`${ok ? 'OK  ' : 'NO  '} ${label}${detail ? ` — ${detail}` : ''}`);
+    if (!ok) failures++;
+  };
+  const luca = await token('luca');
+  const giulia = await token('giulia');
+  for (const tok of [luca, giulia]) {
+    const { data } = await call(tok, 'GET', '/v1/trade/proposals');
+    for (const p of data.proposals ?? []) {
+      if (!['Test Luca', 'Test Giulia'].includes(p.counterpart.nickname)) continue;
+      if (p.status === 'open' && p.myTurn) await call(tok, 'POST', `/v1/trade/proposals/${p.id}/decline`);
+      else if (['open', 'accepted', 'scheduled'].includes(p.status)) await call(tok, 'POST', `/v1/trade/proposals/${p.id}/cancel`);
+    }
+  }
+  const { data: matches } = await call(luca, 'GET', '/v1/trade/matches');
+  const giuliaId = (matches.matches ?? []).find((m) => m.nickname === 'Test Giulia')?.id;
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome' }).format(new Date());
+
+  /** Un accordo fra Luca e Giulia con appuntamento fissato oggi alle 07:00. */
+  async function scheduledDeal() {
+    const { data: lucaHaves } = await call(luca, 'GET', '/v1/trade/haves');
+    const { data: giuliaHaves } = await call(luca, 'GET', `/v1/trade/users/${giuliaId}/haves`);
+    const mine = lucaHaves.items.find((h) => h.qty - (h.reserved ?? 0) > 0);
+    const created = await call(luca, 'POST', '/v1/trade/proposals', {
+      to: giuliaId, give: [asItem({ ...mine, qty: 1 })], take: [asItem({ ...giuliaHaves.items[0], qty: 1 })],
+    });
+    const id = created.data.id;
+    await call(giulia, 'POST', `/v1/trade/proposals/${id}/accept`);
+    const { data: spotData } = await call(luca, 'GET', `/v1/trade/proposals/${id}/spots`);
+    await call(luca, 'POST', `/v1/trade/proposals/${id}/meeting`, { spot: spotData.spots[0].id, slots: [{ day: today, time: '07:00' }] });
+    const confirmed = await call(giulia, 'POST', `/v1/trade/proposals/${id}/meeting/confirm`, { slot: 0 });
+    return { id, ok: confirmed.status === 200, spot: spotData.spots[0] };
+  }
+  const view = async (tok, id) => (await call(tok, 'GET', '/v1/trade/proposals')).data.proposals.find((p) => p.id === id);
+  const tradesOf = async (tok) => (await call(tok, 'GET', '/v1/trade/profile')).data.tradesDone;
+
+  const before = { luca: await tradesOf(luca), giulia: await tradesOf(giulia) };
+  const deal = await scheduledDeal();
+  check('accordo con appuntamento oggi alle 07:00', deal.ok, deal.spot.name);
+
+  const first = await call(luca, 'POST', `/v1/trade/proposals/${deal.id}/done`);
+  check('Luca segna "Scambio fatto": si aspetta Giulia', first.status === 200 && first.data.waitingOther === true);
+  const forGiulia = await view(giulia, deal.id);
+  check('per Giulia serve una sua mossa', forGiulia?.actionNeeded === true && forGiulia.doneByOther === true && !forGiulia.doneByMe);
+  const second = await call(giulia, 'POST', `/v1/trade/proposals/${deal.id}/done`);
+  check('Giulia conferma: scambio chiuso', second.status === 200 && second.data.status === 'done');
+  check('uno scambio in piu\' a testa', (await tradesOf(luca)) === before.luca + 1 && (await tradesOf(giulia)) === before.giulia + 1);
+  const { data: giuliaHavesAfter } = await call(giulia, 'GET', '/v1/trade/haves');
+  check('a scambio chiuso le carte non sono piu\' riservate', (giuliaHavesAfter.items ?? []).every((h) => (h.reserved ?? 0) === 0));
+
+  const mixed = await call(luca, 'POST', `/v1/trade/proposals/${deal.id}/rate`, { mood: 'good', tags: ['late'] });
+  check('un chip negativo con 😊 e\' rifiutato', mixed.status === 400);
+  const rated = await call(luca, 'POST', `/v1/trade/proposals/${deal.id}/rate`, { mood: 'good', tags: ['punctual', 'kind'] });
+  check('Luca vota 😊 Puntuale, Gentile', rated.status === 200);
+  const twice = await call(luca, 'POST', `/v1/trade/proposals/${deal.id}/rate`, { mood: 'bad', tags: [] });
+  check('non si vota due volte', twice.status === 409);
+  const blind = await view(giulia, deal.id);
+  check('alla cieca: Giulia non vede ancora il voto di Luca', blind?.theirRating === null && blind.actionNeeded === true);
+  await call(giulia, 'POST', `/v1/trade/proposals/${deal.id}/rate`, { mood: 'ok', tags: ['late'] });
+  const revealed = await view(giulia, deal.id);
+  check('dopo il suo voto Giulia vede quello di Luca', revealed?.theirRating?.mood === 'good' && revealed.actionNeeded === false, JSON.stringify(revealed?.theirRating));
+  // Luca ha dato 😊 a Giulia, Giulia 😐 a Luca: ognuno vede la reputazione dell'altro.
+  const giuliaRep = (await view(luca, deal.id))?.counterpart?.reputation;
+  check('la reputazione di Giulia (vista da Luca) ha il 😊 e Puntuale', (giuliaRep?.good ?? 0) >= 1 && giuliaRep.topTags.some((t) => t.tag === 'punctual'), JSON.stringify(giuliaRep));
+  const lucaRep = (await view(giulia, deal.id))?.counterpart?.reputation;
+  check('la reputazione di Luca (vista da Giulia) ha il 😐, senza chip negativi', (lucaRep?.ok ?? 0) >= 1 && lucaRep.topTags.length === 0, JSON.stringify(lucaRep));
+
+  const spotVote = await call(luca, 'POST', `/v1/trade/proposals/${deal.id}/spotvote`, { tags: ['comics'] });
+  check('Luca vota il luogo: fumetteria', spotVote.status === 200 && (await view(luca, deal.id))?.spotVoted === true);
+  const badVote = await call(luca, 'POST', `/v1/trade/proposals/${deal.id}/spotvote`, { tags: ['bar'] });
+  check('un tipo di luogo sconosciuto e\' rifiutato', badVote.status === 400);
+
+  const noShowDeal = await scheduledDeal();
+  const noShow = await call(luca, 'POST', `/v1/trade/proposals/${noShowDeal.id}/noshow`);
+  check('"Non si e\' presentato" dopo l\'ora dell\'appuntamento', noShow.status === 200 && noShow.data.status === 'no_show');
+  const giuliaSees = (await call(luca, 'GET', '/v1/trade/matches')).data.matches?.some((m) => m.nickname === 'Test Giulia');
+  check('con una sola segnalazione Giulia resta nei match', giuliaSees === true);
+
+  console.log(failures === 0 ? '\nTutto ok.' : `\n${failures} controlli falliti.`);
+  process.exit(failures === 0 ? 0 : 1);
 }
 
 // ── Prova dell'appuntamento (fase 2b) ───────────────────────────────────────
