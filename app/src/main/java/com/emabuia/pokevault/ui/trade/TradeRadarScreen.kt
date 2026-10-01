@@ -16,6 +16,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -29,6 +30,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -55,6 +57,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -90,6 +93,7 @@ import androidx.compose.material.icons.filled.LocalMall
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -121,6 +125,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FabPosition
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -139,11 +145,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -167,6 +175,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Popup
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
@@ -197,6 +206,8 @@ import java.util.Locale
 import kotlin.math.absoluteValue
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * TradeRadar, fase 1. Esiste solo nel flavor staging (vedi AppNavigation).
@@ -453,6 +464,11 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
     viewModel.closing?.let { closing -> ClosingDialog(viewModel, closing) }
     viewModel.feedback?.let { feedback -> FeedbackDialog(viewModel, feedback) }
     viewModel.leaderboard?.let { board -> LeaderboardDialog(viewModel, board) }
+    // Fuori dalla classifica la festa va in un popup: qui si e' in coda a una colonna gia' piena.
+    if (viewModel.leaderboard == null && viewModel.celebration != null) {
+        Popup(onDismissRequest = { viewModel.consumeCelebration() }) { CelebrationOverlay(viewModel) }
+    }
+    LaunchedEffect(ready.profile.tier) { viewModel.checkTier(ready.profile.tier) }
 }
 
 @Composable
@@ -3575,91 +3591,187 @@ private fun TierBadge(tier: String?, compact: Boolean = false) {
 
 /**
  * La classifica dei piu' affidabili, a schermo intero: nella tua zona o in
- * Italia. In cima la tua situazione (posizione, o cosa manca, o la domanda se
- * vuoi comparire), poi le prime 50 posizioni e come funzionano i livelli.
+ * Italia. "Come si sale" sta dietro la i in alto. Poi la tua situazione (con
+ * il progresso verso il livello successivo), il podio dei primi tre, le
+ * altre posizioni a cascata; toccando una persona si apre il suo mini
+ * profilo, e se sei piu' giu' un tasto ti porta alla tua riga.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LeaderboardDialog(viewModel: TradeRadarViewModel, board: TradeRadarViewModel.Leaderboard) {
     val payload = board.payload
     val me = payload?.me
+    val entries = payload?.entries.orEmpty()
     // "Come si sale" e' a portata di mano ma chiuso: si apre dalla i in alto.
     var showRules by rememberSaveable { mutableStateOf(false) }
+    var selected by remember { mutableStateOf<TradeLeaderboardEntry?>(null) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    // La cascata parte una volta, quando arrivano le righe.
+    var cascade by remember { mutableStateOf(false) }
+    LaunchedEffect(entries.isNotEmpty()) { if (entries.isNotEmpty()) cascade = true }
+
+    // Indici delle righe nella lista: rules, scope, me, podio, poi dal 4° in giu'.
+    val podium = entries.take(3)
+    val rest = entries.drop(3)
+    val firstRowIndex = 2 + (if (me != null) 1 else 0) + (if (podium.isNotEmpty()) 1 else 0)
+    val myIndex = entries.indexOfFirst { it.isMe == true }
+    val myListIndex = when {
+        myIndex < 0 -> null
+        myIndex < 3 -> firstRowIndex - 1
+        else -> firstRowIndex + (myIndex - 3)
+    }
+    val myRowVisible by remember(myListIndex) {
+        derivedStateOf { myListIndex == null || listState.layoutInfo.visibleItemsInfo.any { it.index == myListIndex } }
+    }
+
     Dialog(onDismissRequest = { viewModel.closeLeaderboard() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Scaffold(
-            containerColor = AppColors.background,
-            modifier = Modifier.fillMaxSize(),
-            topBar = {
-                TopAppBar(
-                    title = { Text(AppLocale.tradeRadarLeaderboard, fontWeight = FontWeight.Bold, color = AppColors.textPrimary) },
-                    navigationIcon = {
-                        IconButton(onClick = { viewModel.closeLeaderboard() }) {
-                            Icon(Icons.Default.Close, AppLocale.tradeRadarClose, tint = AppColors.textPrimary)
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { showRules = !showRules }) {
-                            Icon(
-                                if (showRules) Icons.Filled.Info else Icons.Outlined.Info,
-                                AppLocale.tradeRadarTiersTitle,
-                                tint = if (showRules) AppColors.gold else AppColors.textSecondary
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
-                )
-            }
-        ) { padding ->
-            LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 4.dp, bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                item(key = "rules") {
-                    AnimatedVisibility(
-                        visible = showRules,
-                        enter = expandVertically(tween(AppMotion.current.content)) + fadeIn(tween(AppMotion.current.content)),
-                        exit = shrinkVertically(tween(AppMotion.current.state)) + fadeOut(tween(AppMotion.current.state))
-                    ) {
-                        TiersExplained()
-                    }
-                }
-                item(key = "scope") {
-                    SegmentedTabs(
-                        selected = if (board.scope == "italy") 1 else 0,
-                        labels = listOf(AppLocale.tradeRadarLeaderboardZone, AppLocale.tradeRadarLeaderboardItaly),
-                        badges = listOf(0, 0),
-                        onSelect = { viewModel.setLeaderboardScope(if (it == 1) "italy" else "zone") },
-                        modifier = Modifier
+        Box(Modifier.fillMaxSize()) {
+            Scaffold(
+                containerColor = AppColors.background,
+                modifier = Modifier.fillMaxSize(),
+                topBar = {
+                    TopAppBar(
+                        title = { Text(AppLocale.tradeRadarLeaderboard, fontWeight = FontWeight.Bold, color = AppColors.textPrimary) },
+                        navigationIcon = {
+                            IconButton(onClick = { viewModel.closeLeaderboard() }) {
+                                Icon(Icons.Default.Close, AppLocale.tradeRadarClose, tint = AppColors.textPrimary)
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { showRules = !showRules }) {
+                                Icon(
+                                    if (showRules) Icons.Filled.Info else Icons.Outlined.Info,
+                                    AppLocale.tradeRadarTiersTitle,
+                                    tint = if (showRules) AppColors.gold else AppColors.textSecondary
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
                     )
-                }
-                if (me != null) {
-                    item(key = "me") { MyStanding(me, total = payload.total ?: 0, onOptIn = { viewModel.setLeaderboardOptIn(it) }) }
-                }
-                when {
-                    board.loading && payload == null -> item(key = "loading") {
-                        Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
-                            RadarScope(blips = emptyList(), scanning = true, modifier = Modifier.size(90.dp))
+                },
+                floatingActionButton = {
+                    AnimatedVisibility(
+                        visible = !myRowVisible && myListIndex != null,
+                        enter = fadeIn() + slideInVertically { it },
+                        exit = fadeOut() + slideOutVertically { it }
+                    ) {
+                        ExtendedFloatingActionButton(
+                            onClick = { myListIndex?.let { scope.launch { listState.animateScrollToItem(it) } } },
+                            containerColor = AppColors.blue,
+                            contentColor = AppColors.onAccent,
+                            icon = { Icon(Icons.Default.MyLocation, null) },
+                            text = { Text(AppLocale.tradeRadarGoToMe, fontWeight = FontWeight.Bold) }
+                        )
+                    }
+                },
+                floatingActionButtonPosition = FabPosition.Center
+            ) { padding ->
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 4.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    item(key = "rules") {
+                        AnimatedVisibility(
+                            visible = showRules,
+                            enter = expandVertically(tween(AppMotion.current.content)) + fadeIn(tween(AppMotion.current.content)),
+                            exit = shrinkVertically(tween(AppMotion.current.state)) + fadeOut(tween(AppMotion.current.state))
+                        ) {
+                            TiersExplained()
                         }
                     }
-                    payload?.entries.isNullOrEmpty() -> item(key = "empty") {
-                        EmptyState(text = AppLocale.tradeRadarLeaderboardEmpty, radar = false)
+                    item(key = "scope") {
+                        SegmentedTabs(
+                            selected = if (board.scope == "italy") 1 else 0,
+                            labels = listOf(AppLocale.tradeRadarLeaderboardZone, AppLocale.tradeRadarLeaderboardItaly),
+                            badges = listOf(0, 0),
+                            onSelect = { viewModel.setLeaderboardScope(if (it == 1) "italy" else "zone") },
+                            modifier = Modifier
+                        )
                     }
-                    else -> items(payload!!.entries.orEmpty(), key = { "rank|${it.rank}|${it.nickname}" }) { entry ->
-                        LeaderboardRow(entry, modifier = Modifier.animateItem())
+                    if (me != null) {
+                        item(key = "me") { MyStanding(me, total = payload.total ?: 0, onOptIn = { viewModel.setLeaderboardOptIn(it) }) }
+                    }
+                    when {
+                        board.loading && payload == null -> item(key = "loading") {
+                            Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                                RadarScope(blips = emptyList(), scanning = true, modifier = Modifier.size(90.dp))
+                            }
+                        }
+                        entries.isEmpty() -> item(key = "empty") {
+                            EmptyState(text = AppLocale.tradeRadarLeaderboardEmpty, radar = false)
+                        }
+                        else -> {
+                            item(key = "podium|${board.scope}") { Podium(podium, onSelect = { selected = it }) }
+                            itemsIndexed(rest, key = { _, entry -> "rank|${entry.rank}|${entry.nickname}" }) { index, entry ->
+                                CascadeIn(index = index, visible = cascade, modifier = Modifier.animateItem()) {
+                                    LeaderboardRow(entry, onClick = { selected = entry })
+                                }
+                            }
+                        }
                     }
                 }
             }
+            // La festa si disegna qui dentro: la classifica e' una finestra sua, sopra il resto.
+            CelebrationOverlay(viewModel)
+        }
+    }
+    selected?.let { entry -> MiniProfileDialog(entry, onDismiss = { selected = null }) }
+}
+
+/** Le soglie dei livelli, in ordine. */
+private val TierThresholds = listOf("bronze" to 5, "silver" to 15, "gold" to 40, "platinum" to 100)
+
+/**
+ * Verso il livello successivo: "🥉 Bronzo → 🥈 Argento · 9/15". Ricorda anche
+ * la condizione del 90% di 😊 quando non e' rispettata.
+ */
+@Composable
+private fun TierProgress(trades: Int, tier: String?, positivePct: Int?) {
+    val next = TierThresholds.firstOrNull { (_, need) -> trades < need }
+    val previousNeed = TierThresholds.lastOrNull { (_, need) -> trades >= need }?.second ?: 0
+    val progress by animateFloatAsState(
+        if (next == null) 1f else ((trades - previousNeed).toFloat() / (next.second - previousNeed)).coerceIn(0f, 1f),
+        tween(AppMotion.current.bar, easing = AppMotion.standardEasing),
+        label = "tierProgress"
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val nextStyle = next?.let { tierStyle(it.first) }
+            val currentStyle = tierStyle(tier)
+            Text(
+                when {
+                    next == null -> AppLocale.tradeRadarTierMax
+                    currentStyle == null -> AppLocale.tradeRadarTowards("${nextStyle?.emoji} ${nextStyle?.label}")
+                    else -> "${currentStyle.emoji} ${currentStyle.label} → ${nextStyle?.emoji} ${nextStyle?.label}"
+                },
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppColors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            if (next != null) Text("$trades/${next.second}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.gold)
+        }
+        LinearProgressIndicator(
+            progress = { progress },
+            color = AppColors.gold,
+            trackColor = innerColor(),
+            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+        )
+        if (positivePct != null && positivePct < 90) {
+            Text(AppLocale.tradeRadarNeedPositive(positivePct), fontSize = 11.sp, color = AppColors.orange)
         }
     }
 }
 
-/** La mia situazione: in classifica (posizione), fuori per scelta, da invitare, o cosa manca per entrare. */
+/** La mia situazione: progresso di livello, e in classifica (posizione), fuori per scelta, da invitare, o cosa manca. */
 @Composable
 private fun MyStanding(me: TradeLeaderboardMe, total: Int, onOptIn: (Boolean) -> Unit) {
     val shape = RoundedCornerShape(20.dp)
     Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
@@ -3681,15 +3793,10 @@ private fun MyStanding(me: TradeLeaderboardMe, total: Int, onOptIn: (Boolean) ->
             fontSize = 13.sp,
             color = AppColors.textSecondary
         )
+        TierProgress(me.trades ?: 0, me.tier, me.positivePct)
         when {
             me.eligible != true -> {
                 Text(AppLocale.tradeRadarMissingForLeaderboard(me.missingTrades ?: 0, me.missingPartners ?: 0), fontSize = 13.sp, color = AppColors.textPrimary)
-                LinearProgressIndicator(
-                    progress = { ((me.partners ?: 0).coerceAtMost(3)) / 3f },
-                    color = AppColors.gold,
-                    trackColor = innerColor(),
-                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
-                )
             }
             me.optIn == null -> {
                 Text(AppLocale.tradeRadarJoinQuestion, fontSize = 13.sp, color = AppColors.textPrimary)
@@ -3723,28 +3830,96 @@ private fun MyStanding(me: TradeLeaderboardMe, total: Int, onOptIn: (Boolean) ->
     }
 }
 
+/**
+ * Il podio: secondo, primo, terzo, con i blocchi che salgono uno dopo
+ * l'altro. Con le animazioni di sistema spente sono gia' alti.
+ */
 @Composable
-private fun LeaderboardRow(entry: TradeLeaderboardEntry, modifier: Modifier = Modifier) {
+private fun Podium(top: List<TradeLeaderboardEntry>, onSelect: (TradeLeaderboardEntry) -> Unit) {
+    val motion = AppMotion.current
+    // Ordine sul podio: 2°, 1°, 3°.
+    val order = listOfNotNull(top.getOrNull(1), top.getOrNull(0), top.getOrNull(2))
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Bottom,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+    ) {
+        order.forEach { entry ->
+            val rank = entry.rank ?: 0
+            val target = when (rank) { 1 -> 96.dp; 2 -> 72.dp; else -> 56.dp }
+            val color = when (rank) { 1 -> AppColors.gold; 2 -> Color(0xFF9EA3A8); else -> Color(0xFFCD7F32) }
+            val grow = remember { Animatable(if (motion.enabled) 0f else 1f) }
+            LaunchedEffect(entry.nickname) {
+                if (motion.enabled) {
+                    delay(motion.cascade(3 - rank.coerceIn(1, 3)).toLong())
+                    grow.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 300f))
+                }
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable { onSelect(entry) }
+            ) {
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    Avatar(entry.nickname.orEmpty(), size = if (rank == 1) 56.dp else 46.dp)
+                    Text(if (rank == 1) "👑" else "", fontSize = 16.sp)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    entry.nickname.orEmpty().removePrefix("Test "),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = if (entry.isMe == true) AppColors.blue else AppColors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    listOfNotNull(AppLocale.tradeRadarTradesDone(entry.trades ?: 0), entry.positivePct?.let { "$it%" }).joinToString(" · "),
+                    fontSize = 11.sp,
+                    color = AppColors.textSecondary,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(4.dp))
+                Box(
+                    contentAlignment = Alignment.TopCenter,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(target * grow.value)
+                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                        .background(Brush.verticalGradient(listOf(color, color.copy(alpha = 0.35f))))
+                ) {
+                    Text(
+                        when (rank) { 1 -> "🥇"; 2 -> "🥈"; else -> "🥉" },
+                        fontSize = 26.sp,
+                        modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = grow.value }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LeaderboardRow(entry: TradeLeaderboardEntry, onClick: () -> Unit) {
     val mine = entry.isMe == true
-    val rank = entry.rank ?: 0
     val shape = RoundedCornerShape(16.dp)
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
             .background(if (mine) AppColors.blue.copy(alpha = 0.12f) else AppColors.card)
             .then(if (mine) Modifier.border(1.dp, AppColors.blue.copy(alpha = 0.5f), shape) else Modifier)
+            .pressScale(scaleDown = 0.98f, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        Box(Modifier.width(36.dp), contentAlignment = Alignment.Center) {
-            when (rank) {
-                1 -> Text("🥇", fontSize = 24.sp)
-                2 -> Text("🥈", fontSize = 24.sp)
-                3 -> Text("🥉", fontSize = 24.sp)
-                else -> Text("$rank", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.textSecondary)
-            }
-        }
+        Text(
+            "${entry.rank ?: 0}",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = AppColors.textSecondary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(36.dp)
+        )
         Spacer(Modifier.width(6.dp))
         Avatar(entry.nickname.orEmpty(), size = 36.dp)
         Spacer(Modifier.width(10.dp))
@@ -3766,6 +3941,141 @@ private fun LeaderboardRow(entry: TradeLeaderboardEntry, modifier: Modifier = Mo
                 color = AppColors.textSecondary
             )
         }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.textMuted)
+    }
+}
+
+/**
+ * Il mini profilo di chi e' in classifica: livello, scambi, persone, voti e
+ * chip piu' ricevuti, da quando c'e'. Niente zona ne' carte.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MiniProfileDialog(entry: TradeLeaderboardEntry, onDismiss: () -> Unit) {
+    val locale = if (AppLocale.isItalian) Locale.ITALIAN else Locale.ENGLISH
+    val since = entry.memberSince?.let {
+        java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            .format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", locale))
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text(AppLocale.tradeRadarClose) } },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Avatar(entry.nickname.orEmpty(), size = 64.dp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(entry.nickname.orEmpty(), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+                    TierBadge(entry.tier)
+                }
+                Text(
+                    listOfNotNull("#${entry.rank}", since?.let { AppLocale.tradeRadarMemberSince(it) }).joinToString(" · "),
+                    fontSize = 12.sp,
+                    color = AppColors.textMuted
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf(
+                        "${entry.trades ?: 0}" to AppLocale.tradeRadarStatTrades,
+                        "${entry.partners ?: 0}" to AppLocale.tradeRadarStatPeople,
+                        (entry.positivePct?.let { "$it%" } ?: "—") to "😊"
+                    ).forEach { (value, label) ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(innerColor()).padding(vertical = 8.dp)
+                        ) {
+                            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+                            Text(label, fontSize = 11.sp, color = AppColors.textSecondary)
+                        }
+                    }
+                }
+                Text(
+                    "😊 ${entry.good ?: 0}   😐 ${entry.ok ?: 0}   😞 ${entry.bad ?: 0}",
+                    fontSize = 13.sp,
+                    color = AppColors.textSecondary
+                )
+                val tags = entry.topTags.orEmpty()
+                if (tags.isNotEmpty()) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        tags.forEach { InfoPill("${ratingTagLabel(it.tag.orEmpty())} ×${it.count ?: 0}", AppColors.green) }
+                    }
+                }
+            }
+        }
+    )
+}
+
+/**
+ * I coriandoli: una sola animazione muove tutte le particelle, che partono
+ * dal centro in alto e ricadono. Con le animazioni di sistema spente non c'e'.
+ */
+@Composable
+private fun TradeConfetti(modifier: Modifier = Modifier) {
+    val motion = AppMotion.current
+    if (!motion.enabled) return
+    val progress = remember { Animatable(0f) }
+    val colors = listOf(AppColors.gold, AppColors.blue, AppColors.green, AppColors.purple, AppColors.orange, AppColors.red)
+    LaunchedEffect(Unit) { progress.animateTo(1f, tween(motion.confetti * 2, easing = LinearEasing)) }
+    Canvas(modifier.fillMaxSize()) {
+        val particles = 40
+        val origin = Offset(size.width / 2f, size.height * 0.25f)
+        repeat(particles) { index ->
+            val delayFraction = (index % 5) * 0.04f
+            val t = ((progress.value - delayFraction) / (1f - delayFraction)).coerceIn(0f, 1f)
+            if (t <= 0f) return@repeat
+            val angle = Math.toRadians(-160.0 + 140.0 * ((index * 37) % particles) / particles)
+            val speed = size.width * (0.35f + 0.25f * ((index * 13) % 7) / 7f)
+            // Spinta verso l'esterno e poi gravita' che le riporta giu'.
+            val x = origin.x + (cos(angle) * speed * t).toFloat()
+            val y = origin.y + (sin(angle) * speed * t).toFloat() + size.height * 0.9f * t * t
+            val side = (6 + (index % 3) * 2).dp.toPx()
+            rotate(degrees = 720f * t + index * 30f, pivot = Offset(x, y)) {
+                drawRect(
+                    color = colors[index % colors.size].copy(alpha = (1f - t).coerceIn(0f, 1f)),
+                    topLeft = Offset(x - side / 2, y - side / 4),
+                    size = androidx.compose.ui.geometry.Size(side, side / 2)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * La festa: coriandoli e un messaggio quando si entra in classifica o si sale
+ * di livello. Sparisce da sola dopo qualche secondo, o al tocco.
+ */
+@Composable
+private fun CelebrationOverlay(viewModel: TradeRadarViewModel) {
+    val celebration = viewModel.celebration ?: return
+    LaunchedEffect(celebration) {
+        delay(3_000)
+        viewModel.consumeCelebration()
+    }
+    val message = when (celebration) {
+        TradeRadarViewModel.Celebration.Joined -> AppLocale.tradeRadarCelebrateJoined
+        is TradeRadarViewModel.Celebration.TierUp -> {
+            val style = tierStyle(celebration.tier)
+            AppLocale.tradeRadarCelebrateTier("${style?.emoji.orEmpty()} ${style?.label.orEmpty()}".trim())
+        }
+    }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.fillMaxSize().clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { viewModel.consumeCelebration() }
+    ) {
+        TradeConfetti()
+        val scale = remember { Animatable(0.6f) }
+        LaunchedEffect(celebration) { scale.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 400f)) }
+        Text(
+            message,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Black,
+            color = AppColors.textPrimary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
+                .clip(RoundedCornerShape(20.dp))
+                .background(AppColors.card)
+                .border(1.5.dp, AppColors.gold, RoundedCornerShape(20.dp))
+                .padding(horizontal = 22.dp, vertical = 14.dp)
+        )
     }
 }
 

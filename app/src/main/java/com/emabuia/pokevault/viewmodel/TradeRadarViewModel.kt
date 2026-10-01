@@ -985,6 +985,35 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     var leaderboard by mutableStateOf<Leaderboard?>(null)
         private set
 
+    /** Una festa da mostrare una volta: entrata in classifica, o livello nuovo. */
+    sealed class Celebration {
+        data object Joined : Celebration()
+        data class TierUp(val tier: String) : Celebration()
+    }
+
+    var celebration by mutableStateOf<Celebration?>(null)
+        private set
+
+    fun consumeCelebration() {
+        celebration = null
+    }
+
+    /**
+     * Livello salito dall'ultima volta? Si ricorda l'ultimo visto: la prima
+     * volta si salva e basta (niente festa per un livello che si aveva gia').
+     */
+    fun checkTier(tier: String?) {
+        val order = listOf("bronze", "silver", "gold", "platinum")
+        val current = tier.orEmpty()
+        if (!prefs.contains(KEY_LAST_TIER)) {
+            prefs.edit().putString(KEY_LAST_TIER, current).apply()
+            return
+        }
+        val last = prefs.getString(KEY_LAST_TIER, "").orEmpty()
+        if (order.indexOf(current) > order.indexOf(last)) celebration = Celebration.TierUp(current)
+        if (current != last) prefs.edit().putString(KEY_LAST_TIER, current).apply()
+    }
+
     fun openLeaderboard() {
         leaderboard = Leaderboard()
         loadLeaderboard("zone")
@@ -1018,6 +1047,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             val result = TradeApi.setLeaderboardOptIn(optIn)
             if (result is TradeApi.Result.Ok) {
                 info = if (optIn) Info.LEADERBOARD_JOINED else Info.LEADERBOARD_LEFT
+                if (optIn) celebration = Celebration.Joined
                 leaderboard?.let { loadLeaderboard(it.scope) }
                 (TradeApi.getProfile() as? TradeApi.Result.Ok)?.value?.let { screen = Screen.Ready(it) }
             } else {
@@ -1109,6 +1139,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         const val PREFS = "trade_radar"
         const val KEY_LEVELS_EXPLAINED = "levels_explained"
         const val KEY_APPLIED_CLOSINGS = "applied_closings"
+        const val KEY_LAST_TIER = "last_tier"
         const val PUSH_DEBOUNCE_MS = 600L
         const val SEARCH_DEBOUNCE_MS = 450L
         const val MAX_SLOTS = 3

@@ -384,7 +384,13 @@ data class TradeLeaderboardEntry(
     @SerializedName("trades") val trades: Int? = null,
     @SerializedName("positivePct") val positivePct: Int? = null,
     @SerializedName("memberSince") val memberSince: Long? = null,
-    @SerializedName("isMe") val isMe: Boolean? = null
+    @SerializedName("isMe") val isMe: Boolean? = null,
+    /** Per il mini profilo: persone diverse, voti visibili, chip piu' ricevuti. */
+    @SerializedName("partners") val partners: Int? = null,
+    @SerializedName("good") val good: Int? = null,
+    @SerializedName("ok") val ok: Int? = null,
+    @SerializedName("bad") val bad: Int? = null,
+    @SerializedName("topTags") val topTags: List<TradeTagCount>? = null
 )
 
 /** Io: posizione (null se fuori), adesione (null = mai chiesto) e cosa manca per entrare. */

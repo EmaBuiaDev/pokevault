@@ -1975,12 +1975,20 @@ async function getLeaderboard(db: D1Database, uid: string, url: URL): Promise<Re
     .bind(...(scope === 'zone' ? cells : []))
     .all<{ uid: string; nickname: string; created_at: number; trades: number; partners: number; good: number; ok: number; bad: number; score: number; tier: string | null }>();
 
+  // I chip piu' ricevuti dei primi 50, per il mini profilo che si apre toccandoli.
+  const shown = results.slice(0, LEADERBOARD_SIZE);
+  const reputation = await reputationOf(db, 'SELECT value FROM json_each(?)', [JSON.stringify(shown.map((row) => row.uid))]);
   const entry = (row: (typeof results)[number], rank: number) => ({
     rank,
     nickname: row.nickname,
     tier: row.tier,
     trades: row.trades,
+    partners: row.partners,
     positivePct: row.good + row.bad > 0 ? Math.round((row.good * 100) / (row.good + row.bad)) : null,
+    good: row.good,
+    ok: row.ok,
+    bad: row.bad,
+    topTags: reputation.get(row.uid)?.topTags ?? [],
     memberSince: row.created_at,
     isMe: row.uid === uid,
   });
@@ -1992,7 +2000,7 @@ async function getLeaderboard(db: D1Database, uid: string, url: URL): Promise<Re
   const optIn = me.leaderboard_asked_at === null ? null : me.leaderboard_opt_in;
   return json({
     scope,
-    entries: results.slice(0, LEADERBOARD_SIZE).map((row, index) => entry(row, index + 1)),
+    entries: shown.map((row, index) => entry(row, index + 1)),
     total: results.length,
     me: {
       rank: myIndex >= 0 ? myIndex + 1 : null,
