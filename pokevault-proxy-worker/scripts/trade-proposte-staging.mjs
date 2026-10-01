@@ -119,6 +119,111 @@ if (arg('--as')) {
   process.exit(res.status < 300 ? 0 : 1);
 }
 
+// ── Prova dell'appuntamento (fase 2b) ───────────────────────────────────────
+// Luca propone a Giulia, Giulia accetta; poi carte riservate, luoghi,
+// appuntamento proposto e confermato, ricerca e aggiunta di un luogo, e
+// annullamento che libera le carte. Alla fine non resta niente di aperto.
+if (args.includes('--prova-appuntamento')) {
+  let failures = 0;
+  const check = (label, ok, detail = '') => {
+    console.log(`${ok ? 'OK  ' : 'NO  '} ${label}${detail ? ` — ${detail}` : ''}`);
+    if (!ok) failures++;
+  };
+  const luca = await token('luca');
+  const giulia = await token('giulia');
+  for (const tok of [luca, giulia]) {
+    const { data } = await call(tok, 'GET', '/v1/trade/proposals');
+    for (const p of data.proposals ?? []) {
+      if (!['Test Luca', 'Test Giulia'].includes(p.counterpart.nickname)) continue;
+      if (p.status === 'open' && p.myTurn) await call(tok, 'POST', `/v1/trade/proposals/${p.id}/decline`);
+      else if (['open', 'accepted', 'scheduled'].includes(p.status)) await call(tok, 'POST', `/v1/trade/proposals/${p.id}/cancel`);
+    }
+  }
+  const { data: matches } = await call(luca, 'GET', '/v1/trade/matches');
+  const giuliaId = (matches.matches ?? []).find((m) => m.nickname === 'Test Giulia')?.id;
+  const { data: lucaHaves } = await call(luca, 'GET', '/v1/trade/haves');
+  const { data: before } = await call(luca, 'GET', `/v1/trade/users/${giuliaId}/haves`);
+  const card = before.items[0];
+  const give = [asItem({ ...lucaHaves.items[0], qty: 1 })];
+  const take = [asItem({ ...card, qty: card.qty })];
+  const created = await call(luca, 'POST', '/v1/trade/proposals', { to: giuliaId, give, take });
+  const id = created.data.id;
+  const accepted = await call(giulia, 'POST', `/v1/trade/proposals/${id}/accept`);
+  check('Giulia accetta la proposta di Luca', accepted.status === 200, `${card.name} x${card.qty}`);
+
+  const { data: after } = await call(luca, 'GET', `/v1/trade/users/${giuliaId}/haves`);
+  const left = (after.items ?? []).find((h) => asItem(h).key === card.key && h.variant === card.variant);
+  check('le copie dell\'accordo spariscono dalle offerte di Giulia', !left, left ? `restano ${left.qty}` : 'riservate');
+  const { data: giuliaOwn } = await call(giulia, 'GET', '/v1/trade/haves');
+  const own = (giuliaOwn.items ?? []).find((h) => h.key === card.key && h.variant === card.variant);
+  check('per Giulia restano in lista, segnate come riservate', own?.reserved === card.qty, JSON.stringify(own));
+  const again = await call(luca, 'POST', '/v1/trade/proposals', { to: giuliaId, give, take: [{ ...take[0], qty: 1 }] });
+  check('non si possono mettere in un\'altra proposta', again.status === 409 && again.data.error === 'not_offered', JSON.stringify(again.data));
+
+  // Come fa il telefono: le zone che mancano si scaricano da Overpass e si mandano al server.
+  let { data: spotData } = await call(luca, 'GET', `/v1/trade/proposals/${id}/spots`);
+  // Overpass a volte e' occupato (504): come l'app, si riprova con una pausa.
+  async function overpassFetch(query) {
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      const res = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: { 'user-agent': 'PokeVault-TradeRadar/1.0', accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+      });
+      // Un timeout arriva come 200 con un remark e zero elementi: e' un fallimento.
+      const data = res.ok ? await res.json() : null;
+      if (data && !/error/i.test(data.remark ?? '')) return data;
+      console.log(`     Overpass ${res.status}${data?.remark ? ` (${data.remark.slice(0, 60)})` : ''}, tentativo ${attempt}`);
+      await new Promise((r) => setTimeout(r, 5000 * attempt));
+    }
+    return null;
+  }
+  for (const { cell, query } of spotData.missingCells ?? []) {
+    const overpass = await overpassFetch(query);
+    // Se Overpass non ha risposto non si manda niente: la zona resta da scaricare.
+    if (!overpass) { check(`zona ${cell}: Overpass non risponde`, false); continue; }
+    const stored = await call(luca, 'POST', '/v1/trade/spots/cell', { cell, elements: overpass.elements ?? [] });
+    check(`zona ${cell}: ${overpass.elements?.length ?? 0} elementi da Overpass, tenuti dal server dopo il filtro`, stored.status === 200, JSON.stringify(stored.data));
+  }
+  if ((spotData.missingCells ?? []).length > 0) ({ data: spotData } = await call(luca, 'GET', `/v1/trade/proposals/${id}/spots`));
+  check('dopo, nessuna zona da scaricare', (spotData.missingCells ?? []).length === 0);
+  const spots = spotData.spots ?? [];
+  check('ci sono luoghi a meta\' strada, da OpenStreetMap', spots.length > 0, spots.slice(0, 3).map((s) => `${s.name} (${s.kind}, ${s.distanceKm} km)`).join(' | '));
+
+  const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const badSlots = await call(luca, 'POST', `/v1/trade/proposals/${id}/meeting`, { spot: spots[0]?.id, slots: [{ day: day(40), part: 'morning' }] });
+  check('una fascia oltre 21 giorni e\' rifiutata', badSlots.status === 400);
+  const proposedMeeting = await call(luca, 'POST', `/v1/trade/proposals/${id}/meeting`, {
+    spot: spots[0]?.id, slots: [{ day: day(2), part: 'afternoon' }, { day: day(3), part: 'morning' }],
+  });
+  check('Luca propone luogo e due fasce', proposedMeeting.status === 200);
+  const selfConfirm = await call(luca, 'POST', `/v1/trade/proposals/${id}/meeting/confirm`, { slot: 0 });
+  check('Luca non puo\' confermare da solo', selfConfirm.status === 409);
+  const giuliaList = (await call(giulia, 'GET', '/v1/trade/proposals')).data.proposals.find((p) => p.id === id);
+  check('per Giulia serve una sua mossa, con luogo e fasce', giuliaList?.actionNeeded === true && giuliaList.meeting.slots.length === 2, giuliaList?.meeting?.spot?.name);
+  const confirmed = await call(giulia, 'POST', `/v1/trade/proposals/${id}/meeting/confirm`, { slot: 1 });
+  check('Giulia sceglie la seconda fascia: appuntamento fissato', confirmed.status === 200 && confirmed.data.status === 'scheduled', JSON.stringify(confirmed.data.slot));
+  const lucaList = (await call(luca, 'GET', '/v1/trade/proposals')).data.proposals.find((p) => p.id === id);
+  check('per Luca risulta fissato', lucaList?.status === 'scheduled' && lucaList.meeting.status === 'confirmed' && lucaList.meeting.slot?.part === 'morning');
+
+  const { data: found } = await call(luca, 'GET', `/v1/trade/spots/search?q=${encodeURIComponent('Star Shop')}&proposal=${id}`);
+  const star = (found.results ?? []).find((r) => /napoli/i.test(r.city));
+  check('"Manca un negozio?": la ricerca trova Star Shop a Napoli', !!star, star ? `${star.name} ${star.kind} ${star.distanceKm} km` : JSON.stringify(found));
+  if (star) {
+    const added = await call(luca, 'POST', '/v1/trade/spots', star);
+    check('e lo si aggiunge come luogo', added.status === 201 && added.data.spot?.id === star.osmId, added.data.spot?.name);
+  }
+  const reported = await call(luca, 'POST', '/v1/trade/spots', { name: 'Fumetteria di prova', city: 'Portici' });
+  check('una segnalazione senza coordinate resta in attesa', reported.data.spot?.pending === true);
+
+  const cancelled = await call(giulia, 'POST', `/v1/trade/proposals/${id}/cancel`);
+  const { data: freed } = await call(luca, 'GET', `/v1/trade/users/${giuliaId}/haves`);
+  check('annullato l\'accordo, le carte tornano offerte', cancelled.status === 200 && (freed.items ?? []).some((h) => h.key === card.key && h.qty === card.qty));
+
+  console.log(failures === 0 ? '\nTutto ok.' : `\n${failures} controlli falliti.`);
+  process.exit(failures === 0 ? 0 : 1);
+}
+
 // ── Prova completa ──────────────────────────────────────────────────────────
 if (!args.includes('--prova')) {
   console.log('Uso: --prova, oppure --as <utente> [--accept|--decline|--counter|--cancel]');

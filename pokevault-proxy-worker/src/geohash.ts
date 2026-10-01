@@ -36,6 +36,12 @@ function decode(hash: string): { lat: number; lon: number; latErr: number; lonEr
   };
 }
 
+/** Il centro di una cella: per i luoghi d'incontro, mai per una persona. */
+export function cellCenter(hash: string): { lat: number; lon: number } {
+  const { lat, lon } = decode(hash);
+  return { lat, lon };
+}
+
 export function encode(lat: number, lon: number, precision: number): string {
   let evenBit = true;
   let latMin = -90, latMax = 90, lonMin = -180, lonMax = 180;

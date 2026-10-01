@@ -16,7 +16,7 @@
  */
 
 import { verifyFirebaseIdToken } from './billing';
-import { GEOHASH5_REGEX, cellAndNeighbors } from './geohash';
+import { GEOHASH5_REGEX, cellAndNeighbors, cellCenter, encode } from './geohash';
 
 export interface TradeEnv {
   /** "1" accende il modulo. Assente in produzione. */
@@ -334,10 +334,13 @@ async function getHaves(db: D1Database, uid: string): Promise<Response> {
     .prepare(`SELECT card_key, variant, condition, language, qty, manual, notify FROM trade_haves WHERE uid = ?`)
     .bind(uid)
     .all<{ card_key: string; variant: string; condition: string; language: string; qty: number; manual: number; notify: number }>();
+  const reserved = await reservedOf(db, uid);
   return json({
     items: results.map((r) => ({
       key: r.card_key, variant: r.variant, condition: r.condition, language: r.language, qty: r.qty,
       manual: r.manual === 1, notify: r.notify === 1,
+      // Copie promesse in un accordo: restano in lista, ma gli altri non le vedono.
+      reserved: reserved.get(itemId({ key: r.card_key, ...r })) ?? 0,
     })),
   });
 }
@@ -644,19 +647,25 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
     )
     .bind(...nearby.params, uid)
     .all<{ uid: string; card_key: string; variant: string; condition: string; language: string; qty: number }>();
+  const reservedNearby = await reservedByUid(db, nearby.sql, nearby.params);
   const havesByUid = new Map<string, typeof theirHaves.results>();
   for (const row of theirHaves.results) {
+    const qty = row.qty - (reservedNearby.get(row.uid)?.get(itemId({ key: row.card_key, ...row })) ?? 0);
+    if (qty <= 0) continue;
     const list = havesByUid.get(row.uid) ?? [];
-    list.push(row);
+    list.push({ ...row, qty });
     havesByUid.set(row.uid, list);
   }
 
+  const myReserved = await reservedOf(db, uid);
   const myHaves = (
     await db
       .prepare(`SELECT card_key, variant, condition, language, qty FROM trade_haves WHERE uid = ?`)
       .bind(uid)
       .all<{ card_key: string; variant: string; condition: string; language: string; qty: number }>()
-  ).results;
+  ).results
+    .map((row) => ({ ...row, qty: row.qty - (myReserved.get(itemId({ key: row.card_key, ...row })) ?? 0) }))
+    .filter((row) => row.qty > 0);
 
   const setSizes = await catalogSetSizes(env);
   const myWishes = await loadMyWishes(db, uid, setSizes);
@@ -777,7 +786,8 @@ async function itemsAvailable(db: D1Database, giverUid: string, items: ProposalI
     .bind(giverUid)
     .all<{ card_key: string; variant: string; condition: string; language: string; qty: number }>();
   const offered = new Map(results.map((r) => [itemId({ key: r.card_key, ...r }), r.qty]));
-  return items.every((item) => (offered.get(itemId(item)) ?? 0) >= item.qty);
+  const reserved = await reservedOf(db, giverUid);
+  return items.every((item) => (offered.get(itemId(item)) ?? 0) - (reserved.get(itemId(item)) ?? 0) >= item.qty);
 }
 
 async function uidOfPublicId(db: D1Database, publicId: string): Promise<{ uid: string; paused: number } | null> {
@@ -808,11 +818,15 @@ async function getUserHaves(db: D1Database, publicId: string, env: TradeEnv): Pr
     .bind(user.uid)
     .all<{ card_key: string; variant: string; condition: string; language: string; qty: number }>();
   const labels = await catalogCardLabels(env);
+  const reserved = await reservedOf(db, user.uid);
   return json({
-    items: results.map((r) => ({
-      key: r.card_key, variant: r.variant, condition: r.condition, language: r.language, qty: r.qty,
-      name: labels.get(r.card_key)?.name, setName: labels.get(r.card_key)?.setName,
-    })),
+    items: results
+      .map((r) => ({ ...r, qty: r.qty - (reserved.get(itemId({ key: r.card_key, ...r })) ?? 0) }))
+      .filter((r) => r.qty > 0)
+      .map((r) => ({
+        key: r.card_key, variant: r.variant, condition: r.condition, language: r.language, qty: r.qty,
+        name: labels.get(r.card_key)?.name, setName: labels.get(r.card_key)?.setName,
+      })),
   });
 }
 
@@ -903,7 +917,7 @@ async function actOnProposal(request: Request, db: D1Database, uid: string, id: 
 
   if (action === 'cancel') {
     const waiting = proposal.status === 'open' && proposal.turn_uid !== uid;
-    if (!waiting && proposal.status !== 'accepted') return json({ error: 'not_cancellable' }, 409);
+    if (!waiting && proposal.status !== 'accepted' && proposal.status !== 'scheduled') return json({ error: 'not_cancellable' }, 409);
     await close('cancelled');
     return json({ status: 'cancelled' });
   }
@@ -965,12 +979,17 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
               o.trades_done AS other_trades
        FROM trade_proposals p
        JOIN trade_profiles o ON o.uid = CASE WHEN p.from_uid = ?1 THEN p.to_uid ELSE p.from_uid END
-       WHERE (p.from_uid = ?1 OR p.to_uid = ?1) AND (p.status IN ('open', 'accepted') OR p.updated_at > ?2)
+       WHERE (p.from_uid = ?1 OR p.to_uid = ?1) AND (p.status IN ('open', 'accepted', 'scheduled') OR p.updated_at > ?2)
        ORDER BY p.updated_at DESC LIMIT 100`
     )
     .bind(uid, since)
-    .all<ProposalRow & { other_public_id: string; other_nickname: string; other_cell: string; other_trades: number }>();
+    .all<ProposalRow & MeetingColumns & { other_public_id: string; other_nickname: string; other_cell: string; other_trades: number }>();
   if (proposals.length === 0) return json({ proposals: [] });
+
+  const spotIds = [...new Set(proposals.map((p) => p.meet_spot_id).filter((id): id is string => !!id))];
+  const spots = spotIds.length === 0
+    ? []
+    : (await db.prepare(`SELECT * FROM trade_spots WHERE id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(spotIds)).all<SpotRow>()).results;
 
   // Le carte dell'ultima revisione di ognuna, in una query sola.
   const { results: items } = await db
@@ -991,11 +1010,23 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
         key: i.card_key, variant: i.variant, condition: i.condition, language: i.language, qty: i.qty,
         name: labels.get(i.card_key)?.name, setName: labels.get(i.card_key)?.setName,
       });
+      const spot = spots.find((s) => s.id === p.meet_spot_id);
+      const center = me ? cellCenter(me.geohash5) : { lat: 0, lon: 0 };
+      const meetingToConfirm = p.status === 'accepted' && p.meet_status === 'proposed' && p.meet_by !== uid;
       return {
         id: p.id,
         status: p.status,
         revision: p.revision,
         myTurn: p.status === 'open' && p.turn_uid === uid,
+        // Serve una mia mossa: rispondere alla proposta, o confermare l'appuntamento.
+        actionNeeded: (p.status === 'open' && p.turn_uid === uid) || meetingToConfirm,
+        meeting: {
+          status: p.meet_status,
+          byMe: p.meet_by === uid,
+          spot: spot ? spotJson(spot, center.lat, center.lon) : null,
+          slots: p.meet_slots ? JSON.parse(p.meet_slots) : [],
+          slot: p.meet_slot ? JSON.parse(p.meet_slot) : null,
+        },
         iStarted: p.from_uid === uid,
         closedByMe: p.closed_by === uid,
         createdAt: p.created_at,
@@ -1011,6 +1042,423 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
       };
     }),
   });
+}
+
+// ── Carte riservate negli accordi (fase 2b) ─────────────────────────────────
+
+/**
+ * Le copie gia' promesse in un accordo (accettato o con appuntamento), per
+ * persona e carta. Restano nella lista di chi le offre, ma per gli altri non
+ * ci sono piu': non compaiono nei match, ne' nelle sue offerte, ne' si
+ * possono mettere in un'altra proposta. Si liberano da sole se l'accordo
+ * viene annullato.
+ */
+async function reservedByUid(db: D1Database, giverSql: string, params: unknown[]): Promise<Map<string, Map<string, number>>> {
+  const { results } = await db
+    .prepare(
+      `SELECT i.giver_uid, i.card_key, i.variant, i.condition, i.language, SUM(i.qty) AS qty
+       FROM trade_proposal_items i
+       JOIN trade_proposals p ON p.id = i.proposal_id AND p.revision = i.revision
+       WHERE p.status IN ('accepted', 'scheduled') AND i.giver_uid IN (${giverSql})
+       GROUP BY i.giver_uid, i.card_key, i.variant, i.condition, i.language`
+    )
+    .bind(...params)
+    .all<{ giver_uid: string; card_key: string; variant: string; condition: string; language: string; qty: number }>();
+  const byUid = new Map<string, Map<string, number>>();
+  for (const row of results) {
+    const map = byUid.get(row.giver_uid) ?? new Map<string, number>();
+    map.set(itemId({ key: row.card_key, ...row }), Number(row.qty));
+    byUid.set(row.giver_uid, map);
+  }
+  return byUid;
+}
+
+async function reservedOf(db: D1Database, uid: string): Promise<Map<string, number>> {
+  return (await reservedByUid(db, '?', [uid])).get(uid) ?? new Map();
+}
+
+// ── Luoghi (fase 2b) ────────────────────────────────────────────────────────
+
+/** Una zona si riscarica da OpenStreetMap dopo questo tempo. */
+const SPOT_CELL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SPOT_EMPTY_CELL_TTL_MS = 24 * 60 * 60 * 1000;
+/** Raggio della ricerca attorno al centro di una cella. */
+const SPOT_RADIUS_M = 8000;
+/** Elementi di Overpass accettati per cella. */
+const MAX_CELL_ELEMENTS = 400;
+const PHOTON_URL = 'https://photon.komoot.io/api/';
+/** I servizi di OpenStreetMap chiedono un'identificazione. */
+const OSM_USER_AGENT = 'PokeVault-TradeRadar/1.0';
+const SPOT_KINDS = ['card_shop', 'comics', 'games', 'video_games', 'toys', 'mall', 'library', 'other'] as const;
+type SpotKind = (typeof SPOT_KINDS)[number];
+/** Quanto conviene un tipo di luogo: prima i negozi di carte, poi i luoghi pubblici. */
+const SPOT_KIND_RANK: Record<SpotKind, number> = {
+  card_shop: 6, comics: 5, games: 5, video_games: 3, toys: 3, mall: 2, library: 2, other: 1,
+};
+const SPOT_SLOT_PARTS = ['morning', 'afternoon', 'evening'];
+/** Fin dove si puo' fissare un appuntamento. */
+const MEETING_MAX_DAYS = 21;
+
+/**
+ * Il tipo di un luogo di OpenStreetMap, o null se non e' adatto. Il nome
+ * conta solo per negozi di tipo compatibile: una ricerca larga per nome
+ * prendeva macellerie ("Cardoncello"), parrucchieri e sale scommesse
+ * ("Games Point"). Sale giochi e bingo (adult_gaming_centre) restano fuori.
+ */
+function spotKindOf(tags: Record<string, string>): SpotKind | null {
+  const name = tags.name ?? '';
+  if (!name) return null;
+  const shop = tags.shop ?? '';
+  const cards = /\b(tcg|cards?|card shop|carte da gioco|carte collezionabili)\b/i.test(name);
+  const comics = /fumett|\bcomics?\b|\bmanga\b/i.test(name);
+  const games = /\bgames?\b|ludoteca|\bnerd/i.test(name);
+  if (shop === 'collector' || (cards && ['books', 'stationery', 'gift', 'variety_store', 'hobby', 'games', 'toys'].includes(shop))) return 'card_shop';
+  if (shop === 'comics' || shop === 'anime' || (shop === 'books' && (/comic/i.test(tags.books ?? '') || comics))) return 'comics';
+  if (shop === 'games' || shop === 'hobby' || (games && ['books', 'stationery', 'gift', 'variety_store', 'toys'].includes(shop))) return 'games';
+  if (shop === 'video_games') return 'video_games';
+  if (shop === 'toys') return 'toys';
+  if (shop === 'mall') return 'mall';
+  if (tags.amenity === 'library') return 'library';
+  return null;
+}
+
+interface SpotRow {
+  id: string;
+  name: string;
+  kind: SpotKind;
+  lat: number;
+  lon: number;
+  geohash5: string;
+  city: string | null;
+  opening_hours: string | null;
+  source: string;
+  approved: number;
+  added_by: string | null;
+}
+
+function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const rad = Math.PI / 180;
+  const dLat = (bLat - aLat) * rad;
+  const dLon = (bLon - aLon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * La richiesta Overpass per i luoghi attorno a una cella. La prepara il
+ * server, ma la manda il telefono: da Cloudflare overpass-api.de risponde 521
+ * (blocca i Worker), dai telefoni no. Cosi' le categorie restano decise qui,
+ * e il telefono chiede solo il centro della zona, mai la sua posizione.
+ */
+function overpassQuery(cell: string): string {
+  const { lat, lon } = cellCenter(cell);
+  // Un rettangolo di SPOT_RADIUS_M per lato attorno al centro, non un cerchio,
+  // e il nome con le maiuscole nelle classi invece di ",i": il 01/10, con
+  // Overpass carico, (around:...) e ",i" andavano in timeout dopo 30 secondi
+  // (risposta 200 con un remark e zero elementi), cosi' rispondono in 3.
+  const dLat = SPOT_RADIUS_M / 111_320;
+  const dLon = SPOT_RADIUS_M / (111_320 * Math.cos((lat * Math.PI) / 180));
+  const box = `(${(lat - dLat).toFixed(4)},${(lon - dLon).toFixed(4)},${(lat + dLat).toFixed(4)},${(lon + dLon).toFixed(4)})`;
+  return `[out:json][timeout:60];(` +
+    `nwr["shop"~"^(collector|comics|anime|games|hobby|toys|video_games|mall)$"]${box};` +
+    `nwr["shop"~"^(books|stationery|gift|variety_store)$"]["name"~"[Ff]umett|[Cc]omic|[Mm]anga|[Gg]ames|TCG|[Cc]ard|[Cc]arte|[Ll]udoteca|[Nn]erd"]${box};` +
+    `nwr["amenity"="library"]${box};` +
+    `);out center tags ${MAX_CELL_ELEMENTS};`;
+}
+
+/**
+ * Le celle senza luoghi o scaricate da piu' di 30 giorni. Una cella risultata
+ * vuota si riprova dopo un giorno: puo' essere una zona senza niente, ma
+ * anche una risposta di Overpass andata storta.
+ */
+async function staleCells(db: D1Database, cells: string[]): Promise<string[]> {
+  const { results } = await db
+    .prepare(`SELECT geohash5, fetched_at, found FROM trade_spot_cells WHERE geohash5 IN (SELECT value FROM json_each(?))`)
+    .bind(JSON.stringify(cells))
+    .all<{ geohash5: string; fetched_at: number; found: number }>();
+  const fresh = new Set(
+    results
+      .filter((r) => Date.now() - r.fetched_at < (r.found > 0 ? SPOT_CELL_TTL_MS : SPOT_EMPTY_CELL_TTL_MS))
+      .map((r) => r.geohash5)
+  );
+  return cells.filter((cell) => !fresh.has(cell));
+}
+
+type OverpassElement = {
+  type?: string;
+  id?: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat?: number; lon?: number };
+  tags?: Record<string, string>;
+};
+
+/**
+ * POST /v1/trade/spots/cell — { cell, elements }: la risposta di Overpass
+ * che il telefono ha ottenuto con overpassQuery. Il filtro lo rifa' il server
+ * (spotKindOf), e accetta solo celle da aggiornare: una cella fresca non si
+ * riscrive.
+ */
+async function putCellSpots(request: Request, db: D1Database): Promise<Response> {
+  const body = await readJson<{ cell?: string; elements?: unknown }>(request);
+  const cell = cleanText(body?.cell, 5).toLowerCase();
+  if (!GEOHASH5_REGEX.test(cell) || !Array.isArray(body?.elements)) return json({ error: 'bad_cell' }, 400);
+  if ((await staleCells(db, [cell])).length === 0) return json({ stored: 0, fresh: true });
+  const { lat: centerLat, lon: centerLon } = cellCenter(cell);
+
+  const now = Date.now();
+  const statements: D1PreparedStatement[] = [];
+  for (const element of (body!.elements as OverpassElement[]).slice(0, MAX_CELL_ELEMENTS)) {
+    const tags: Record<string, string> = {};
+    for (const [k, v] of Object.entries(element?.tags ?? {})) if (typeof v === 'string') tags[k] = v;
+    const kind = spotKindOf(tags);
+    const spotLat = Number(element?.lat ?? element?.center?.lat);
+    const spotLon = Number(element?.lon ?? element?.center?.lon);
+    const type = String(element?.type ?? '')[0];
+    // Solo luoghi veri e davvero nella zona: niente di inventato lontano.
+    if (!kind || !['n', 'w', 'r'].includes(type) || !Number.isInteger(element?.id)) continue;
+    if (!Number.isFinite(spotLat) || !Number.isFinite(spotLon) || distanceKm(centerLat, centerLon, spotLat, spotLon) > (SPOT_RADIUS_M / 1000) * Math.SQRT2 + 1) continue;
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO trade_spots (id, name, kind, lat, lon, geohash5, city, opening_hours, source, approved, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'osm', 1, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind, lat = excluded.lat, lon = excluded.lon,
+             geohash5 = excluded.geohash5, city = excluded.city, opening_hours = excluded.opening_hours, updated_at = excluded.updated_at`
+        )
+        .bind(
+          `osm:${type}${element.id}`, cleanText(tags.name, 80), kind, spotLat, spotLon, encode(spotLat, spotLon, 5),
+          cleanText(tags['addr:city'], 60) || null, cleanText(tags.opening_hours, 120) || null, now, now
+        )
+    );
+  }
+  const stored = statements.length;
+  statements.push(
+    db.prepare(`INSERT OR REPLACE INTO trade_spot_cells (geohash5, fetched_at, found) VALUES (?, ?, ?)`).bind(cell, now, stored)
+  );
+  for (let i = 0; i < statements.length; i += 50) await db.batch(statements.slice(i, i + 50));
+  return json({ stored });
+}
+
+function spotJson(spot: SpotRow, fromLat: number, fromLon: number) {
+  return {
+    id: spot.id,
+    name: spot.name,
+    kind: spot.kind,
+    city: spot.city,
+    openingHours: spot.opening_hours,
+    lat: spot.lat,
+    lon: spot.lon,
+    // Dal punto a meta' strada fra le due zone, non da una persona.
+    distanceKm: Math.round(distanceKm(fromLat, fromLon, spot.lat, spot.lon) * 10) / 10,
+    pending: spot.approved !== 1,
+  };
+}
+
+/** Le due persone di una proposta, se chi chiede e' una di loro. */
+async function proposalParties(db: D1Database, id: string, uid: string) {
+  const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow & MeetingColumns>();
+  if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return null;
+  const other = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
+  const cells = await db
+    .prepare(`SELECT uid, geohash5 FROM trade_profiles WHERE uid IN (?, ?)`)
+    .bind(uid, other)
+    .all<{ uid: string; geohash5: string }>();
+  const mine = cells.results.find((r) => r.uid === uid)?.geohash5;
+  const theirs = cells.results.find((r) => r.uid === other)?.geohash5 ?? mine;
+  if (!mine || !theirs) return null;
+  const a = cellCenter(mine);
+  const b = cellCenter(theirs);
+  return { proposal, other, cells: [...new Set([mine, theirs])], mid: { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 } };
+}
+
+/**
+ * GET /v1/trade/proposals/:id/spots — i luoghi per l'appuntamento, i migliori
+ * per primi: il tipo conta (prima i negozi di carte), ma ogni 3 km dal punto
+ * a meta' strada costano un gradino. missingCells elenca le zone ancora da
+ * scaricare, con la richiesta Overpass gia' pronta.
+ */
+async function getProposalSpots(db: D1Database, uid: string, id: string): Promise<Response> {
+  const parties = await proposalParties(db, id, uid);
+  if (!parties) return json({ error: 'no_proposal' }, 404);
+  // Le zone da aggiornare le scarica il telefono (vedi overpassQuery) e poi richiede.
+  const missing = await staleCells(db, parties.cells);
+  const { lat, lon } = parties.mid;
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM trade_spots
+       WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? AND (approved = 1 OR added_by IN (?, ?))`
+    )
+    .bind(lat - 0.15, lat + 0.15, lon - 0.2, lon + 0.2, uid, parties.other)
+    .all<SpotRow>();
+  const score = (spot: SpotRow) => (SPOT_KIND_RANK[spot.kind] ?? 1) - distanceKm(lat, lon, spot.lat, spot.lon) / 3;
+  const spots = results.sort((a, b) => score(b) - score(a)).slice(0, 25).map((spot) => spotJson(spot, lat, lon));
+  return json({ spots, missingCells: missing.map((cell) => ({ cell, query: overpassQuery(cell) })) });
+}
+
+/** GET /v1/trade/spots/search?q=...&proposal=... — "Manca un negozio?", cercato su OpenStreetMap vicino. */
+async function searchSpots(db: D1Database, uid: string, url: URL): Promise<Response> {
+  const q = cleanText(url.searchParams.get('q'), 60);
+  if (q.length < 2) return json({ results: [] });
+  let center: { lat: number; lon: number } | null = null;
+  const proposalId = url.searchParams.get('proposal');
+  if (proposalId) center = (await proposalParties(db, proposalId, uid))?.mid ?? null;
+  if (!center) {
+    const me = await loadProfile(db, uid);
+    if (me) center = cellCenter(me.geohash5);
+  }
+  const params = new URLSearchParams({ q, limit: '8', lang: 'default' });
+  if (center) {
+    params.set('lat', center.lat.toFixed(4));
+    params.set('lon', center.lon.toFixed(4));
+  }
+  try {
+    const response = await fetch(`${PHOTON_URL}?${params}`, { headers: { 'user-agent': OSM_USER_AGENT }, signal: AbortSignal.timeout(10000) });
+    if (!response.ok) return json({ results: [] });
+    const data = (await response.json()) as {
+      features?: Array<{ geometry?: { coordinates?: [number, number] }; properties?: Record<string, string | number> }>;
+    };
+    const results = (data.features ?? [])
+      .filter((f) => f.properties?.name && f.geometry?.coordinates)
+      .map((f) => {
+        const p = f.properties!;
+        const [fLon, fLat] = f.geometry!.coordinates!;
+        const tags: Record<string, string> = { name: String(p.name), [String(p.osm_key)]: String(p.osm_value) };
+        return {
+          osmId: `osm:${String(p.osm_type ?? 'n').toLowerCase()[0]}${p.osm_id}`,
+          name: String(p.name),
+          kind: spotKindOf(tags) ?? 'other',
+          city: String(p.city ?? p.county ?? ''),
+          lat: fLat,
+          lon: fLon,
+          distanceKm: center ? Math.round(distanceKm(center.lat, center.lon, fLat, fLon) * 10) / 10 : null,
+        };
+      });
+    return json({ results });
+  } catch {
+    return json({ results: [] });
+  }
+}
+
+/**
+ * POST /v1/trade/spots — un luogo che mancava. Con osmId e coordinate e' un
+ * luogo vero di OpenStreetMap, trovato con la ricerca: entra subito. Senza,
+ * e' una segnalazione (nome e citta'): la vede chi l'ha fatta, gli altri
+ * quando la approviamo.
+ */
+async function addSpot(request: Request, db: D1Database, uid: string): Promise<Response> {
+  const body = await readJson<{ osmId?: string; name?: string; kind?: string; city?: string; lat?: number; lon?: number }>(request);
+  const name = cleanText(body?.name, 80);
+  if (name.length < 2) return json({ error: 'bad_name' }, 400);
+  const kind = (SPOT_KINDS as readonly string[]).includes(body?.kind ?? '') ? (body!.kind as SpotKind) : 'other';
+  const osmId = cleanText(body?.osmId, 30);
+  const now = Date.now();
+  let id: string;
+  let lat = Number(body?.lat);
+  let lon = Number(body?.lon);
+  let source: string;
+  let approved: number;
+  if (/^osm:[nwr]\d+$/.test(osmId) && Number.isFinite(lat) && Number.isFinite(lon)) {
+    id = osmId;
+    source = 'osm';
+    approved = 1;
+  } else {
+    // Senza coordinate si mette al centro della zona di chi segnala, finche' non la sistemiamo.
+    const me = await loadProfile(db, uid);
+    if (!me) return json({ error: 'no_profile' }, 404);
+    ({ lat, lon } = cellCenter(me.geohash5));
+    id = `user:${crypto.randomUUID()}`;
+    source = 'user';
+    approved = 0;
+  }
+  await db
+    .prepare(
+      `INSERT INTO trade_spots (id, name, kind, lat, lon, geohash5, city, opening_hours, source, approved, added_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING`
+    )
+    .bind(id, name, kind, lat, lon, encode(lat, lon, 5), cleanText(body?.city, 60) || null, source, approved, uid, now, now)
+    .run();
+  const spot = await db.prepare(`SELECT * FROM trade_spots WHERE id = ?`).bind(id).first<SpotRow>();
+  return json({ spot: spot ? spotJson(spot, lat, lon) : null }, 201);
+}
+
+// ── Appuntamento (fase 2b) ──────────────────────────────────────────────────
+
+interface MeetingColumns {
+  meet_status: string;
+  meet_by: string | null;
+  meet_spot_id: string | null;
+  meet_slots: string | null;
+  meet_slot: string | null;
+}
+
+interface Slot {
+  day: string;
+  part: string;
+}
+
+/** Le fasce proposte: da 1 a 3, giorno fra oggi e 21 giorni, mattina/pomeriggio/sera. */
+function parseSlots(raw: unknown): Slot[] | null {
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 3) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const last = new Date(Date.now() + MEETING_MAX_DAYS * 86400000).toISOString().slice(0, 10);
+  const seen = new Set<string>();
+  const slots: Slot[] = [];
+  for (const value of raw as Array<Record<string, unknown>>) {
+    const day = cleanText(value?.day, 10);
+    const part = cleanText(value?.part, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < today || day > last || !SPOT_SLOT_PARTS.includes(part)) return null;
+    if (seen.has(`${day}|${part}`)) continue;
+    seen.add(`${day}|${part}`);
+    slots.push({ day, part });
+  }
+  return slots;
+}
+
+/**
+ * POST /v1/trade/proposals/:id/meeting — { spot, slots }: propone (o cambia)
+ * luogo e fasce. Si puo' dopo l'accordo, anche ad appuntamento gia' fissato:
+ * allora torna "da confermare" e tocca all'altro.
+ * POST /v1/trade/proposals/:id/meeting/confirm — { slot }: l'altro sceglie
+ * una delle fasce e l'appuntamento e' fissato.
+ */
+async function meetingAction(request: Request, db: D1Database, uid: string, id: string, confirm: boolean): Promise<Response> {
+  const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow & MeetingColumns>();
+  if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return json({ error: 'no_proposal' }, 404);
+  if (proposal.status !== 'accepted' && proposal.status !== 'scheduled') return json({ error: 'not_agreed' }, 409);
+  const now = Date.now();
+
+  if (confirm) {
+    if (proposal.meet_status !== 'proposed' || proposal.meet_by === uid) return json({ error: 'not_your_turn' }, 409);
+    const body = await readJson<{ slot?: number }>(request);
+    const slots = JSON.parse(proposal.meet_slots ?? '[]') as Slot[];
+    const chosen = slots[Number(body?.slot)];
+    if (!chosen) return json({ error: 'bad_slot' }, 400);
+    await db
+      .prepare(`UPDATE trade_proposals SET meet_status = 'confirmed', meet_slot = ?, status = 'scheduled', updated_at = ? WHERE id = ?`)
+      .bind(JSON.stringify(chosen), now, id)
+      .run();
+    return json({ status: 'scheduled', slot: chosen });
+  }
+
+  const body = await readJson<{ spot?: string; slots?: unknown }>(request);
+  const slots = parseSlots(body?.slots);
+  if (!slots) return json({ error: 'bad_slots' }, 400);
+  const other = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
+  const spot = await db
+    .prepare(`SELECT id FROM trade_spots WHERE id = ? AND (approved = 1 OR added_by IN (?, ?))`)
+    .bind(cleanText(body?.spot, 60), uid, other)
+    .first<{ id: string }>();
+  if (!spot) return json({ error: 'bad_spot' }, 400);
+  await db
+    .prepare(
+      `UPDATE trade_proposals SET meet_status = 'proposed', meet_by = ?, meet_spot_id = ?, meet_slots = ?, meet_slot = NULL,
+         status = 'accepted', updated_at = ? WHERE id = ?`
+    )
+    .bind(uid, spot.id, JSON.stringify(slots), now, id)
+    .run();
+  return json({ status: 'accepted', meeting: 'proposed' });
 }
 
 // ── Router ──────────────────────────────────────────────────────────────────
@@ -1069,6 +1517,15 @@ export async function handleTradeRequest(
   }
   const action = /^\/v1\/trade\/proposals\/([0-9a-f-]{36})\/(accept|decline|cancel|counter)$/.exec(pathname);
   if (action && method === 'POST') return actOnProposal(request, db, uid, action[1], action[2]);
+  const meeting = /^\/v1\/trade\/proposals\/([0-9a-f-]{36})\/(spots|meeting|meeting\/confirm)$/.exec(pathname);
+  if (meeting) {
+    if (meeting[2] === 'spots' && method === 'GET') return getProposalSpots(db, uid, meeting[1]);
+    if (meeting[2] === 'meeting' && method === 'POST') return meetingAction(request, db, uid, meeting[1], false);
+    if (meeting[2] === 'meeting/confirm' && method === 'POST') return meetingAction(request, db, uid, meeting[1], true);
+  }
+  if (pathname === '/v1/trade/spots/search' && method === 'GET') return searchSpots(db, uid, new URL(request.url));
+  if (pathname === '/v1/trade/spots' && method === 'POST') return addSpot(request, db, uid);
+  if (pathname === '/v1/trade/spots/cell' && method === 'POST') return putCellSpots(request, db);
   const userHaves = /^\/v1\/trade\/users\/([0-9a-f]{16})\/haves$/.exec(pathname);
   if (userHaves && method === 'GET') return getUserHaves(db, userHaves[1], env);
 
