@@ -1359,8 +1359,14 @@ async function searchSpots(db: D1Database, uid: string, url: URL): Promise<Respo
  * per una segnalazione, cosi' le mappe portano nel posto giusto anche prima
  * della verifica. Null se non trova niente entro 40 km.
  */
-async function geocode(query: string, near: { lat: number; lon: number }): Promise<{ lat: number; lon: number } | null> {
+async function geocode(
+  query: string,
+  near: { lat: number; lon: number },
+  onlyStreets = false
+): Promise<{ lat: number; lon: number } | null> {
   const params = new URLSearchParams({ q: query, limit: '5', lang: 'default', lat: near.lat.toFixed(4), lon: near.lon.toFixed(4) });
+  // Senza civico si cerca una strada: "Gioacchino Rossini" da solo trovava altro con quel nome.
+  if (onlyStreets) params.set('osm_tag', 'highway');
   try {
     const response = await fetch(`${PHOTON_URL}?${params}`, { headers: { 'user-agent': OSM_USER_AGENT }, signal: AbortSignal.timeout(10000) });
     if (!response.ok) return null;
@@ -1375,6 +1381,14 @@ async function geocode(query: string, near: { lat: number; lon: number }): Promi
     // Senza coordinate si resta al centro della zona: lo si sistema in verifica.
   }
   return null;
+}
+
+/** Le forme di un indirizzo da provare, dalla piu' precisa: com'e', senza civico, senza tipo di strada. */
+function addressAttempts(address: string): string[] {
+  if (!address) return [];
+  const noNumber = address.replace(/[,\s]+\d+[a-z]?\s*$/i, '').trim();
+  const noType = noNumber.replace(/^(via|viale|piazza|piazzale|corso|largo|vico|vicolo|strada|traversa)\s+/i, '').trim();
+  return [...new Set([address, noNumber, noType].filter((a) => a.length >= 3))];
 }
 
 /**
@@ -1408,7 +1422,14 @@ async function addSpot(request: Request, db: D1Database, uid: string): Promise<R
     const me = await loadProfile(db, uid);
     if (!me) return json({ error: 'no_profile' }, 404);
     const center = cellCenter(me.geohash5);
-    const found = (address ? await geocode(`${address}, ${city}`, center) : null) ?? (await geocode(city, center));
+    // Prima l'indirizzo esatto, poi senza civico, poi senza "Via/Viale": il 01/10
+    // "Viale Gioacchino Rossini 27, Portici" in OpenStreetMap e' "Via Gioacchino Rossini".
+    let found: { lat: number; lon: number } | null = null;
+    for (const [index, attempt] of addressAttempts(address).entries()) {
+      found = await geocode(`${attempt}, ${city}`, center, index > 0);
+      if (found) break;
+    }
+    found = found ?? (await geocode(city, center));
     ({ lat, lon } = found ?? center);
     id = `user:${crypto.randomUUID()}`;
     source = 'user';

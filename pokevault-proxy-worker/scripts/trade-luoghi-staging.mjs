@@ -3,9 +3,9 @@
 //
 //   node scripts/trade-luoghi-staging.mjs
 //       elenca le segnalazioni in verifica
-//   node scripts/trade-luoghi-staging.mjs --approva <id> [--lat N --lon N] [--nome "..."] [--tipo card_shop|comics|games|...]
+//   node scripts/trade-luoghi-staging.mjs --approva <id> [--lat N --lon N] [--nome "..."] [--citta "..."] [--indirizzo "..."] [--tipo card_shop|comics|games|...]
 //       la approva: da quel momento la vedono tutti (si possono correggere
-//       coordinate, nome e tipo)
+//       coordinate, nome, citta', indirizzo e tipo)
 //   node scripts/trade-luoghi-staging.mjs --rifiuta <id>
 //       la cancella, se nessun appuntamento la usa
 //
@@ -35,6 +35,20 @@ function sql(query) {
   });
   return JSON.parse(out.slice(out.indexOf('[')))[0].results ?? [];
 }
+/** La cella geohash di 5 caratteri, come encode() in src/geohash.ts. */
+function geohash5(lat, lon) {
+  const B32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+  let la = [-90, 90], lo = [-180, 180], even = true, bit = 0, ch = 0, out = '';
+  while (out.length < 5) {
+    const range = even ? lo : la;
+    const v = even ? lon : lat;
+    const mid = (range[0] + range[1]) / 2;
+    if (v >= mid) { ch |= 1 << (4 - bit); range[0] = mid; } else range[1] = mid;
+    even = !even;
+    if (++bit === 5) { out += B32[ch]; bit = 0; ch = 0; }
+  }
+  return out;
+}
 const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
 
 function find(prefix) {
@@ -49,8 +63,14 @@ function find(prefix) {
 if (arg('--approva')) {
   const spot = find(arg('--approva'));
   const sets = ['approved = 1', `updated_at = ${Date.now()}`];
-  if (arg('--lat') && arg('--lon')) sets.push(`lat = ${Number(arg('--lat'))}`, `lon = ${Number(arg('--lon'))}`);
+  if (arg('--lat') && arg('--lon')) {
+    const lat = Number(arg('--lat'));
+    const lon = Number(arg('--lon'));
+    sets.push(`lat = ${lat}`, `lon = ${lon}`, `geohash5 = ${quote(geohash5(lat, lon))}`);
+  }
   if (arg('--nome')) sets.push(`name = ${quote(arg('--nome'))}`);
+  if (arg('--citta')) sets.push(`city = ${quote(arg('--citta'))}`);
+  if (arg('--indirizzo')) sets.push(`address = ${quote(arg('--indirizzo'))}`);
   if (arg('--tipo')) {
     if (!KINDS.includes(arg('--tipo'))) { console.log(`Tipo sconosciuto. Validi: ${KINDS.join(', ')}`); process.exit(1); }
     sets.push(`kind = ${quote(arg('--tipo'))}`);
