@@ -2,6 +2,10 @@ package com.emabuia.pokevault.data.trade
 
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.billing.WorkerApi
+import com.emabuia.pokevault.data.trade.dto.TradeAddSpotPayload
+import com.emabuia.pokevault.data.trade.dto.TradeAddSpotRequest
+import com.emabuia.pokevault.data.trade.dto.TradeCellUpload
+import com.emabuia.pokevault.data.trade.dto.TradeConfirmRequest
 import com.emabuia.pokevault.data.trade.dto.TradeCounterRequest
 import com.emabuia.pokevault.data.trade.dto.TradeCreatedPayload
 import com.emabuia.pokevault.data.trade.dto.TradeErrorPayload
@@ -13,6 +17,9 @@ import com.emabuia.pokevault.data.trade.dto.TradeProfilePayload
 import com.emabuia.pokevault.data.trade.dto.TradeProfileRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposalRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProposalsPayload
+import com.emabuia.pokevault.data.trade.dto.TradeMeetingRequest
+import com.emabuia.pokevault.data.trade.dto.TradeSpotSearchPayload
+import com.emabuia.pokevault.data.trade.dto.TradeSpotsPayload
 import com.emabuia.pokevault.data.trade.dto.TradeUserHavesPayload
 import com.emabuia.pokevault.data.trade.dto.TradeWantsRequest
 import com.google.gson.Gson
@@ -140,4 +147,30 @@ object TradeApi {
 
     suspend fun counterProposal(id: String, request: TradeCounterRequest): Result<Unit> =
         call("POST", "v1/trade/proposals/$id/counter", request) { Unit }
+
+    // ── Luoghi e appuntamento ───────────────────────────────────────────────
+
+    /** I luoghi per l'appuntamento di un accordo, e le zone ancora da scaricare. */
+    suspend fun proposalSpots(id: String): Result<TradeSpotsPayload> =
+        call("GET", "v1/trade/proposals/$id/spots", null, parser<TradeSpotsPayload>())
+
+    /** I dati grezzi di Overpass per una zona: il filtro lo fa il server. */
+    suspend fun uploadCell(upload: TradeCellUpload): Result<Unit> =
+        call("POST", "v1/trade/spots/cell", upload) { Unit }
+
+    /** "Manca un negozio?": ricerca su OpenStreetMap vicino al punto a meta' strada. */
+    suspend fun searchSpots(query: String, proposalId: String?): Result<TradeSpotSearchPayload> {
+        val q = java.net.URLEncoder.encode(query, "UTF-8")
+        val near = proposalId?.let { "&proposal=$it" }.orEmpty()
+        return call("GET", "v1/trade/spots/search?q=$q$near", null, parser<TradeSpotSearchPayload>())
+    }
+
+    suspend fun addSpot(request: TradeAddSpotRequest): Result<TradeAddSpotPayload> =
+        call("POST", "v1/trade/spots", request, parser<TradeAddSpotPayload>())
+
+    suspend fun proposeMeeting(id: String, request: TradeMeetingRequest): Result<Unit> =
+        call("POST", "v1/trade/proposals/$id/meeting", request) { Unit }
+
+    suspend fun confirmMeeting(id: String, slotIndex: Int): Result<Unit> =
+        call("POST", "v1/trade/proposals/$id/meeting/confirm", TradeConfirmRequest(slotIndex)) { Unit }
 }

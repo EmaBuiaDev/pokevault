@@ -88,6 +88,30 @@ if (arg('--as')) {
   const tok = await token(label);
   const { data } = await call(tok, 'GET', '/v1/trade/proposals');
   const list = data.proposals ?? [];
+  // Appuntamento: --conferma sceglie la prima fascia proposta dall'altro;
+  // --proponi propone il primo luogo suggerito e due fasce (dopodomani
+  // pomeriggio, fra tre giorni mattina).
+  if (args.includes('--conferma') || args.includes('--proponi')) {
+    const deal = args.includes('--conferma')
+      ? list.find((p) => p.status === 'accepted' && p.meeting?.status === 'proposed' && !p.meeting.byMe)
+      : list.find((p) => ['accepted', 'scheduled'].includes(p.status));
+    if (!deal) { console.log('Nessun accordo su cui agire.'); process.exit(1); }
+    let res;
+    if (args.includes('--conferma')) {
+      res = await call(tok, 'POST', `/v1/trade/proposals/${deal.id}/meeting/confirm`, { slot: 0 });
+    } else {
+      const { data: spotData } = await call(tok, 'GET', `/v1/trade/proposals/${deal.id}/spots`);
+      const spot = (spotData.spots ?? [])[0];
+      if (!spot) { console.log('Nessun luogo: apri prima il pannello appuntamento dall\'app, che scarica la zona.'); process.exit(1); }
+      const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+      res = await call(tok, 'POST', `/v1/trade/proposals/${deal.id}/meeting`, {
+        spot: spot.id, slots: [{ day: day(2), part: 'afternoon' }, { day: day(3), part: 'morning' }],
+      });
+      console.log(`luogo: ${spot.name} (${spot.kind})`);
+    }
+    console.log(`${label} ${args.includes('--conferma') ? 'conferma' : 'propone'} su ${deal.id.slice(0, 8)} (con ${deal.counterpart.nickname}) -> ${res.status} ${JSON.stringify(res.data)}`);
+    process.exit(res.status < 300 ? 0 : 1);
+  }
   const action = ['--accept', '--decline', '--counter', '--cancel'].find((a) => args.includes(a));
   if (!action) {
     for (const p of list) {

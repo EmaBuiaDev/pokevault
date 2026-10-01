@@ -1,6 +1,8 @@
 package com.emabuia.pokevault.ui.trade
 
+import android.content.Intent
 import android.Manifest
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -61,6 +63,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Add
@@ -68,21 +71,34 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Balance
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.LocalLibrary
+import androidx.compose.material.icons.filled.LocalMall
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Toys
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.NotificationsOff
@@ -149,6 +165,8 @@ import com.emabuia.pokevault.data.trade.dto.TradeMatch
 import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
 import com.emabuia.pokevault.data.trade.dto.TradeOfferItem
 import com.emabuia.pokevault.data.trade.dto.TradeProposal
+import com.emabuia.pokevault.data.trade.dto.TradeSlot
+import com.emabuia.pokevault.data.trade.dto.TradeSpot
 import com.emabuia.pokevault.data.trade.TradeCardKey
 import com.emabuia.pokevault.data.trade.TradeLists
 import com.emabuia.pokevault.ui.components.CardImageSkeleton
@@ -408,6 +426,7 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
     }
 
     viewModel.composer?.let { composer -> ComposerDialog(viewModel, composer) }
+    viewModel.planner?.let { planner -> PlannerDialog(viewModel, planner) }
 }
 
 @Composable
@@ -1545,9 +1564,9 @@ private fun CardDetailDialog(item: TradeMatchItem, theirs: Boolean, onDismiss: (
 private enum class ProposalBucket { TO_ANSWER, WAITING, AGREED, CLOSED }
 
 private fun bucketOf(proposal: TradeProposal): ProposalBucket = when {
-    proposal.status == "open" && proposal.myTurn == true -> ProposalBucket.TO_ANSWER
+    proposal.actionNeeded == true || (proposal.status == "open" && proposal.myTurn == true) -> ProposalBucket.TO_ANSWER
     proposal.status == "open" -> ProposalBucket.WAITING
-    proposal.status == "accepted" -> ProposalBucket.AGREED
+    proposal.status == "accepted" || proposal.status == "scheduled" -> ProposalBucket.AGREED
     else -> ProposalBucket.CLOSED
 }
 
@@ -1655,6 +1674,7 @@ private fun ProposalsTab(viewModel: TradeRadarViewModel, onGoToMatches: () -> Un
                 viewModel = viewModel,
                 onCounter = { proposal -> detail = null; viewModel.openCounter(proposal) },
                 onCancelDeal = { confirmCancel = it },
+                onPlan = { proposal -> detail = null; viewModel.openPlanner(proposal) },
                 onDismiss = { detail = null }
             )
         }
@@ -1723,6 +1743,7 @@ private fun ProposalRow(group: List<TradeProposal>, prices: Map<String, Double>,
                 when {
                     bucket == ProposalBucket.CLOSED && group.size > 1 -> "${proposalStatus(proposal).label} · ${AppLocale.tradeRadarClosedCount(group.size)}"
                     bucket == ProposalBucket.CLOSED -> proposalStatus(proposal).label
+                    proposal.status == "accepted" || proposal.status == "scheduled" -> meetingLine(proposal)
                     else -> listOfNotNull(
                         AppLocale.tradeRadarRowSummary(take.sumOf { it.qty ?: 1 }, give.sumOf { it.qty ?: 1 }),
                         AppLocale.tradeRadarCounterShort.takeIf { (proposal.revision ?: 1) > 1 && proposal.status == "open" }
@@ -1735,6 +1756,18 @@ private fun ProposalRow(group: List<TradeProposal>, prices: Map<String, Double>,
             )
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.textMuted)
+    }
+}
+
+/** A che punto e' l'appuntamento di un accordo, in una riga. */
+private fun meetingLine(proposal: TradeProposal): String {
+    val meeting = proposal.meeting
+    return when {
+        meeting?.status == "confirmed" && meeting.slot != null ->
+            listOfNotNull(slotLabel(meeting.slot), meeting.spot?.name).joinToString(" · ")
+        meeting?.status == "proposed" && meeting.byMe == true -> AppLocale.tradeRadarMeetingWaitingShort
+        meeting?.status == "proposed" -> AppLocale.tradeRadarMeetingPickShort
+        else -> AppLocale.tradeRadarMeetingToPlan
     }
 }
 
@@ -1775,6 +1808,7 @@ private fun ProposalSheet(
     viewModel: TradeRadarViewModel,
     onCounter: (TradeProposal) -> Unit,
     onCancelDeal: (TradeProposal) -> Unit,
+    onPlan: (TradeProposal) -> Unit,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -1797,9 +1831,11 @@ private fun ProposalSheet(
                     onDecline = { viewModel.answer(proposal.id.orEmpty(), "decline") },
                     onCounter = { onCounter(proposal) },
                     onCancel = {
-                        if (proposal.status == "accepted") onCancelDeal(proposal)
+                        if (proposal.status == "accepted" || proposal.status == "scheduled") onCancelDeal(proposal)
                         else viewModel.answer(proposal.id.orEmpty(), "cancel")
-                    }
+                    },
+                    onPlan = { onPlan(proposal) },
+                    onConfirmMeeting = { index -> viewModel.confirmMeeting(proposal.id.orEmpty(), index) }
                 )
             }
         }
@@ -1822,7 +1858,9 @@ private fun ProposalCard(
     onDecline: () -> Unit,
     onCounter: () -> Unit,
     onCancel: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPlan: () -> Unit = {},
+    onConfirmMeeting: (Int) -> Unit = {}
 ) {
     val other = proposal.counterpart
     val status = proposalStatus(proposal)
@@ -1835,7 +1873,7 @@ private fun ProposalCard(
             .fillMaxWidth()
             .clip(shape)
             .background(AppColors.card)
-            .then(if (myTurn || proposal.status == "accepted") Modifier.border(1.dp, status.color.copy(alpha = 0.5f), shape) else Modifier)
+            .then(if (myTurn || proposal.actionNeeded == true || proposal.status == "accepted" || proposal.status == "scheduled") Modifier.border(1.dp, status.color.copy(alpha = 0.5f), shape) else Modifier)
             .padding(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1880,19 +1918,13 @@ private fun ProposalCard(
             open -> OutlinedButton(onClick = onCancel, enabled = !acting, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                 Text(AppLocale.tradeRadarWithdraw)
             }
-            proposal.status == "accepted" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AppColors.green.copy(alpha = 0.12f)).padding(10.dp)
-                ) {
-                    Icon(Icons.Default.Handshake, null, tint = AppColors.green, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(AppLocale.tradeRadarAcceptedNext, fontSize = 12.sp, color = AppColors.textSecondary)
-                }
-                TextButton(onClick = onCancel, enabled = !acting, modifier = Modifier.align(Alignment.End)) {
-                    Text(AppLocale.tradeRadarCancelDeal, color = AppColors.red)
-                }
-            }
+            proposal.status == "accepted" || proposal.status == "scheduled" -> MeetingSection(
+                proposal = proposal,
+                acting = acting,
+                onPlan = onPlan,
+                onConfirm = onConfirmMeeting,
+                onCancel = onCancel
+            )
         }
     }
 }
@@ -1939,7 +1971,10 @@ private data class StatusStyle(val label: String, val color: Color)
 private fun proposalStatus(proposal: TradeProposal): StatusStyle = when (proposal.status) {
     "open" -> if (proposal.myTurn == true) StatusStyle(AppLocale.tradeRadarStatusYourTurn, AppColors.orange)
         else StatusStyle(AppLocale.tradeRadarStatusWaiting, AppColors.blue)
-    "accepted" -> StatusStyle(AppLocale.tradeRadarStatusAccepted, AppColors.green)
+    "accepted" -> if (proposal.meeting?.status == "proposed" && proposal.meeting.byMe != true) {
+        StatusStyle(AppLocale.tradeRadarStatusPickSlot, AppColors.orange)
+    } else StatusStyle(AppLocale.tradeRadarStatusAccepted, AppColors.green)
+    "scheduled" -> StatusStyle(AppLocale.tradeRadarStatusScheduled, AppColors.green)
     "declined" -> StatusStyle(
         if (proposal.closedByMe == true) AppLocale.tradeRadarStatusDeclinedByMe else AppLocale.tradeRadarStatusDeclined,
         AppColors.textMuted
@@ -2245,6 +2280,537 @@ private fun PickRow(item: TradeOfferItem, price: Double?, modifier: Modifier = M
     }
 }
 
+// ── Appuntamento (fase 2b) ──────────────────────────────────────────────────
+
+/** Le fasce, nell'ordine della giornata. */
+private val SlotParts = listOf("morning", "afternoon", "evening")
+
+/** Il localizzatore ufficiale dei tornei: solo un link, i suoi dati non si copiano (termini d'uso). */
+private const val POKEMON_EVENT_LOCATOR = "https://events.pokemon.com/EventLocator/"
+
+private fun slotPartLabel(part: String): String = when (part) {
+    "morning" -> AppLocale.tradeRadarMorning
+    "afternoon" -> AppLocale.tradeRadarAfternoon
+    else -> AppLocale.tradeRadarEvening
+}
+
+/** "sab 4 ott · Pomeriggio" */
+private fun slotLabel(slot: TradeSlot): String {
+    val date = runCatching { java.time.LocalDate.parse(slot.day) }.getOrNull() ?: return slot.day
+    val locale = if (AppLocale.isItalian) Locale.ITALIAN else Locale.ENGLISH
+    val day = date.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", locale))
+    return "$day · ${slotPartLabel(slot.part)}"
+}
+
+private fun spotKindIcon(kind: String?): ImageVector = when (kind) {
+    "card_shop" -> Icons.Default.Style
+    "comics" -> Icons.AutoMirrored.Filled.MenuBook
+    "games", "video_games" -> Icons.Default.SportsEsports
+    "toys" -> Icons.Default.Toys
+    "mall" -> Icons.Default.LocalMall
+    "library" -> Icons.Default.LocalLibrary
+    else -> Icons.Default.Place
+}
+
+private fun spotKindLabel(kind: String?): String = when (kind) {
+    "card_shop" -> AppLocale.tradeRadarKindCardShop
+    "comics" -> AppLocale.tradeRadarKindComics
+    "games" -> AppLocale.tradeRadarKindGames
+    "video_games" -> AppLocale.tradeRadarKindVideoGames
+    "toys" -> AppLocale.tradeRadarKindToys
+    "mall" -> AppLocale.tradeRadarKindMall
+    "library" -> AppLocale.tradeRadarKindLibrary
+    else -> AppLocale.tradeRadarKindOther
+}
+
+@Composable
+private fun spotKindColor(kind: String?): Color = when (kind) {
+    "card_shop", "comics", "games" -> AppColors.orange
+    "video_games", "toys" -> AppColors.purple
+    "mall", "library" -> AppColors.blue
+    else -> AppColors.textMuted
+}
+
+/** Apre il luogo nell'app di mappe: per nome e coordinate, o per nome se e' una segnalazione. */
+private fun openInMaps(context: android.content.Context, spot: TradeSpot) {
+    val name = Uri.encode(listOfNotNull(spot.name, spot.city).joinToString(", "))
+    val uri = if (spot.lat != null && spot.lon != null && spot.pending != true) {
+        Uri.parse("geo:${spot.lat},${spot.lon}?q=${spot.lat},${spot.lon}($name)")
+    } else {
+        Uri.parse("geo:0,0?q=$name")
+    }
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+}
+
+private fun openUrl(context: android.content.Context, url: String) {
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+}
+
+/**
+ * L'appuntamento dentro la scheda di un accordo. Quattro momenti: da fissare,
+ * proposto da me (si aspetta), proposto dall'altro (si sceglie una fascia),
+ * fissato (giorno, luogo, mappe).
+ */
+@Composable
+private fun MeetingSection(
+    proposal: TradeProposal,
+    acting: Boolean,
+    onPlan: () -> Unit,
+    onConfirm: (Int) -> Unit,
+    onCancel: () -> Unit
+) {
+    val context = LocalContext.current
+    val meeting = proposal.meeting
+    val nickname = proposal.counterpart?.nickname.orEmpty()
+    val status = meeting?.status ?: "none"
+    var chosen by remember(proposal.id, meeting?.slots) { mutableStateOf<Int?>(null) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when {
+            status == "confirmed" && meeting?.slot != null -> {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AppColors.green.copy(alpha = 0.12f)).padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Event, null, tint = AppColors.green, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(slotLabel(meeting.slot), fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+                    }
+                    meeting.spot?.let { SpotSummary(it) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    meeting.spot?.let { spot ->
+                        Button(
+                            onClick = { openInMaps(context, spot) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.green),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Map, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(AppLocale.tradeRadarOpenMaps, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    OutlinedButton(onClick = onPlan, enabled = !acting, shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
+                        Text(AppLocale.tradeRadarChangeMeeting)
+                    }
+                }
+            }
+            status == "proposed" && meeting?.byMe == true -> {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(innerColor()).padding(12.dp)
+                ) {
+                    meeting.spot?.let { SpotSummary(it) }
+                    FlowRowSlots(meeting.slots.orEmpty())
+                    Text(AppLocale.tradeRadarMeetingWaiting(nickname), fontSize = 12.sp, color = AppColors.blue)
+                }
+                TextButton(onClick = onPlan, enabled = !acting) { Text(AppLocale.tradeRadarChangeMeeting) }
+            }
+            status == "proposed" -> {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AppColors.orange.copy(alpha = 0.10f))
+                        .padding(12.dp)
+                ) {
+                    Text(AppLocale.tradeRadarMeetingPick(nickname), fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, fontSize = 14.sp)
+                    meeting?.spot?.let { SpotSummary(it) }
+                    meeting?.slots.orEmpty().forEachIndexed { index, slot ->
+                        val selected = chosen == index
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selected) AppColors.green.copy(alpha = 0.18f) else AppColors.card)
+                                .border(1.dp, if (selected) AppColors.green else Color.Transparent, RoundedCornerShape(12.dp))
+                                .clickable { chosen = index }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Icon(
+                                if (selected) Icons.Default.CheckCircle else Icons.Default.Schedule,
+                                null,
+                                tint = if (selected) AppColors.green else AppColors.textMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(slotLabel(slot), color = AppColors.textPrimary, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onPlan, enabled = !acting, shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
+                        Text(AppLocale.tradeRadarOtherMeeting, maxLines = 1)
+                    }
+                    Button(
+                        onClick = { chosen?.let(onConfirm) },
+                        enabled = chosen != null && !acting,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.green),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (acting) CircularProgressIndicator(Modifier.size(16.dp), color = AppColors.onAccent, strokeWidth = 2.dp)
+                        else Text(AppLocale.tradeRadarConfirmMeeting, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            else -> {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AppColors.green.copy(alpha = 0.12f)).padding(10.dp)
+                ) {
+                    Icon(Icons.Default.Handshake, null, tint = AppColors.green, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(AppLocale.tradeRadarMeetingNone, fontSize = 12.sp, color = AppColors.textSecondary)
+                }
+                Button(
+                    onClick = onPlan,
+                    enabled = !acting,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.green),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Event, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(AppLocale.tradeRadarPlanMeeting, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        TextButton(onClick = onCancel, enabled = !acting, modifier = Modifier.align(Alignment.End)) {
+            Text(AppLocale.tradeRadarCancelDeal, color = AppColors.red)
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FlowRowSlots(slots: List<TradeSlot>) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        slots.forEach { InfoPill(slotLabel(it), AppColors.blue) }
+    }
+}
+
+/** Il luogo in breve: icona del tipo, nome, tipo e citta', orari. */
+@Composable
+private fun SpotSummary(spot: TradeSpot) {
+    val color = spotKindColor(spot.kind)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(34.dp).clip(CircleShape).background(color.copy(alpha = 0.15f))) {
+            Icon(spotKindIcon(spot.kind), null, tint = color, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(spot.name.orEmpty(), fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                listOfNotNull(spotKindLabel(spot.kind), spot.city?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                fontSize = 12.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            spot.openingHours?.takeIf { it.isNotBlank() }?.let {
+                Text(AppLocale.tradeRadarOpeningHours(it), fontSize = 11.sp, color = AppColors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+/**
+ * Il pannello per fissare l'appuntamento, a schermo intero. Dove: i luoghi
+ * migliori a meta' strada (gia' scelto il primo), gli altri, "Manca un
+ * negozio?" e il link ai tornei ufficiali. Quando: i prossimi 14 giorni,
+ * e per ognuno mattina, pomeriggio o sera, fino a tre fasce.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlannerDialog(viewModel: TradeRadarViewModel, planner: TradeRadarViewModel.Planner) {
+    val context = LocalContext.current
+    var showAllSpots by remember { mutableStateOf(false) }
+    val today = remember { java.time.LocalDate.now() }
+    var selectedDay by remember { mutableStateOf(today.plusDays(1)) }
+    val selectedSpot = planner.spots.firstOrNull { it.id == planner.selectedSpot }
+    val ready = selectedSpot != null && planner.slots.isNotEmpty()
+
+    Dialog(onDismissRequest = { viewModel.closePlanner() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Scaffold(
+            containerColor = AppColors.background,
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(AppLocale.tradeRadarPlannerTitle, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+                            Text(AppLocale.tradeRadarWith(planner.nickname), fontSize = 13.sp, color = AppColors.textSecondary)
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.closePlanner() }) {
+                            Icon(Icons.Default.Close, AppLocale.tradeRadarClose, tint = AppColors.textPrimary)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
+                )
+            },
+            bottomBar = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                        .background(AppColors.card)
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        when {
+                            selectedSpot == null -> AppLocale.tradeRadarPickSpot
+                            planner.slots.isEmpty() -> AppLocale.tradeRadarPickSlot
+                            else -> AppLocale.tradeRadarPlannerSummary(selectedSpot.name.orEmpty(), planner.slots.size)
+                        },
+                        fontSize = 12.sp,
+                        color = if (ready) AppColors.textSecondary else AppColors.orange
+                    )
+                    if (planner.changing) Text(AppLocale.tradeRadarPlannerChanging(planner.nickname), fontSize = 11.sp, color = AppColors.textMuted)
+                    Button(
+                        onClick = { viewModel.sendPlanner() },
+                        enabled = ready && !planner.sending,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.green),
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
+                    ) {
+                        if (planner.sending) CircularProgressIndicator(Modifier.size(20.dp), color = AppColors.onAccent, strokeWidth = 2.dp)
+                        else Text(AppLocale.tradeRadarSendMeeting, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        ) { padding ->
+            LazyColumn(
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // ── Dove ──
+                item(key = "whereTitle") { ComposerSideTitle(Icons.Default.Place, AppLocale.tradeRadarWhere, AppColors.orange) }
+                if (planner.loading || planner.downloadingArea) {
+                    item(key = "loadingSpots") {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                            RadarScope(blips = emptyList(), scanning = true, modifier = Modifier.size(40.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                if (planner.downloadingArea) AppLocale.tradeRadarDownloadingArea else AppLocale.tradeRadarLoadingSpots,
+                                fontSize = 13.sp, color = AppColors.textSecondary
+                            )
+                        }
+                    }
+                }
+                if (!planner.loading && planner.spots.isEmpty()) {
+                    item(key = "noSpots") { Text(AppLocale.tradeRadarNoSpots, fontSize = 13.sp, color = AppColors.textSecondary) }
+                }
+                val visible = if (showAllSpots) planner.spots else planner.spots.take(3)
+                if (planner.spots.isNotEmpty()) {
+                    item(key = "suggested") { Text(AppLocale.tradeRadarSuggestedSpots, fontSize = 12.sp, color = AppColors.textMuted) }
+                }
+                items(visible, key = { "spot|" + it.id.orEmpty() }) { spot ->
+                    SpotOption(spot, selected = spot.id == planner.selectedSpot, modifier = Modifier.animateItem()) {
+                        spot.id?.let(viewModel::selectSpot)
+                    }
+                }
+                if (planner.spots.size > 3) {
+                    item(key = "moreSpots") {
+                        AddToggle(
+                            if (showAllSpots) AppLocale.tradeRadarFewerSpots else AppLocale.tradeRadarMoreSpots(planner.spots.size - 3),
+                            open = showAllSpots,
+                            enabled = true
+                        ) { showAllSpots = !showAllSpots }
+                    }
+                }
+                item(key = "search") {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                        Text(AppLocale.tradeRadarMissingShop, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, fontSize = 14.sp)
+                        OutlinedTextField(
+                            value = planner.query,
+                            onValueChange = { viewModel.searchSpot(it) },
+                            placeholder = { Text(AppLocale.tradeRadarSearchShop, fontSize = 14.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, null, tint = AppColors.textMuted) },
+                            trailingIcon = {
+                                if (planner.searching) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                items(planner.searchResults, key = { "found|" + it.osmId.orEmpty() + it.name.orEmpty() }) { candidate ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .animateItem()
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(innerColor())
+                            .clickable { viewModel.addSearchedSpot(candidate) }
+                            .padding(10.dp)
+                    ) {
+                        Icon(spotKindIcon(candidate.kind), null, tint = spotKindColor(candidate.kind), modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(candidate.name.orEmpty(), fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                listOfNotNull(candidate.city?.takeIf { it.isNotBlank() }, candidate.distanceKm?.let { AppLocale.tradeRadarKmAway(it) }).joinToString(" · "),
+                                fontSize = 12.sp, color = AppColors.textSecondary
+                            )
+                        }
+                        Icon(Icons.Default.AddCircle, null, tint = AppColors.green, modifier = Modifier.size(22.dp))
+                    }
+                }
+                if (planner.searchedEmpty && planner.query.isNotBlank()) {
+                    item(key = "report") {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(AppLocale.tradeRadarNotOnMap, fontSize = 12.sp, color = AppColors.textSecondary)
+                            OutlinedButton(onClick = { viewModel.reportSpot(planner.query) }, shape = RoundedCornerShape(12.dp)) {
+                                Text(AppLocale.tradeRadarReportShop(planner.query.trim()), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+                item(key = "locator") {
+                    TextButton(onClick = { openUrl(context, POKEMON_EVENT_LOCATOR) }) {
+                        Icon(Icons.Default.EmojiEvents, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(AppLocale.tradeRadarEventLocator)
+                    }
+                }
+
+                item(key = "divider") { Box(Modifier.padding(vertical = 4.dp)) { HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.2f)) } }
+
+                // ── Quando ──
+                item(key = "whenTitle") { ComposerSideTitle(Icons.Default.Event, AppLocale.tradeRadarWhen, AppColors.blue) }
+                item(key = "days") {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items((0L until 14L).map { today.plusDays(it) }) { date ->
+                            DayChip(date, today, selected = date == selectedDay, slotsOnDay = planner.slots.count { it.day == date.toString() }) {
+                                selectedDay = date
+                            }
+                        }
+                    }
+                }
+                item(key = "parts") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SlotParts.forEach { part ->
+                            val slot = TradeSlot(selectedDay.toString(), part)
+                            val on = slot in planner.slots
+                            val full = !on && planner.slots.size >= 3
+                            val background by animateColorAsState(if (on) AppColors.blue else AppColors.card, tween(AppMotion.current.state), label = "part")
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(background)
+                                    .pressScale(enabled = !full) { viewModel.toggleSlot(slot) }
+                                    .padding(vertical = 12.dp)
+                            ) {
+                                Icon(
+                                    when (part) {
+                                        "morning" -> Icons.Default.WbTwilight
+                                        "afternoon" -> Icons.Default.WbSunny
+                                        else -> Icons.Default.NightsStay
+                                    },
+                                    null,
+                                    tint = if (on) AppColors.onAccent else if (full) AppColors.textMuted.copy(alpha = 0.4f) else AppColors.textSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    slotPartLabel(part),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (on) AppColors.onAccent else if (full) AppColors.textMuted.copy(alpha = 0.4f) else AppColors.textPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+                item(key = "chosen") {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(AppLocale.tradeRadarSlotsChosen(planner.slots.size), fontSize = 12.sp, color = AppColors.textMuted)
+                        planner.slots.forEach { slot ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AppColors.blue.copy(alpha = 0.12f)).padding(start = 12.dp)
+                            ) {
+                                Text(slotLabel(slot), color = AppColors.textPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                IconButton(onClick = { viewModel.toggleSlot(slot) }) {
+                                    Icon(Icons.Default.Close, AppLocale.tradeRadarRemove, tint = AppColors.textSecondary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Un luogo da scegliere, con il segno di spunta quando e' quello scelto. */
+@Composable
+private fun SpotOption(spot: TradeSpot, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    val border by animateColorAsState(if (selected) AppColors.green else Color.Transparent, tween(AppMotion.current.state), label = "spotBorder")
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(AppColors.card)
+            .border(1.5.dp, border, shape)
+            .pressScale(scaleDown = 0.98f, onClick = onClick)
+            .padding(12.dp)
+    ) {
+        Box(Modifier.weight(1f)) { SpotSummary(spot) }
+        Column(horizontalAlignment = Alignment.End) {
+            spot.distanceKm?.let { Text(AppLocale.tradeRadarKmAway(it), fontSize = 11.sp, color = AppColors.textMuted) }
+            if (spot.pending == true) InfoPill(AppLocale.tradeRadarPendingSpot, AppColors.orange)
+        }
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+            null,
+            tint = if (selected) AppColors.green else AppColors.textMuted,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun DayChip(date: java.time.LocalDate, today: java.time.LocalDate, selected: Boolean, slotsOnDay: Int, onClick: () -> Unit) {
+    val locale = if (AppLocale.isItalian) Locale.ITALIAN else Locale.ENGLISH
+    val background by animateColorAsState(if (selected) AppColors.blue else AppColors.card, tween(AppMotion.current.state), label = "day")
+    val content = if (selected) AppColors.onAccent else AppColors.textPrimary
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(56.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(background)
+            .pressScale(onClick = onClick)
+            .padding(vertical = 8.dp)
+    ) {
+        Text(
+            if (date == today) AppLocale.tradeRadarToday else date.format(java.time.format.DateTimeFormatter.ofPattern("EEE", locale)),
+            fontSize = 11.sp,
+            color = content.copy(alpha = 0.8f)
+        )
+        Text(date.dayOfMonth.toString(), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = content)
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(if (slotsOnDay > 0) (if (selected) AppColors.onAccent else AppColors.blue) else Color.Transparent)
+        )
+    }
+}
+
 // ── Le mie carte ────────────────────────────────────────────────────────────
 
 @Composable
@@ -2312,6 +2878,7 @@ private fun MyCardsTab(viewModel: TradeRadarViewModel) {
             items(duplicates, key = { "dup|${it.id}" }) { duplicate ->
                 OfferRow(
                     offer = duplicate,
+                    reserved = viewModel.reserved[duplicate.id] ?: 0,
                     quantity = offers[duplicate.id],
                     onToggle = { viewModel.setEnabled(duplicate.id, it) },
                     onQuantity = { viewModel.setQuantity(duplicate.id, it) },
@@ -2330,6 +2897,7 @@ private fun MyCardsTab(viewModel: TradeRadarViewModel) {
         items(manual, key = { "manual|${it.id}" }) { single ->
             OfferRow(
                 offer = single,
+                reserved = viewModel.reserved[single.id] ?: 0,
                 quantity = offers[single.id],
                 onToggle = { viewModel.setEnabled(single.id, it) },
                 onQuantity = {},
@@ -2378,7 +2946,9 @@ private fun OfferRow(
     modifier: Modifier = Modifier,
     manual: Boolean = false,
     notify: Boolean = false,
-    onNotify: (Boolean) -> Unit = {}
+    onNotify: (Boolean) -> Unit = {},
+    /** Copie promesse in un accordo: restano in lista, ma gli altri non le vedono. */
+    reserved: Int = 0
 ) {
     val motion = AppMotion.current
     val enabled = quantity != null
@@ -2429,6 +2999,7 @@ private fun OfferRow(
                     } else {
                         InfoPill(AppLocale.tradeRadarSpare(offer.spare), AppColors.green)
                     }
+                    if (reserved > 0) InfoPill(AppLocale.tradeRadarReserved(reserved), AppColors.orange)
                 }
             }
             Spacer(Modifier.width(8.dp))
@@ -2877,4 +3448,7 @@ private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
     TradeRadarViewModel.Info.ACCEPTED -> AppLocale.tradeRadarInfoAccepted
     TradeRadarViewModel.Info.DECLINED -> AppLocale.tradeRadarInfoDeclined
     TradeRadarViewModel.Info.CANCELLED -> AppLocale.tradeRadarInfoCancelled
+    TradeRadarViewModel.Info.MEETING_SENT -> AppLocale.tradeRadarInfoMeetingSent
+    TradeRadarViewModel.Info.MEETING_CONFIRMED -> AppLocale.tradeRadarInfoMeetingConfirmed
+    TradeRadarViewModel.Info.SPOT_REPORTED -> AppLocale.tradeRadarInfoSpotReported
 }

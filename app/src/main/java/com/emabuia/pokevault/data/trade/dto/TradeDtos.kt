@@ -52,7 +52,9 @@ data class TradeHaveItem(
     /** Carta singola messa in lista a mano (schema 3). */
     @SerializedName("manual") val manual: Boolean? = null,
     /** Partecipa agli avvisi: sempre per i doppioni, a scelta per le carte a mano. */
-    @SerializedName("notify") val notify: Boolean? = null
+    @SerializedName("notify") val notify: Boolean? = null,
+    /** Copie promesse in un accordo: restano mie, ma gli altri non le vedono (solo in GET). */
+    @SerializedName("reserved") val reserved: Int? = null
 )
 
 /** GET e PUT /v1/trade/haves */
@@ -204,6 +206,9 @@ data class TradeProposal(
     /** Da 2 in su e' una controproposta. */
     @SerializedName("revision") val revision: Int? = null,
     @SerializedName("myTurn") val myTurn: Boolean? = null,
+    /** Serve una mia mossa: rispondere, o confermare l'appuntamento. */
+    @SerializedName("actionNeeded") val actionNeeded: Boolean? = null,
+    @SerializedName("meeting") val meeting: TradeMeeting? = null,
     @SerializedName("iStarted") val iStarted: Boolean? = null,
     @SerializedName("closedByMe") val closedByMe: Boolean? = null,
     @SerializedName("createdAt") val createdAt: Long? = null,
@@ -216,4 +221,95 @@ data class TradeProposal(
 /** GET /v1/trade/proposals */
 data class TradeProposalsPayload(
     @SerializedName("proposals") val proposals: List<TradeProposal>? = null
+)
+
+// ── Luoghi e appuntamento (fase 2b) ─────────────────────────────────────────
+
+data class TradeSpot(
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("name") val name: String? = null,
+    /** card_shop | comics | games | video_games | toys | mall | library | other */
+    @SerializedName("kind") val kind: String? = null,
+    @SerializedName("city") val city: String? = null,
+    @SerializedName("openingHours") val openingHours: String? = null,
+    @SerializedName("lat") val lat: Double? = null,
+    @SerializedName("lon") val lon: Double? = null,
+    /** Dal punto a meta' strada fra le due zone. */
+    @SerializedName("distanceKm") val distanceKm: Double? = null,
+    /** Segnalato da un utente e non ancora approvato. */
+    @SerializedName("pending") val pending: Boolean? = null
+)
+
+data class TradeSlot(
+    /** yyyy-MM-dd */
+    @SerializedName("day") val day: String,
+    /** morning | afternoon | evening */
+    @SerializedName("part") val part: String
+)
+
+data class TradeMeeting(
+    /** none | proposed | confirmed */
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("byMe") val byMe: Boolean? = null,
+    @SerializedName("spot") val spot: TradeSpot? = null,
+    @SerializedName("slots") val slots: List<TradeSlot>? = null,
+    @SerializedName("slot") val slot: TradeSlot? = null
+)
+
+/** Una zona che il server non ha ancora: il telefono la scarica da Overpass con [query]. */
+data class TradeMissingCell(
+    @SerializedName("cell") val cell: String? = null,
+    @SerializedName("query") val query: String? = null
+)
+
+/** GET /v1/trade/proposals/:id/spots */
+data class TradeSpotsPayload(
+    @SerializedName("spots") val spots: List<TradeSpot>? = null,
+    @SerializedName("missingCells") val missingCells: List<TradeMissingCell>? = null
+)
+
+/** POST /v1/trade/spots/cell: la risposta grezza di Overpass, il filtro lo fa il server. */
+data class TradeCellUpload(
+    @SerializedName("cell") val cell: String,
+    @SerializedName("elements") val elements: com.google.gson.JsonArray
+)
+
+data class TradeSpotCandidate(
+    @SerializedName("osmId") val osmId: String? = null,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("kind") val kind: String? = null,
+    @SerializedName("city") val city: String? = null,
+    @SerializedName("lat") val lat: Double? = null,
+    @SerializedName("lon") val lon: Double? = null,
+    @SerializedName("distanceKm") val distanceKm: Double? = null
+)
+
+/** GET /v1/trade/spots/search */
+data class TradeSpotSearchPayload(
+    @SerializedName("results") val results: List<TradeSpotCandidate>? = null
+)
+
+/** POST /v1/trade/spots: un luogo trovato con la ricerca, o una segnalazione (solo nome e citta'). */
+data class TradeAddSpotRequest(
+    @SerializedName("osmId") val osmId: String? = null,
+    @SerializedName("name") val name: String,
+    @SerializedName("kind") val kind: String? = null,
+    @SerializedName("city") val city: String? = null,
+    @SerializedName("lat") val lat: Double? = null,
+    @SerializedName("lon") val lon: Double? = null
+)
+
+data class TradeAddSpotPayload(
+    @SerializedName("spot") val spot: TradeSpot? = null
+)
+
+/** POST /v1/trade/proposals/:id/meeting */
+data class TradeMeetingRequest(
+    @SerializedName("spot") val spot: String,
+    @SerializedName("slots") val slots: List<TradeSlot>
+)
+
+/** POST /v1/trade/proposals/:id/meeting/confirm */
+data class TradeConfirmRequest(
+    @SerializedName("slot") val slot: Int
 )

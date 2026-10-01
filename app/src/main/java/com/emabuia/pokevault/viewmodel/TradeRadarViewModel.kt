@@ -12,7 +12,14 @@ import com.emabuia.pokevault.data.trade.TradeApi
 import com.emabuia.pokevault.data.trade.TradeLists
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.trade.TradeCardKey
+import com.emabuia.pokevault.data.trade.OverpassClient
+import com.emabuia.pokevault.data.trade.dto.TradeAddSpotRequest
 import com.emabuia.pokevault.data.trade.dto.TradeCardOffer
+import com.emabuia.pokevault.data.trade.dto.TradeCellUpload
+import com.emabuia.pokevault.data.trade.dto.TradeMeetingRequest
+import com.emabuia.pokevault.data.trade.dto.TradeSlot
+import com.emabuia.pokevault.data.trade.dto.TradeSpot
+import com.emabuia.pokevault.data.trade.dto.TradeSpotCandidate
 import com.emabuia.pokevault.data.trade.dto.TradeCounterRequest
 import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
 import com.emabuia.pokevault.data.trade.dto.TradeOfferItem
@@ -52,7 +59,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     enum class Problem { UNAUTHORIZED, UNAVAILABLE, REJECTED, NO_LOCATION, ALREADY_OPEN, NOT_AVAILABLE }
 
     /** Conferme da mostrare una volta, come [notice] ma non sono errori. */
-    enum class Info { PROPOSAL_SENT, COUNTER_SENT, ACCEPTED, DECLINED, CANCELLED }
+    enum class Info { PROPOSAL_SENT, COUNTER_SENT, ACCEPTED, DECLINED, CANCELLED, MEETING_SENT, MEETING_CONFIRMED, SPOT_REPORTED }
 
     var screen by mutableStateOf<Screen>(Screen.Loading)
         private set
@@ -301,7 +308,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         private set
 
     /** Quelle in cui tocca a me rispondere: il numero sulla tab. */
-    val proposalsToAnswer: Int get() = proposals.count { it.myTurn == true }
+    val proposalsToAnswer: Int get() = proposals.count { it.actionNeeded == true || it.myTurn == true }
 
     /** La proposta su cui si sta agendo (accetta, rifiuta...), per il caricamento sul tasto. */
     var actingOn by mutableStateOf<String?>(null)
@@ -517,6 +524,176 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    // ── Appuntamento (fase 2b) ──────────────────────────────────────────────
+
+    /** Copie riservate negli accordi, per id di carta offerta ([TradeLists.Duplicate.id]). */
+    var reserved by mutableStateOf<Map<String, Int>>(emptyMap())
+        private set
+
+    /** Il pannello per fissare (o cambiare) l'appuntamento di un accordo. */
+    data class Planner(
+        val proposalId: String,
+        val nickname: String,
+        /** Si sta cambiando un appuntamento gia' fissato o proposto. */
+        val changing: Boolean,
+        val spots: List<TradeSpot> = emptyList(),
+        val loading: Boolean = true,
+        /** Il telefono sta scaricando da OpenStreetMap una zona nuova. */
+        val downloadingArea: Boolean = false,
+        val selectedSpot: String? = null,
+        val slots: List<TradeSlot> = emptyList(),
+        val query: String = "",
+        val searchResults: List<TradeSpotCandidate> = emptyList(),
+        val searching: Boolean = false,
+        /** La ricerca e' finita senza risultati: si puo' segnalare il negozio. */
+        val searchedEmpty: Boolean = false,
+        val sending: Boolean = false
+    )
+
+    var planner by mutableStateOf<Planner?>(null)
+        private set
+
+    private var searchJob: Job? = null
+
+    fun openPlanner(proposal: TradeProposal) {
+        val id = proposal.id ?: return
+        val meeting = proposal.meeting
+        planner = Planner(
+            proposalId = id,
+            nickname = proposal.counterpart?.nickname.orEmpty(),
+            changing = meeting?.status == "proposed" || meeting?.status == "confirmed",
+            selectedSpot = meeting?.spot?.id,
+            slots = meeting?.slots.orEmpty().filter { it.day >= java.time.LocalDate.now().toString() }
+        )
+        viewModelScope.launch { loadSpots(id) }
+    }
+
+    /**
+     * I luoghi del server; se mancano delle zone le scarica il telefono da
+     * OpenStreetMap, le manda al server e rilegge. Una zona che non si riesce
+     * a scaricare non blocca niente: si va avanti con i luoghi che ci sono.
+     */
+    private suspend fun loadSpots(id: String) {
+        var payload = (TradeApi.proposalSpots(id) as? TradeApi.Result.Ok)?.value
+        val missing = payload?.missingCells.orEmpty()
+        if (missing.isNotEmpty()) {
+            planner = planner?.takeIf { it.proposalId == id }?.copy(downloadingArea = true, spots = payload?.spots.orEmpty())
+            var uploaded = false
+            for (cell in missing) {
+                val code = cell.cell ?: continue
+                val elements = OverpassClient.fetch(cell.query ?: continue) ?: continue
+                if (TradeApi.uploadCell(TradeCellUpload(code, elements)) is TradeApi.Result.Ok) uploaded = true
+            }
+            if (uploaded) payload = (TradeApi.proposalSpots(id) as? TradeApi.Result.Ok)?.value ?: payload
+        }
+        val spots = payload?.spots.orEmpty()
+        planner = planner?.takeIf { it.proposalId == id }?.let { current ->
+            current.copy(
+                spots = spots,
+                loading = false,
+                downloadingArea = false,
+                selectedSpot = current.selectedSpot?.takeIf { selected -> spots.any { it.id == selected } } ?: spots.firstOrNull()?.id
+            )
+        }
+    }
+
+    fun closePlanner() {
+        searchJob?.cancel()
+        planner = null
+    }
+
+    fun selectSpot(id: String) {
+        planner = planner?.copy(selectedSpot = id)
+    }
+
+    /** Aggiunge o toglie una fascia; al massimo tre. */
+    fun toggleSlot(slot: TradeSlot) {
+        val current = planner ?: return
+        planner = when {
+            slot in current.slots -> current.copy(slots = current.slots - slot)
+            current.slots.size >= MAX_SLOTS -> current
+            else -> current.copy(slots = (current.slots + slot).sortedWith(compareBy({ it.day }, { SLOT_PARTS.indexOf(it.part) })))
+        }
+    }
+
+    /** "Manca un negozio?": cerca dopo una breve pausa nella digitazione. */
+    fun searchSpot(query: String) {
+        val current = planner ?: return
+        planner = current.copy(query = query, searchedEmpty = false)
+        searchJob?.cancel()
+        if (query.trim().length < 2) {
+            planner = planner?.copy(searchResults = emptyList(), searching = false)
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            planner = planner?.copy(searching = true)
+            val results = (TradeApi.searchSpots(query.trim(), current.proposalId) as? TradeApi.Result.Ok)?.value?.results.orEmpty()
+            planner = planner?.copy(searchResults = results, searching = false, searchedEmpty = results.isEmpty())
+        }
+    }
+
+    /** Un luogo trovato con la ricerca entra fra i luoghi, gia' scelto. */
+    fun addSearchedSpot(candidate: TradeSpotCandidate) {
+        viewModelScope.launch {
+            val result = TradeApi.addSpot(
+                TradeAddSpotRequest(candidate.osmId, candidate.name.orEmpty(), candidate.kind, candidate.city, candidate.lat, candidate.lon)
+            )
+            (result as? TradeApi.Result.Ok)?.value?.spot?.let { spot -> takeSpot(spot.copy(distanceKm = candidate.distanceKm)) }
+                ?: run { notice = problemOf(result) }
+        }
+    }
+
+    /** Il negozio non c'e' nemmeno su OpenStreetMap: lo si segnala per nome, e lo approviamo noi. */
+    fun reportSpot(name: String) {
+        viewModelScope.launch {
+            val result = TradeApi.addSpot(TradeAddSpotRequest(name = name.trim()))
+            (result as? TradeApi.Result.Ok)?.value?.spot?.let { takeSpot(it); info = Info.SPOT_REPORTED }
+                ?: run { notice = problemOf(result) }
+        }
+    }
+
+    private fun takeSpot(spot: TradeSpot) {
+        val current = planner ?: return
+        planner = current.copy(
+            spots = listOf(spot) + current.spots.filter { it.id != spot.id },
+            selectedSpot = spot.id,
+            query = "",
+            searchResults = emptyList(),
+            searchedEmpty = false
+        )
+    }
+
+    fun sendPlanner() {
+        val current = planner ?: return
+        val spot = current.selectedSpot ?: return
+        if (current.slots.isEmpty() || current.sending) return
+        planner = current.copy(sending = true)
+        viewModelScope.launch {
+            val result = TradeApi.proposeMeeting(current.proposalId, TradeMeetingRequest(spot, current.slots))
+            if (result is TradeApi.Result.Ok) {
+                planner = null
+                info = Info.MEETING_SENT
+                refreshProposals()
+            } else {
+                notice = problemOf(result)
+                planner = planner?.copy(sending = false)
+            }
+        }
+    }
+
+    /** L'altro ha proposto luogo e fasce: se ne sceglie una e l'appuntamento e' fissato. */
+    fun confirmMeeting(proposalId: String, slotIndex: Int) {
+        if (actingOn != null) return
+        viewModelScope.launch {
+            actingOn = proposalId
+            val result = TradeApi.confirmMeeting(proposalId, slotIndex)
+            actingOn = null
+            if (result is TradeApi.Result.Ok) info = Info.MEETING_CONFIRMED else notice = problemOf(result)
+            refreshProposals()
+        }
+    }
+
     // ── Sincronizzazione ────────────────────────────────────────────────────
 
     private suspend fun updateProfile(profile: TradeProfilePayload, cell: String, paused: Boolean) {
@@ -563,6 +740,8 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             offers = (duplicates + singles).mapNotNull { offer ->
                 serverQuantities[offer.id]?.let { offer.id to it.coerceIn(1, offer.spare) }
             }.toMap()
+            reserved = serverHaves.filter { (it.reserved ?: 0) > 0 }
+                .associate { listOf(it.key, it.variant, it.condition, it.language).joinToString("|") to (it.reserved ?: 0) }
             val serverNotify = serverHaves.filter { it.notify == true }
                 .map { listOf(it.key, it.variant, it.condition, it.language).joinToString("|") }.toSet()
             notifyIds = singles.map { it.id }.filter { it in offers && it in serverNotify }.toSet()
@@ -598,6 +777,9 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         const val PREFS = "trade_radar"
         const val KEY_LEVELS_EXPLAINED = "levels_explained"
         const val PUSH_DEBOUNCE_MS = 600L
+        const val SEARCH_DEBOUNCE_MS = 450L
+        const val MAX_SLOTS = 3
+        val SLOT_PARTS = listOf("morning", "afternoon", "evening")
     }
 
     private fun problemOf(result: TradeApi.Result<*>): Problem = when (result) {
