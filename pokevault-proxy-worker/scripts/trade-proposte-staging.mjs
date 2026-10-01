@@ -108,7 +108,11 @@ if (arg('--as')) {
       if (!spot) { console.log('Nessun luogo: apri prima il pannello appuntamento dall\'app, che scarica la zona.'); process.exit(1); }
       const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
       res = await call(tok, 'POST', `/v1/trade/proposals/${deal.id}/meeting`, {
-        spot: spot.id, slots: [{ day: day(2), time: '17:30' }, { day: day(3), time: '10:30' }],
+        // --oggi HH:MM: un solo orario oggi (ora italiana), per provare la chiusura senza aspettare.
+        spot: spot.id,
+        slots: arg('--oggi')
+          ? [{ day: new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome' }).format(new Date()), time: arg('--oggi') }]
+          : [{ day: day(2), time: '17:30' }, { day: day(3), time: '10:30' }],
       });
       console.log(`luogo: ${spot.name} (${spot.kind})`);
     }
