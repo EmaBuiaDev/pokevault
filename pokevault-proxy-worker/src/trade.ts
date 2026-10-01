@@ -213,13 +213,16 @@ interface ProfileRow {
   avatar: number | null;
   /** 1 = sprite animato (Premium, fino al 649). */
   avatar_animated: number;
+  /** Fino a quando e' fuori dai match (ms), e perche': no_show | reports | admin (schema 10). */
+  suspended_until: number | null;
+  suspension_reason: string | null;
 }
 
 async function loadProfile(db: D1Database, uid: string): Promise<ProfileRow | null> {
   return db
     .prepare(
       `SELECT uid, nickname, geohash5, paused, owned_hash, trades_done, created_at, leaderboard_opt_in, leaderboard_asked_at,
-              avatar, avatar_animated
+              avatar, avatar_animated, suspended_until, suspension_reason
        FROM trade_profiles WHERE uid = ?`
     )
     .bind(uid)
@@ -236,6 +239,9 @@ function profileJson(row: ProfileRow, counts?: { haves: number; wants: number; o
     memberSince: row.created_at,
     avatar: row.avatar,
     avatarAnimated: row.avatar_animated === 1,
+    // Chi e' sospeso lo deve sapere, e perche': altrimenti vede solo un radar vuoto.
+    suspendedUntil: (row.suspended_until ?? 0) > Date.now() ? row.suspended_until : null,
+    suspensionReason: (row.suspended_until ?? 0) > Date.now() ? row.suspension_reason : null,
     ...(counts ?? {}),
   };
 }
@@ -272,6 +278,18 @@ async function putProfile(request: Request, db: D1Database, uid: string): Promis
     )
     .bind(uid, nickname, geohash5, now, body.paused === true ? 1 : 0)
     .run();
+  // Chi ha disattivato il profilo mentre era sospeso ritrova la sospensione.
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE trade_profiles
+         SET suspended_until = (SELECT suspended_until FROM trade_sanctions WHERE uid = ?1),
+             suspension_reason = (SELECT reason FROM trade_sanctions WHERE uid = ?1)
+         WHERE uid = ?1 AND EXISTS (SELECT 1 FROM trade_sanctions WHERE uid = ?1 AND suspended_until > ?2)`
+      )
+      .bind(uid, now),
+    db.prepare(`DELETE FROM trade_sanctions WHERE uid = ?`).bind(uid),
+  ]);
 
   const row = await loadProfile(db, uid);
   return json(row ? profileJson(row) : {});
@@ -299,9 +317,22 @@ async function getProfile(db: D1Database, uid: string): Promise<Response> {
   });
 }
 
-/** Disattivazione: via tutto quello che il server sa dell'utente. */
+/**
+ * Disattivazione: via tutto quello che il server sa dell'utente, tranne
+ * quello che serve alla sicurezza degli altri: una sospensione in corso
+ * (torna se riattiva, in trade_sanctions), le segnalazioni fatte e
+ * ricevute, e i blocchi che altri hanno messo su di lui.
+ */
 async function deleteProfile(db: D1Database, uid: string): Promise<Response> {
+  const now = Date.now();
   await db.batch([
+    db
+      .prepare(
+        `INSERT OR REPLACE INTO trade_sanctions (uid, suspended_until, reason, created_at)
+         SELECT uid, suspended_until, suspension_reason, ?2 FROM trade_profiles WHERE uid = ?1 AND suspended_until > ?2`
+      )
+      .bind(uid, now),
+    db.prepare(`DELETE FROM trade_blocks WHERE blocker_uid = ?`).bind(uid),
     // Le proposte se ne vanno con il profilo, anche per l'altra persona.
     db.prepare(
       `DELETE FROM trade_proposal_items WHERE proposal_id IN
@@ -502,8 +533,10 @@ function nearbyOf(cells: string[], uid: string): Nearby {
     sql: `SELECT uid FROM trade_profiles
           WHERE geohash5 IN (${cells.map(() => '?').join(', ')}) AND uid <> ? AND paused = 0
             AND (suspended_until IS NULL OR suspended_until < ${Date.now()})
+            AND uid NOT IN (SELECT blocked_uid FROM trade_blocks WHERE blocker_uid = ?)
+            AND uid NOT IN (SELECT blocker_uid FROM trade_blocks WHERE blocked_uid = ?)
           ORDER BY updated_at DESC LIMIT ${MAX_CANDIDATES}`,
-    params: [...cells, uid],
+    params: [...cells, uid, uid, uid],
   };
 }
 
@@ -648,6 +681,7 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
   const me = await loadProfile(db, uid);
   if (!me) return json({ error: 'no_profile' }, 404);
   if (me.paused === 1) return json({ paused: true, matches: [], cards: [] });
+  if ((me.suspended_until ?? 0) > Date.now()) return json({ suspended: true, matches: [], cards: [] });
 
   const cells = cellAndNeighbors(me.geohash5);
   const nearby = nearbyOf(cells, uid);
@@ -835,9 +869,9 @@ function itemStatements(db: D1Database, proposalId: string, revision: number, gi
 }
 
 /** GET /v1/trade/users/:publicId/haves — le carte che una persona offre, per comporre una proposta. */
-async function getUserHaves(db: D1Database, publicId: string, env: TradeEnv): Promise<Response> {
+async function getUserHaves(db: D1Database, uid: string, publicId: string, env: TradeEnv): Promise<Response> {
   const user = await uidOfPublicId(db, publicId);
-  if (!user || user.paused === 1) return json({ error: 'no_user' }, 404);
+  if (!user || user.paused === 1 || (await blockedBetween(db, uid, user.uid))) return json({ error: 'no_user' }, 404);
   const { results } = await db
     .prepare(`SELECT card_key, variant, condition, language, qty FROM trade_haves WHERE uid = ?`)
     .bind(user.uid)
@@ -863,8 +897,11 @@ async function getUserHaves(db: D1Database, publicId: string, env: TradeEnv): Pr
 async function createProposal(request: Request, db: D1Database, uid: string): Promise<Response> {
   const body = await readJson<{ to?: string; give?: unknown; take?: unknown }>(request);
   if (!body) return json({ error: 'bad_json' }, 400);
+  if (await isSuspended(db, uid)) return json({ error: 'suspended' }, 403);
   const target = await uidOfPublicId(db, cleanText(body.to, 16));
   if (!target || target.paused === 1 || target.uid === uid) return json({ error: 'no_user' }, 404);
+  // Un blocco non si rivela: la risposta e' quella di chi non c'e'.
+  if (await blockedBetween(db, uid, target.uid)) return json({ error: 'no_user' }, 404);
   const give = parseItems(body.give);
   const take = parseItems(body.take);
   if (!give || !take || give.length === 0 || take.length === 0) return json({ error: 'bad_items' }, 400);
@@ -943,9 +980,17 @@ async function actOnProposal(request: Request, db: D1Database, uid: string, id: 
   if (action === 'cancel') {
     const waiting = proposal.status === 'open' && proposal.turn_uid !== uid;
     if (!waiting && proposal.status !== 'accepted' && proposal.status !== 'scheduled') return json({ error: 'not_cancellable' }, 409);
+    // Passata l'ora resta solo "Scambio fatto" o "Non si e' presentato": chi
+    // non si e' presentato non deve poter far sparire l'appuntamento.
+    if (proposal.status === 'scheduled' && meetingPassed(proposal as ProposalRow & Partial<MeetingColumns>)) {
+      return json({ error: 'meeting_passed' }, 409);
+    }
     await close('cancelled');
     return json({ status: 'cancelled' });
   }
+
+  // Sospeso: si puo' rifiutare o ritirare, non prendere impegni nuovi.
+  if ((action === 'accept' || action === 'counter') && (await isSuspended(db, uid))) return json({ error: 'suspended' }, 403);
 
   if (action === 'accept') {
     if (!myTurn) return json({ error: 'not_your_turn' }, 409);
@@ -1710,7 +1755,7 @@ async function markNoShow(db: D1Database, uid: string, id: string): Promise<Resp
     .bind(target, ts - NO_SHOW_WINDOW_MS)
     .first<{ n: number }>();
   if ((reporters?.n ?? 0) >= 2) {
-    await db.prepare(`UPDATE trade_profiles SET suspended_until = ? WHERE uid = ?`).bind(ts + NO_SHOW_SUSPENSION_MS, target).run();
+    await suspend(db, target, ts + NO_SHOW_SUSPENSION_MS, 'no_show');
   }
   return json({ status: 'no_show' });
 }
@@ -1974,19 +2019,20 @@ async function getLeaderboard(db: D1Database, uid: string, url: URL): Promise<Re
   const zoneFilter = scope === 'zone' ? `AND p.geohash5 IN (${cells.map(() => '?').join(', ')})` : '';
   const { results } = await db
     .prepare(
-      `SELECT p.uid, p.nickname, p.created_at, p.avatar, p.avatar_animated, l.trades, l.partners, l.good, l.ok, l.bad, l.score, l.tier
+      `SELECT p.uid, p.public_id, p.nickname, p.created_at, p.avatar, p.avatar_animated, l.trades, l.partners, l.good, l.ok, l.bad, l.score, l.tier
        FROM trade_leaderboard l JOIN trade_profiles p ON p.uid = l.uid
        WHERE l.eligible = 1 AND p.leaderboard_opt_in = 1 ${zoneFilter}
        ORDER BY l.score DESC, l.trades DESC, p.created_at ASC`
     )
     .bind(...(scope === 'zone' ? cells : []))
-    .all<{ uid: string; nickname: string; created_at: number; avatar: number | null; avatar_animated: number; trades: number; partners: number; good: number; ok: number; bad: number; score: number; tier: string | null }>();
+    .all<{ uid: string; public_id: string; nickname: string; created_at: number; avatar: number | null; avatar_animated: number; trades: number; partners: number; good: number; ok: number; bad: number; score: number; tier: string | null }>();
 
   // I chip piu' ricevuti dei primi 50, per il mini profilo che si apre toccandoli.
   const shown = results.slice(0, LEADERBOARD_SIZE);
   const reputation = await reputationOf(db, 'SELECT value FROM json_each(?)', [JSON.stringify(shown.map((row) => row.uid))]);
   const entry = (row: (typeof results)[number], rank: number) => ({
     rank,
+    id: row.public_id,
     nickname: row.nickname,
     tier: row.tier,
     trades: row.trades,
@@ -2058,6 +2104,207 @@ async function putAvatar(request: Request, db: D1Database, uid: string): Promise
     .run();
   if (!result.meta.changes) return json({ error: 'no_profile' }, 404);
   return json({ avatar, avatarAnimated: animated });
+}
+
+// ── Segnala e blocca (fase 2f) ──────────────────────────────────────────────
+//
+// Pensato per chi lo usa male, non solo per chi lo usa bene:
+// - bloccare e' privato e vale nei due sensi; all'altro non si dice nulla;
+// - segnalare e' anonimo, ma una segnalazione conta per la sospensione
+//   automatica solo se il motivo e' grave, fra i due c'e' stato un accordo
+//   vero, chi segnala non ha gia' segnalazioni archiviate come infondate e
+//   non sta rispondendo a una segnalazione appena ricevuta da quella persona;
+// - servono tre persone diverse cosi' in 90 giorni, e la sospensione
+//   automatica dura 14 giorni: se non la controlliamo, finisce da sola;
+// - le altre restano da guardare (script trade-segnalazioni-staging.mjs);
+// - chi segnala non sa se la sua ha contato, ne' se l'altro e' stato sospeso.
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const REPORT_REASONS = new Set(['behavior', 'scam', 'fake_cards', 'nickname', 'other']);
+/** I motivi che possono portare alla sospensione automatica. Il nickname e "altro" li guardiamo noi. */
+const SERIOUS_REASONS = new Set(['behavior', 'scam', 'fake_cards']);
+const REPORTS_PER_DAY = 5;
+const REPORT_REPEAT_MS = 30 * DAY_MS;
+const REPORT_WINDOW_MS = 90 * DAY_MS;
+const REPORT_THRESHOLD = 3;
+const REPORT_SUSPENSION_MS = 14 * DAY_MS;
+/** Chi e' stato segnalato da qualcuno, se lo segnala a sua volta entro questo tempo, non conta. */
+const RETALIATION_MS = 30 * DAY_MS;
+/** Con due segnalazioni archiviate come infondate, le nuove non contano piu' da sole. */
+const MAX_DISMISSED = 2;
+const MAX_BLOCKS = 500;
+
+async function isSuspended(db: D1Database, uid: string): Promise<boolean> {
+  const row = await db.prepare(`SELECT suspended_until FROM trade_profiles WHERE uid = ?`).bind(uid).first<{ suspended_until: number | null }>();
+  return (row?.suspended_until ?? 0) > Date.now();
+}
+
+/** Uno dei due ha bloccato l'altro. */
+async function blockedBetween(db: D1Database, a: string, b: string): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT 1 AS x FROM trade_blocks
+       WHERE (blocker_uid = ?1 AND blocked_uid = ?2) OR (blocker_uid = ?2 AND blocked_uid = ?1) LIMIT 1`
+    )
+    .bind(a, b)
+    .first<{ x: number }>();
+  return row !== null;
+}
+
+/** L'ora dell'appuntamento e' passata (giorno e ora in Italia). */
+function meetingPassed(row: Partial<MeetingColumns>): boolean {
+  if (!row.meet_slot) return false;
+  const slot = JSON.parse(row.meet_slot) as Slot;
+  const now = romeNow();
+  return now.day > slot.day || (now.day === slot.day && now.time >= slotTime(slot));
+}
+
+/** Fuori dai match fino a [until]; una sospensione gia' piu' lunga resta quella. */
+async function suspend(db: D1Database, uid: string, until: number, reason: string): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE trade_profiles SET suspended_until = ?2, suspension_reason = ?3
+       WHERE uid = ?1 AND (suspended_until IS NULL OR suspended_until < ?2)`
+    )
+    .bind(uid, until, reason)
+    .run();
+}
+
+async function profileOfPublicId(db: D1Database, publicId: string): Promise<{ uid: string; nickname: string } | null> {
+  if (!/^[0-9a-f]{16}$/.test(publicId)) return null;
+  return db.prepare(`SELECT uid, nickname FROM trade_profiles WHERE public_id = ?`).bind(publicId).first();
+}
+
+/**
+ * Blocca: e le proposte in corso fra i due si annullano. Non quelle con
+ * l'appuntamento gia' passato: restano per "Scambio fatto" o "Non si e'
+ * presentato", altrimenti bloccare servirebbe a sfuggire al giudizio.
+ */
+async function applyBlock(db: D1Database, uid: string, target: string): Promise<number> {
+  const now = Date.now();
+  const { results } = await db
+    .prepare(
+      `SELECT id, status, meet_slot FROM trade_proposals
+       WHERE ((from_uid = ?1 AND to_uid = ?2) OR (from_uid = ?2 AND to_uid = ?1))
+         AND status IN ('open', 'accepted', 'scheduled')`
+    )
+    .bind(uid, target)
+    .all<{ id: string; status: string; meet_slot: string | null }>();
+  const cancel = results.filter((r) => !(r.status === 'scheduled' && meetingPassed(r)));
+  await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO trade_blocks (blocker_uid, blocked_uid, created_at) VALUES (?, ?, ?)`).bind(uid, target, now),
+    ...cancel.map((r) =>
+      db
+        .prepare(`UPDATE trade_proposals SET status = 'cancelled', closed_by = ?, updated_at = ? WHERE id = ?`)
+        .bind(uid, now, r.id)
+    ),
+  ]);
+  return cancel.length;
+}
+
+/** POST /v1/trade/users/:publicId/block */
+async function blockUser(db: D1Database, uid: string, publicId: string): Promise<Response> {
+  const target = await profileOfPublicId(db, publicId);
+  if (!target || target.uid === uid) return json({ error: 'no_user' }, 404);
+  const count = await db.prepare(`SELECT COUNT(*) AS n FROM trade_blocks WHERE blocker_uid = ?`).bind(uid).first<{ n: number }>();
+  if ((count?.n ?? 0) >= MAX_BLOCKS) return json({ error: 'too_many_blocks', max: MAX_BLOCKS }, 429);
+  const cancelled = await applyBlock(db, uid, target.uid);
+  return json({ blocked: true, cancelled });
+}
+
+/** DELETE /v1/trade/users/:publicId/block */
+async function unblockUser(db: D1Database, uid: string, publicId: string): Promise<Response> {
+  const target = await profileOfPublicId(db, publicId);
+  if (!target) return json({ error: 'no_user' }, 404);
+  await db.prepare(`DELETE FROM trade_blocks WHERE blocker_uid = ? AND blocked_uid = ?`).bind(uid, target.uid).run();
+  return json({ blocked: false });
+}
+
+/** GET /v1/trade/blocks — le persone che ho bloccato (non chi ha bloccato me: quello non si dice). */
+async function listBlocks(db: D1Database, uid: string): Promise<Response> {
+  const { results } = await db
+    .prepare(
+      `SELECT p.public_id AS id, p.nickname, b.created_at AS blockedAt
+       FROM trade_blocks b JOIN trade_profiles p ON p.uid = b.blocked_uid
+       WHERE b.blocker_uid = ? ORDER BY b.created_at DESC`
+    )
+    .bind(uid)
+    .all<{ id: string; nickname: string; blockedAt: number }>();
+  return json({ items: results });
+}
+
+/**
+ * POST /v1/trade/users/:publicId/report — { reason, note?, proposalId?, block? }.
+ * Una segnalazione per persona ogni 30 giorni, cinque al giorno in tutto.
+ * block (di default si') blocca anche. La risposta non dice se ha contato.
+ */
+async function reportUser(request: Request, db: D1Database, uid: string, publicId: string): Promise<Response> {
+  const body = await readJson<{ reason?: string; note?: string; proposalId?: string; block?: boolean }>(request);
+  if (!body) return json({ error: 'bad_json' }, 400);
+  const reason = cleanText(body.reason, 20);
+  if (!REPORT_REASONS.has(reason)) return json({ error: 'bad_reason' }, 400);
+  const note = cleanText(body.note, 300);
+  const target = await profileOfPublicId(db, publicId);
+  if (!target || target.uid === uid) return json({ error: 'no_user' }, 404);
+  const now = Date.now();
+
+  const recent = await db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM trade_reports WHERE reporter_uid = ?1 AND created_at > ?3) AS today,
+              (SELECT COUNT(*) FROM trade_reports WHERE reporter_uid = ?1 AND target_uid = ?2 AND created_at > ?4) AS again,
+              (SELECT COUNT(*) FROM trade_reports WHERE reporter_uid = ?1 AND status = 'dismissed') AS dismissed,
+              (SELECT COUNT(*) FROM trade_reports WHERE reporter_uid = ?2 AND target_uid = ?1 AND created_at > ?5) AS retaliation,
+              (SELECT COUNT(*) FROM trade_proposals
+                 WHERE ((from_uid = ?1 AND to_uid = ?2) OR (from_uid = ?2 AND to_uid = ?1))
+                   AND (status IN ('accepted', 'scheduled', 'done', 'no_show') OR meet_slots IS NOT NULL OR meet_slot IS NOT NULL)) AS deals,
+              (SELECT COALESCE(suspended_until, 0) FROM trade_profiles WHERE uid = ?1) AS mySuspension`
+    )
+    .bind(uid, target.uid, now - DAY_MS, now - REPORT_REPEAT_MS, now - RETALIATION_MS)
+    .first<{ today: number; again: number; dismissed: number; retaliation: number; deals: number; mySuspension: number }>();
+  if (!recent) return json({ error: 'no_profile' }, 404);
+  if (recent.again > 0) return json({ error: 'already_reported' }, 409);
+  if (recent.today >= REPORTS_PER_DAY) return json({ error: 'too_many_reports', max: REPORTS_PER_DAY }, 429);
+
+  // La proposta di riferimento, se c'e', deve essere fra loro due.
+  let proposalId: string | null = null;
+  if (typeof body.proposalId === 'string' && /^[0-9a-f-]{36}$/.test(body.proposalId)) {
+    const own = await db
+      .prepare(`SELECT id FROM trade_proposals WHERE id = ?3 AND ((from_uid = ?1 AND to_uid = ?2) OR (from_uid = ?2 AND to_uid = ?1))`)
+      .bind(uid, target.uid, body.proposalId)
+      .first<{ id: string }>();
+    proposalId = own?.id ?? null;
+  }
+
+  const weight =
+    SERIOUS_REASONS.has(reason) &&
+    recent.deals > 0 &&
+    recent.dismissed < MAX_DISMISSED &&
+    recent.retaliation === 0 &&
+    recent.mySuspension <= now;
+
+  // Prima la segnalazione, poi il blocco: il blocco annulla le proposte, e
+  // l'accordo che da' peso alla segnalazione e' gia' stato contato.
+  await db
+    .prepare(
+      `INSERT INTO trade_reports (id, reporter_uid, target_uid, reason, note, proposal_id, weight, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`
+    )
+    .bind(crypto.randomUUID(), uid, target.uid, reason, note, proposalId, weight ? 1 : 0, now)
+    .run();
+  const block = body.block !== false;
+  if (block) await applyBlock(db, uid, target.uid);
+
+  if (weight) {
+    const reporters = await db
+      .prepare(
+        `SELECT COUNT(DISTINCT reporter_uid) AS n FROM trade_reports
+         WHERE target_uid = ? AND weight = 1 AND status <> 'dismissed' AND created_at > ?`
+      )
+      .bind(target.uid, now - REPORT_WINDOW_MS)
+      .first<{ n: number }>();
+    if ((reporters?.n ?? 0) >= REPORT_THRESHOLD) await suspend(db, target.uid, now + REPORT_SUSPENSION_MS, 'reports');
+  }
+  return json({ reported: true, blocked: block });
 }
 
 // ── Router ──────────────────────────────────────────────────────────────────
@@ -2135,8 +2382,15 @@ export async function handleTradeRequest(
   if (pathname === '/v1/trade/spots/search' && method === 'GET') return searchSpots(db, uid, new URL(request.url));
   if (pathname === '/v1/trade/spots' && method === 'POST') return addSpot(request, db, uid);
   if (pathname === '/v1/trade/spots/cell' && method === 'POST') return putCellSpots(request, db);
+  if (pathname === '/v1/trade/blocks' && method === 'GET') return listBlocks(db, uid);
+  const userAction = /^\/v1\/trade\/users\/([0-9a-f]{16})\/(block|report)$/.exec(pathname);
+  if (userAction) {
+    if (userAction[2] === 'block' && method === 'POST') return blockUser(db, uid, userAction[1]);
+    if (userAction[2] === 'block' && method === 'DELETE') return unblockUser(db, uid, userAction[1]);
+    if (userAction[2] === 'report' && method === 'POST') return reportUser(request, db, uid, userAction[1]);
+  }
   const userHaves = /^\/v1\/trade\/users\/([0-9a-f]{16})\/haves$/.exec(pathname);
-  if (userHaves && method === 'GET') return getUserHaves(db, userHaves[1], env);
+  if (userHaves && method === 'GET') return getUserHaves(db, uid, userHaves[1], env);
 
   return json({ error: 'unknown /v1/trade route' }, 404);
 }
