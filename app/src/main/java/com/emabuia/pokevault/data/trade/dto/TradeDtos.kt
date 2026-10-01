@@ -96,6 +96,8 @@ data class TradeMatchItem(
 )
 
 data class TradeMatch(
+    /** Id pubblico della persona: per proporle uno scambio o leggere le sue offerte. */
+    @SerializedName("id") val id: String? = null,
     @SerializedName("nickname") val nickname: String? = null,
     /** "lt5" | "lt15" */
     @SerializedName("distance") val distance: String? = null,
@@ -147,4 +149,71 @@ data class TradeMatchesPayload(
 /** Corpo delle risposte d'errore: { "error": "no_profile" } e simili. */
 data class TradeErrorPayload(
     @SerializedName("error") val error: String? = null
+)
+
+// ── Proposte (fase 2a) ──────────────────────────────────────────────────────
+
+/** Una carta in una proposta, o fra le offerte di un'altra persona. */
+data class TradeOfferItem(
+    @SerializedName("key") val key: String? = null,
+    @SerializedName("variant") val variant: String? = null,
+    @SerializedName("condition") val condition: String? = null,
+    @SerializedName("language") val language: String? = null,
+    @SerializedName("qty") val qty: Int? = null,
+    /** Dal catalogo, solo nelle risposte: il server li ignora nelle richieste. */
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("setName") val setName: String? = null
+)
+
+/** GET /v1/trade/users/:id/haves */
+data class TradeUserHavesPayload(
+    @SerializedName("items") val items: List<TradeOfferItem>? = null
+)
+
+/** POST /v1/trade/proposals: give e take dal punto di vista di chi manda. */
+data class TradeProposalRequest(
+    @SerializedName("to") val to: String,
+    @SerializedName("give") val give: List<TradeOfferItem>,
+    @SerializedName("take") val take: List<TradeOfferItem>
+)
+
+/** POST /v1/trade/proposals/:id/counter */
+data class TradeCounterRequest(
+    @SerializedName("give") val give: List<TradeOfferItem>,
+    @SerializedName("take") val take: List<TradeOfferItem>
+)
+
+data class TradeCreatedPayload(
+    @SerializedName("id") val id: String? = null
+)
+
+data class TradeCounterpart(
+    /** L'id pubblico, lo stesso di [TradeMatch.id]. */
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("nickname") val nickname: String? = null,
+    /** "lt5" | "lt15" | "far" */
+    @SerializedName("distance") val distance: String? = null,
+    @SerializedName("tradesDone") val tradesDone: Int? = null
+)
+
+/** Una proposta vista da me: [give] e' cio' che do, [take] cio' che ricevo. */
+data class TradeProposal(
+    @SerializedName("id") val id: String? = null,
+    /** "open" | "accepted" | "declined" | "cancelled" */
+    @SerializedName("status") val status: String? = null,
+    /** Da 2 in su e' una controproposta. */
+    @SerializedName("revision") val revision: Int? = null,
+    @SerializedName("myTurn") val myTurn: Boolean? = null,
+    @SerializedName("iStarted") val iStarted: Boolean? = null,
+    @SerializedName("closedByMe") val closedByMe: Boolean? = null,
+    @SerializedName("createdAt") val createdAt: Long? = null,
+    @SerializedName("updatedAt") val updatedAt: Long? = null,
+    @SerializedName("counterpart") val counterpart: TradeCounterpart? = null,
+    @SerializedName("give") val give: List<TradeOfferItem>? = null,
+    @SerializedName("take") val take: List<TradeOfferItem>? = null
+)
+
+/** GET /v1/trade/proposals */
+data class TradeProposalsPayload(
+    @SerializedName("proposals") val proposals: List<TradeProposal>? = null
 )

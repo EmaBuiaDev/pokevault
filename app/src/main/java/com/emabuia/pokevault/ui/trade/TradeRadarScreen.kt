@@ -58,16 +58,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CallMade
+import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Place
@@ -131,6 +135,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
@@ -139,6 +144,8 @@ import com.emabuia.pokevault.data.trade.dto.TradeCardHolder
 import com.emabuia.pokevault.data.trade.dto.TradeCardOffer
 import com.emabuia.pokevault.data.trade.dto.TradeMatch
 import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
+import com.emabuia.pokevault.data.trade.dto.TradeOfferItem
+import com.emabuia.pokevault.data.trade.dto.TradeProposal
 import com.emabuia.pokevault.data.trade.TradeCardKey
 import com.emabuia.pokevault.data.trade.TradeLists
 import com.emabuia.pokevault.ui.components.CardImageSkeleton
@@ -150,6 +157,7 @@ import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.TradeRadarViewModel
 import com.emabuia.pokevault.viewmodel.TradeRadarViewModel.Problem
 import com.emabuia.pokevault.viewmodel.TradeRadarViewModel.Screen
+import java.util.Locale
 import kotlin.math.absoluteValue
 import kotlin.math.cos
 import kotlin.math.sin
@@ -178,6 +186,13 @@ fun TradeRadarScreen(onBack: () -> Unit, viewModel: TradeRadarViewModel = viewMo
         if (notice != null) {
             snackbar.showSnackbar(problemText(notice))
             viewModel.consumeNotice()
+        }
+    }
+    val info = viewModel.info
+    LaunchedEffect(info) {
+        if (info != null) {
+            snackbar.showSnackbar(infoText(info))
+            viewModel.consumeInfo()
         }
     }
 
@@ -353,6 +368,10 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
     LaunchedEffect(viewModel.matchesLoaded) {
         if (viewModel.matchesLoaded) cascadeStarted = true
     }
+    // Dopo aver mandato una proposta si va a vederla.
+    LaunchedEffect(viewModel.focusProposals) {
+        if (viewModel.focusProposals > 0) tab = 1
+    }
 
     Column(Modifier.fillMaxSize()) {
         ProfileHeader(
@@ -362,8 +381,9 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
         )
         SegmentedTabs(
             selected = tab,
-            labels = listOf(AppLocale.tradeRadarTabMatches, AppLocale.tradeRadarTabMyCards),
-            badges = listOf(viewModel.matches.size, viewModel.enabledIds.size),
+            labels = listOf(AppLocale.tradeRadarTabMatches, AppLocale.tradeRadarTabProposals, AppLocale.tradeRadarTabMyCards),
+            // Sulle Proposte il numero conta solo quelle in cui tocca a te.
+            badges = listOf(viewModel.matches.size, viewModel.proposalsToAnswer, viewModel.enabledIds.size),
             onSelect = { tab = it }
         )
         AnimatedContent(
@@ -377,11 +397,14 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready) {
             modifier = Modifier.fillMaxSize()
         ) { page ->
             when (page) {
-                0 -> MatchesTab(viewModel, paused, cascadeStarted, onGoToMyCards = { tab = 1 })
+                0 -> MatchesTab(viewModel, paused, cascadeStarted, onGoToMyCards = { tab = 2 })
+                1 -> ProposalsTab(viewModel, onGoToMatches = { tab = 0 })
                 else -> MyCardsTab(viewModel)
             }
         }
     }
+
+    viewModel.composer?.let { composer -> ComposerDialog(viewModel, composer) }
 }
 
 @Composable
@@ -643,7 +666,8 @@ private fun MatchesTab(
                             level = level,
                             expanded = index in expanded,
                             onToggle = { expanded = if (index in expanded) expanded - index else expanded + index },
-                            onCardClick = { card, theirs -> selectedCard = card to theirs }
+                            onCardClick = { card, theirs -> selectedCard = card to theirs },
+                            onPropose = { viewModel.openComposer(match) }
                         )
                     }
                 }
@@ -658,6 +682,7 @@ private fun MatchesTab(
             level = level,
             onNavigate = { sheet = it },
             onCardClick = { card, theirs -> selectedCard = card to theirs },
+            onPropose = { match, presetKey -> sheet = null; viewModel.openComposer(match, presetKey) },
             onDismiss = { sheet = null }
         )
     }
@@ -876,7 +901,8 @@ private fun CompactMatchRow(
     level: String,
     expanded: Boolean,
     onToggle: () -> Unit,
-    onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit
+    onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
+    onPropose: () -> Unit
 ) {
     val motion = AppMotion.current
     val mutual = match.mutual == true
@@ -924,7 +950,7 @@ private fun CompactMatchRow(
             exit = shrinkVertically(tween(motion.state)) + fadeOut(tween(motion.state))
         ) {
             Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                MatchBody(match, level, onCardClick)
+                MatchBody(match, level, onCardClick, onPropose)
             }
         }
     }
@@ -943,6 +969,8 @@ private fun TradeSheet(
     level: String,
     onNavigate: (SheetPage) -> Unit,
     onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
+    /** La persona e, se si arriva da una carta, quella carta gia' nella proposta. */
+    onPropose: (TradeMatch, presetKey: String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     val motion = AppMotion.current
@@ -967,7 +995,8 @@ private fun TradeSheet(
                     match = matches.getOrNull(current.index),
                     level = level,
                     onBack = current.from?.let { card -> { onNavigate(SheetPage.Holders(card)) } },
-                    onCardClick = onCardClick
+                    onCardClick = onCardClick,
+                    onPropose = { match -> onPropose(match, current.from?.key) }
                 )
             }
         }
@@ -1055,7 +1084,8 @@ private fun PersonPage(
     match: TradeMatch?,
     level: String,
     onBack: (() -> Unit)?,
-    onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit
+    onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
+    onPropose: (TradeMatch) -> Unit
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1068,7 +1098,7 @@ private fun PersonPage(
                 Text(AppLocale.back)
             }
         }
-        if (match != null) MatchCard(match, level, onCardClick)
+        if (match != null) MatchCard(match, level, onCardClick, onPropose = { onPropose(match) })
     }
 }
 
@@ -1245,7 +1275,12 @@ private fun FilterChip(text: String, count: Int, style: LevelStyle?, selected: B
 
 /** La scheda intera di una persona: intestazione e [MatchBody]. */
 @Composable
-private fun MatchCard(match: TradeMatch, level: String, onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit) {
+private fun MatchCard(
+    match: TradeMatch,
+    level: String,
+    onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
+    onPropose: (() -> Unit)? = null
+) {
     val mutual = match.mutual == true
     val shape = RoundedCornerShape(22.dp)
     Column(
@@ -1274,13 +1309,18 @@ private fun MatchCard(match: TradeMatch, level: String, onCardClick: (TradeMatch
                 }
             }
         }
-        MatchBody(match, level, onCardClick)
+        MatchBody(match, level, onCardClick, onPropose)
     }
 }
 
 /** Fascia "Scambio reciproco" e le due file di carte: cosa ti da', cosa vuole da te. */
 @Composable
-private fun MatchBody(match: TradeMatch, level: String, onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit) {
+private fun MatchBody(
+    match: TradeMatch,
+    level: String,
+    onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit,
+    onPropose: (() -> Unit)? = null
+) {
     val theyGive = match.theyGive.orEmpty().filter { level == "all" || it.level == level }
     val iGive = match.iGive.orEmpty()
     if (match.mutual == true) {
@@ -1312,6 +1352,18 @@ private fun MatchBody(match: TradeMatch, level: String, onCardClick: (TradeMatch
         CardStrip(iGive, theirs = true) { onCardClick(it, true) }
     } else {
         Text(AppLocale.tradeRadarOneWay, fontSize = 12.sp, color = AppColors.textMuted)
+    }
+    if (onPropose != null && match.id != null) {
+        Button(
+            onClick = onPropose,
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = if (match.mutual == true) AppColors.green else AppColors.blue),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) {
+            Icon(Icons.Default.SwapHoriz, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(AppLocale.tradeRadarPropose, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -1481,6 +1533,507 @@ private fun CardDetailDialog(item: TradeMatchItem, theirs: Boolean, onDismiss: (
             }
             TextButton(onClick = onDismiss) { Text(AppLocale.tradeRadarClose) }
         }
+    }
+}
+
+// ── Proposte ────────────────────────────────────────────────────────────────
+
+/**
+ * La tab Proposte: prima quelle in cui tocca a te, poi quelle che aspettano
+ * l'altro, gli accordi fatti e le chiuse. Niente testo libero: si accetta, si
+ * rifiuta o si fa una controproposta cambiando carte e quantita'.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProposalsTab(viewModel: TradeRadarViewModel, onGoToMatches: () -> Unit) {
+    LaunchedEffect(Unit) { viewModel.refreshProposals() }
+    val proposals = viewModel.proposals
+    val sections = listOf(
+        AppLocale.tradeRadarSectionToAnswer to proposals.filter { it.status == "open" && it.myTurn == true },
+        AppLocale.tradeRadarSectionWaiting to proposals.filter { it.status == "open" && it.myTurn != true },
+        AppLocale.tradeRadarSectionAccepted to proposals.filter { it.status == "accepted" },
+        AppLocale.tradeRadarSectionClosed to proposals.filter { it.status == "declined" || it.status == "cancelled" },
+    ).filter { it.second.isNotEmpty() }
+    var confirmCancel by remember { mutableStateOf<TradeProposal?>(null) }
+
+    PullToRefreshBox(
+        isRefreshing = false,
+        onRefresh = { viewModel.refreshProposals() },
+        modifier = Modifier.fillMaxSize()
+    ) {
+        LazyColumn(
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            when {
+                !viewModel.proposalsLoaded -> item {
+                    Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                        RadarScope(blips = emptyList(), scanning = true, modifier = Modifier.size(96.dp))
+                    }
+                }
+                proposals.isEmpty() -> item {
+                    EmptyState(text = AppLocale.tradeRadarNoProposals, action = AppLocale.tradeRadarGoToMatches to onGoToMatches)
+                }
+                else -> sections.forEach { (title, list) ->
+                    item(key = "title|$title") {
+                        SectionTitle(title, list.size)
+                    }
+                    items(list, key = { it.id.orEmpty() }) { proposal ->
+                        ProposalCard(
+                            proposal = proposal,
+                            prices = viewModel.prices,
+                            acting = viewModel.actingOn == proposal.id,
+                            onAccept = { viewModel.answer(proposal.id.orEmpty(), "accept") },
+                            onDecline = { viewModel.answer(proposal.id.orEmpty(), "decline") },
+                            onCounter = { viewModel.openCounter(proposal) },
+                            onCancel = {
+                                if (proposal.status == "accepted") confirmCancel = proposal
+                                else viewModel.answer(proposal.id.orEmpty(), "cancel")
+                            },
+                            modifier = Modifier.animateItem()
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    confirmCancel?.let { proposal ->
+        AlertDialog(
+            onDismissRequest = { confirmCancel = null },
+            title = { Text(AppLocale.tradeRadarCancelDeal) },
+            text = { Text(AppLocale.tradeRadarCancelDealText(proposal.counterpart?.nickname.orEmpty())) },
+            confirmButton = {
+                TextButton(onClick = { confirmCancel = null; viewModel.answer(proposal.id.orEmpty(), "cancel") }) {
+                    Text(AppLocale.confirm, color = AppColors.red)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmCancel = null }) { Text(AppLocale.cancel) } }
+        )
+    }
+}
+
+@Composable
+private fun ProposalCard(
+    proposal: TradeProposal,
+    prices: Map<String, Double>,
+    acting: Boolean,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+    onCounter: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val other = proposal.counterpart
+    val status = proposalStatus(proposal)
+    val shape = RoundedCornerShape(20.dp)
+    val open = proposal.status == "open"
+    val myTurn = open && proposal.myTurn == true
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(AppColors.card)
+            .then(if (myTurn || proposal.status == "accepted") Modifier.border(1.dp, status.color.copy(alpha = 0.5f), shape) else Modifier)
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(other?.nickname.orEmpty(), size = 40.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(other?.nickname.orEmpty(), fontWeight = FontWeight.Bold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    listOfNotNull(
+                        distanceLabel(other?.distance),
+                        (proposal.revision ?: 1).takeIf { it > 1 && open }?.let { AppLocale.tradeRadarCounterNote(it) }
+                    ).joinToString(" · "),
+                    fontSize = 12.sp,
+                    color = AppColors.textSecondary
+                )
+            }
+            InfoPill(status.label, status.color)
+        }
+        ProposalSide(AppLocale.tradeRadarReceive, proposal.take.orEmpty())
+        ProposalSide(AppLocale.tradeRadarGive, proposal.give.orEmpty())
+        BalanceLine(proposal.give.orEmpty(), proposal.take.orEmpty(), prices, compact = true)
+
+        when {
+            myTurn -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onDecline, enabled = !acting) {
+                    Text(AppLocale.tradeRadarDecline, color = AppColors.red, fontWeight = FontWeight.SemiBold)
+                }
+                OutlinedButton(onClick = onCounter, enabled = !acting, shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
+                    Text(AppLocale.tradeRadarCounter, maxLines = 1)
+                }
+                Button(
+                    onClick = onAccept,
+                    enabled = !acting,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.green),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    if (acting) CircularProgressIndicator(Modifier.size(16.dp), color = AppColors.onAccent, strokeWidth = 2.dp)
+                    else Text(AppLocale.tradeRadarAccept, fontWeight = FontWeight.Bold)
+                }
+            }
+            open -> OutlinedButton(onClick = onCancel, enabled = !acting, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Text(AppLocale.tradeRadarWithdraw)
+            }
+            proposal.status == "accepted" -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AppColors.green.copy(alpha = 0.12f)).padding(10.dp)
+                ) {
+                    Icon(Icons.Default.Handshake, null, tint = AppColors.green, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(AppLocale.tradeRadarAcceptedNext, fontSize = 12.sp, color = AppColors.textSecondary)
+                }
+                TextButton(onClick = onCancel, enabled = !acting, modifier = Modifier.align(Alignment.End)) {
+                    Text(AppLocale.tradeRadarCancelDeal, color = AppColors.red)
+                }
+            }
+        }
+    }
+}
+
+/** Una riga di carte di una proposta: "Ricevi" o "Dai", con le copie. */
+@Composable
+private fun ProposalSide(title: String, items: List<TradeOfferItem>) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppColors.textMuted, modifier = Modifier.width(52.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(items) { item ->
+                Box {
+                    Box(Modifier.width(42.dp).aspectRatio(0.716f).clip(RoundedCornerShape(4.dp))) {
+                        CardImageSkeleton()
+                        AsyncImage(
+                            model = TradeCardKey.imageUrl(item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+                            contentDescription = item.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    if ((item.qty ?: 1) > 1) {
+                        Text(
+                            "×${item.qty}",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.Black.copy(alpha = 0.65f))
+                                .padding(horizontal = 3.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class StatusStyle(val label: String, val color: Color)
+
+@Composable
+private fun proposalStatus(proposal: TradeProposal): StatusStyle = when (proposal.status) {
+    "open" -> if (proposal.myTurn == true) StatusStyle(AppLocale.tradeRadarStatusYourTurn, AppColors.orange)
+        else StatusStyle(AppLocale.tradeRadarStatusWaiting, AppColors.blue)
+    "accepted" -> StatusStyle(AppLocale.tradeRadarStatusAccepted, AppColors.green)
+    "declined" -> StatusStyle(
+        if (proposal.closedByMe == true) AppLocale.tradeRadarStatusDeclinedByMe else AppLocale.tradeRadarStatusDeclined,
+        AppColors.textMuted
+    )
+    else -> StatusStyle(
+        if (proposal.closedByMe == true) AppLocale.tradeRadarStatusCancelledByMe else AppLocale.tradeRadarStatusCancelled,
+        AppColors.textMuted
+    )
+}
+
+/**
+ * Il bilancio in euro, solo informativo: quanto dai, quanto ricevi, e se e'
+ * equo. Non blocca e non corregge niente. Le carte senza prezzo restano fuori
+ * dal conto e si dice quante sono.
+ */
+@Composable
+private fun BalanceLine(give: List<TradeOfferItem>, take: List<TradeOfferItem>, prices: Map<String, Double>, compact: Boolean = false) {
+    fun total(items: List<TradeOfferItem>) = items.sumOf { (prices[it.key.orEmpty()] ?: 0.0) * (it.qty ?: 1) }
+    val unpriced = (give + take).count { prices[it.key.orEmpty()] == null }
+    val giveValue = total(give)
+    val takeValue = total(take)
+    val diff = takeValue - giveValue
+    val fair = kotlin.math.abs(diff) <= maxOf(1.0, 0.1 * maxOf(giveValue, takeValue))
+    val verdict = when {
+        giveValue == 0.0 && takeValue == 0.0 -> null
+        fair -> AppLocale.tradeRadarBalanceFair to AppColors.green
+        diff > 0 -> AppLocale.tradeRadarBalanceForYou(euro(diff)) to AppColors.blue
+        else -> AppLocale.tradeRadarBalanceForThem(euro(-diff)) to AppColors.orange
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Balance, null, tint = AppColors.textMuted, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "${AppLocale.tradeRadarBalanceGive(euro(giveValue))} · ${AppLocale.tradeRadarBalanceTake(euro(takeValue))}",
+                fontSize = 12.sp,
+                color = AppColors.textSecondary,
+                modifier = Modifier.weight(1f)
+            )
+            verdict?.let { (text, color) -> InfoPill(text, color) }
+        }
+        if (!compact || unpriced > 0) {
+            Text(
+                listOfNotNull(
+                    AppLocale.tradeRadarBalanceNote.takeIf { !compact },
+                    unpriced.takeIf { it > 0 }?.let { AppLocale.tradeRadarNoPrices(it) }
+                ).joinToString(" "),
+                fontSize = 11.sp,
+                color = AppColors.textMuted
+            )
+        }
+    }
+}
+
+private fun euro(value: Double): String = "€%.2f".format(Locale.ITALY, value)
+
+/**
+ * La composizione, a schermo intero: cosa ricevi (fra le sue offerte) e cosa
+ * dai (fra le tue), con le copie, e in fondo il bilancio e l'invio. Le carte
+ * si aggiungono da elenchi che si aprono sotto ciascuna parte.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ComposerDialog(viewModel: TradeRadarViewModel, composer: TradeRadarViewModel.Composer) {
+    val prices = viewModel.prices
+    val myOffers = viewModel.myOffers
+    var addingTake by remember { mutableStateOf(false) }
+    var addingGive by remember { mutableStateOf(false) }
+    val takeItems = composer.theirOffers.filter { viewModel.offerId(it) in composer.take }
+        .map { it.copy(qty = composer.take[viewModel.offerId(it)]) }
+    val giveItems = myOffers.filter { viewModel.offerId(it) in composer.give }
+        .map { it.copy(qty = composer.give[viewModel.offerId(it)]) }
+    val nickname = composer.nickname
+
+    Dialog(
+        onDismissRequest = { viewModel.closeComposer() },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Scaffold(
+            containerColor = AppColors.background,
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                if (composer.counterTo != null) AppLocale.tradeRadarCounterTitle else AppLocale.tradeRadarComposerTitle,
+                                fontWeight = FontWeight.Bold,
+                                color = AppColors.textPrimary
+                            )
+                            Text(AppLocale.tradeRadarTo(nickname), fontSize = 13.sp, color = AppColors.textSecondary)
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.closeComposer() }) {
+                            Icon(Icons.Default.Close, AppLocale.tradeRadarClose, tint = AppColors.textPrimary)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
+                )
+            },
+            bottomBar = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                        .background(AppColors.card)
+                        .padding(16.dp)
+                ) {
+                    BalanceLine(giveItems, takeItems, prices)
+                    val ready = giveItems.isNotEmpty() && takeItems.isNotEmpty()
+                    if (!ready && !composer.loading) {
+                        Text(AppLocale.tradeRadarPickBothSides, fontSize = 12.sp, color = AppColors.orange)
+                    }
+                    Button(
+                        onClick = { viewModel.sendComposer() },
+                        enabled = ready && !composer.sending,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
+                    ) {
+                        if (composer.sending) CircularProgressIndicator(Modifier.size(20.dp), color = AppColors.onAccent, strokeWidth = 2.dp)
+                        else Text(
+                            if (composer.counterTo != null) AppLocale.tradeRadarSendCounter else AppLocale.tradeRadarSend,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        ) { padding ->
+            if (composer.loading) {
+                Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                    RadarScope(blips = emptyList(), scanning = true, modifier = Modifier.size(110.dp))
+                }
+                return@Scaffold
+            }
+            LazyColumn(
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Cosa ricevi.
+                item(key = "takeTitle") { ComposerSideTitle(Icons.AutoMirrored.Filled.CallReceived, AppLocale.tradeRadarReceiveFrom(nickname), AppColors.green) }
+                items(takeItems, key = { "take|" + viewModel.offerId(it) }) { item ->
+                    val id = viewModel.offerId(item)
+                    ComposerItemRow(
+                        item = item,
+                        max = composer.theirOffers.firstOrNull { viewModel.offerId(it) == id }?.qty ?: 1,
+                        price = prices[item.key.orEmpty()],
+                        onQuantity = { viewModel.setTake(id, it) },
+                        modifier = Modifier.animateItem()
+                    )
+                }
+                val moreTheirs = composer.theirOffers.filter { viewModel.offerId(it) !in composer.take }
+                item(key = "takeAdd") {
+                    AddToggle(AppLocale.tradeRadarAddTheirs, open = addingTake, enabled = moreTheirs.isNotEmpty()) { addingTake = !addingTake }
+                }
+                if (addingTake) {
+                    if (moreTheirs.isEmpty()) item(key = "takeNone") { Text(AppLocale.tradeRadarNothingMoreTheirs, fontSize = 12.sp, color = AppColors.textMuted) }
+                    items(moreTheirs, key = { "takePick|" + viewModel.offerId(it) }) { item ->
+                        PickRow(item, prices[item.key.orEmpty()], Modifier.animateItem()) { viewModel.setTake(viewModel.offerId(item), 1) }
+                    }
+                }
+
+                item(key = "divider") { Box(Modifier.padding(vertical = 6.dp)) { SwapDivider() } }
+
+                // Cosa dai.
+                item(key = "giveTitle") { ComposerSideTitle(Icons.AutoMirrored.Filled.CallMade, AppLocale.tradeRadarGiveTo(nickname), AppColors.orange) }
+                items(giveItems, key = { "give|" + viewModel.offerId(it) }) { item ->
+                    val id = viewModel.offerId(item)
+                    ComposerItemRow(
+                        item = item,
+                        max = myOffers.firstOrNull { viewModel.offerId(it) == id }?.qty ?: 1,
+                        price = prices[item.key.orEmpty()],
+                        onQuantity = { viewModel.setGive(id, it) },
+                        modifier = Modifier.animateItem()
+                    )
+                }
+                val moreMine = myOffers.filter { viewModel.offerId(it) !in composer.give }
+                if (myOffers.isEmpty()) {
+                    item(key = "giveNone") { Text(AppLocale.tradeRadarNoOffersYet, fontSize = 12.sp, color = AppColors.orange) }
+                } else {
+                    item(key = "giveAdd") {
+                        AddToggle(AppLocale.tradeRadarAddMine, open = addingGive, enabled = moreMine.isNotEmpty()) { addingGive = !addingGive }
+                    }
+                    if (addingGive) {
+                        items(moreMine, key = { "givePick|" + viewModel.offerId(it) }) { item ->
+                            PickRow(item, prices[item.key.orEmpty()], Modifier.animateItem()) { viewModel.setGive(viewModel.offerId(item), 1) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComposerSideTitle(icon: ImageVector, text: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(28.dp).clip(CircleShape).background(color.copy(alpha = 0.15f))
+        ) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(16.dp))
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(text, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+    }
+}
+
+/** Una carta scelta: immagine, dati della copia, prezzo e copie con − e +. A 1, il − la toglie. */
+@Composable
+private fun ComposerItemRow(item: TradeOfferItem, max: Int, price: Double?, onQuantity: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val quantity = item.qty ?: 1
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(AppColors.card)
+            .padding(10.dp)
+    ) {
+        Box(Modifier.width(40.dp).height(56.dp).clip(RoundedCornerShape(4.dp))) {
+            CardImageSkeleton()
+            AsyncImage(
+                model = TradeCardKey.imageUrl(item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+                contentDescription = item.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(item.name ?: TradeCardKey.label(item.key.orEmpty()), fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                listOfNotNull(item.setName, item.condition?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                fontSize = 11.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            Text(price?.let { "~" + euro(it) } ?: AppLocale.tradeRadarNoPrice, fontSize = 11.sp, color = AppColors.textMuted)
+        }
+        StepButton(if (quantity <= 1) Icons.Default.Close else Icons.Default.Remove, enabled = true) { onQuantity(quantity - 1) }
+        Text(
+            quantity.toString(),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = AppColors.textPrimary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(30.dp)
+        )
+        StepButton(Icons.Default.Add, enabled = quantity < max) { onQuantity(quantity + 1) }
+    }
+}
+
+@Composable
+private fun AddToggle(text: String, open: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val arrow by animateFloatAsState(if (open) 45f else 0f, tween(AppMotion.current.chevron), label = "addToggle")
+    TextButton(onClick = onClick, enabled = enabled || open) {
+        Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp).rotate(arrow))
+        Spacer(Modifier.width(6.dp))
+        Text(text, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** Una carta da aggiungere: al tocco entra nella proposta con una copia. */
+@Composable
+private fun PickRow(item: TradeOfferItem, price: Double?, modifier: Modifier = Modifier, onPick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(innerColor())
+            .clickable(onClick = onPick)
+            .padding(8.dp)
+    ) {
+        Box(Modifier.width(32.dp).height(45.dp).clip(RoundedCornerShape(3.dp))) {
+            CardImageSkeleton()
+            AsyncImage(
+                model = TradeCardKey.imageUrl(item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+                contentDescription = item.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(item.name ?: TradeCardKey.label(item.key.orEmpty()), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                listOfNotNull(item.setName, price?.let { "~" + euro(it) }, (item.qty ?: 1).takeIf { it > 1 }?.let { "×$it" }).joinToString(" · "),
+                fontSize = 11.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(Icons.Default.AddCircle, null, tint = AppColors.green, modifier = Modifier.size(22.dp))
     }
 }
 
@@ -2094,12 +2647,26 @@ private fun reasonText(reason: String?, setOwned: Int?, setSize: Int?, theirs: B
     else -> null
 }
 
-private fun distanceLabel(distance: String?): String =
-    if (distance == "lt5") AppLocale.tradeRadarDistanceNear else AppLocale.tradeRadarDistanceArea
+private fun distanceLabel(distance: String?): String = when (distance) {
+    "lt5" -> AppLocale.tradeRadarDistanceNear
+    // Solo nelle proposte: chi nel frattempo si e' spostato fuori zona.
+    "far" -> AppLocale.tradeRadarDistanceFar
+    else -> AppLocale.tradeRadarDistanceArea
+}
 
 private fun problemText(problem: Problem): String = when (problem) {
     Problem.UNAUTHORIZED -> AppLocale.tradeRadarUnauthorized
     Problem.REJECTED -> AppLocale.tradeRadarRejected
     Problem.NO_LOCATION -> AppLocale.tradeRadarNoLocation
     Problem.UNAVAILABLE -> AppLocale.tradeRadarUnavailable(null)
+    Problem.ALREADY_OPEN -> AppLocale.tradeRadarAlreadyOpen
+    Problem.NOT_AVAILABLE -> AppLocale.tradeRadarNotAvailable
+}
+
+private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
+    TradeRadarViewModel.Info.PROPOSAL_SENT -> AppLocale.tradeRadarInfoSent
+    TradeRadarViewModel.Info.COUNTER_SENT -> AppLocale.tradeRadarInfoCounterSent
+    TradeRadarViewModel.Info.ACCEPTED -> AppLocale.tradeRadarInfoAccepted
+    TradeRadarViewModel.Info.DECLINED -> AppLocale.tradeRadarInfoDeclined
+    TradeRadarViewModel.Info.CANCELLED -> AppLocale.tradeRadarInfoCancelled
 }

@@ -2,6 +2,8 @@ package com.emabuia.pokevault.data.trade
 
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.billing.WorkerApi
+import com.emabuia.pokevault.data.trade.dto.TradeCounterRequest
+import com.emabuia.pokevault.data.trade.dto.TradeCreatedPayload
 import com.emabuia.pokevault.data.trade.dto.TradeErrorPayload
 import com.emabuia.pokevault.data.trade.dto.TradeHavesPayload
 import com.emabuia.pokevault.data.trade.dto.TradeMatchesPayload
@@ -9,6 +11,9 @@ import com.emabuia.pokevault.data.trade.dto.TradeMePayload
 import com.emabuia.pokevault.data.trade.dto.TradeOwnedRequest
 import com.emabuia.pokevault.data.trade.dto.TradeProfilePayload
 import com.emabuia.pokevault.data.trade.dto.TradeProfileRequest
+import com.emabuia.pokevault.data.trade.dto.TradeProposalRequest
+import com.emabuia.pokevault.data.trade.dto.TradeProposalsPayload
+import com.emabuia.pokevault.data.trade.dto.TradeUserHavesPayload
 import com.emabuia.pokevault.data.trade.dto.TradeWantsRequest
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -74,7 +79,8 @@ object TradeApi {
                     when {
                         response.code == 401 -> Result.Unauthorized
                         response.code == 404 && error == "no_profile" -> Result.NoProfile
-                        response.code == 400 || response.code == 413 -> Result.Rejected(error)
+                        // 409: proposta gia' aperta, carte non piu' offerte, non e' il tuo turno.
+                        response.code == 400 || response.code == 409 || response.code == 413 || response.code == 429 -> Result.Rejected(error)
                         !response.isSuccessful -> Result.Unavailable(response.code)
                         else -> parse(text)?.let { Result.Ok(it) } ?: Result.Unavailable(response.code)
                     }
@@ -115,4 +121,23 @@ object TradeApi {
 
     suspend fun matches(): Result<TradeMatchesPayload> =
         call("GET", "v1/trade/matches", null, parser<TradeMatchesPayload>())
+
+    // ── Proposte ────────────────────────────────────────────────────────────
+
+    /** Le carte che offre un'altra persona, per comporre una proposta. */
+    suspend fun userHaves(publicId: String): Result<TradeUserHavesPayload> =
+        call("GET", "v1/trade/users/$publicId/haves", null, parser<TradeUserHavesPayload>())
+
+    suspend fun proposals(): Result<TradeProposalsPayload> =
+        call("GET", "v1/trade/proposals", null, parser<TradeProposalsPayload>())
+
+    suspend fun createProposal(request: TradeProposalRequest): Result<TradeCreatedPayload> =
+        call("POST", "v1/trade/proposals", request, parser<TradeCreatedPayload>())
+
+    /** accept | decline | cancel; per counter c'e' [counterProposal]. */
+    suspend fun actOnProposal(id: String, action: String): Result<Unit> =
+        call("POST", "v1/trade/proposals/$id/$action", emptyMap<String, String>()) { Unit }
+
+    suspend fun counterProposal(id: String, request: TradeCounterRequest): Result<Unit> =
+        call("POST", "v1/trade/proposals/$id/counter", request) { Unit }
 }

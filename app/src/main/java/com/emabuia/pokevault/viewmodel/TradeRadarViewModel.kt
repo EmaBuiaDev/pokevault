@@ -10,7 +10,14 @@ import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.trade.CoarseLocation
 import com.emabuia.pokevault.data.trade.TradeApi
 import com.emabuia.pokevault.data.trade.TradeLists
+import com.emabuia.pokevault.data.remote.RepositoryProvider
+import com.emabuia.pokevault.data.trade.TradeCardKey
 import com.emabuia.pokevault.data.trade.dto.TradeCardOffer
+import com.emabuia.pokevault.data.trade.dto.TradeCounterRequest
+import com.emabuia.pokevault.data.trade.dto.TradeMatchItem
+import com.emabuia.pokevault.data.trade.dto.TradeOfferItem
+import com.emabuia.pokevault.data.trade.dto.TradeProposal
+import com.emabuia.pokevault.data.trade.dto.TradeProposalRequest
 import com.emabuia.pokevault.data.trade.dto.TradeHaveItem
 import com.emabuia.pokevault.data.trade.dto.TradeHavesPayload
 import com.emabuia.pokevault.data.trade.dto.TradeMatch
@@ -42,7 +49,10 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         data class Error(val message: Problem) : Screen()
     }
 
-    enum class Problem { UNAUTHORIZED, UNAVAILABLE, REJECTED, NO_LOCATION }
+    enum class Problem { UNAUTHORIZED, UNAVAILABLE, REJECTED, NO_LOCATION, ALREADY_OPEN, NOT_AVAILABLE }
+
+    /** Conferme da mostrare una volta, come [notice] ma non sono errori. */
+    enum class Info { PROPOSAL_SENT, COUNTER_SENT, ACCEPTED, DECLINED, CANCELLED }
 
     var screen by mutableStateOf<Screen>(Screen.Loading)
         private set
@@ -109,12 +119,19 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     var notice by mutableStateOf<Problem?>(null)
         private set
 
+    var info by mutableStateOf<Info?>(null)
+        private set
+
     init {
         load()
     }
 
     fun consumeNotice() {
         notice = null
+    }
+
+    fun consumeInfo() {
+        info = null
     }
 
     fun dismissLevelsIntro() {
@@ -198,6 +215,8 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                 notifyIds = emptySet()
                 matches = emptyList()
                 cards = emptyList()
+                proposals = emptyList()
+                composer = null
                 screen = Screen.Onboarding
             } else {
                 notice = problemOf(result)
@@ -272,6 +291,219 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    // ── Proposte (fase 2a) ──────────────────────────────────────────────────
+
+    /** Le mie proposte, aperte e chiuse da poco, viste da me. */
+    var proposals by mutableStateOf<List<TradeProposal>>(emptyList())
+        private set
+
+    var proposalsLoaded by mutableStateOf(false)
+        private set
+
+    /** Quelle in cui tocca a me rispondere: il numero sulla tab. */
+    val proposalsToAnswer: Int get() = proposals.count { it.myTurn == true }
+
+    /** La proposta su cui si sta agendo (accetta, rifiuta...), per il caricamento sul tasto. */
+    var actingOn by mutableStateOf<String?>(null)
+        private set
+
+    /** Cresce quando l'app deve portare l'utente sulla tab Proposte (dopo un invio). */
+    var focusProposals by mutableStateOf(0)
+        private set
+
+    /**
+     * La proposta in composizione. [give] e [take] vanno dall'id della carta
+     * ([offerId]) alle copie: [give] fra le mie offerte, [take] fra le sue.
+     */
+    data class Composer(
+        val counterpartId: String,
+        val nickname: String,
+        val distance: String?,
+        /** Se non e' null si sta scrivendo una controproposta a questa proposta. */
+        val counterTo: String? = null,
+        val theirOffers: List<TradeOfferItem> = emptyList(),
+        val loading: Boolean = true,
+        val give: Map<String, Int> = emptyMap(),
+        val take: Map<String, Int> = emptyMap(),
+        val sending: Boolean = false
+    )
+
+    var composer by mutableStateOf<Composer?>(null)
+        private set
+
+    /** Prezzo di una carta per chiave (il minimo di Cardmarket, come nel resto dell'app). */
+    var prices by mutableStateOf<Map<String, Double>>(emptyMap())
+        private set
+    private val pricedSets = mutableSetOf<String>()
+
+    /** Le mie carte offerte, nella forma delle proposte, con le copie che offro. */
+    val myOffers: List<TradeOfferItem>
+        get() = (duplicates + singles).mapNotNull { offer ->
+            val quantity = offers[offer.id] ?: return@mapNotNull null
+            TradeOfferItem(
+                key = offer.key, variant = offer.variant, condition = offer.condition, language = offer.language,
+                qty = quantity, name = offer.name, setName = offer.setName
+            )
+        }
+
+    fun refreshProposals() {
+        viewModelScope.launch {
+            when (val result = TradeApi.proposals()) {
+                is TradeApi.Result.Ok -> {
+                    proposals = result.value.proposals.orEmpty()
+                    proposalsLoaded = true
+                    ensurePrices(proposals.flatMap { it.give.orEmpty() + it.take.orEmpty() }.mapNotNull { it.key })
+                }
+                else -> notice = problemOf(result)
+            }
+        }
+    }
+
+    /**
+     * Apre la composizione verso una persona. Le carte partono gia' scelte:
+     * [presetKey] se si arriva da una carta, altrimenti fino a tre "La cerchi"
+     * per parte (o la prima carta, se non ce ne sono). Si cambia tutto.
+     */
+    fun openComposer(match: TradeMatch, presetKey: String? = null) {
+        val id = match.id ?: return
+        composer = Composer(id, match.nickname.orEmpty(), match.distance)
+        viewModelScope.launch {
+            val theirs = (TradeApi.userHaves(id) as? TradeApi.Result.Ok)?.value?.items.orEmpty()
+            fun preset(items: List<TradeMatchItem>): Set<String> =
+                items.filter { it.level == "wanted" }.take(3).mapNotNull { it.key }.toSet()
+                    .ifEmpty { items.take(1).mapNotNull { it.key }.toSet() }
+            val takeKeys = presetKey?.let { setOf(it) } ?: preset(match.theyGive.orEmpty())
+            val giveKeys = preset(match.iGive.orEmpty())
+            composer = composer?.takeIf { it.counterpartId == id && it.counterTo == null }?.copy(
+                theirOffers = theirs,
+                loading = false,
+                take = theirs.filter { it.key in takeKeys }.distinctBy { it.key }.associate { offerId(it) to 1 },
+                give = myOffers.filter { it.key in giveKeys }.distinctBy { it.key }.associate { offerId(it) to 1 }
+            )
+            ensurePrices((theirs + myOffers).mapNotNull { it.key })
+        }
+    }
+
+    /** Controproposta: si riparte dalle carte dell'ultima revisione. */
+    fun openCounter(proposal: TradeProposal) {
+        val other = proposal.counterpart ?: return
+        val id = other.id ?: return
+        composer = Composer(id, other.nickname.orEmpty(), other.distance, counterTo = proposal.id)
+        viewModelScope.launch {
+            val theirs = (TradeApi.userHaves(id) as? TradeApi.Result.Ok)?.value?.items.orEmpty()
+            composer = composer?.takeIf { it.counterTo == proposal.id }?.copy(
+                theirOffers = theirs,
+                loading = false,
+                give = proposal.give.orEmpty().associate { offerId(it) to (it.qty ?: 1) },
+                take = proposal.take.orEmpty().associate { offerId(it) to (it.qty ?: 1) }
+            )
+            ensurePrices((theirs + myOffers).mapNotNull { it.key })
+        }
+    }
+
+    fun closeComposer() {
+        composer = null
+    }
+
+    /** Copie di una mia carta nella proposta; 0 la toglie. */
+    fun setGive(id: String, quantity: Int) {
+        val current = composer ?: return
+        val max = myOffers.firstOrNull { offerId(it) == id }?.qty ?: return
+        composer = current.copy(give = current.give.withQuantity(id, quantity.coerceAtMost(max)))
+    }
+
+    /** Copie di una sua carta nella proposta; 0 la toglie. */
+    fun setTake(id: String, quantity: Int) {
+        val current = composer ?: return
+        val max = current.theirOffers.firstOrNull { offerId(it) == id }?.qty ?: return
+        composer = current.copy(take = current.take.withQuantity(id, quantity.coerceAtMost(max)))
+    }
+
+    private fun Map<String, Int>.withQuantity(id: String, quantity: Int): Map<String, Int> =
+        if (quantity <= 0) this - id else this + (id to quantity)
+
+    fun sendComposer() {
+        val current = composer ?: return
+        if (current.give.isEmpty() || current.take.isEmpty() || current.sending) return
+        val give = myOffers.mapNotNull { item -> current.give[offerId(item)]?.let { item.copy(qty = it, name = null, setName = null) } }
+        val take = current.theirOffers.mapNotNull { item -> current.take[offerId(item)]?.let { item.copy(qty = it, name = null, setName = null) } }
+        composer = current.copy(sending = true)
+        viewModelScope.launch {
+            val result = if (current.counterTo != null) {
+                TradeApi.counterProposal(current.counterTo, TradeCounterRequest(give, take))
+            } else {
+                TradeApi.createProposal(TradeProposalRequest(current.counterpartId, give, take))
+            }
+            when {
+                result is TradeApi.Result.Ok -> {
+                    composer = null
+                    info = if (current.counterTo != null) Info.COUNTER_SENT else Info.PROPOSAL_SENT
+                    focusProposals++
+                    refreshProposals()
+                }
+                result is TradeApi.Result.Rejected && result.error == "already_open" -> {
+                    composer = null
+                    notice = Problem.ALREADY_OPEN
+                    focusProposals++
+                    refreshProposals()
+                }
+                result is TradeApi.Result.Rejected && result.error == "not_offered" -> {
+                    // Qualcuno ha cambiato le sue offerte nel frattempo: si rilegge e si riprova.
+                    notice = Problem.NOT_AVAILABLE
+                    val theirs = (TradeApi.userHaves(current.counterpartId) as? TradeApi.Result.Ok)?.value?.items
+                    composer = composer?.copy(sending = false, theirOffers = theirs ?: current.theirOffers)
+                }
+                else -> {
+                    notice = problemOf(result)
+                    composer = composer?.copy(sending = false)
+                }
+            }
+        }
+    }
+
+    /** accept | decline | cancel su una proposta. */
+    fun answer(proposalId: String, action: String) {
+        if (actingOn != null) return
+        viewModelScope.launch {
+            actingOn = proposalId
+            val result = TradeApi.actOnProposal(proposalId, action)
+            actingOn = null
+            when {
+                result is TradeApi.Result.Ok -> info = when (action) {
+                    "accept" -> Info.ACCEPTED
+                    "decline" -> Info.DECLINED
+                    else -> Info.CANCELLED
+                }
+                result is TradeApi.Result.Rejected && result.error == "items_changed" -> notice = Problem.NOT_AVAILABLE
+                else -> notice = problemOf(result)
+            }
+            refreshProposals()
+        }
+    }
+
+    /**
+     * Prezzi per il bilancio, presi set per set dallo stesso snapshot che usa
+     * il resto dell'app. Una carta senza prezzo resta fuori dal conto.
+     */
+    private fun ensurePrices(keys: Collection<String>) {
+        val sets = keys.map { TradeCardKey.setCodeOf(it) }.toSet() - pricedSets
+        if (sets.isEmpty()) return
+        pricedSets += sets
+        viewModelScope.launch {
+            val found = HashMap<String, Double>()
+            for (set in sets) {
+                val map = runCatching {
+                    RepositoryProvider.italianPriceSnapshotRepository.getPriceMap(getApplication(), set)
+                }.getOrDefault(emptyMap())
+                for ((number, data) in map) {
+                    val price = data.eurLow ?: data.eurTrend ?: data.eurAvg
+                    if (price != null && price > 0) found["$set:$number"] = price
+                }
+            }
+            if (found.isNotEmpty()) prices = prices + found
+        }
+    }
+
     // ── Sincronizzazione ────────────────────────────────────────────────────
 
     private suspend fun updateProfile(profile: TradeProfilePayload, cell: String, paused: Boolean) {
@@ -325,6 +557,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             pushHaves()
 
             refreshMatches()
+            refreshProposals()
         } finally {
             busy = false
         }
@@ -343,6 +576,10 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         val result = TradeApi.putHaves(TradeHavesPayload(items))
         if (result !is TradeApi.Result.Ok) notice = problemOf(result)
     }
+
+    /** Identifica una carta offerta: stampa, condizione e lingua, come [TradeLists.Duplicate.id]. */
+    fun offerId(item: TradeOfferItem): String =
+        listOf(item.key.orEmpty(), item.variant.orEmpty(), item.condition.orEmpty(), item.language.orEmpty()).joinToString("|")
 
     private companion object {
         const val PREFS = "trade_radar"
