@@ -105,7 +105,7 @@ if (arg('--as')) {
       if (!spot) { console.log('Nessun luogo: apri prima il pannello appuntamento dall\'app, che scarica la zona.'); process.exit(1); }
       const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
       res = await call(tok, 'POST', `/v1/trade/proposals/${deal.id}/meeting`, {
-        spot: spot.id, slots: [{ day: day(2), part: 'afternoon' }, { day: day(3), part: 'morning' }],
+        spot: spot.id, slots: [{ day: day(2), time: '17:30' }, { day: day(3), time: '10:30' }],
       });
       console.log(`luogo: ${spot.name} (${spot.kind})`);
     }
@@ -218,7 +218,7 @@ if (args.includes('--prova-appuntamento')) {
   const badSlots = await call(luca, 'POST', `/v1/trade/proposals/${id}/meeting`, { spot: spots[0]?.id, slots: [{ day: day(40), part: 'morning' }] });
   check('una fascia oltre 21 giorni e\' rifiutata', badSlots.status === 400);
   const proposedMeeting = await call(luca, 'POST', `/v1/trade/proposals/${id}/meeting`, {
-    spot: spots[0]?.id, slots: [{ day: day(2), part: 'afternoon' }, { day: day(3), part: 'morning' }],
+    spot: spots[0]?.id, slots: [{ day: day(2), time: '17:30' }, { day: day(3), time: '10:00' }],
   });
   check('Luca propone luogo e due fasce', proposedMeeting.status === 200);
   const selfConfirm = await call(luca, 'POST', `/v1/trade/proposals/${id}/meeting/confirm`, { slot: 0 });
@@ -226,7 +226,7 @@ if (args.includes('--prova-appuntamento')) {
   const giuliaList = (await call(giulia, 'GET', '/v1/trade/proposals')).data.proposals.find((p) => p.id === id);
   check('per Giulia serve una sua mossa, con luogo e fasce', giuliaList?.actionNeeded === true && giuliaList.meeting.slots.length === 2, giuliaList?.meeting?.spot?.name);
   const confirmed = await call(giulia, 'POST', `/v1/trade/proposals/${id}/meeting/confirm`, { slot: 1 });
-  check('Giulia sceglie la seconda fascia: appuntamento fissato', confirmed.status === 200 && confirmed.data.status === 'scheduled', JSON.stringify(confirmed.data.slot));
+  check('Giulia sceglie il secondo orario: appuntamento fissato', confirmed.status === 200 && confirmed.data.status === 'scheduled' && confirmed.data.slot?.time === '10:00', JSON.stringify(confirmed.data.slot));
   const lucaList = (await call(luca, 'GET', '/v1/trade/proposals')).data.proposals.find((p) => p.id === id);
   check('per Luca risulta fissato', lucaList?.status === 'scheduled' && lucaList.meeting.status === 'confirmed' && lucaList.meeting.slot?.part === 'morning');
 

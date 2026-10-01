@@ -243,8 +243,10 @@ data class TradeSpot(
 data class TradeSlot(
     /** yyyy-MM-dd */
     @SerializedName("day") val day: String,
-    /** morning | afternoon | evening */
-    @SerializedName("part") val part: String
+    /** "HH:mm": l'ora dell'appuntamento (dal 01/10; le prime prove avevano solo la fascia). */
+    @SerializedName("time") val time: String? = null,
+    /** morning | afternoon | evening: la parte della giornata, ricavata dall'ora. */
+    @SerializedName("part") val part: String? = null
 )
 
 data class TradeMeeting(

@@ -64,6 +64,8 @@ import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Add
@@ -82,6 +84,7 @@ import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.material.icons.filled.LocalMall
+import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NightsStay
@@ -1561,29 +1564,43 @@ private fun CardDetailDialog(item: TradeMatchItem, theirs: Boolean, onDismiss: (
 // ── Proposte ────────────────────────────────────────────────────────────────
 
 /** I contenitori della tab Proposte, nell'ordine in cui si mostrano. */
-private enum class ProposalBucket { TO_ANSWER, WAITING, AGREED, CLOSED }
+private enum class ProposalBucket { TO_ANSWER, MEETINGS, AGREED, WAITING, CLOSED }
 
 private fun bucketOf(proposal: TradeProposal): ProposalBucket = when {
     proposal.actionNeeded == true || (proposal.status == "open" && proposal.myTurn == true) -> ProposalBucket.TO_ANSWER
     proposal.status == "open" -> ProposalBucket.WAITING
-    proposal.status == "accepted" || proposal.status == "scheduled" -> ProposalBucket.AGREED
+    proposal.status == "scheduled" -> ProposalBucket.MEETINGS
+    proposal.status == "accepted" -> ProposalBucket.AGREED
     else -> ProposalBucket.CLOSED
 }
 
 @Composable
 private fun bucketStyle(bucket: ProposalBucket): LevelStyle = when (bucket) {
     ProposalBucket.TO_ANSWER -> LevelStyle(AppLocale.tradeRadarSectionToAnswer, AppLocale.tradeRadarBucketEmptyToAnswer, AppColors.orange, Icons.Default.Inbox)
+    ProposalBucket.MEETINGS -> LevelStyle(AppLocale.tradeRadarBucketMeetings, AppLocale.tradeRadarBucketEmptyMeetings, AppColors.green, Icons.Default.Event)
+    ProposalBucket.AGREED -> LevelStyle(AppLocale.tradeRadarBucketAgreed, AppLocale.tradeRadarBucketEmptyAgreed, AppColors.purple, Icons.Default.Handshake)
     ProposalBucket.WAITING -> LevelStyle(AppLocale.tradeRadarStatusWaiting, AppLocale.tradeRadarBucketEmptyWaiting, AppColors.blue, Icons.Default.Schedule)
-    ProposalBucket.AGREED -> LevelStyle(AppLocale.tradeRadarBucketAgreed, AppLocale.tradeRadarBucketEmptyAgreed, AppColors.green, Icons.Default.Handshake)
     ProposalBucket.CLOSED -> LevelStyle(AppLocale.tradeRadarSectionClosed, AppLocale.tradeRadarBucketEmptyClosed, AppColors.textMuted, Icons.Default.Archive)
 }
 
+/** Quando cade un appuntamento fissato, per ordinarli: giorno e ora. */
+private fun meetingWhen(proposal: TradeProposal): String =
+    proposal.meeting?.slot?.let { "${it.day} ${it.time ?: slotPartTime(it.part)}" } ?: "9999"
+
+/** Per le fasce senza ora (le prime prove): un'ora indicativa solo per ordinarle. */
+private fun slotPartTime(part: String?): String = when (part) {
+    "morning" -> "09:00"
+    "afternoon" -> "15:00"
+    else -> "20:00"
+}
+
 /**
- * La tab Proposte, pensata per quando sono tante: quattro contenitori (tocca a
- * te, in attesa, accordi, chiuse) e se ne guarda uno alla volta, a righe
- * compatte. Il dettaglio con i tasti si apre al tocco. Le chiuse stanno una
- * riga per persona, con la cronologia nel dettaglio. Si apre da sola sul
- * contenitore che conta: prima cio' che aspetta te, poi gli accordi.
+ * La tab Proposte, pensata per quando sono tante. In cima il prossimo
+ * appuntamento, se c'e', grande e con le mappe. Sotto cinque contenitori (tocca a
+ * te, appuntamenti, accordi, in attesa, chiuse) e se ne guarda uno alla volta,
+ * a righe compatte con un'etichetta che dice che cos'e' ognuna. Il
+ * dettaglio con i tasti si apre al tocco. Si apre da sola sul contenitore che
+ * conta: prima cio' che aspetta te, poi gli appuntamenti.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1591,22 +1608,28 @@ private fun ProposalsTab(viewModel: TradeRadarViewModel, onGoToMatches: () -> Un
     LaunchedEffect(Unit) { viewModel.refreshProposals() }
     val proposals = viewModel.proposals
     val byBucket = proposals.groupBy(::bucketOf)
-    val automatic = listOf(ProposalBucket.TO_ANSWER, ProposalBucket.AGREED, ProposalBucket.WAITING, ProposalBucket.CLOSED)
+    val automatic = listOf(ProposalBucket.TO_ANSWER, ProposalBucket.MEETINGS, ProposalBucket.AGREED, ProposalBucket.WAITING, ProposalBucket.CLOSED)
         .firstOrNull { !byBucket[it].isNullOrEmpty() } ?: ProposalBucket.TO_ANSWER
     val bucket = viewModel.proposalsBucket?.let { name -> ProposalBucket.entries.firstOrNull { it.name == name } } ?: automatic
     var query by rememberSaveable { mutableStateOf("") }
     /** Gli id delle proposte nel dettaglio: una, o la cronologia di una persona. */
     var detail by remember { mutableStateOf<List<String>?>(null) }
     var confirmCancel by remember { mutableStateOf<TradeProposal?>(null) }
+    val today = java.time.LocalDate.now().toString()
+    val nextMeeting = byBucket[ProposalBucket.MEETINGS].orEmpty()
+        .filter { (it.meeting?.slot?.day ?: "") >= today }
+        .minByOrNull(::meetingWhen)
 
     val needle = query.trim()
     fun hit(proposal: TradeProposal): Boolean =
         needle.isEmpty() ||
             proposal.counterpart?.nickname.orEmpty().contains(needle, ignoreCase = true) ||
+            proposal.meeting?.spot?.name.orEmpty().contains(needle, ignoreCase = true) ||
             (proposal.give.orEmpty() + proposal.take.orEmpty()).any {
                 it.name.orEmpty().contains(needle, ignoreCase = true) || it.setName.orEmpty().contains(needle, ignoreCase = true)
             }
     val shown = byBucket[bucket].orEmpty().filter(::hit)
+        .let { list -> if (bucket == ProposalBucket.MEETINGS) list.sortedBy(::meetingWhen) else list }
     val rows: List<List<TradeProposal>> = if (bucket == ProposalBucket.CLOSED) {
         shown.groupBy { it.counterpart?.id ?: it.id }.values.map { group -> group.sortedByDescending { it.updatedAt ?: 0L } }
     } else {
@@ -1633,6 +1656,11 @@ private fun ProposalsTab(viewModel: TradeRadarViewModel, onGoToMatches: () -> Un
                     EmptyState(text = AppLocale.tradeRadarNoProposals, action = AppLocale.tradeRadarGoToMatches to onGoToMatches)
                 }
                 else -> {
+                    nextMeeting?.let { meeting ->
+                        item(key = "nextMeeting") {
+                            NextMeetingCard(meeting, onClick = { detail = listOfNotNull(meeting.id) }, modifier = Modifier.animateItem())
+                        }
+                    }
                     item(key = "buckets") {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(ProposalBucket.entries) { entry ->
@@ -1695,10 +1723,108 @@ private fun ProposalsTab(viewModel: TradeRadarViewModel, onGoToMatches: () -> Un
     }
 }
 
+/** Il datario: giorno della settimana, numero, mese e ora, come un foglio di calendario. */
+@Composable
+private fun DateTile(slot: TradeSlot?, size: Dp, color: Color) {
+    val date = slot?.let { runCatching { java.time.LocalDate.parse(it.day) }.getOrNull() }
+    val locale = if (AppLocale.isItalian) Locale.ITALIAN else Locale.ENGLISH
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(size).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.14f))
+    ) {
+        Text(
+            date?.format(java.time.format.DateTimeFormatter.ofPattern("EEE", locale))?.uppercase(locale).orEmpty(),
+            fontSize = (size.value * 0.17f).sp,
+            fontWeight = FontWeight.Bold,
+            color = AppColors.onAccent,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().background(color).padding(vertical = 2.dp)
+        )
+        Text(date?.dayOfMonth?.toString() ?: "?", fontSize = (size.value * 0.38f).sp, fontWeight = FontWeight.Black, color = AppColors.textPrimary)
+        Text(
+            date?.format(java.time.format.DateTimeFormatter.ofPattern("MMM", locale)).orEmpty(),
+            fontSize = (size.value * 0.16f).sp,
+            color = AppColors.textSecondary
+        )
+        Text(
+            slot?.time ?: slot?.part?.let(::slotPartLabel).orEmpty(),
+            fontSize = (size.value * 0.18f).sp,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+    }
+}
+
+/** In cima alla tab: il prossimo appuntamento fissato, grande, con chi, dove e le mappe. */
+@Composable
+private fun NextMeetingCard(proposal: TradeProposal, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val meeting = proposal.meeting
+    val shape = RoundedCornerShape(22.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(AppColors.green.copy(alpha = 0.18f), AppColors.card)))
+            .background(AppColors.card.copy(alpha = 0.45f))
+            .border(1.dp, AppColors.green.copy(alpha = 0.5f), shape)
+            .pressScale(scaleDown = 0.98f, onClick = onClick)
+            .padding(14.dp)
+    ) {
+        DateTile(meeting?.slot, size = 64.dp, color = AppColors.green)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(AppLocale.tradeRadarNextMeeting.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AppColors.green)
+            Text(proposal.counterpart?.nickname.orEmpty(), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
+            meeting?.spot?.let { spot ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(spotKindIcon(spot.kind), null, tint = spotKindColor(spot.kind), modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(spot.name.orEmpty(), fontSize = 13.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Text(
+                AppLocale.tradeRadarRowSummary(proposal.take.orEmpty().sumOf { it.qty ?: 1 }, proposal.give.orEmpty().sumOf { it.qty ?: 1 }),
+                fontSize = 12.sp,
+                color = AppColors.textMuted
+            )
+        }
+        meeting?.spot?.let { spot ->
+            IconButton(onClick = { openInMaps(context, spot) }) {
+                Icon(Icons.Default.Map, AppLocale.tradeRadarOpenMaps, tint = AppColors.green)
+            }
+        }
+    }
+}
+
+private data class RowTag(val text: String, val icon: ImageVector, val color: Color)
+
+/** Che cos'e' una riga, a colpo d'occhio: proposta, controproposta, accordo, appuntamento... */
+@Composable
+private fun rowTag(proposal: TradeProposal, groupSize: Int): RowTag {
+    val meeting = proposal.meeting
+    return when {
+        proposal.status == "open" && proposal.myTurn == true && (proposal.revision ?: 1) > 1 ->
+            RowTag(AppLocale.tradeRadarTagCounter, Icons.AutoMirrored.Filled.Reply, AppColors.orange)
+        proposal.status == "open" && proposal.myTurn == true -> RowTag(AppLocale.tradeRadarTagNew, Icons.Default.Mail, AppColors.orange)
+        proposal.status == "open" -> RowTag(AppLocale.tradeRadarTagSent, Icons.AutoMirrored.Filled.Send, AppColors.blue)
+        proposal.status == "scheduled" -> RowTag(AppLocale.tradeRadarTagMeeting, Icons.Default.Event, AppColors.green)
+        proposal.status == "accepted" && meeting?.status == "proposed" && meeting.byMe != true ->
+            RowTag(AppLocale.tradeRadarTagPickTime, Icons.Default.Schedule, AppColors.orange)
+        proposal.status == "accepted" && meeting?.status == "proposed" -> RowTag(AppLocale.tradeRadarTagTimeProposed, Icons.Default.Schedule, AppColors.blue)
+        proposal.status == "accepted" -> RowTag(AppLocale.tradeRadarTagDeal, Icons.Default.Handshake, AppColors.purple)
+        groupSize > 1 -> RowTag("${proposalStatus(proposal).label} · ${AppLocale.tradeRadarClosedCount(groupSize)}", Icons.Default.Archive, AppColors.textMuted)
+        else -> RowTag(proposalStatus(proposal).label, Icons.Default.Archive, AppColors.textMuted)
+    }
+}
+
 /**
- * Una proposta in una riga: chi, quando, cosa ricevi e cosa dai in
- * miniatura, e se il bilancio e' equo. Nelle chiuse la riga e' la persona,
- * con quante proposte chiuse ci sono.
+ * Una proposta in una riga: chi, quando, un'etichetta con che cos'e', cosa
+ * ricevi e cosa dai in miniatura, e se il bilancio e' equo. Gli appuntamenti
+ * hanno il datario al posto dell'iniziale e il luogo al posto delle carte.
+ * Nelle chiuse la riga e' la persona, con quante proposte chiuse ci sono.
  */
 @Composable
 private fun ProposalRow(group: List<TradeProposal>, prices: Map<String, Double>, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -1708,17 +1834,26 @@ private fun ProposalRow(group: List<TradeProposal>, prices: Map<String, Double>,
     val take = proposal.take.orEmpty()
     val give = proposal.give.orEmpty()
     val verdict = balanceVerdict(give, take, prices)
+    val tag = rowTag(proposal, group.size)
+    val scheduled = proposal.status == "scheduled"
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .background(AppColors.card)
-            .then(if (bucket == ProposalBucket.TO_ANSWER) Modifier.border(1.dp, AppColors.orange.copy(alpha = 0.5f), shape) else Modifier)
+            .then(
+                when (bucket) {
+                    ProposalBucket.TO_ANSWER -> Modifier.border(1.dp, AppColors.orange.copy(alpha = 0.5f), shape)
+                    ProposalBucket.MEETINGS -> Modifier.border(1.dp, AppColors.green.copy(alpha = 0.45f), shape)
+                    else -> Modifier
+                }
+            )
             .pressScale(scaleDown = 0.98f, onClick = onClick)
             .padding(12.dp)
     ) {
-        Avatar(proposal.counterpart?.nickname.orEmpty(), size = 42.dp)
+        if (scheduled) DateTile(proposal.meeting?.slot, size = 48.dp, color = AppColors.green)
+        else Avatar(proposal.counterpart?.nickname.orEmpty(), size = 42.dp)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1730,44 +1865,32 @@ private fun ProposalRow(group: List<TradeProposal>, prices: Map<String, Double>,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                Text(timeAgo(proposal.updatedAt), fontSize = 11.sp, color = AppColors.textMuted)
+                if (!scheduled) Text(timeAgo(proposal.updatedAt), fontSize = 11.sp, color = AppColors.textMuted)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                MiniStack(take)
-                Icon(Icons.Default.SwapHoriz, null, tint = AppColors.textMuted, modifier = Modifier.padding(horizontal = 6.dp).size(16.dp))
-                MiniStack(give)
-                Spacer(Modifier.weight(1f))
-                verdict?.let { (text, color) -> InfoPill(text, color) }
+                Icon(tag.icon, null, tint = tag.color, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(tag.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = tag.color, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text(
-                when {
-                    bucket == ProposalBucket.CLOSED && group.size > 1 -> "${proposalStatus(proposal).label} · ${AppLocale.tradeRadarClosedCount(group.size)}"
-                    bucket == ProposalBucket.CLOSED -> proposalStatus(proposal).label
-                    proposal.status == "accepted" || proposal.status == "scheduled" -> meetingLine(proposal)
-                    else -> listOfNotNull(
-                        AppLocale.tradeRadarRowSummary(take.sumOf { it.qty ?: 1 }, give.sumOf { it.qty ?: 1 }),
-                        AppLocale.tradeRadarCounterShort.takeIf { (proposal.revision ?: 1) > 1 && proposal.status == "open" }
-                    ).joinToString(" · ")
-                },
-                fontSize = 12.sp,
-                color = AppColors.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (scheduled) {
+                proposal.meeting?.spot?.let { spot ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(spotKindIcon(spot.kind), null, tint = spotKindColor(spot.kind), modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(spot.name.orEmpty(), fontSize = 12.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    MiniStack(take)
+                    Icon(Icons.Default.SwapHoriz, null, tint = AppColors.textMuted, modifier = Modifier.padding(horizontal = 6.dp).size(16.dp))
+                    MiniStack(give)
+                    Spacer(Modifier.weight(1f))
+                    verdict?.let { (text, color) -> InfoPill(text, color) }
+                }
+            }
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.textMuted)
-    }
-}
-
-/** A che punto e' l'appuntamento di un accordo, in una riga. */
-private fun meetingLine(proposal: TradeProposal): String {
-    val meeting = proposal.meeting
-    return when {
-        meeting?.status == "confirmed" && meeting.slot != null ->
-            listOfNotNull(slotLabel(meeting.slot), meeting.spot?.name).joinToString(" · ")
-        meeting?.status == "proposed" && meeting.byMe == true -> AppLocale.tradeRadarMeetingWaitingShort
-        meeting?.status == "proposed" -> AppLocale.tradeRadarMeetingPickShort
-        else -> AppLocale.tradeRadarMeetingToPlan
     }
 }
 
@@ -2282,13 +2405,10 @@ private fun PickRow(item: TradeOfferItem, price: Double?, modifier: Modifier = M
 
 // ── Appuntamento (fase 2b) ──────────────────────────────────────────────────
 
-/** Le fasce, nell'ordine della giornata. */
-private val SlotParts = listOf("morning", "afternoon", "evening")
-
 /** Il localizzatore ufficiale dei tornei: solo un link, i suoi dati non si copiano (termini d'uso). */
 private const val POKEMON_EVENT_LOCATOR = "https://events.pokemon.com/EventLocator/"
 
-private fun slotPartLabel(part: String): String = when (part) {
+private fun slotPartLabel(part: String?): String = when (part) {
     "morning" -> AppLocale.tradeRadarMorning
     "afternoon" -> AppLocale.tradeRadarAfternoon
     else -> AppLocale.tradeRadarEvening
@@ -2299,7 +2419,7 @@ private fun slotLabel(slot: TradeSlot): String {
     val date = runCatching { java.time.LocalDate.parse(slot.day) }.getOrNull() ?: return slot.day
     val locale = if (AppLocale.isItalian) Locale.ITALIAN else Locale.ENGLISH
     val day = date.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", locale))
-    return "$day · ${slotPartLabel(slot.part)}"
+    return "$day · ${slot.time ?: slotPartLabel(slot.part)}"
 }
 
 private fun spotKindIcon(kind: String?): ImageVector = when (kind) {
@@ -2520,7 +2640,7 @@ private fun SpotSummary(spot: TradeSpot) {
  * Il pannello per fissare l'appuntamento, a schermo intero. Dove: i luoghi
  * migliori a meta' strada (gia' scelto il primo), gli altri, "Manca un
  * negozio?" e il link ai tornei ufficiali. Quando: i prossimi 14 giorni,
- * e per ognuno mattina, pomeriggio o sera, fino a tre fasce.
+ * e per ognuno gli orari ogni mezz'ora, fino a tre proposte.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2696,40 +2816,12 @@ private fun PlannerDialog(viewModel: TradeRadarViewModel, planner: TradeRadarVie
                     }
                 }
                 item(key = "parts") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SlotParts.forEach { part ->
-                            val slot = TradeSlot(selectedDay.toString(), part)
-                            val on = slot in planner.slots
-                            val full = !on && planner.slots.size >= 3
-                            val background by animateColorAsState(if (on) AppColors.blue else AppColors.card, tween(AppMotion.current.state), label = "part")
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(background)
-                                    .pressScale(enabled = !full) { viewModel.toggleSlot(slot) }
-                                    .padding(vertical = 12.dp)
-                            ) {
-                                Icon(
-                                    when (part) {
-                                        "morning" -> Icons.Default.WbTwilight
-                                        "afternoon" -> Icons.Default.WbSunny
-                                        else -> Icons.Default.NightsStay
-                                    },
-                                    null,
-                                    tint = if (on) AppColors.onAccent else if (full) AppColors.textMuted.copy(alpha = 0.4f) else AppColors.textSecondary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    slotPartLabel(part),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (on) AppColors.onAccent else if (full) AppColors.textMuted.copy(alpha = 0.4f) else AppColors.textPrimary
-                                )
-                            }
-                        }
-                    }
+                    TimeGrid(
+                        day = selectedDay,
+                        today = today,
+                        chosen = planner.slots,
+                        onToggle = { viewModel.toggleSlot(it) }
+                    )
                 }
                 item(key = "chosen") {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2745,6 +2837,71 @@ private fun PlannerDialog(viewModel: TradeRadarViewModel, planner: TradeRadarVie
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Gli orari proponibili, ogni mezz'ora, divisi per parte della giornata. */
+private val TimeGroups: List<Pair<String, List<String>>> = listOf(
+    "morning" to (9..12).flatMap { h -> listOf("%02d:00".format(h), "%02d:30".format(h)) },
+    "afternoon" to (13..18).flatMap { h -> listOf("%02d:00".format(h), "%02d:30".format(h)) },
+    "evening" to (19..21).flatMap { h -> listOf("%02d:00".format(h), "%02d:30".format(h)) },
+)
+
+/**
+ * Gli orari di un giorno: tre gruppi (mattina, pomeriggio, sera) di pulsanti
+ * ogni mezz'ora. Un tocco aggiunge o toglie l'orario, fino a tre in tutto;
+ * oggi gli orari gia' passati non si vedono.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TimeGrid(day: java.time.LocalDate, today: java.time.LocalDate, chosen: List<TradeSlot>, onToggle: (TradeSlot) -> Unit) {
+    val now = java.time.LocalTime.now()
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        TimeGroups.forEach { (part, times) ->
+            val visible = if (day == today) times.filter { java.time.LocalTime.parse(it).isAfter(now.plusMinutes(30)) } else times
+            if (visible.isEmpty()) return@forEach
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        when (part) {
+                            "morning" -> Icons.Default.WbTwilight
+                            "afternoon" -> Icons.Default.WbSunny
+                            else -> Icons.Default.NightsStay
+                        },
+                        null,
+                        tint = AppColors.textMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(slotPartLabel(part), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppColors.textSecondary)
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    visible.forEach { time ->
+                        val slot = TradeSlot(day = day.toString(), time = time, part = part)
+                        val on = chosen.any { it.day == slot.day && it.time == time }
+                        val full = !on && chosen.size >= 3
+                        val background by animateColorAsState(if (on) AppColors.blue else AppColors.card, tween(AppMotion.current.state), label = "time")
+                        Text(
+                            time,
+                            fontSize = 13.sp,
+                            fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                            color = when {
+                                on -> AppColors.onAccent
+                                full -> AppColors.textMuted.copy(alpha = 0.4f)
+                                else -> AppColors.textPrimary
+                            },
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .width(60.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(background)
+                                .pressScale(enabled = !full, scaleDown = 0.92f) { onToggle(slot) }
+                                .padding(vertical = 8.dp)
+                        )
                     }
                 }
             }

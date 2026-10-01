@@ -606,13 +606,14 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         planner = planner?.copy(selectedSpot = id)
     }
 
-    /** Aggiunge o toglie una fascia; al massimo tre. */
+    /** Aggiunge o toglie un orario (giorno e ora); al massimo tre. */
     fun toggleSlot(slot: TradeSlot) {
         val current = planner ?: return
         planner = when {
-            slot in current.slots -> current.copy(slots = current.slots - slot)
+            current.slots.any { it.day == slot.day && it.time == slot.time && it.part == slot.part } ->
+                current.copy(slots = current.slots.filterNot { it.day == slot.day && it.time == slot.time && it.part == slot.part })
             current.slots.size >= MAX_SLOTS -> current
-            else -> current.copy(slots = (current.slots + slot).sortedWith(compareBy({ it.day }, { SLOT_PARTS.indexOf(it.part) })))
+            else -> current.copy(slots = (current.slots + slot).sortedWith(compareBy({ it.day }, { it.time ?: "" }, { SLOT_PARTS.indexOf(it.part) })))
         }
     }
 
@@ -689,7 +690,12 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             actingOn = proposalId
             val result = TradeApi.confirmMeeting(proposalId, slotIndex)
             actingOn = null
-            if (result is TradeApi.Result.Ok) info = Info.MEETING_CONFIRMED else notice = problemOf(result)
+            if (result is TradeApi.Result.Ok) {
+                info = Info.MEETING_CONFIRMED
+                proposalsBucket = "MEETINGS"
+            } else {
+                notice = problemOf(result)
+            }
             refreshProposals()
         }
     }

@@ -1395,10 +1395,22 @@ interface MeetingColumns {
 
 interface Slot {
   day: string;
+  /** "HH:mm", dalle 07:00 alle 23:00. Le prime prove (01/10) avevano solo la fascia. */
+  time?: string;
   part: string;
 }
 
-/** Le fasce proposte: da 1 a 3, giorno fra oggi e 21 giorni, mattina/pomeriggio/sera. */
+/** La fascia di un orario, per chi la legge ancora: prima delle 13 mattina, dalle 19 sera. */
+function partOfTime(time: string): string {
+  const hour = Number(time.slice(0, 2));
+  return hour < 13 ? 'morning' : hour < 19 ? 'afternoon' : 'evening';
+}
+
+/**
+ * Gli orari proposti: da 1 a 3, giorno fra oggi e 21 giorni, ciascuno con
+ * l'ora (richiesta dall'utente il 01/10: "mattina" non basta per vedersi).
+ * Una fascia senza ora si accetta ancora, per le app di prima.
+ */
 function parseSlots(raw: unknown): Slot[] | null {
   if (!Array.isArray(raw) || raw.length < 1 || raw.length > 3) return null;
   const today = new Date().toISOString().slice(0, 10);
@@ -1407,11 +1419,18 @@ function parseSlots(raw: unknown): Slot[] | null {
   const slots: Slot[] = [];
   for (const value of raw as Array<Record<string, unknown>>) {
     const day = cleanText(value?.day, 10);
-    const part = cleanText(value?.part, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < today || day > last || !SPOT_SLOT_PARTS.includes(part)) return null;
-    if (seen.has(`${day}|${part}`)) continue;
-    seen.add(`${day}|${part}`);
-    slots.push({ day, part });
+    const time = cleanText(value?.time, 5);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < today || day > last) return null;
+    if (time) {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || time < '07:00' || time > '23:00') return null;
+    } else if (!SPOT_SLOT_PARTS.includes(cleanText(value?.part, 10))) {
+      return null;
+    }
+    const part = time ? partOfTime(time) : cleanText(value?.part, 10);
+    const id = `${day}|${time || part}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    slots.push(time ? { day, time, part } : { day, part });
   }
   return slots;
 }
