@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.data.firebase
 
+import com.emabuia.pokevault.data.trade.TradeApi
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseUser
@@ -155,6 +156,16 @@ class FirebaseAuthManager {
         return try {
             val user = currentUser ?: throw Exception("Nessun utente autenticato")
             val uid = user.uid
+
+            // Prima il profilo TradeRadar, finche' c'e' l'account per autenticarsi:
+            // dopo non ci sarebbe piu' modo di cancellarlo. Se il server non
+            // risponde ci si ferma, e l'utente riprova.
+            if (TradeApi.isEnabled) {
+                when (TradeApi.deleteProfile()) {
+                    is TradeApi.Result.Ok, TradeApi.Result.NoProfile -> Unit
+                    else -> throw Exception("TradeRadar non raggiungibile: riprova tra poco")
+                }
+            }
 
             val userDoc = firestore.collection("users").document(uid)
             val subcollections = listOf(

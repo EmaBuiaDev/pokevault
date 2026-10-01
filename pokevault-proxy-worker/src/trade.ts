@@ -333,6 +333,10 @@ async function deleteProfile(db: D1Database, uid: string): Promise<Response> {
       )
       .bind(uid, now),
     db.prepare(`DELETE FROM trade_blocks WHERE blocker_uid = ?`).bind(uid),
+    // I luoghi segnalati: quelli approvati restano (sono pubblici) ma senza
+    // legame con chi li ha segnalati; quelli ancora in verifica se ne vanno.
+    db.prepare(`DELETE FROM trade_spots WHERE added_by = ? AND approved = 0`).bind(uid),
+    db.prepare(`UPDATE trade_spots SET added_by = NULL WHERE added_by = ?`).bind(uid),
     // Le proposte se ne vanno con il profilo, anche per l'altra persona.
     db.prepare(
       `DELETE FROM trade_proposal_items WHERE proposal_id IN
@@ -1909,6 +1913,32 @@ function wilsonLower(good: number, total: number): number {
 }
 
 /**
+ * Quello che resta dopo una disattivazione non resta per sempre: la privacy
+ * policy promette al massimo 12 mesi. Segnalazioni e "non si e' presentato"
+ * dopo 12 mesi se ne vanno per tutti; i voti solo se uno dei due non ha
+ * piu' il profilo (fra profili attivi sono la reputazione). Le sospensioni
+ * messe da parte spariscono quando scadono. Gira insieme alla classifica,
+ * quindi al piu' ogni LEADERBOARD_TTL_MS; al lancio andra' nel cron.
+ */
+const RETENTION_MS = 365 * 24 * 60 * 60 * 1000;
+
+async function purgeExpired(db: D1Database): Promise<void> {
+  const now = Date.now();
+  const before = now - RETENTION_MS;
+  await db.batch([
+    db.prepare(`DELETE FROM trade_reports WHERE created_at < ?`).bind(before),
+    db.prepare(`DELETE FROM trade_no_shows WHERE created_at < ?`).bind(before),
+    db.prepare(`DELETE FROM trade_sanctions WHERE suspended_until < ?`).bind(now),
+    db
+      .prepare(
+        `DELETE FROM trade_ratings WHERE created_at < ?
+           AND (from_uid NOT IN (SELECT uid FROM trade_profiles) OR to_uid NOT IN (SELECT uid FROM trade_profiles))`
+      )
+      .bind(before),
+  ]);
+}
+
+/**
  * Ricalcola trade_leaderboard per tutti, se e' piu' vecchia di
  * LEADERBOARD_TTL_MS. Conta solo scambi chiusi da entrambi e voti gia'
  * visibili; per ogni coppia, uno ogni 30 giorni.
@@ -1918,6 +1948,7 @@ async function refreshLeaderboard(db: D1Database, force = false): Promise<void> 
     const last = await db.prepare(`SELECT MAX(computed_at) AS at FROM trade_leaderboard`).first<{ at: number | null }>();
     if (last?.at && Date.now() - last.at < LEADERBOARD_TTL_MS) return;
   }
+  await purgeExpired(db);
   const now = Date.now();
   const { results: done } = await db
     .prepare(`SELECT from_uid, to_uid, COALESCE(closed_at, updated_at) AS at FROM trade_proposals WHERE status = 'done' ORDER BY at`)

@@ -443,7 +443,7 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
             onOpenLeaderboard = { viewModel.openLeaderboard() }
         )
         ready.profile.suspendedUntil?.let { until ->
-            SuspensionBanner(until, ready.profile.suspensionReason, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            SuspensionBanner(until, ready.profile.suspensionReason, ready.profile.nickname.orEmpty(), modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
         SegmentedTabs(
             selected = tab,

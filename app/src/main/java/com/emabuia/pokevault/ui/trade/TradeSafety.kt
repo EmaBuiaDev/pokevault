@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.ui.trade
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -228,6 +230,9 @@ internal fun BlockedListDialog(items: List<TradeBlockedUser>?, onUnblock: (Strin
     )
 }
 
+/** Lo stesso indirizzo della privacy policy e dei termini: non ce n'e' uno dedicato. */
+internal const val SUPPORT_EMAIL = "devteam.vaultcards@hotmail.com"
+
 /** Un ban e' una sospensione che non finisce: oltre il 2100 non si scrive la data. */
 private const val FOREVER_FROM = 4_102_444_800_000L
 
@@ -236,7 +241,8 @@ private const val FOREVER_FROM = 4_102_444_800_000L
  * ancora fare. Senza, vedrebbe solo un radar vuoto e non capirebbe.
  */
 @Composable
-internal fun SuspensionBanner(until: Long, reason: String?, modifier: Modifier = Modifier) {
+internal fun SuspensionBanner(until: Long, reason: String?, nickname: String, modifier: Modifier = Modifier) {
+    val uriHandler = LocalUriHandler.current
     val locale = if (AppLocale.isItalian) Locale.ITALIAN else Locale.ENGLISH
     val date = remember(until, locale) { Instant.ofEpochMilli(until).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("d MMMM", locale)) }
     val shape = RoundedCornerShape(16.dp)
@@ -264,5 +270,16 @@ internal fun SuspensionBanner(until: Long, reason: String?, modifier: Modifier =
             color = AppColors.textPrimary
         )
         Text(AppLocale.tradeRadarSuspendedRules, fontSize = 12.sp, color = AppColors.textSecondary)
+        // Chi pensa sia un errore deve sapere a chi scrivere: l'oggetto ci dice gia' chi e'.
+        Text(
+            AppLocale.tradeRadarSuspendedContact(SUPPORT_EMAIL),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = AppColors.blue,
+            modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable {
+                val subject = Uri.encode(AppLocale.tradeRadarSuspendedMailSubject(nickname))
+                runCatching { uriHandler.openUri("mailto:$SUPPORT_EMAIL?subject=$subject") }
+            }
+        )
     }
 }
