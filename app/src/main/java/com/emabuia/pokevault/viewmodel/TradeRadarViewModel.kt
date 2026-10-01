@@ -41,6 +41,7 @@ import com.emabuia.pokevault.data.trade.TradeApi
 import com.emabuia.pokevault.data.trade.TradeCardKey
 import com.emabuia.pokevault.data.trade.TradeLists
 import com.emabuia.pokevault.data.trade.TradePush
+import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
@@ -526,19 +527,23 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         val sets = keys.map { TradeCardKey.setCodeOf(it) }.toSet() - pricedSets
         if (sets.isEmpty()) return
         pricedSets += sets
-        viewModelScope.launch {
-            val found = HashMap<String, Double>()
-            for (set in sets) {
-                val map = runCatching {
-                    RepositoryProvider.italianPriceSnapshotRepository.getPriceMap(getApplication(), set)
-                }.getOrDefault(emptyMap())
-                for ((number, data) in map) {
-                    val price = data.eurLow ?: data.eurTrend ?: data.eurAvg
-                    if (price != null && price > 0) found["$set:$number"] = price
-                }
+        viewModelScope.launch { loadPrices(sets) }
+    }
+
+    /** I prezzi di questi set, attesi: li deposita in [prices] e li restituisce. */
+    private suspend fun loadPrices(sets: Set<String>): Map<String, Double> {
+        val found = HashMap<String, Double>()
+        for (set in sets) {
+            val map = runCatching {
+                RepositoryProvider.italianPriceSnapshotRepository.getPriceMap(getApplication(), set)
+            }.getOrDefault(emptyMap())
+            for ((number, data) in map) {
+                val price = data.eurLow ?: data.eurTrend ?: data.eurAvg
+                if (price != null && price > 0) found["$set:$number"] = price
             }
-            if (found.isNotEmpty()) prices = prices + found
         }
+        if (found.isNotEmpty()) prices = prices + found
+        return found
     }
 
     // ── Appuntamento (fase 2b) ──────────────────────────────────────────────
@@ -901,8 +906,16 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             }
             val received = chosen.filter { !it.giving }
             val catalog = RepositoryProvider.tcgRepository.italianCardsByApiIds(context, received.map { it.apiCardId }.toSet())
+            // Le carte italiane del catalogo quasi mai hanno un prezzo Cardmarket
+            // (lo prendono dalla carta inglese di appoggio): il prezzo vero e'
+            // nello snapshot italiano, lo stesso del bilancio. Atteso qui, non
+            // in coda: senza, la carta entrava a 0 e il totale non si muoveva.
+            val snapshot = loadPrices(received.mapNotNull { it.item.key }.map { TradeCardKey.setCodeOf(it) }.toSet())
             for (line in received) {
                 val card = catalog[line.apiCardId]
+                val key = line.item.key.orEmpty()
+                val price = card?.cardmarket?.prices.minimumEurPriceOrZero().takeIf { it > 0.0 }
+                    ?: snapshot[key] ?: prices[key] ?: 0.0
                 repository.addCard(
                     PokemonCard(
                         name = card?.name ?: line.item.name.orEmpty(),
@@ -913,6 +926,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                         hp = card?.hp?.toIntOrNull() ?: 0,
                         supertype = card?.supertype?.ifBlank { null } ?: "Pokémon",
                         subtypes = card?.subtypes.orEmpty(),
+                        estimatedValue = price,
                         apiCardId = line.apiCardId,
                         cardNumber = card?.number ?: line.item.key.orEmpty().substringAfter(':'),
                         variant = line.item.variant?.ifBlank { null } ?: "Normal",
