@@ -2739,6 +2739,10 @@ private fun ReportSpotDialog(
 @Composable
 private fun PlannerDialog(viewModel: TradeRadarViewModel, planner: TradeRadarViewModel.Planner) {
     val context = LocalContext.current
+    // "Piu' vicini a me" senza permesso: lo si chiede li', e se arriva si ordina.
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) viewModel.locateMe() else viewModel.locationDenied()
+    }
     var showAllSpots by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf(false) }
     val today = remember { java.time.LocalDate.now() }
@@ -2839,15 +2843,22 @@ private fun PlannerDialog(viewModel: TradeRadarViewModel, planner: TradeRadarVie
                 if (planner.spots.isNotEmpty()) {
                     item(key = "suggested") {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (me != null) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    SortChip(AppLocale.tradeRadarSortSuggestedSpots, Icons.Default.AutoAwesome, selected = !planner.nearestFirst) {
-                                        viewModel.setNearestFirst(false)
-                                    }
-                                    SortChip(AppLocale.tradeRadarSortNearMe, Icons.Default.NearMe, selected = planner.nearestFirst) {
-                                        viewModel.setNearestFirst(true)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                SortChip(AppLocale.tradeRadarSortSuggestedSpots, Icons.Default.AutoAwesome, selected = !planner.nearestFirst) {
+                                    viewModel.setNearestFirst(false)
+                                }
+                                SortChip(AppLocale.tradeRadarSortNearMe, Icons.Default.NearMe, selected = planner.nearestFirst && me != null) {
+                                    when {
+                                        me != null -> viewModel.setNearestFirst(true)
+                                        !CoarseLocation.hasPermission(context) -> locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                        else -> viewModel.locateMe()
                                     }
                                 }
+                                if (planner.locating) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            }
+                            when {
+                                planner.locating -> Text(AppLocale.tradeRadarLocating, fontSize = 12.sp, color = AppColors.textMuted)
+                                planner.locationUnavailable -> Text(AppLocale.tradeRadarNoLocationForSort, fontSize = 12.sp, color = AppColors.orange)
                             }
                             Text(
                                 if (planner.nearestFirst && me != null) AppLocale.tradeRadarNearestSpots else AppLocale.tradeRadarSuggestedSpots,

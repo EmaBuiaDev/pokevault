@@ -1550,6 +1550,8 @@ object AppLocale {
     val tradeRadarAlreadyOpen: String get() = if (isItalian) "Con questa persona c'è già una proposta aperta: eccola." else "There is already an open proposal with this person: here it is."
     val tradeRadarNotAvailable: String get() = if (isItalian) "Alcune carte non sono più offerte: controlla la proposta." else "Some cards are no longer on offer: check the proposal."
     val tradeRadarDistanceFar: String get() = if (isItalian) "Fuori zona" else "Out of area"
+    val tradeRadarLocating: String get() = if (isItalian) "Cerco la tua posizione…" else "Finding your location…"
+    val tradeRadarNoLocationForSort: String get() = if (isItalian) "Per ordinarli dal più vicino serve la posizione: consentila all'app o accendi la localizzazione. Resta solo sul telefono." else "Sorting by distance needs your location: allow it or turn location on. It stays on your phone."
     val tradeRadarSortSuggestedSpots: String get() = if (isItalian) "Consigliati" else "Suggested"
     val tradeRadarSortNearMe: String get() = if (isItalian) "Più vicini a me" else "Nearest to me"
     val tradeRadarNearestSpots: String get() = if (isItalian) "Dal più vicino a te" else "Nearest to you first"

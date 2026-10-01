@@ -551,7 +551,11 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         /** La posizione del telefono, solo per le distanze sul telefono: non va al server. */
         val myPosition: Pair<Double, Double>? = null,
         /** Luoghi dal piu' vicino a me invece che "consigliati" (a meta' strada). */
-        val nearestFirst: Boolean = false
+        val nearestFirst: Boolean = false,
+        /** Si sta leggendo la posizione per "Piu' vicini a me". */
+        val locating: Boolean = false,
+        /** La posizione non c'e' (permesso negato, localizzazione spenta): si spiega perche'. */
+        val locationUnavailable: Boolean = false
     )
 
     var planner by mutableStateOf<Planner?>(null)
@@ -613,6 +617,28 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setNearestFirst(nearest: Boolean) {
         planner = planner?.copy(nearestFirst = nearest)
+    }
+
+    /**
+     * "Piu' vicini a me" quando la posizione non c'era ancora: la si legge (il
+     * permesso c'e' gia', o e' appena stato dato) e, se arriva, si ordina.
+     */
+    fun locateMe() {
+        val id = planner?.proposalId ?: return
+        planner = planner?.copy(locating = true, locationUnavailable = false)
+        viewModelScope.launch {
+            val position = CoarseLocation.currentPoint(getApplication(), timeoutMs = 10_000)
+            planner = planner?.takeIf { it.proposalId == id }?.copy(
+                myPosition = position,
+                nearestFirst = position != null,
+                locating = false,
+                locationUnavailable = position == null
+            )
+        }
+    }
+
+    fun locationDenied() {
+        planner = planner?.copy(locating = false, locationUnavailable = true)
     }
 
     fun selectSpot(id: String) {
