@@ -480,7 +480,8 @@ private fun MatchesTab(
 ) {
     var level by rememberSaveable { mutableStateOf("all") }
     var showLegend by remember { mutableStateOf(false) }
-    var selectedCard by remember { mutableStateOf<TradeMatchItem?>(null) }
+    /** La carta toccata, e se e' una di quelle che dai (le etichette allora parlano dell'altro). */
+    var selectedCard by remember { mutableStateOf<Pair<TradeMatchItem, Boolean>?>(null) }
     // L'indicatore del pull-to-refresh solo per un aggiornamento tirato a mano:
     // per gli altri basta il radar.
     var pulled by remember { mutableStateOf(false) }
@@ -541,7 +542,7 @@ private fun MatchesTab(
                 }
                 else -> itemsIndexed(shown, key = { index, match -> match.nickname ?: "match-$index" }) { index, match ->
                     CascadeIn(index = index, visible = cascadeStarted, modifier = Modifier.animateItem()) {
-                        MatchCard(match, level, onCardClick = { selectedCard = it })
+                        MatchCard(match, level, onCardClick = { card, theirs -> selectedCard = card to theirs })
                     }
                 }
             }
@@ -556,7 +557,7 @@ private fun MatchesTab(
             confirmButton = { TextButton(onClick = { showLegend = false }) { Text(AppLocale.tradeRadarLevelsGotIt) } }
         )
     }
-    selectedCard?.let { card -> CardDetailDialog(card, onDismiss = { selectedCard = null }) }
+    selectedCard?.let { (card, theirs) -> CardDetailDialog(card, theirs, onDismiss = { selectedCard = null }) }
 }
 
 /** Il radar in cima: quanti sono vicini, quanti reciproci, e il tasto per aggiornare. */
@@ -672,6 +673,7 @@ private fun LevelsLegend() {
                 }
             }
         }
+        Text(AppLocale.tradeRadarLevelsTheirSide, fontSize = 12.sp, color = AppColors.textMuted)
     }
 }
 
@@ -730,7 +732,7 @@ private fun FilterChip(text: String, count: Int, style: LevelStyle?, selected: B
 }
 
 @Composable
-private fun MatchCard(match: TradeMatch, level: String, onCardClick: (TradeMatchItem) -> Unit) {
+private fun MatchCard(match: TradeMatch, level: String, onCardClick: (TradeMatchItem, theirs: Boolean) -> Unit) {
     val theyGive = match.theyGive.orEmpty().filter { level == "all" || it.level == level }
     val iGive = match.iGive.orEmpty()
     val mutual = match.mutual == true
@@ -779,12 +781,13 @@ private fun MatchCard(match: TradeMatch, level: String, onCardClick: (TradeMatch
         }
 
         SectionTitle(AppLocale.tradeRadarTheyGive, theyGive.size)
-        CardStrip(theyGive, onCardClick)
+        CardStrip(theyGive, theirs = false) { onCardClick(it, false) }
 
         if (iGive.isNotEmpty()) {
             SwapDivider()
             SectionTitle(AppLocale.tradeRadarYouGive, iGive.size)
-            CardStrip(iGive, onCardClick)
+            // Qui le etichette dicono quanto la carta interessa all'ALTRO.
+            CardStrip(iGive, theirs = true) { onCardClick(it, true) }
         } else {
             Text(AppLocale.tradeRadarOneWay, fontSize = 12.sp, color = AppColors.textMuted)
         }
@@ -815,18 +818,19 @@ private fun SwapDivider() {
 }
 
 @Composable
-private fun CardStrip(items: List<TradeMatchItem>, onCardClick: (TradeMatchItem) -> Unit) {
+private fun CardStrip(items: List<TradeMatchItem>, theirs: Boolean, onCardClick: (TradeMatchItem) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         items(items, key = { "${it.key}|${it.variant}|${it.condition}|${it.language}" }) { item ->
-            TradeCardTile(item, onClick = { onCardClick(item) })
+            TradeCardTile(item, theirs, onClick = { onCardClick(item) })
         }
     }
 }
 
+/** [theirs]: la carta e' tua e va all'altro, quindi l'etichetta parla di lui. */
 @Composable
-private fun TradeCardTile(item: TradeMatchItem, onClick: () -> Unit) {
+private fun TradeCardTile(item: TradeMatchItem, theirs: Boolean, onClick: () -> Unit) {
     val key = item.key.orEmpty()
-    val style = levelStyle(item.level)
+    val style = levelStyle(item.level, theirs)
     Column(Modifier.width(98.dp).pressScale(onClick = onClick)) {
         Box(Modifier.width(98.dp).height(137.dp).clip(RoundedCornerShape(8.dp))) {
             CardImageSkeleton(number = key.substringAfter(':'))
@@ -861,7 +865,7 @@ private fun TradeCardTile(item: TradeMatchItem, onClick: () -> Unit) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        val reason = reasonLabel(item)
+        val reason = reasonLabel(item, theirs)
         Text(
             reason ?: item.setName ?: TradeCardKey.label(key),
             fontSize = 10.sp,
@@ -892,9 +896,9 @@ private fun LevelRibbon(style: LevelStyle, modifier: Modifier = Modifier) {
 /** La carta grande, con l'etichetta spiegata per esteso: il tocco su una carta risponde a "perche' me la mostri?". */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CardDetailDialog(item: TradeMatchItem, onDismiss: () -> Unit) {
+private fun CardDetailDialog(item: TradeMatchItem, theirs: Boolean, onDismiss: () -> Unit) {
     val key = item.key.orEmpty()
-    val style = levelStyle(item.level)
+    val style = levelStyle(item.level, theirs)
     Dialog(onDismissRequest = onDismiss) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -940,7 +944,7 @@ private fun CardDetailDialog(item: TradeMatchItem, onDismiss: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(style.icon, null, tint = style.color, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(reasonLabel(item) ?: style.label, fontWeight = FontWeight.Bold, color = style.color, fontSize = 14.sp)
+                    Text(reasonLabel(item, theirs) ?: style.label, fontWeight = FontWeight.Bold, color = style.color, fontSize = 14.sp)
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(style.description, fontSize = 12.sp, color = AppColors.textSecondary, textAlign = TextAlign.Center)
@@ -1533,17 +1537,34 @@ private val Levels = listOf("wanted", "useful", "possible")
 
 private data class LevelStyle(val label: String, val description: String, val color: Color, val icon: ImageVector)
 
+/**
+ * Stesso livello, due voci: per le carte che ricevi parla di te ("Ti manca"),
+ * per quelle che dai parla dell'altro ("Non ce l'ha"). Colore e icona restano
+ * uguali, cosi' il livello si riconosce da entrambe le parti.
+ */
 @Composable
-private fun levelStyle(level: String?): LevelStyle = when (level) {
-    "wanted" -> LevelStyle(AppLocale.tradeRadarLevelWanted, AppLocale.tradeRadarLevelWantedText, AppColors.orange, Icons.Default.Favorite)
-    "useful" -> LevelStyle(AppLocale.tradeRadarLevelUseful, AppLocale.tradeRadarLevelUsefulText, AppColors.blue, Icons.Default.AddCircle)
-    else -> LevelStyle(AppLocale.tradeRadarLevelPossible, AppLocale.tradeRadarLevelPossibleText, AppColors.textMuted, Icons.Default.Explore)
+private fun levelStyle(level: String?, theirs: Boolean = false): LevelStyle = when (level) {
+    "wanted" -> LevelStyle(
+        if (theirs) AppLocale.tradeRadarTheirLevelWanted else AppLocale.tradeRadarLevelWanted,
+        if (theirs) AppLocale.tradeRadarTheirLevelWantedText else AppLocale.tradeRadarLevelWantedText,
+        AppColors.orange, Icons.Default.Favorite
+    )
+    "useful" -> LevelStyle(
+        if (theirs) AppLocale.tradeRadarTheirLevelUseful else AppLocale.tradeRadarLevelUseful,
+        if (theirs) AppLocale.tradeRadarTheirLevelUsefulText else AppLocale.tradeRadarLevelUsefulText,
+        AppColors.blue, Icons.Default.AddCircle
+    )
+    else -> LevelStyle(
+        AppLocale.tradeRadarLevelPossible,
+        if (theirs) AppLocale.tradeRadarTheirLevelPossibleText else AppLocale.tradeRadarLevelPossibleText,
+        AppColors.textMuted, Icons.Default.Explore
+    )
 }
 
 /** Il motivo preciso, quando c'e'; null per "Ti manca" e "Altre carte", che non ne hanno uno. */
-private fun reasonLabel(item: TradeMatchItem): String? = when (item.reason) {
-    "wishlist" -> AppLocale.tradeRadarReasonWishlist
-    "album" -> AppLocale.tradeRadarReasonAlbum
+private fun reasonLabel(item: TradeMatchItem, theirs: Boolean = false): String? = when (item.reason) {
+    "wishlist" -> if (theirs) AppLocale.tradeRadarTheirReasonWishlist else AppLocale.tradeRadarReasonWishlist
+    "album" -> if (theirs) AppLocale.tradeRadarTheirReasonAlbum else AppLocale.tradeRadarReasonAlbum
     "set" -> {
         val owned = item.setOwned
         val size = item.setSize
