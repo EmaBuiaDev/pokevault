@@ -221,7 +221,7 @@ data class TradeCounterpart(
 /** Una proposta vista da me: [give] e' cio' che do, [take] cio' che ricevo. */
 data class TradeProposal(
     @SerializedName("id") val id: String? = null,
-    /** "open" | "accepted" | "declined" | "cancelled" */
+    /** "open" | "accepted" | "scheduled" | "done" | "no_show" | "expired" | "declined" | "cancelled" */
     @SerializedName("status") val status: String? = null,
     /** Da 2 in su e' una controproposta. */
     @SerializedName("revision") val revision: Int? = null,
@@ -231,6 +231,13 @@ data class TradeProposal(
     /** Chi ha gia' segnato "Scambio fatto" (fase 2c). */
     @SerializedName("doneByMe") val doneByMe: Boolean? = null,
     @SerializedName("doneByOther") val doneByOther: Boolean? = null,
+    /** Chiuso da solo 7 giorni dopo l'appuntamento: uno solo dei due l'aveva segnato fatto. */
+    @SerializedName("autoClosed") val autoClosed: Boolean? = null,
+    /** Mi hanno segnalato come assente e posso ancora rispondere "Io c'ero" (fino a [disputeUntil], ms). */
+    @SerializedName("canDispute") val canDispute: Boolean? = null,
+    @SerializedName("disputeUntil") val disputeUntil: Long? = null,
+    /** La segnalazione di assenza e' stata contestata. */
+    @SerializedName("noShowDisputed") val noShowDisputed: Boolean? = null,
     @SerializedName("closedAt") val closedAt: Long? = null,
     @SerializedName("myRating") val myRating: TradeRating? = null,
     /** Il voto dell'altro: null finche' non ho votato anch'io (o non passano 7 giorni). */

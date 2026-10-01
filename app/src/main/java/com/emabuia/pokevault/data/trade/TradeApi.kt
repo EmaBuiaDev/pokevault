@@ -197,6 +197,10 @@ object TradeApi {
     suspend fun markNoShow(id: String): Result<Unit> =
         call("POST", "v1/trade/proposals/$id/noshow", emptyMap<String, String>()) { Unit }
 
+    /** "Io c'ero": chi e' stato segnalato come assente, entro 48 ore. */
+    suspend fun disputeNoShow(id: String): Result<Unit> =
+        call("POST", "v1/trade/proposals/$id/dispute", emptyMap<String, String>()) { Unit }
+
     suspend fun rate(id: String, request: TradeRateRequest): Result<Unit> =
         call("POST", "v1/trade/proposals/$id/rate", request) { Unit }
 

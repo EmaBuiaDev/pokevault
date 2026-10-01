@@ -1959,6 +1959,7 @@ private fun rowTag(proposal: TradeProposal, groupSize: Int, applied: Set<String>
         proposal.status == "done" && proposal.id !in applied -> RowTag(AppLocale.tradeRadarUpdateCollection, Icons.Default.Inventory2, AppColors.orange)
         proposal.status == "done" && proposal.myRating == null -> RowTag(AppLocale.tradeRadarTagRate, Icons.Default.Star, AppColors.orange)
         proposal.status == "done" -> RowTag(AppLocale.tradeRadarStatusDone, Icons.Default.Verified, AppColors.green)
+        proposal.status == "no_show" && proposal.canDispute == true -> RowTag(AppLocale.tradeRadarTagDispute, Icons.Default.PersonOff, AppColors.orange)
         proposal.status == "no_show" -> RowTag(AppLocale.tradeRadarStatusNoShow, Icons.Default.PersonOff, AppColors.red)
         proposal.status == "accepted" && meeting?.status == "proposed" && meeting.byMe != true ->
             RowTag(AppLocale.tradeRadarTagPickTime, Icons.Default.Schedule, AppColors.orange)
@@ -2117,6 +2118,7 @@ private fun ProposalSheet(
                     needsCollection = viewModel.needsCollectionUpdate(proposal),
                     onDone = { viewModel.markDone(proposal) },
                     onNoShow = { viewModel.markNoShow(proposal) },
+                    onDispute = { viewModel.disputeNoShow(proposal) },
                     onCollection = { viewModel.openClosing(proposal) },
                     onFeedback = { viewModel.openFeedback(proposal) },
                     // Una volta per persona: il gruppo e' tutto con lei.
@@ -2151,6 +2153,7 @@ private fun ProposalCard(
     needsCollection: Boolean = false,
     onDone: () -> Unit = {},
     onNoShow: () -> Unit = {},
+    onDispute: () -> Unit = {},
     onCollection: () -> Unit = {},
     onFeedback: () -> Unit = {},
     onSafety: ((report: Boolean) -> Unit)? = null
@@ -2225,11 +2228,8 @@ private fun ProposalCard(
                 onNoShow = onNoShow
             )
             proposal.status == "done" -> DoneSection(proposal, needsCollection, onCollection = onCollection, onFeedback = onFeedback)
-            proposal.status == "no_show" -> Text(
-                if (proposal.closedByMe == true) AppLocale.tradeRadarNoShowByMe(other?.nickname.orEmpty()) else AppLocale.tradeRadarNoShowByOther,
-                fontSize = 12.sp,
-                color = AppColors.textMuted
-            )
+            proposal.status == "no_show" -> NoShowSection(proposal, acting, onDispute)
+            proposal.status == "expired" -> Text(AppLocale.tradeRadarExpiredText, fontSize = 12.sp, color = AppColors.textMuted)
         }
         if (onSafety != null) PersonSafetyLink(onSafety)
     }
@@ -2283,6 +2283,7 @@ private fun proposalStatus(proposal: TradeProposal): StatusStyle = when (proposa
     "scheduled" -> StatusStyle(AppLocale.tradeRadarStatusScheduled, AppColors.green)
     "done" -> StatusStyle(AppLocale.tradeRadarStatusDone, AppColors.green)
     "no_show" -> StatusStyle(AppLocale.tradeRadarStatusNoShow, AppColors.red)
+    "expired" -> StatusStyle(AppLocale.tradeRadarStatusExpired, AppColors.textMuted)
     "declined" -> StatusStyle(
         if (proposal.closedByMe == true) AppLocale.tradeRadarStatusDeclinedByMe else AppLocale.tradeRadarStatusDeclined,
         AppColors.textMuted
@@ -3446,6 +3447,55 @@ private fun ClosingControls(proposal: TradeProposal, acting: Boolean, onDone: ()
     }
 }
 
+/**
+ * Uno scambio chiuso per assenza: chi l'ha segnalata, chi e' stato segnalato
+ * e, per 48 ore, il suo "Io c'ero". Contestata, lo vedono tutti e due.
+ */
+@Composable
+private fun NoShowSection(proposal: TradeProposal, acting: Boolean, onDispute: () -> Unit) {
+    val nickname = proposal.counterpart?.nickname.orEmpty()
+    val byMe = proposal.closedByMe == true
+    var askDispute by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            if (byMe) AppLocale.tradeRadarNoShowByMe(nickname) else AppLocale.tradeRadarNoShowByOther,
+            fontSize = 12.sp,
+            color = AppColors.textMuted
+        )
+        if (proposal.noShowDisputed == true) {
+            Text(
+                if (byMe) AppLocale.tradeRadarNoShowDisputedByOther(nickname) else AppLocale.tradeRadarNoShowDisputedByMe,
+                fontSize = 12.sp,
+                color = AppColors.textSecondary
+            )
+        } else if (proposal.canDispute == true) {
+            val hoursLeft = proposal.disputeUntil
+                ?.let { ((it - System.currentTimeMillis() + 3_599_999L) / 3_600_000L).coerceAtLeast(1L) }
+            if (hoursLeft != null) Text(AppLocale.tradeRadarDisputeHoursLeft(hoursLeft), fontSize = 12.sp, color = AppColors.orange)
+            OutlinedButton(
+                onClick = { askDispute = true },
+                enabled = !acting,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (acting) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                else Text(AppLocale.tradeRadarDispute, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+    if (askDispute) {
+        AlertDialog(
+            onDismissRequest = { askDispute = false },
+            title = { Text(AppLocale.tradeRadarDispute) },
+            text = { Text(AppLocale.tradeRadarDisputeText(nickname)) },
+            confirmButton = {
+                TextButton(onClick = { askDispute = false; onDispute() }) { Text(AppLocale.confirm) }
+            },
+            dismissButton = { TextButton(onClick = { askDispute = false }) { Text(AppLocale.cancel) } }
+        )
+    }
+}
+
 /** Uno scambio chiuso: la collezione da aggiornare, il voto da dare, e quello dell'altro quando si vede. */
 @Composable
 private fun DoneSection(proposal: TradeProposal, needsCollection: Boolean, onCollection: () -> Unit, onFeedback: () -> Unit) {
@@ -3458,6 +3508,13 @@ private fun DoneSection(proposal: TradeProposal, needsCollection: Boolean, onCol
             Text("🎉", fontSize = 18.sp)
             Spacer(Modifier.width(8.dp))
             Text(AppLocale.tradeRadarTradeCompleted(nickname), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary)
+        }
+        if (proposal.autoClosed == true) {
+            Text(
+                if (proposal.doneByMe == true) AppLocale.tradeRadarAutoClosedMarked(nickname) else AppLocale.tradeRadarAutoClosedSilent(nickname),
+                fontSize = 12.sp,
+                color = AppColors.textMuted
+            )
         }
         if (needsCollection) {
             Button(
@@ -4920,6 +4977,8 @@ private fun problemText(problem: Problem): String = when (problem) {
     Problem.TOO_MANY_REPORTS -> AppLocale.tradeRadarTooManyReports
     Problem.SUSPENDED -> AppLocale.tradeRadarSuspendedAction
     Problem.MEETING_PASSED -> AppLocale.tradeRadarMeetingPassed
+    Problem.DISPUTE_TOO_LATE -> AppLocale.tradeRadarDisputeTooLate
+    Problem.NOT_SCHEDULED -> AppLocale.tradeRadarNotScheduled
 }
 
 private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
@@ -4934,6 +4993,7 @@ private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
     TradeRadarViewModel.Info.DONE_WAITING -> AppLocale.tradeRadarInfoDoneWaiting
     TradeRadarViewModel.Info.TRADE_DONE -> AppLocale.tradeRadarInfoTradeDone
     TradeRadarViewModel.Info.NO_SHOW_SENT -> AppLocale.tradeRadarInfoNoShow
+    TradeRadarViewModel.Info.DISPUTE_SENT -> AppLocale.tradeRadarInfoDispute
     TradeRadarViewModel.Info.COLLECTION_UPDATED -> AppLocale.tradeRadarInfoCollectionUpdated
     TradeRadarViewModel.Info.FEEDBACK_SENT -> AppLocale.tradeRadarInfoFeedbackSent
     TradeRadarViewModel.Info.LEADERBOARD_JOINED -> AppLocale.tradeRadarInfoJoined

@@ -66,13 +66,13 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
 
     enum class Problem {
         UNAUTHORIZED, UNAVAILABLE, REJECTED, NO_LOCATION, ALREADY_OPEN, NOT_AVAILABLE, TOO_EARLY,
-        ALREADY_REPORTED, TOO_MANY_REPORTS, SUSPENDED, MEETING_PASSED
+        ALREADY_REPORTED, TOO_MANY_REPORTS, SUSPENDED, MEETING_PASSED, DISPUTE_TOO_LATE, NOT_SCHEDULED
     }
 
     /** Conferme da mostrare una volta, come [notice] ma non sono errori. */
     enum class Info {
         PROPOSAL_SENT, COUNTER_SENT, ACCEPTED, DECLINED, CANCELLED, MEETING_SENT, MEETING_CONFIRMED, SPOT_REPORTED,
-        DONE_WAITING, TRADE_DONE, NO_SHOW_SENT, COLLECTION_UPDATED, FEEDBACK_SENT, LEADERBOARD_JOINED, LEADERBOARD_LEFT,
+        DONE_WAITING, TRADE_DONE, NO_SHOW_SENT, DISPUTE_SENT, COLLECTION_UPDATED, FEEDBACK_SENT, LEADERBOARD_JOINED, LEADERBOARD_LEFT,
         BLOCKED, UNBLOCKED, REPORTED
     }
 
@@ -805,6 +805,19 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /** "Io c'ero": risposta a una segnalazione di assenza, entro 48 ore. */
+    fun disputeNoShow(proposal: TradeProposal) {
+        val id = proposal.id ?: return
+        if (actingOn != null) return
+        viewModelScope.launch {
+            actingOn = id
+            val result = TradeApi.disputeNoShow(id)
+            actingOn = null
+            if (result is TradeApi.Result.Ok) info = Info.DISPUTE_SENT else notice = problemOf(result)
+            refreshProposals()
+        }
+    }
+
     /**
      * Una riga del riepilogo: una carta che esce dalla collezione (le copie
      * date) o che entra (quelle ricevute). [docIds] sono i documenti della
@@ -1316,6 +1329,9 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             "too_many_reports" -> Problem.TOO_MANY_REPORTS
             "suspended" -> Problem.SUSPENDED
             "meeting_passed" -> Problem.MEETING_PASSED
+            "too_late" -> Problem.DISPUTE_TOO_LATE
+            // Chiusa nel frattempo (dall'altro, o da sola dopo 7 giorni).
+            "not_scheduled" -> Problem.NOT_SCHEDULED
             else -> Problem.REJECTED
         }
         else -> Problem.UNAVAILABLE
