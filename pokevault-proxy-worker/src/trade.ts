@@ -37,12 +37,22 @@ const MAX_WANTS = 5000;
 const MAX_OWNED = 20000;
 /** Oltre questa quota di un set posseduta, le carte mancanti sono "cercate". */
 const NEAR_COMPLETE_RATIO = 0.5;
-/** Quanti utenti vicini guardare per richiesta, i piu' recenti per primi. */
-const MAX_NEIGHBORS = 50;
+/** Profili vicini esaminati per richiesta, i piu' recenti per primi. */
+const MAX_CANDIDATES = 1000;
+/** Persone restituite, le migliori per punteggio (vedi matchScore). */
+const MAX_MATCHES = 100;
+/** Righe della vista per carta, e persone elencate per ogni carta. */
+const MAX_CARDS = 300;
+const MAX_HOLDERS_PER_CARD = 50;
 /** Carte per lato mostrate per ogni vicino. */
 const MAX_ITEMS_PER_SIDE = 60;
-/** D1 accetta al massimo 100 parametri per istruzione. */
-const ROWS_PER_INSERT = 14;
+/**
+ * D1 accetta al massimo 100 parametri per istruzione: le righe per INSERT si
+ * ricavano dalle colonne. Un numero fisso (14) andava bene con 7 colonne e ha
+ * rotto trade_haves quando ne ha avute 9 (schema 3): 126 parametri, errore 500
+ * appena si offrivano piu' di 11 carte.
+ */
+const MAX_PARAMS_PER_STATEMENT = 100;
 
 const CARD_KEY_REGEX = /^[a-z0-9-]{1,20}:[A-Za-z0-9_]{1,20}$/;
 const NICKNAME_REGEX = /^[\p{L}\p{N}_.\- ]{3,20}$/u;
@@ -106,8 +116,9 @@ async function replaceRows(
 ): Promise<void> {
   const statements: D1PreparedStatement[] = [db.prepare(`DELETE FROM ${table} WHERE uid = ?`).bind(uid)];
   const placeholders = `(${columns.map(() => '?').join(', ')})`;
-  for (let i = 0; i < rows.length; i += ROWS_PER_INSERT) {
-    const chunk = rows.slice(i, i + ROWS_PER_INSERT);
+  const rowsPerInsert = Math.floor(MAX_PARAMS_PER_STATEMENT / columns.length);
+  for (let i = 0; i < rows.length; i += rowsPerInsert) {
+    const chunk = rows.slice(i, i + rowsPerInsert);
     statements.push(
       db
         .prepare(`INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES ${chunk.map(() => placeholders).join(', ')}`)
@@ -414,45 +425,111 @@ function classify(
   return { level: 'possible', reason: null };
 }
 
-/** Cosa cercano gli utenti in [uids]: wishlist e album, possedute e set. */
-async function loadWishes(db: D1Database, uids: string[], setSizes: Map<string, number>): Promise<Map<string, Wishes>> {
-  const byUid = new Map<string, Wishes>();
-  for (const uid of uids) {
-    byUid.set(uid, { explicit: new Map(), owned: new Set(), collecting: new Set(), nearComplete: new Set(), progress: new Map() });
+function emptyWishes(): Wishes {
+  return { explicit: new Map(), owned: new Set(), collecting: new Set(), nearComplete: new Set(), progress: new Map() };
+}
+
+/** Un set con [count] carte possedute: lo si colleziona, e oltre la soglia ogni mancante e' cercata. */
+function addSetCount(wishes: Wishes, set: string, count: number, setSizes: Map<string, number>): void {
+  wishes.collecting.add(set);
+  const size = setSizes.get(set) ?? 0;
+  if (size > 0 && count / size >= NEAR_COMPLETE_RATIO && count < size) {
+    wishes.nearComplete.add(set);
+    wishes.progress.set(set, [count, size]);
   }
-  if (uids.length === 0) return byUid;
-  const marks = uids.map(() => '?').join(', ');
+}
+
+/**
+ * Cosa cerco io: wishlist, album e quante carte ho per set. Le singole carte
+ * possedute qui non servono: quelle che ho gia' le scarta in SQL la query
+ * delle offerte dei vicini.
+ */
+async function loadMyWishes(db: D1Database, uid: string, setSizes: Map<string, number>): Promise<Wishes> {
+  const wishes = emptyWishes();
+  const wants = await db
+    .prepare(`SELECT card_key, source FROM trade_wants WHERE uid = ?`)
+    .bind(uid)
+    .all<{ card_key: string; source: string }>();
+  for (const row of wants.results) wishes.explicit.set(row.card_key, row.source);
+  const sets = await db
+    .prepare(`SELECT set_code, COUNT(*) AS n FROM trade_owned WHERE uid = ? GROUP BY set_code`)
+    .bind(uid)
+    .all<{ set_code: string; n: number }>();
+  for (const row of sets.results) addSetCount(wishes, row.set_code, Number(row.n), setSizes);
+  return wishes;
+}
+
+/**
+ * I vicini, come sottoquery da mettere dentro `uid IN (...)`. Cosi' i loro id
+ * non passano mai come parametri: D1 ne accetta 100 per istruzione, e con
+ * cento persone in zona un `IN (?, ?, ...)` non starebbe piu' in piedi.
+ */
+interface Nearby {
+  sql: string;
+  params: string[];
+}
+
+function nearbyOf(cells: string[], uid: string): Nearby {
+  return {
+    sql: `SELECT uid FROM trade_profiles
+          WHERE geohash5 IN (${cells.map(() => '?').join(', ')}) AND uid <> ? AND paused = 0
+          ORDER BY updated_at DESC LIMIT ${MAX_CANDIDATES}`,
+    params: [...cells, uid],
+  };
+}
+
+/**
+ * Quanto interessano ai vicini le MIE carte: per ognuno solo cio' che tocca
+ * le chiavi che offro (cercate, gia' possedute, set collezionati). Le loro
+ * liste intere non servono e con molte persone sarebbero troppe righe.
+ */
+async function loadTheirWishes(
+  db: D1Database,
+  nearby: Nearby,
+  myKeys: string[],
+  setSizes: Map<string, number>
+): Promise<Map<string, Wishes>> {
+  const byUid = new Map<string, Wishes>();
+  const wishesOf = (uid: string): Wishes => {
+    let wishes = byUid.get(uid);
+    if (!wishes) {
+      wishes = emptyWishes();
+      byUid.set(uid, wishes);
+    }
+    return wishes;
+  };
+  if (myKeys.length === 0) return byUid;
+  const keysJson = JSON.stringify(myKeys);
+  const setsJson = JSON.stringify([...new Set(myKeys.map(setCodeOf))]);
 
   const wants = await db
-    .prepare(`SELECT uid, card_key, source FROM trade_wants WHERE uid IN (${marks})`)
-    .bind(...uids)
+    .prepare(
+      `SELECT uid, card_key, source FROM trade_wants
+       WHERE uid IN (${nearby.sql}) AND card_key IN (SELECT value FROM json_each(?))`
+    )
+    .bind(...nearby.params, keysJson)
     .all<{ uid: string; card_key: string; source: string }>();
-  for (const row of wants.results) byUid.get(row.uid)?.explicit.set(row.card_key, row.source);
+  for (const row of wants.results) wishesOf(row.uid).explicit.set(row.card_key, row.source);
 
   const owned = await db
-    .prepare(`SELECT uid, card_key, set_code FROM trade_owned WHERE uid IN (${marks})`)
-    .bind(...uids)
-    .all<{ uid: string; card_key: string; set_code: string }>();
-  const perSet = new Map<string, Map<string, number>>();
-  for (const row of owned.results) {
-    const wishes = byUid.get(row.uid);
-    if (!wishes) continue;
-    wishes.owned.add(row.card_key);
-    wishes.collecting.add(row.set_code);
-    const counts = perSet.get(row.uid) ?? new Map<string, number>();
-    counts.set(row.set_code, (counts.get(row.set_code) ?? 0) + 1);
-    perSet.set(row.uid, counts);
-  }
-  for (const [uid, counts] of perSet) {
-    const wishes = byUid.get(uid)!;
-    for (const [set, count] of counts) {
-      const size = setSizes.get(set) ?? 0;
-      if (size > 0 && count / size >= NEAR_COMPLETE_RATIO && count < size) {
-        wishes.nearComplete.add(set);
-        wishes.progress.set(set, [count, size]);
-      }
-    }
-  }
+    .prepare(
+      `SELECT uid, card_key FROM trade_owned
+       WHERE uid IN (${nearby.sql}) AND card_key IN (SELECT value FROM json_each(?))`
+    )
+    .bind(...nearby.params, keysJson)
+    .all<{ uid: string; card_key: string }>();
+  for (const row of owned.results) wishesOf(row.uid).owned.add(row.card_key);
+
+  const sets = await db
+    .prepare(
+      `SELECT uid, set_code, COUNT(*) AS n FROM trade_owned
+       WHERE uid IN (${nearby.sql}) AND set_code IN (SELECT value FROM json_each(?))
+       GROUP BY uid, set_code`
+    )
+    .bind(...nearby.params, setsJson)
+    .all<{ uid: string; set_code: string; n: number }>();
+  for (const row of sets.results) addSetCount(wishesOf(row.uid), row.set_code, Number(row.n), setSizes);
+
   return byUid;
 }
 
@@ -465,49 +542,122 @@ function bestLevel(items: MatchItem[]): Level | null {
 }
 
 function sortItems(items: MatchItem[]): MatchItem[] {
-  return items
-    .sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level] || a.key.localeCompare(b.key))
-    .slice(0, MAX_ITEMS_PER_SIDE);
+  return items.sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level] || a.key.localeCompare(b.key));
+}
+
+const LEVEL_WEIGHT: Record<Level, number> = { wanted: 100, useful: 30, possible: 5 };
+
+/**
+ * Quanto vale uno scambio, per decidere chi mostrare per primo: la
+ * reciprocita' prima di tutto, poi quanto interessano le carte (quelle che
+ * ricevi pesano il doppio di quelle che dai), poi la vicinanza. Le carte di
+ * un lato contano fino a MAX_ITEMS_PER_SIDE, come quelle che si mostrano.
+ */
+function matchScore(theyGive: MatchItem[], iGive: MatchItem[], near: boolean): number {
+  const sum = (items: MatchItem[]) =>
+    items.slice(0, MAX_ITEMS_PER_SIDE).reduce((total, item) => total + LEVEL_WEIGHT[item.level], 0);
+  return (iGive.length > 0 ? 1000 : 0) + sum(theyGive) + sum(iGive) / 2 + (near ? 20 : 0);
+}
+
+interface CardHolder {
+  /** Posizione nella lista `matches` della stessa risposta. */
+  match: number;
+  qty: number;
+  variant: string;
+  condition: string;
+  language: string;
+}
+
+interface CardOffer {
+  key: string;
+  name?: string;
+  setName?: string;
+  level: Level;
+  reason: string | null;
+  setOwned?: number;
+  setSize?: number;
+  /** Quante persone ce l'hanno; holders ne elenca al massimo MAX_HOLDERS_PER_CARD. */
+  holderCount: number;
+  holders: CardHolder[];
+}
+
+/**
+ * La vista per carta: ogni carta che posso ricevere, con chi ce l'ha. Le
+ * persone restano nell'ordine dei match, quindi i reciproci e i migliori per
+ * primi; le carte vanno per livello e poi per quante persone le hanno.
+ */
+function cardsView(matches: Array<{ theyGive: MatchItem[] }>): CardOffer[] {
+  const byKey = new Map<string, CardOffer>();
+  matches.forEach((match, index) => {
+    for (const item of match.theyGive) {
+      let card = byKey.get(item.key);
+      if (!card) {
+        card = {
+          key: item.key, name: item.name, setName: item.setName,
+          level: item.level, reason: item.reason, setOwned: item.setOwned, setSize: item.setSize,
+          holderCount: 0, holders: [],
+        };
+        byKey.set(item.key, card);
+      }
+      // Due stampe della stessa carta dalla stessa persona: una riga sola.
+      if (card.holders.some((holder) => holder.match === index)) continue;
+      card.holderCount += 1;
+      card.holders.push({ match: index, qty: item.qty, variant: item.variant, condition: item.condition, language: item.language });
+    }
+  });
+  return [...byKey.values()]
+    .sort((a, b) =>
+      LEVEL_RANK[b.level] - LEVEL_RANK[a.level] ||
+      b.holderCount - a.holderCount ||
+      (a.name ?? a.key).localeCompare(b.name ?? b.key)
+    )
+    .slice(0, MAX_CARDS)
+    .map((card) => ({ ...card, holders: card.holders.slice(0, MAX_HOLDERS_PER_CARD) }));
 }
 
 async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<Response> {
   const me = await loadProfile(db, uid);
   if (!me) return json({ error: 'no_profile' }, 404);
-  if (me.paused === 1) return json({ paused: true, matches: [] });
+  if (me.paused === 1) return json({ paused: true, matches: [], cards: [] });
 
   const cells = cellAndNeighbors(me.geohash5);
+  const nearby = nearbyOf(cells, uid);
   const neighborRows = await db
-    .prepare(
-      `SELECT uid, nickname, geohash5, trades_done, created_at FROM trade_profiles
-       WHERE geohash5 IN (${cells.map(() => '?').join(', ')}) AND uid <> ? AND paused = 0
-       ORDER BY updated_at DESC LIMIT ${MAX_NEIGHBORS}`
-    )
-    .bind(...cells, uid)
+    .prepare(`SELECT uid, nickname, geohash5, trades_done, created_at FROM trade_profiles WHERE uid IN (${nearby.sql})`)
+    .bind(...nearby.params)
     .all<{ uid: string; nickname: string; geohash5: string; trades_done: number; created_at: number }>();
   const neighbors = neighborRows.results;
-  if (neighbors.length === 0) return json({ cells: cells.length, matches: [] });
+  if (neighbors.length === 0) return json({ cells: cells.length, nearby: 0, matches: [], cards: [] });
 
-  const allUids = [uid, ...neighbors.map((n) => n.uid)];
-  const marks = allUids.map(() => '?').join(', ');
-  const haves = await db
-    .prepare(`SELECT uid, card_key, variant, condition, language, qty FROM trade_haves WHERE uid IN (${marks})`)
-    .bind(...allUids)
+  // Le loro offerte, meno le carte che ho gia'.
+  const theirHaves = await db
+    .prepare(
+      `SELECT h.uid, h.card_key, h.variant, h.condition, h.language, h.qty FROM trade_haves h
+       WHERE h.uid IN (${nearby.sql})
+         AND NOT EXISTS (SELECT 1 FROM trade_owned o WHERE o.uid = ? AND o.card_key = h.card_key)`
+    )
+    .bind(...nearby.params, uid)
     .all<{ uid: string; card_key: string; variant: string; condition: string; language: string; qty: number }>();
-  const havesByUid = new Map<string, typeof haves.results>();
-  for (const row of haves.results) {
+  const havesByUid = new Map<string, typeof theirHaves.results>();
+  for (const row of theirHaves.results) {
     const list = havesByUid.get(row.uid) ?? [];
     list.push(row);
     havesByUid.set(row.uid, list);
   }
 
-  const wishes = await loadWishes(db, allUids, await catalogSetSizes(env));
-  const myWishes = wishes.get(uid)!;
-  const myHaves = havesByUid.get(uid) ?? [];
+  const myHaves = (
+    await db
+      .prepare(`SELECT card_key, variant, condition, language, qty FROM trade_haves WHERE uid = ?`)
+      .bind(uid)
+      .all<{ card_key: string; variant: string; condition: string; language: string; qty: number }>()
+  ).results;
 
-  const matches = [];
+  const setSizes = await catalogSetSizes(env);
+  const myWishes = await loadMyWishes(db, uid, setSizes);
+  const theirWishes = await loadTheirWishes(db, nearby, [...new Set(myHaves.map((h) => h.card_key))], setSizes);
+
+  const scored = [];
   for (const neighbor of neighbors) {
-    const theirWishes = wishes.get(neighbor.uid)!;
-
     const theyGive: MatchItem[] = [];
     for (const have of havesByUid.get(neighbor.uid) ?? []) {
       const verdict = classify(have.card_key, myWishes);
@@ -515,27 +665,35 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
     }
     if (theyGive.length === 0) continue;
 
+    const wishes = theirWishes.get(neighbor.uid) ?? emptyWishes();
     const iGive: MatchItem[] = [];
     for (const have of myHaves) {
-      const verdict = classify(have.card_key, theirWishes);
+      const verdict = classify(have.card_key, wishes);
       if (verdict) iGive.push({ key: have.card_key, variant: have.variant, condition: have.condition, language: have.language, qty: have.qty, ...verdict });
     }
 
-    matches.push({
+    // Stessa cella: meno di ~5 km; cella accanto: meno di ~15 km.
+    const near = neighbor.geohash5 === me.geohash5;
+    sortItems(theyGive);
+    sortItems(iGive);
+    scored.push({
+      score: matchScore(theyGive, iGive, near),
       nickname: neighbor.nickname,
-      // Stessa cella: meno di ~5 km; cella accanto: meno di ~15 km.
-      distance: neighbor.geohash5 === me.geohash5 ? 'lt5' : 'lt15',
+      distance: near ? 'lt5' : 'lt15',
       tradesDone: neighbor.trades_done,
       memberSince: neighbor.created_at,
       level: bestLevel(theyGive),
       mutual: iGive.length > 0,
-      theyGive: sortItems(theyGive),
-      iGive: sortItems(iGive),
+      theyGive,
+      iGive,
     });
   }
 
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored.slice(0, MAX_MATCHES);
+
   const labels = await catalogCardLabels(env);
-  for (const match of matches) {
+  for (const match of top) {
     for (const item of [...match.theyGive, ...match.iGive]) {
       const label = labels.get(item.key);
       if (label) {
@@ -545,13 +703,16 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
     }
   }
 
-  // Prima i reciproci, poi il livello migliore, poi quante carte.
-  matches.sort((a, b) =>
-    Number(b.mutual) - Number(a.mutual) ||
-    LEVEL_RANK[b.level!] - LEVEL_RANK[a.level!] ||
-    b.theyGive.length - a.theyGive.length
-  );
-  return json({ cells: cells.length, matches });
+  // La vista per carta si fa sulle liste intere; le schede ne mostrano un tetto.
+  const cards = cardsView(top);
+  const matches = top.map(({ score: _score, ...match }) => ({
+    ...match,
+    theyGiveCount: match.theyGive.length,
+    iGiveCount: match.iGive.length,
+    theyGive: match.theyGive.slice(0, MAX_ITEMS_PER_SIDE),
+    iGive: match.iGive.slice(0, MAX_ITEMS_PER_SIDE),
+  }));
+  return json({ cells: cells.length, nearby: neighbors.length, matches, cards });
 }
 
 // ── Router ──────────────────────────────────────────────────────────────────
