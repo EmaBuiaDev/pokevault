@@ -563,7 +563,8 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             nickname = proposal.counterpart?.nickname.orEmpty(),
             changing = meeting?.status == "proposed" || meeting?.status == "confirmed",
             selectedSpot = meeting?.spot?.id,
-            slots = meeting?.slots.orEmpty().filter { it.day >= java.time.LocalDate.now().toString() }
+            // Si ripartono solo gli orari precisi ancora futuri: le fasce senza ora delle prime prove no.
+            slots = meeting?.slots.orEmpty().filter { it.time != null && it.day >= java.time.LocalDate.now().toString() }
         )
         viewModelScope.launch { loadSpots(id) }
     }

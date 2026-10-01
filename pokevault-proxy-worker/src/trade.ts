@@ -1087,6 +1087,9 @@ const SPOT_RADIUS_M = 8000;
 /** Elementi di Overpass accettati per cella. */
 const MAX_CELL_ELEMENTS = 400;
 const PHOTON_URL = 'https://photon.komoot.io/api/';
+/** I tipi di OpenStreetMap che "Manca un negozio?" accetta: niente citta', vie o confini. */
+const SEARCH_MAX_KM = 30;
+const SEARCH_OSM_KEYS = ['shop', 'amenity', 'leisure', 'tourism', 'craft', 'office', 'building'];
 /** I servizi di OpenStreetMap chiedono un'identificazione. */
 const OSM_USER_AGENT = 'PokeVault-TradeRadar/1.0';
 const SPOT_KINDS = ['card_shop', 'comics', 'games', 'video_games', 'toys', 'mall', 'library', 'other'] as const;
@@ -1307,7 +1310,8 @@ async function searchSpots(db: D1Database, uid: string, url: URL): Promise<Respo
     const me = await loadProfile(db, uid);
     if (me) center = cellCenter(me.geohash5);
   }
-  const params = new URLSearchParams({ q, limit: '8', lang: 'default' });
+  // Se ne chiedono di piu': citta' e vie si scartano qui sotto.
+  const params = new URLSearchParams({ q, limit: '40', lang: 'default', zoom: '11' });
   if (center) {
     params.set('lat', center.lat.toFixed(4));
     params.set('lon', center.lon.toFixed(4));
@@ -1319,7 +1323,9 @@ async function searchSpots(db: D1Database, uid: string, url: URL): Promise<Respo
       features?: Array<{ geometry?: { coordinates?: [number, number] }; properties?: Record<string, string | number> }>;
     };
     const results = (data.features ?? [])
-      .filter((f) => f.properties?.name && f.geometry?.coordinates)
+      // Solo luoghi dove si entra: negozi, locali, biblioteche, centri. Il 01/10
+      // la ricerca ha restituito il comune di Portici, finito come luogo d'incontro.
+      .filter((f) => f.properties?.name && f.geometry?.coordinates && SEARCH_OSM_KEYS.includes(String(f.properties.osm_key)))
       .map((f) => {
         const p = f.properties!;
         const [fLon, fLat] = f.geometry!.coordinates!;
@@ -1334,7 +1340,13 @@ async function searchSpots(db: D1Database, uid: string, url: URL): Promise<Respo
           distanceKm: center ? Math.round(distanceKm(center.lat, center.lon, fLat, fLon) * 10) / 10 : null,
         };
       });
-    return json({ results });
+    // Photon da' solo una precedenza ai vicini: "fumetteria" tornava Milano e Torino.
+    // Si tengono quelli entro SEARCH_MAX_KM, dal piu' vicino.
+    const near = results
+      .filter((r) => r.distanceKm == null || r.distanceKm <= SEARCH_MAX_KM)
+      .sort((x, y) => (x.distanceKm ?? 0) - (y.distanceKm ?? 0))
+      .slice(0, 8);
+    return json({ results: near });
   } catch {
     return json({ results: [] });
   }

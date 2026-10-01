@@ -98,7 +98,10 @@ if (arg('--as')) {
     if (!deal) { console.log('Nessun accordo su cui agire.'); process.exit(1); }
     let res;
     if (args.includes('--conferma')) {
-      res = await call(tok, 'POST', `/v1/trade/proposals/${deal.id}/meeting/confirm`, { slot: 0 });
+      // Il primo orario preciso; una fascia senza ora solo se non c'e' altro.
+      const slots = deal.meeting?.slots ?? [];
+      const index = Math.max(0, slots.findIndex((x) => x.time));
+      res = await call(tok, 'POST', `/v1/trade/proposals/${deal.id}/meeting/confirm`, { slot: index });
     } else {
       const { data: spotData } = await call(tok, 'GET', `/v1/trade/proposals/${deal.id}/spots`);
       const spot = (spotData.spots ?? [])[0];
