@@ -128,6 +128,15 @@ const TEMPLATES: Record<string, (a: Args, lang: Lang) => { title: string; body: 
   trade_closed: (a, l) => l === 'it'
     ? { title: `Scambio con ${a.nick} chiuso!`, body: 'Aggiorna la collezione e lascia il tuo voto.' }
     : { title: `Trade with ${a.nick} closed!`, body: 'Update your collection and leave your rating.' },
+  trade_auto_closed: (a, l) => l === 'it'
+    ? { title: `Scambio con ${a.nick} chiuso`, body: "L'aveva segnato fatto e sono passati 7 giorni. Aggiorna la collezione e lascia il tuo voto." }
+    : { title: `Trade with ${a.nick} closed`, body: 'They marked it done and 7 days have passed. Update your collection and leave your rating.' },
+  meeting_expired: (a, l) => l === 'it'
+    ? { title: `Appuntamento con ${a.nick} scaduto`, body: 'Nessuno dei due ha segnato lo scambio entro 7 giorni: le carte riservate tornano disponibili.' }
+    : { title: `Meeting with ${a.nick} expired`, body: 'Neither of you marked the trade within 7 days: the reserved cards are available again.' },
+  no_show_reported: (a, l) => l === 'it'
+    ? { title: `${a.nick} dice che non ti sei presentato`, body: "Se c'eri, rispondi \"Io c'ero\" entro 48 ore." }
+    : { title: `${a.nick} says you did not show up`, body: 'If you were there, answer "I was there" within 48 hours.' },
   wants: (a, l) => {
     const total = Number(a.count);
     const list = Array.isArray(a.names) ? a.names : [];

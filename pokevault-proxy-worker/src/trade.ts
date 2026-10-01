@@ -1094,6 +1094,10 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
     .prepare(`SELECT proposal_id, from_uid, mood, tags, created_at FROM trade_ratings WHERE proposal_id IN (SELECT value FROM json_each(?))`)
     .bind(ids)
     .all<{ proposal_id: string; from_uid: string; mood: string; tags: string; created_at: number }>();
+  const { results: noShows } = await db
+    .prepare(`SELECT proposal_id, target_uid, created_at, disputed_at FROM trade_no_shows WHERE proposal_id IN (SELECT value FROM json_each(?))`)
+    .bind(ids)
+    .all<{ proposal_id: string; target_uid: string; created_at: number; disputed_at: number | null }>();
   const { results: myVotes } = await db
     .prepare(`SELECT DISTINCT spot_id FROM trade_spot_votes WHERE uid = ?`)
     .bind(uid)
@@ -1139,17 +1143,27 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
       // Il voto dell'altro si vede quando ho votato anch'io, o dopo 7 giorni.
       const theirsVisible = theirs && (mine || theirs.created_at < Date.now() - RATING_REVEAL_MS);
       const rating = (r: { mood: string; tags: string }) => ({ mood: r.mood, tags: JSON.parse(r.tags || '[]') });
+      // Segnalato come assente: posso rispondere "Io c'ero" per 48 ore.
+      const noShow = p.status === 'no_show' ? noShows.find((n) => n.proposal_id === p.id) : undefined;
+      const disputeUntil = noShow && noShow.target_uid === uid && !noShow.disputed_at ? noShow.created_at + NO_SHOW_DISPUTE_MS : null;
+      const canDispute = disputeUntil !== null && disputeUntil > Date.now();
       return {
         id: p.id,
         status: p.status,
         revision: p.revision,
         myTurn: p.status === 'open' && p.turn_uid === uid,
         // Serve una mia mossa: rispondere, confermare l'appuntamento, confermare
-        // lo scambio che l'altro ha gia' segnato, o votare a scambio chiuso.
+        // lo scambio che l'altro ha gia' segnato, votare a scambio chiuso, o
+        // rispondere a una segnalazione di assenza.
         actionNeeded: (p.status === 'open' && p.turn_uid === uid) || meetingToConfirm ||
-          (p.status === 'scheduled' && doneByOther && !doneByMe) || (p.status === 'done' && !mine),
+          (p.status === 'scheduled' && doneByOther && !doneByMe) || (p.status === 'done' && !mine) || canDispute,
         doneByMe,
         doneByOther,
+        // Chiuso dal cron dopo 7 giorni: uno solo dei due l'aveva segnato fatto.
+        autoClosed: p.status === 'done' && doneByMe !== doneByOther,
+        canDispute,
+        disputeUntil: canDispute ? disputeUntil : null,
+        noShowDisputed: !!noShow?.disputed_at,
         closedAt: p.closed_at,
         myRating: mine ? rating(mine) : null,
         theirRating: theirsVisible ? rating(theirs!) : null,
@@ -1706,6 +1720,16 @@ const RATING_REVEAL_MS = 7 * 24 * 60 * 60 * 1000;
 const NO_SHOW_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
 /** ...tolgono il profilo dai match per questo tempo. */
 const NO_SHOW_SUSPENSION_MS = 30 * 24 * 60 * 60 * 1000;
+/** Chi e' segnalato puo' rispondere "Io c'ero" entro questo tempo (schema 12). */
+const NO_SHOW_DISPUTE_MS = 48 * 60 * 60 * 1000;
+/** Persone diverse che sospendono: con segnalazioni non contestate, o comunque. */
+const NO_SHOW_REPORTERS = 2;
+const NO_SHOW_REPORTERS_ANYWAY = 3;
+/**
+ * Passato questo tempo dall'appuntamento lo scambio si chiude da solo: fatto
+ * se uno dei due l'aveva segnato, altrimenti scaduto (schema 12).
+ */
+const MEETING_AUTO_CLOSE_MS = 7 * 24 * 60 * 60 * 1000;
 const RATING_MOODS = ['good', 'ok', 'bad'];
 /** I chip: i primi dopo 😊, gli altri dopo 😐 o 😞. */
 const GOOD_TAGS = ['punctual', 'as_described', 'kind'];
@@ -1737,7 +1761,9 @@ async function markDone(db: D1Database, uid: string, id: string, push: Pusher): 
   const column = proposal.from_uid === uid ? 'done_from' : 'done_to';
   const otherDone = proposal.from_uid === uid ? proposal.done_to : proposal.done_from;
   if (!otherDone) {
-    await db.prepare(`UPDATE trade_proposals SET ${column} = ?, updated_at = ? WHERE id = ?`).bind(now, now, id).run();
+    // Lo status nel WHERE: nel frattempo il cron puo' averlo chiuso.
+    const marked = await db.prepare(`UPDATE trade_proposals SET ${column} = ?, updated_at = ? WHERE id = ? AND status = 'scheduled'`).bind(now, now, id).run();
+    if (!marked.meta.changes) return json({ error: 'not_scheduled' }, 409);
     const other = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
     await push([{
       id: `done:${id}:${other}`, uid: other, kind: 'after', template: 'done_by_other',
@@ -1745,14 +1771,19 @@ async function markDone(db: D1Database, uid: string, id: string, push: Pusher): 
     }]);
     return json({ status: 'scheduled', waitingOther: true });
   }
-  await db.batch([
+  // Lo scambio in piu' a testa solo se l'ha chiuso questa chiamata, non il cron.
+  const [closed] = await db.batch([
     db
-      .prepare(`UPDATE trade_proposals SET ${column} = ?, status = 'done', closed_at = ?, updated_at = ? WHERE id = ?`)
+      .prepare(`UPDATE trade_proposals SET ${column} = ?, status = 'done', closed_at = ?, updated_at = ? WHERE id = ? AND status = 'scheduled'`)
       .bind(now, now, now, id),
     db
-      .prepare(`UPDATE trade_profiles SET trades_done = trades_done + 1 WHERE uid IN (?, ?)`)
-      .bind(proposal.from_uid, proposal.to_uid),
+      .prepare(
+        `UPDATE trade_profiles SET trades_done = trades_done + 1 WHERE uid IN (?1, ?2)
+           AND EXISTS (SELECT 1 FROM trade_proposals WHERE id = ?3 AND status = 'done' AND ${column} = ?4 AND closed_at = ?4)`
+      )
+      .bind(proposal.from_uid, proposal.to_uid, id, now),
   ]);
+  if (!closed.meta.changes) return json({ error: 'not_scheduled' }, 409);
   // Chi aveva segnato per primo lo scopre qui: e' il momento di aggiornare la collezione e votare.
   const first = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
   await push([{
@@ -1763,12 +1794,30 @@ async function markDone(db: D1Database, uid: string, id: string, push: Pusher): 
 }
 
 /**
+ * Le segnalazioni di assenza ricevute da [since] in poi bastano a sospendere?
+ * Due persone diverse non contestate, o tre comunque: una contestazione e'
+ * una parola contro l'altra, tre persone non sono piu' un caso.
+ */
+async function noShowSuspends(db: D1Database, target: string, since: number): Promise<boolean> {
+  const counts = await db
+    .prepare(
+      `SELECT COUNT(DISTINCT reporter_uid) AS reporters,
+              COUNT(DISTINCT CASE WHEN disputed_at IS NULL THEN reporter_uid END) AS undisputed
+       FROM trade_no_shows WHERE target_uid = ? AND created_at > ?`
+    )
+    .bind(target, since)
+    .first<{ reporters: number; undisputed: number }>();
+  return (counts?.undisputed ?? 0) >= NO_SHOW_REPORTERS || (counts?.reporters ?? 0) >= NO_SHOW_REPORTERS_ANYWAY;
+}
+
+/**
  * POST /v1/trade/proposals/:id/noshow — "Non si e' presentato", solo dopo
  * l'ora dell'appuntamento. Lo scambio non c'e' stato: niente percentuale, ma
  * due segnalazioni da persone diverse in 60 giorni sospendono il profilo
- * dai match per 30 giorni.
+ * dai match per 30 giorni. Chi e' segnalato lo sa subito e ha 48 ore per
+ * rispondere "Io c'ero" (disputeNoShow).
  */
-async function markNoShow(db: D1Database, uid: string, id: string): Promise<Response> {
+async function markNoShow(db: D1Database, uid: string, id: string, push: Pusher): Promise<Response> {
   const proposal = await db.prepare(`SELECT * FROM trade_proposals WHERE id = ?`).bind(id).first<ProposalRow & MeetingColumns & ClosingColumns>();
   if (!proposal || (proposal.from_uid !== uid && proposal.to_uid !== uid)) return json({ error: 'no_proposal' }, 404);
   if (proposal.status !== 'scheduled' || !proposal.meet_slot) return json({ error: 'not_scheduled' }, 409);
@@ -1778,22 +1827,68 @@ async function markNoShow(db: D1Database, uid: string, id: string): Promise<Resp
 
   const target = proposal.from_uid === uid ? proposal.to_uid : proposal.from_uid;
   const ts = Date.now();
-  await db.batch([
+  // Prima si chiude, poi si registra solo se l'ha chiusa questa chiamata: se
+  // l'altro ha segnalato nello stesso istante, o il cron l'ha chiusa, niente.
+  const [closed] = await db.batch([
     db
-      .prepare(`INSERT OR IGNORE INTO trade_no_shows (proposal_id, reporter_uid, target_uid, created_at) VALUES (?, ?, ?, ?)`)
-      .bind(id, uid, target, ts),
-    db
-      .prepare(`UPDATE trade_proposals SET status = 'no_show', closed_by = ?, closed_at = ?, updated_at = ? WHERE id = ?`)
+      .prepare(`UPDATE trade_proposals SET status = 'no_show', closed_by = ?, closed_at = ?, updated_at = ? WHERE id = ? AND status = 'scheduled'`)
       .bind(uid, ts, ts, id),
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO trade_no_shows (proposal_id, reporter_uid, target_uid, created_at)
+         SELECT ?1, ?2, ?3, ?4 WHERE EXISTS
+           (SELECT 1 FROM trade_proposals WHERE id = ?1 AND status = 'no_show' AND closed_by = ?2 AND closed_at = ?4)`
+      )
+      .bind(id, uid, target, ts),
   ]);
-  const reporters = await db
-    .prepare(`SELECT COUNT(DISTINCT reporter_uid) AS n FROM trade_no_shows WHERE target_uid = ? AND created_at > ?`)
-    .bind(target, ts - NO_SHOW_WINDOW_MS)
-    .first<{ n: number }>();
-  if ((reporters?.n ?? 0) >= 2) {
+  if (!closed.meta.changes) return json({ error: 'not_scheduled' }, 409);
+  if (await noShowSuspends(db, target, ts - NO_SHOW_WINDOW_MS)) {
     await suspend(db, target, ts + NO_SHOW_SUSPENSION_MS, 'no_show');
   }
+  await push([{
+    id: `noshow:${id}:${target}`, uid: target, kind: 'meetings', template: 'no_show_reported',
+    args: { nick: await nicknameOf(db, uid) }, data: { screen: 'proposals', proposalId: id }, tag: `proposal:${id}`,
+  }]);
   return json({ status: 'no_show' });
+}
+
+/**
+ * POST /v1/trade/proposals/:id/dispute — "Io c'ero": chi e' stato segnalato
+ * come assente, entro 48 ore. La segnalazione resta, ma da sola non conta
+ * piu': se la sospensione dipendeva da lei, si toglie.
+ */
+async function disputeNoShow(db: D1Database, uid: string, id: string): Promise<Response> {
+  const report = await db
+    .prepare(
+      `SELECT n.created_at, n.disputed_at FROM trade_no_shows n JOIN trade_proposals p ON p.id = n.proposal_id
+       WHERE n.proposal_id = ? AND n.target_uid = ? AND p.status = 'no_show'`
+    )
+    .bind(id, uid)
+    .first<{ created_at: number; disputed_at: number | null }>();
+  if (!report) return json({ error: 'no_proposal' }, 404);
+  if (report.disputed_at) return json({ status: 'disputed' });
+  const now = Date.now();
+  if (now - report.created_at > NO_SHOW_DISPUTE_MS) return json({ error: 'too_late' }, 409);
+
+  await db.batch([
+    db.prepare(`UPDATE trade_no_shows SET disputed_at = ? WHERE proposal_id = ? AND target_uid = ? AND disputed_at IS NULL`).bind(now, id, uid),
+    db.prepare(`UPDATE trade_proposals SET updated_at = ? WHERE id = ?`).bind(now, id),
+  ]);
+  const profile = await db
+    .prepare(`SELECT suspended_until, suspension_reason FROM trade_profiles WHERE uid = ?`)
+    .bind(uid)
+    .first<{ suspended_until: number | null; suspension_reason: string | null }>();
+  if (profile?.suspension_reason === 'no_show' && (profile.suspended_until ?? 0) > now) {
+    // Si ricontano le segnalazioni che l'avevano fatta scattare, e quelle venute dopo.
+    const since = profile.suspended_until! - NO_SHOW_SUSPENSION_MS - NO_SHOW_WINDOW_MS;
+    if (!(await noShowSuspends(db, uid, since))) {
+      await db
+        .prepare(`UPDATE trade_profiles SET suspended_until = NULL, suspension_reason = NULL WHERE uid = ? AND suspension_reason = 'no_show'`)
+        .bind(uid)
+        .run();
+    }
+  }
+  return json({ status: 'disputed' });
 }
 
 /**
@@ -1986,7 +2081,11 @@ async function refreshLeaderboard(db: D1Database, force = false): Promise<void> 
   await purgeExpired(db);
   const now = Date.now();
   const { results: done } = await db
-    .prepare(`SELECT from_uid, to_uid, COALESCE(closed_at, updated_at) AS at FROM trade_proposals WHERE status = 'done' ORDER BY at`)
+    // Chiusi da tutti e due: non quelli chiusi dal cron dopo 7 giorni (schema 12).
+    .prepare(
+      `SELECT from_uid, to_uid, COALESCE(closed_at, updated_at) AS at FROM trade_proposals
+       WHERE status = 'done' AND done_from IS NOT NULL AND done_to IS NOT NULL ORDER BY at`
+    )
     .all<{ from_uid: string; to_uid: string; at: number }>();
   const { results: ratings } = await db
     .prepare(
@@ -2454,9 +2553,72 @@ async function putNotifyPrefs(request: Request, db: D1Database, uid: string): Pr
 const REMINDER_BEFORE_MS = 2 * 60 * 60 * 1000;
 const EARLY_MEETING = '10:00';
 const EVENING_BEFORE = '21:00';
-/** "Com'e' andata?": 2 ore dopo l'ora fissata, finche' entro una settimana. */
+/** "Com'e' andata?": 2 ore dopo l'ora fissata, finche' lo scambio non si chiude da solo. */
 const AFTER_MS = 2 * 60 * 60 * 1000;
-const AFTER_UNTIL_MS = 7 * 24 * 60 * 60 * 1000;
+const AFTER_UNTIL_MS = MEETING_AUTO_CLOSE_MS;
+
+/**
+ * Gli appuntamenti passati da 7 giorni senza un esito: se uno dei due aveva
+ * segnato "Scambio fatto" lo scambio si chiude come fatto (l'altro ha avuto
+ * una settimana di "com'e' andata?" senza dire niente); se nessuno dei due
+ * aveva segnato niente scade, senza penalita' per nessuno, e le carte
+ * riservate tornano libere.
+ */
+async function closeStaleMeetings(db: D1Database): Promise<void> {
+  const { results } = await db
+    .prepare(
+      `SELECT p.id, p.from_uid, p.to_uid, p.meet_slot, p.done_from, p.done_to,
+              f.nickname AS from_nick, t.nickname AS to_nick
+       FROM trade_proposals p
+       JOIN trade_profiles f ON f.uid = p.from_uid
+       JOIN trade_profiles t ON t.uid = p.to_uid
+       WHERE p.status = 'scheduled' AND p.meet_slot IS NOT NULL`
+    )
+    .all<{ id: string; from_uid: string; to_uid: string; meet_slot: string; done_from: number | null; done_to: number | null; from_nick: string; to_nick: string }>();
+  const items: Outgoing[] = [];
+  for (const p of results) {
+    const slot = JSON.parse(p.meet_slot) as Slot;
+    const now = Date.now();
+    if (now < romeToEpoch(slot.day, slotTime(slot)) + MEETING_AUTO_CLOSE_MS) continue;
+    const data = { screen: 'proposals', proposalId: p.id };
+    const tag = `proposal:${p.id}`;
+
+    if (!p.done_from && !p.done_to) {
+      const expired = await db
+        .prepare(
+          `UPDATE trade_proposals SET status = 'expired', closed_at = ?1, updated_at = ?1
+           WHERE id = ?2 AND status = 'scheduled' AND done_from IS NULL AND done_to IS NULL`
+        )
+        .bind(now, p.id)
+        .run();
+      if (!expired.meta.changes) continue;
+      items.push(
+        { id: `expired:${p.id}:${p.from_uid}`, uid: p.from_uid, kind: 'meetings', template: 'meeting_expired', args: { nick: p.to_nick }, data, tag },
+        { id: `expired:${p.id}:${p.to_uid}`, uid: p.to_uid, kind: 'meetings', template: 'meeting_expired', args: { nick: p.from_nick }, data, tag }
+      );
+      continue;
+    }
+
+    // Uno solo l'aveva segnato (con tutti e due sarebbe gia' 'done'). Si
+    // aggiorna la collezione e si vota, ma non e' uno scambio "chiuso da
+    // tutti e due": niente trades_done, e la classifica non lo conta.
+    const closed = await db
+      .prepare(
+        `UPDATE trade_proposals SET status = 'done', closed_at = ?1, updated_at = ?1
+         WHERE id = ?2 AND status = 'scheduled' AND (done_from IS NULL) <> (done_to IS NULL)`
+      )
+      .bind(now, p.id)
+      .run();
+    if (!closed.meta.changes) continue;
+    const marked = p.done_from ? { uid: p.from_uid, other: p.to_nick } : { uid: p.to_uid, other: p.from_nick };
+    const silent = p.done_from ? { uid: p.to_uid, other: p.from_nick } : { uid: p.from_uid, other: p.to_nick };
+    items.push(
+      { id: `closed:${p.id}:${marked.uid}`, uid: marked.uid, kind: 'after', template: 'trade_closed', args: { nick: marked.other }, data, tag },
+      { id: `autoclosed:${p.id}:${silent.uid}`, uid: silent.uid, kind: 'after', template: 'trade_auto_closed', args: { nick: silent.other }, data, tag }
+    );
+  }
+  await enqueue(db, items);
+}
 
 async function enqueueMeetingNotifications(db: D1Database): Promise<void> {
   const today = romeNow().day;
@@ -2567,14 +2729,17 @@ async function enqueueWantsDigest(db: D1Database, env: TradeEnv): Promise<void> 
 }
 
 /**
- * Il cron di TradeRadar (ogni 15 minuti): promemoria e "com'e' andata",
- * carte cercate la sera, poi spedisce quello che e' pronto (anche cio' che
- * di notte era stato rimandato al mattino).
+ * Il cron di TradeRadar (ogni 15 minuti): chiude gli appuntamenti rimasti
+ * senza esito, promemoria e "com'e' andata", carte cercate la sera, poi
+ * spedisce quello che e' pronto (anche cio' che di notte era stato rimandato
+ * al mattino).
  */
 export async function tradeScheduled(env: TradeEnv): Promise<void> {
   const db = env.trade_db;
   if (!db || env.TRADE_ENABLED !== '1') return;
   try {
+    // Un errore qui non deve fermare promemoria e notifiche.
+    await closeStaleMeetings(db).catch((error) => console.warn('traderadar chiusura automatica', error));
     await enqueueMeetingNotifications(db);
     await enqueueWantsDigest(db, env);
   } finally {
@@ -2652,10 +2817,11 @@ export async function handleTradeRequest(
     if (meeting[2] === 'meeting' && method === 'POST') return meetingAction(request, db, uid, meeting[1], false, push);
     if (meeting[2] === 'meeting/confirm' && method === 'POST') return meetingAction(request, db, uid, meeting[1], true, push);
   }
-  const closing = /^\/v1\/trade\/proposals\/([0-9a-f-]{36})\/(done|noshow|rate|spotvote)$/.exec(pathname);
+  const closing = /^\/v1\/trade\/proposals\/([0-9a-f-]{36})\/(done|noshow|dispute|rate|spotvote)$/.exec(pathname);
   if (closing && method === 'POST') {
     if (closing[2] === 'done') return markDone(db, uid, closing[1], push);
-    if (closing[2] === 'noshow') return markNoShow(db, uid, closing[1]);
+    if (closing[2] === 'noshow') return markNoShow(db, uid, closing[1], push);
+    if (closing[2] === 'dispute') return disputeNoShow(db, uid, closing[1]);
     if (closing[2] === 'rate') return rateTrade(request, db, uid, closing[1]);
     return voteSpot(request, db, uid, closing[1]);
   }
