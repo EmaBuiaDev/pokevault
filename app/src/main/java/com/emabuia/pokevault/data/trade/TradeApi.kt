@@ -81,7 +81,10 @@ object TradeApi {
             val url = endpoint(path) ?: return@withContext Result.Unavailable(null)
             val token = WorkerApi.idToken() ?: return@withContext Result.Unauthorized
             runCatching {
-                val requestBody = body?.let { gson.toJson(it).toRequestBody(WorkerApi.jsonMediaType) }
+                // OkHttp rifiuta POST e PUT senza corpo (IllegalArgumentException, che qui
+                // diventerebbe "server non raggiungibile"): senza dati si manda "{}".
+                val json = body?.let { gson.toJson(it) } ?: if (method == "POST" || method == "PUT") "{}" else null
+                val requestBody = json?.toRequestBody(WorkerApi.jsonMediaType)
                 val request = Request.Builder()
                     .url(url)
                     .header("Authorization", "Bearer $token")
