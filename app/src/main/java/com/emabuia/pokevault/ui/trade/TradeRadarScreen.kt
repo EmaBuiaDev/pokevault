@@ -65,6 +65,7 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.Close
@@ -72,11 +73,13 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SwapVert
@@ -1538,23 +1541,58 @@ private fun CardDetailDialog(item: TradeMatchItem, theirs: Boolean, onDismiss: (
 
 // ── Proposte ────────────────────────────────────────────────────────────────
 
+/** I contenitori della tab Proposte, nell'ordine in cui si mostrano. */
+private enum class ProposalBucket { TO_ANSWER, WAITING, AGREED, CLOSED }
+
+private fun bucketOf(proposal: TradeProposal): ProposalBucket = when {
+    proposal.status == "open" && proposal.myTurn == true -> ProposalBucket.TO_ANSWER
+    proposal.status == "open" -> ProposalBucket.WAITING
+    proposal.status == "accepted" -> ProposalBucket.AGREED
+    else -> ProposalBucket.CLOSED
+}
+
+@Composable
+private fun bucketStyle(bucket: ProposalBucket): LevelStyle = when (bucket) {
+    ProposalBucket.TO_ANSWER -> LevelStyle(AppLocale.tradeRadarSectionToAnswer, AppLocale.tradeRadarBucketEmptyToAnswer, AppColors.orange, Icons.Default.Inbox)
+    ProposalBucket.WAITING -> LevelStyle(AppLocale.tradeRadarStatusWaiting, AppLocale.tradeRadarBucketEmptyWaiting, AppColors.blue, Icons.Default.Schedule)
+    ProposalBucket.AGREED -> LevelStyle(AppLocale.tradeRadarBucketAgreed, AppLocale.tradeRadarBucketEmptyAgreed, AppColors.green, Icons.Default.Handshake)
+    ProposalBucket.CLOSED -> LevelStyle(AppLocale.tradeRadarSectionClosed, AppLocale.tradeRadarBucketEmptyClosed, AppColors.textMuted, Icons.Default.Archive)
+}
+
 /**
- * La tab Proposte: prima quelle in cui tocca a te, poi quelle che aspettano
- * l'altro, gli accordi fatti e le chiuse. Niente testo libero: si accetta, si
- * rifiuta o si fa una controproposta cambiando carte e quantita'.
+ * La tab Proposte, pensata per quando sono tante: quattro contenitori (tocca a
+ * te, in attesa, accordi, chiuse) e se ne guarda uno alla volta, a righe
+ * compatte. Il dettaglio con i tasti si apre al tocco. Le chiuse stanno una
+ * riga per persona, con la cronologia nel dettaglio. Si apre da sola sul
+ * contenitore che conta: prima cio' che aspetta te, poi gli accordi.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProposalsTab(viewModel: TradeRadarViewModel, onGoToMatches: () -> Unit) {
     LaunchedEffect(Unit) { viewModel.refreshProposals() }
     val proposals = viewModel.proposals
-    val sections = listOf(
-        AppLocale.tradeRadarSectionToAnswer to proposals.filter { it.status == "open" && it.myTurn == true },
-        AppLocale.tradeRadarSectionWaiting to proposals.filter { it.status == "open" && it.myTurn != true },
-        AppLocale.tradeRadarSectionAccepted to proposals.filter { it.status == "accepted" },
-        AppLocale.tradeRadarSectionClosed to proposals.filter { it.status == "declined" || it.status == "cancelled" },
-    ).filter { it.second.isNotEmpty() }
+    val byBucket = proposals.groupBy(::bucketOf)
+    val automatic = listOf(ProposalBucket.TO_ANSWER, ProposalBucket.AGREED, ProposalBucket.WAITING, ProposalBucket.CLOSED)
+        .firstOrNull { !byBucket[it].isNullOrEmpty() } ?: ProposalBucket.TO_ANSWER
+    val bucket = viewModel.proposalsBucket?.let { name -> ProposalBucket.entries.firstOrNull { it.name == name } } ?: automatic
+    var query by rememberSaveable { mutableStateOf("") }
+    /** Gli id delle proposte nel dettaglio: una, o la cronologia di una persona. */
+    var detail by remember { mutableStateOf<List<String>?>(null) }
     var confirmCancel by remember { mutableStateOf<TradeProposal?>(null) }
+
+    val needle = query.trim()
+    fun hit(proposal: TradeProposal): Boolean =
+        needle.isEmpty() ||
+            proposal.counterpart?.nickname.orEmpty().contains(needle, ignoreCase = true) ||
+            (proposal.give.orEmpty() + proposal.take.orEmpty()).any {
+                it.name.orEmpty().contains(needle, ignoreCase = true) || it.setName.orEmpty().contains(needle, ignoreCase = true)
+            }
+    val shown = byBucket[bucket].orEmpty().filter(::hit)
+    val rows: List<List<TradeProposal>> = if (bucket == ProposalBucket.CLOSED) {
+        shown.groupBy { it.counterpart?.id ?: it.id }.values.map { group -> group.sortedByDescending { it.updatedAt ?: 0L } }
+    } else {
+        shown.map { listOf(it) }
+    }
 
     PullToRefreshBox(
         isRefreshing = false,
@@ -1575,27 +1613,50 @@ private fun ProposalsTab(viewModel: TradeRadarViewModel, onGoToMatches: () -> Un
                 proposals.isEmpty() -> item {
                     EmptyState(text = AppLocale.tradeRadarNoProposals, action = AppLocale.tradeRadarGoToMatches to onGoToMatches)
                 }
-                else -> sections.forEach { (title, list) ->
-                    item(key = "title|$title") {
-                        SectionTitle(title, list.size)
+                else -> {
+                    item(key = "buckets") {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(ProposalBucket.entries) { entry ->
+                                val style = bucketStyle(entry)
+                                FilterChip(style.label, byBucket[entry].orEmpty().size, style, entry == bucket) {
+                                    viewModel.selectProposalsBucket(entry.name)
+                                }
+                            }
+                        }
                     }
-                    items(list, key = { it.id.orEmpty() }) { proposal ->
-                        ProposalCard(
-                            proposal = proposal,
+                    if (proposals.size > 5) {
+                        item(key = "search") { SearchField(query, onChange = { query = it }, modifier = Modifier.fillMaxWidth()) }
+                    }
+                    if (rows.isEmpty()) {
+                        item(key = "emptyBucket") {
+                            EmptyState(text = if (needle.isNotEmpty()) AppLocale.tradeRadarNoSearchResults else bucketStyle(bucket).description, radar = false)
+                        }
+                    }
+                    items(rows, key = { group -> "row|" + group.first().id.orEmpty() }) { group ->
+                        ProposalRow(
+                            group = group,
                             prices = viewModel.prices,
-                            acting = viewModel.actingOn == proposal.id,
-                            onAccept = { viewModel.answer(proposal.id.orEmpty(), "accept") },
-                            onDecline = { viewModel.answer(proposal.id.orEmpty(), "decline") },
-                            onCounter = { viewModel.openCounter(proposal) },
-                            onCancel = {
-                                if (proposal.status == "accepted") confirmCancel = proposal
-                                else viewModel.answer(proposal.id.orEmpty(), "cancel")
-                            },
+                            onClick = { detail = group.mapNotNull { it.id } },
                             modifier = Modifier.animateItem()
                         )
                     }
                 }
             }
+        }
+    }
+
+    detail?.let { ids ->
+        val group = ids.mapNotNull { id -> proposals.firstOrNull { it.id == id } }
+        if (group.isEmpty()) {
+            LaunchedEffect(ids) { detail = null }
+        } else {
+            ProposalSheet(
+                group = group,
+                viewModel = viewModel,
+                onCounter = { proposal -> detail = null; viewModel.openCounter(proposal) },
+                onCancelDeal = { confirmCancel = it },
+                onDismiss = { detail = null }
+            )
         }
     }
 
@@ -1612,6 +1673,144 @@ private fun ProposalsTab(viewModel: TradeRadarViewModel, onGoToMatches: () -> Un
             dismissButton = { TextButton(onClick = { confirmCancel = null }) { Text(AppLocale.cancel) } }
         )
     }
+}
+
+/**
+ * Una proposta in una riga: chi, quando, cosa ricevi e cosa dai in
+ * miniatura, e se il bilancio e' equo. Nelle chiuse la riga e' la persona,
+ * con quante proposte chiuse ci sono.
+ */
+@Composable
+private fun ProposalRow(group: List<TradeProposal>, prices: Map<String, Double>, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val proposal = group.first()
+    val bucket = bucketOf(proposal)
+    val shape = RoundedCornerShape(18.dp)
+    val take = proposal.take.orEmpty()
+    val give = proposal.give.orEmpty()
+    val verdict = balanceVerdict(give, take, prices)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(AppColors.card)
+            .then(if (bucket == ProposalBucket.TO_ANSWER) Modifier.border(1.dp, AppColors.orange.copy(alpha = 0.5f), shape) else Modifier)
+            .pressScale(scaleDown = 0.98f, onClick = onClick)
+            .padding(12.dp)
+    ) {
+        Avatar(proposal.counterpart?.nickname.orEmpty(), size = 42.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    proposal.counterpart?.nickname.orEmpty(),
+                    fontWeight = FontWeight.Bold,
+                    color = AppColors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(timeAgo(proposal.updatedAt), fontSize = 11.sp, color = AppColors.textMuted)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MiniStack(take)
+                Icon(Icons.Default.SwapHoriz, null, tint = AppColors.textMuted, modifier = Modifier.padding(horizontal = 6.dp).size(16.dp))
+                MiniStack(give)
+                Spacer(Modifier.weight(1f))
+                verdict?.let { (text, color) -> InfoPill(text, color) }
+            }
+            Text(
+                when {
+                    bucket == ProposalBucket.CLOSED && group.size > 1 -> "${proposalStatus(proposal).label} · ${AppLocale.tradeRadarClosedCount(group.size)}"
+                    bucket == ProposalBucket.CLOSED -> proposalStatus(proposal).label
+                    else -> listOfNotNull(
+                        AppLocale.tradeRadarRowSummary(take.sumOf { it.qty ?: 1 }, give.sumOf { it.qty ?: 1 }),
+                        AppLocale.tradeRadarCounterShort.takeIf { (proposal.revision ?: 1) > 1 && proposal.status == "open" }
+                    ).joinToString(" · ")
+                },
+                fontSize = 12.sp,
+                color = AppColors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.textMuted)
+    }
+}
+
+/** Fino a tre miniature una sopra l'altra, con "+N" per il resto delle copie. */
+@Composable
+private fun MiniStack(items: List<TradeOfferItem>) {
+    val copies = items.sumOf { it.qty ?: 1 }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy((-12).dp)) {
+            items.take(3).forEach { item ->
+                Box(Modifier.width(26.dp).aspectRatio(0.716f).clip(RoundedCornerShape(3.dp)).background(AppColors.card)) {
+                    CardImageSkeleton()
+                    AsyncImage(
+                        model = TradeCardKey.imageUrl(item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+                        contentDescription = item.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+        val shownCopies = items.take(3).size
+        if (copies > shownCopies) {
+            Spacer(Modifier.width(4.dp))
+            Text("+${copies - shownCopies}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AppColors.textSecondary)
+        }
+    }
+}
+
+/**
+ * Il dettaglio di una proposta, con i tasti; per le chiuse di una persona
+ * anche la cronologia. Contenuto a misura, insets solo in basso.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProposalSheet(
+    group: List<TradeProposal>,
+    viewModel: TradeRadarViewModel,
+    onCounter: (TradeProposal) -> Unit,
+    onCancelDeal: (TradeProposal) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AppColors.background,
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) }
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
+        ) {
+            group.forEachIndexed { index, proposal ->
+                if (index == 1) SectionTitle(AppLocale.tradeRadarHistory, group.size - 1)
+                ProposalCard(
+                    proposal = proposal,
+                    prices = viewModel.prices,
+                    acting = viewModel.actingOn == proposal.id,
+                    onAccept = { viewModel.answer(proposal.id.orEmpty(), "accept") },
+                    onDecline = { viewModel.answer(proposal.id.orEmpty(), "decline") },
+                    onCounter = { onCounter(proposal) },
+                    onCancel = {
+                        if (proposal.status == "accepted") onCancelDeal(proposal)
+                        else viewModel.answer(proposal.id.orEmpty(), "cancel")
+                    }
+                )
+            }
+        }
+    }
+}
+
+/** "adesso", "5 min fa", "3 ore fa", "ieri", "4 giorni fa". */
+private fun timeAgo(at: Long?): String {
+    if (at == null || at <= 0L) return ""
+    val minutes = ((System.currentTimeMillis() - at) / 60_000L).coerceAtLeast(0L)
+    return AppLocale.tradeRadarTimeAgo(minutes)
 }
 
 @Composable
@@ -1758,18 +1957,10 @@ private fun proposalStatus(proposal: TradeProposal): StatusStyle = when (proposa
  */
 @Composable
 private fun BalanceLine(give: List<TradeOfferItem>, take: List<TradeOfferItem>, prices: Map<String, Double>, compact: Boolean = false) {
-    fun total(items: List<TradeOfferItem>) = items.sumOf { (prices[it.key.orEmpty()] ?: 0.0) * (it.qty ?: 1) }
     val unpriced = (give + take).count { prices[it.key.orEmpty()] == null }
-    val giveValue = total(give)
-    val takeValue = total(take)
-    val diff = takeValue - giveValue
-    val fair = kotlin.math.abs(diff) <= maxOf(1.0, 0.1 * maxOf(giveValue, takeValue))
-    val verdict = when {
-        giveValue == 0.0 && takeValue == 0.0 -> null
-        fair -> AppLocale.tradeRadarBalanceFair to AppColors.green
-        diff > 0 -> AppLocale.tradeRadarBalanceForYou(euro(diff)) to AppColors.blue
-        else -> AppLocale.tradeRadarBalanceForThem(euro(-diff)) to AppColors.orange
-    }
+    val giveValue = valueOf(give, prices)
+    val takeValue = valueOf(take, prices)
+    val verdict = balanceVerdict(give, take, prices)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Balance, null, tint = AppColors.textMuted, modifier = Modifier.size(16.dp))
@@ -1796,6 +1987,23 @@ private fun BalanceLine(give: List<TradeOfferItem>, take: List<TradeOfferItem>, 
 }
 
 private fun euro(value: Double): String = "€%.2f".format(Locale.ITALY, value)
+
+private fun valueOf(items: List<TradeOfferItem>, prices: Map<String, Double>): Double =
+    items.sumOf { (prices[it.key.orEmpty()] ?: 0.0) * (it.qty ?: 1) }
+
+/** Equo (entro 1 € o il 10%), o a favore di chi, con il suo colore; null senza prezzi. */
+@Composable
+private fun balanceVerdict(give: List<TradeOfferItem>, take: List<TradeOfferItem>, prices: Map<String, Double>): Pair<String, Color>? {
+    val giveValue = valueOf(give, prices)
+    val takeValue = valueOf(take, prices)
+    val diff = takeValue - giveValue
+    return when {
+        giveValue == 0.0 && takeValue == 0.0 -> null
+        kotlin.math.abs(diff) <= maxOf(1.0, 0.1 * maxOf(giveValue, takeValue)) -> AppLocale.tradeRadarBalanceFair to AppColors.green
+        diff > 0 -> AppLocale.tradeRadarBalanceForYou(euro(diff)) to AppColors.blue
+        else -> AppLocale.tradeRadarBalanceForThem(euro(-diff)) to AppColors.orange
+    }
+}
 
 /**
  * La composizione, a schermo intero: cosa ricevi (fra le sue offerte) e cosa

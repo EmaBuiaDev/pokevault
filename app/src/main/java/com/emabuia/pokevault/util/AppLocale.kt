@@ -1551,6 +1551,23 @@ object AppLocale {
     val tradeRadarAlreadyOpen: String get() = if (isItalian) "Con questa persona c'è già una proposta aperta: eccola." else "There is already an open proposal with this person: here it is."
     val tradeRadarNotAvailable: String get() = if (isItalian) "Alcune carte non sono più offerte: controlla la proposta." else "Some cards are no longer on offer: check the proposal."
     val tradeRadarDistanceFar: String get() = if (isItalian) "Fuori zona" else "Out of area"
+    val tradeRadarBucketAgreed: String get() = if (isItalian) "Accordi" else "Deals"
+    val tradeRadarBucketEmptyToAnswer: String get() = if (isItalian) "Nessuna proposta aspetta una tua risposta." else "No proposal is waiting for your answer."
+    val tradeRadarBucketEmptyWaiting: String get() = if (isItalian) "Non stai aspettando nessuna risposta." else "You are not waiting for any answer."
+    val tradeRadarBucketEmptyAgreed: String get() = if (isItalian) "Nessun accordo per ora." else "No deals yet."
+    val tradeRadarBucketEmptyClosed: String get() = if (isItalian) "Nessuna proposta chiusa." else "No closed proposals."
+    fun tradeRadarClosedCount(count: Int): String = if (isItalian) "$count proposte chiuse" else "$count closed proposals"
+    fun tradeRadarRowSummary(take: Int, give: Int): String = if (isItalian) "Ricevi $take · Dai $give" else "You get $take · You give $give"
+    val tradeRadarCounterShort: String get() = if (isItalian) "controproposta" else "counter-offer"
+    val tradeRadarHistory: String get() = if (isItalian) "Cronologia" else "History"
+    fun tradeRadarTimeAgo(minutes: Long): String = when {
+        minutes < 1 -> if (isItalian) "adesso" else "now"
+        minutes < 60 -> if (isItalian) "$minutes min fa" else "$minutes min ago"
+        minutes < 120 -> if (isItalian) "1 ora fa" else "1 hour ago"
+        minutes < 24 * 60 -> if (isItalian) "${minutes / 60} ore fa" else "${minutes / 60} hours ago"
+        minutes < 48 * 60 -> if (isItalian) "ieri" else "yesterday"
+        else -> if (isItalian) "${minutes / (24 * 60)} giorni fa" else "${minutes / (24 * 60)} days ago"
+    }
     val tradeRadarReasonWishlist: String get() = if (isItalian) "In wishlist" else "In wishlist"
     val tradeRadarReasonAlbum: String get() = if (isItalian) "Per un album" else "For an album"
     // Le stesse etichette sulle carte che dai: parlano dell'altra persona.

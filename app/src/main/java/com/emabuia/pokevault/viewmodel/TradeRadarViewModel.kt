@@ -307,6 +307,17 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     var actingOn by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * Il contenitore aperto nella tab Proposte (nome di ProposalBucket nella
+     * schermata); null = sceglie la schermata, partendo da cio' che aspetta te.
+     */
+    var proposalsBucket by mutableStateOf<String?>(null)
+        private set
+
+    fun selectProposalsBucket(name: String?) {
+        proposalsBucket = name
+    }
+
     /** Cresce quando l'app deve portare l'utente sulla tab Proposte (dopo un invio). */
     var focusProposals by mutableStateOf(0)
         private set
@@ -438,12 +449,14 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                 result is TradeApi.Result.Ok -> {
                     composer = null
                     info = if (current.counterTo != null) Info.COUNTER_SENT else Info.PROPOSAL_SENT
+                    proposalsBucket = "WAITING"
                     focusProposals++
                     refreshProposals()
                 }
                 result is TradeApi.Result.Rejected && result.error == "already_open" -> {
                     composer = null
                     notice = Problem.ALREADY_OPEN
+                    proposalsBucket = null
                     focusProposals++
                     refreshProposals()
                 }
@@ -470,7 +483,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             actingOn = null
             when {
                 result is TradeApi.Result.Ok -> info = when (action) {
-                    "accept" -> Info.ACCEPTED
+                    "accept" -> Info.ACCEPTED.also { proposalsBucket = "AGREED" }
                     "decline" -> Info.DECLINED
                     else -> Info.CANCELLED
                 }
