@@ -70,6 +70,7 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Balance
@@ -2453,8 +2454,9 @@ private fun spotKindColor(kind: String?): Color = when (kind) {
 
 /** Apre il luogo nell'app di mappe: per nome e coordinate, o per nome se e' una segnalazione. */
 private fun openInMaps(context: android.content.Context, spot: TradeSpot) {
-    val name = Uri.encode(listOfNotNull(spot.name, spot.city).joinToString(", "))
-    val uri = if (spot.lat != null && spot.lon != null && spot.pending != true) {
+    val name = Uri.encode(listOfNotNull(spot.name, spot.address?.takeIf { it.isNotBlank() }, spot.city).joinToString(", "))
+    // Le coordinate di una segnalazione vengono dall'indirizzo: vanno bene anche prima della verifica.
+    val uri = if (spot.lat != null && spot.lon != null && (spot.pending != true || !spot.address.isNullOrBlank())) {
         Uri.parse("geo:${spot.lat},${spot.lon}?q=${spot.lat},${spot.lon}($name)")
     } else {
         Uri.parse("geo:0,0?q=$name")
@@ -2629,11 +2631,101 @@ private fun SpotSummary(spot: TradeSpot) {
                 listOfNotNull(spotKindLabel(spot.kind), spot.city?.takeIf { it.isNotBlank() }).joinToString(" · "),
                 fontSize = 12.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
+            spot.address?.takeIf { it.isNotBlank() }?.let {
+                Text(it, fontSize = 11.sp, color = AppColors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             spot.openingHours?.takeIf { it.isNotBlank() }?.let {
                 Text(AppLocale.tradeRadarOpeningHours(it), fontSize = 11.sp, color = AppColors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            if (spot.pending == true) {
+                Text(AppLocale.tradeRadarPendingExplain, fontSize = 11.sp, color = AppColors.orange)
+            }
         }
     }
+}
+
+/** I tipi che si possono scegliere segnalando un negozio. */
+private val ReportKinds = listOf("card_shop", "comics", "games", "other")
+
+/**
+ * "Segnala un negozio": nome, citta' (gia' quella della zona), indirizzo
+ * facoltativo e tipo. Dall'indirizzo il server ricava dove sta, cosi' le
+ * mappe portano nel posto giusto anche prima della verifica.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReportSpotDialog(
+    initialName: String,
+    initialCity: String,
+    onSend: (name: String, city: String, address: String, kind: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by rememberSaveable { mutableStateOf(initialName) }
+    var city by rememberSaveable { mutableStateOf(initialCity) }
+    var address by rememberSaveable { mutableStateOf("") }
+    var kind by rememberSaveable { mutableStateOf("card_shop") }
+    val ready = name.trim().length >= 2 && city.trim().length >= 2
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(AppLocale.tradeRadarReportTitle) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(AppLocale.tradeRadarReportText, fontSize = 13.sp, color = AppColors.textSecondary)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(80) },
+                    label = { Text(AppLocale.tradeRadarReportName) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = city,
+                    onValueChange = { city = it.take(60) },
+                    label = { Text(AppLocale.tradeRadarReportCity) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it.take(120) },
+                    label = { Text(AppLocale.tradeRadarReportAddress) },
+                    supportingText = { Text(AppLocale.tradeRadarReportAddressHint) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(AppLocale.tradeRadarReportKind, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppColors.textSecondary)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ReportKinds.forEach { option ->
+                        val selected = option == kind
+                        val color = spotKindColor(option)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selected) color else innerColor())
+                                .clickable { kind = option }
+                                .padding(horizontal = 10.dp, vertical = 7.dp)
+                        ) {
+                            Icon(spotKindIcon(option), null, tint = if (selected) AppColors.onAccent else color, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                spotKindLabel(option),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (selected) AppColors.onAccent else AppColors.textPrimary
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSend(name.trim(), city.trim(), address.trim(), kind) }, enabled = ready) {
+                Text(AppLocale.tradeRadarReportSend, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(AppLocale.cancel) } }
+    )
 }
 
 /**
@@ -2647,11 +2739,22 @@ private fun SpotSummary(spot: TradeSpot) {
 private fun PlannerDialog(viewModel: TradeRadarViewModel, planner: TradeRadarViewModel.Planner) {
     val context = LocalContext.current
     var showAllSpots by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
     val today = remember { java.time.LocalDate.now() }
     var selectedDay by remember { mutableStateOf(today.plusDays(1)) }
     val selectedSpot = planner.spots.firstOrNull { it.id == planner.selectedSpot }
     val ready = selectedSpot != null && planner.slots.isNotEmpty()
 
+    if (reporting) {
+        // La citta' della zona: quella piu' frequente fra i luoghi trovati.
+        val zoneCity = planner.spots.mapNotNull { it.city?.takeIf(String::isNotBlank) }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key.orEmpty()
+        ReportSpotDialog(
+            initialName = planner.query.trim(),
+            initialCity = zoneCity,
+            onSend = { name, city, address, kind -> reporting = false; viewModel.reportSpot(name, city, address, kind) },
+            onDismiss = { reporting = false }
+        )
+    }
     Dialog(onDismissRequest = { viewModel.closePlanner() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Scaffold(
             containerColor = AppColors.background,
@@ -2784,12 +2887,18 @@ private fun PlannerDialog(viewModel: TradeRadarViewModel, planner: TradeRadarVie
                         Icon(Icons.Default.AddCircle, null, tint = AppColors.green, modifier = Modifier.size(22.dp))
                     }
                 }
-                if (planner.searchedEmpty && planner.query.isNotBlank()) {
+                if (planner.query.trim().length >= 2 && !planner.searching) {
                     item(key = "report") {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(AppLocale.tradeRadarNotOnMap, fontSize = 12.sp, color = AppColors.textSecondary)
-                            OutlinedButton(onClick = { viewModel.reportSpot(planner.query) }, shape = RoundedCornerShape(12.dp)) {
-                                Text(AppLocale.tradeRadarReportShop(planner.query.trim()), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                if (planner.searchedEmpty) AppLocale.tradeRadarNotOnMap else AppLocale.tradeRadarNotInList,
+                                fontSize = 12.sp,
+                                color = AppColors.textSecondary
+                            )
+                            OutlinedButton(onClick = { reporting = true }, shape = RoundedCornerShape(12.dp)) {
+                                Icon(Icons.Default.AddLocationAlt, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(AppLocale.tradeRadarReportTitle)
                             }
                         }
                     }

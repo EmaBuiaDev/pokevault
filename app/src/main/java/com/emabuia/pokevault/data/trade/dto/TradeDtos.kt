@@ -231,6 +231,8 @@ data class TradeSpot(
     /** card_shop | comics | games | video_games | toys | mall | library | other */
     @SerializedName("kind") val kind: String? = null,
     @SerializedName("city") val city: String? = null,
+    /** Solo per i luoghi segnalati: l'indirizzo scritto da chi l'ha segnalato. */
+    @SerializedName("address") val address: String? = null,
     @SerializedName("openingHours") val openingHours: String? = null,
     @SerializedName("lat") val lat: Double? = null,
     @SerializedName("lon") val lon: Double? = null,
@@ -298,7 +300,9 @@ data class TradeAddSpotRequest(
     @SerializedName("kind") val kind: String? = null,
     @SerializedName("city") val city: String? = null,
     @SerializedName("lat") val lat: Double? = null,
-    @SerializedName("lon") val lon: Double? = null
+    @SerializedName("lon") val lon: Double? = null,
+    /** Per una segnalazione: facoltativo, da li' il server ricava le coordinate. */
+    @SerializedName("address") val address: String? = null
 )
 
 data class TradeAddSpotPayload(

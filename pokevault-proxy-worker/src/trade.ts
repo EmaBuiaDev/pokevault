@@ -1133,6 +1133,7 @@ interface SpotRow {
   lon: number;
   geohash5: string;
   city: string | null;
+  address: string | null;
   opening_hours: string | null;
   source: string;
   approved: number;
@@ -1249,6 +1250,7 @@ function spotJson(spot: SpotRow, fromLat: number, fromLon: number) {
     name: spot.name,
     kind: spot.kind,
     city: spot.city,
+    address: spot.address,
     openingHours: spot.opening_hours,
     lat: spot.lat,
     lon: spot.lon,
@@ -1353,17 +1355,44 @@ async function searchSpots(db: D1Database, uid: string, url: URL): Promise<Respo
 }
 
 /**
+ * Coordinate di un indirizzo (o di una citta') con Photon, vicino a [near]:
+ * per una segnalazione, cosi' le mappe portano nel posto giusto anche prima
+ * della verifica. Null se non trova niente entro 40 km.
+ */
+async function geocode(query: string, near: { lat: number; lon: number }): Promise<{ lat: number; lon: number } | null> {
+  const params = new URLSearchParams({ q: query, limit: '5', lang: 'default', lat: near.lat.toFixed(4), lon: near.lon.toFixed(4) });
+  try {
+    const response = await fetch(`${PHOTON_URL}?${params}`, { headers: { 'user-agent': OSM_USER_AGENT }, signal: AbortSignal.timeout(10000) });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { features?: Array<{ geometry?: { coordinates?: [number, number] } }> };
+    for (const feature of data.features ?? []) {
+      const coordinates = feature.geometry?.coordinates;
+      if (!coordinates) continue;
+      const [fLon, fLat] = coordinates;
+      if (Number.isFinite(fLat) && Number.isFinite(fLon) && distanceKm(near.lat, near.lon, fLat, fLon) <= 40) return { lat: fLat, lon: fLon };
+    }
+  } catch {
+    // Senza coordinate si resta al centro della zona: lo si sistema in verifica.
+  }
+  return null;
+}
+
+/**
  * POST /v1/trade/spots — un luogo che mancava. Con osmId e coordinate e' un
  * luogo vero di OpenStreetMap, trovato con la ricerca: entra subito. Senza,
- * e' una segnalazione (nome e citta'): la vede chi l'ha fatta, gli altri
- * quando la approviamo.
+ * e' una segnalazione: nome, citta' (obbligatoria), indirizzo facoltativo e
+ * tipo. Le coordinate vengono dall'indirizzo, o dalla citta'. Finche' non la
+ * verifichiamo la vedono solo chi l'ha fatta e chi scambia con lui (approved
+ * = 0); poi tutti.
  */
 async function addSpot(request: Request, db: D1Database, uid: string): Promise<Response> {
-  const body = await readJson<{ osmId?: string; name?: string; kind?: string; city?: string; lat?: number; lon?: number }>(request);
+  const body = await readJson<{ osmId?: string; name?: string; kind?: string; city?: string; address?: string; lat?: number; lon?: number }>(request);
   const name = cleanText(body?.name, 80);
   if (name.length < 2) return json({ error: 'bad_name' }, 400);
   const kind = (SPOT_KINDS as readonly string[]).includes(body?.kind ?? '') ? (body!.kind as SpotKind) : 'other';
   const osmId = cleanText(body?.osmId, 30);
+  const city = cleanText(body?.city, 60);
+  const address = cleanText(body?.address, 120);
   const now = Date.now();
   let id: string;
   let lat = Number(body?.lat);
@@ -1375,21 +1404,23 @@ async function addSpot(request: Request, db: D1Database, uid: string): Promise<R
     source = 'osm';
     approved = 1;
   } else {
-    // Senza coordinate si mette al centro della zona di chi segnala, finche' non la sistemiamo.
+    if (city.length < 2) return json({ error: 'bad_city' }, 400);
     const me = await loadProfile(db, uid);
     if (!me) return json({ error: 'no_profile' }, 404);
-    ({ lat, lon } = cellCenter(me.geohash5));
+    const center = cellCenter(me.geohash5);
+    const found = (address ? await geocode(`${address}, ${city}`, center) : null) ?? (await geocode(city, center));
+    ({ lat, lon } = found ?? center);
     id = `user:${crypto.randomUUID()}`;
     source = 'user';
     approved = 0;
   }
   await db
     .prepare(
-      `INSERT INTO trade_spots (id, name, kind, lat, lon, geohash5, city, opening_hours, source, approved, added_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+      `INSERT INTO trade_spots (id, name, kind, lat, lon, geohash5, city, address, opening_hours, source, approved, added_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO NOTHING`
     )
-    .bind(id, name, kind, lat, lon, encode(lat, lon, 5), cleanText(body?.city, 60) || null, source, approved, uid, now, now)
+    .bind(id, name, kind, lat, lon, encode(lat, lon, 5), city || null, address || null, source, approved, uid, now, now)
     .run();
   const spot = await db.prepare(`SELECT * FROM trade_spots WHERE id = ?`).bind(id).first<SpotRow>();
   return json({ spot: spot ? spotJson(spot, lat, lon) : null }, 201);

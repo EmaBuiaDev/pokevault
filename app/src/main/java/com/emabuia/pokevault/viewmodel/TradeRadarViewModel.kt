@@ -646,10 +646,16 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Il negozio non c'e' nemmeno su OpenStreetMap: lo si segnala per nome, e lo approviamo noi. */
-    fun reportSpot(name: String) {
+    /**
+     * Il negozio non c'e' su OpenStreetMap: lo si segnala con nome, citta',
+     * indirizzo (facoltativo) e tipo. Lo vedono subito i due dell'accordo,
+     * gli altri dopo la verifica (scripts/trade-luoghi-staging.mjs).
+     */
+    fun reportSpot(name: String, city: String, address: String, kind: String) {
         viewModelScope.launch {
-            val result = TradeApi.addSpot(TradeAddSpotRequest(name = name.trim()))
+            val result = TradeApi.addSpot(
+                TradeAddSpotRequest(name = name.trim(), city = city.trim(), address = address.trim().ifBlank { null }, kind = kind)
+            )
             (result as? TradeApi.Result.Ok)?.value?.spot?.let { takeSpot(it); info = Info.SPOT_REPORTED }
                 ?: run { notice = problemOf(result) }
         }
