@@ -83,6 +83,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.material.icons.filled.LocalMall
@@ -109,6 +110,7 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material3.AlertDialog
@@ -3581,6 +3583,8 @@ private fun TierBadge(tier: String?, compact: Boolean = false) {
 private fun LeaderboardDialog(viewModel: TradeRadarViewModel, board: TradeRadarViewModel.Leaderboard) {
     val payload = board.payload
     val me = payload?.me
+    // "Come si sale" e' a portata di mano ma chiuso: si apre dalla i in alto.
+    var showRules by rememberSaveable { mutableStateOf(false) }
     Dialog(onDismissRequest = { viewModel.closeLeaderboard() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Scaffold(
             containerColor = AppColors.background,
@@ -3593,6 +3597,15 @@ private fun LeaderboardDialog(viewModel: TradeRadarViewModel, board: TradeRadarV
                             Icon(Icons.Default.Close, AppLocale.tradeRadarClose, tint = AppColors.textPrimary)
                         }
                     },
+                    actions = {
+                        IconButton(onClick = { showRules = !showRules }) {
+                            Icon(
+                                if (showRules) Icons.Filled.Info else Icons.Outlined.Info,
+                                AppLocale.tradeRadarTiersTitle,
+                                tint = if (showRules) AppColors.gold else AppColors.textSecondary
+                            )
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
                 )
             }
@@ -3602,6 +3615,15 @@ private fun LeaderboardDialog(viewModel: TradeRadarViewModel, board: TradeRadarV
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
+                item(key = "rules") {
+                    AnimatedVisibility(
+                        visible = showRules,
+                        enter = expandVertically(tween(AppMotion.current.content)) + fadeIn(tween(AppMotion.current.content)),
+                        exit = shrinkVertically(tween(AppMotion.current.state)) + fadeOut(tween(AppMotion.current.state))
+                    ) {
+                        TiersExplained()
+                    }
+                }
                 item(key = "scope") {
                     SegmentedTabs(
                         selected = if (board.scope == "italy") 1 else 0,
@@ -3627,7 +3649,6 @@ private fun LeaderboardDialog(viewModel: TradeRadarViewModel, board: TradeRadarV
                         LeaderboardRow(entry, modifier = Modifier.animateItem())
                     }
                 }
-                item(key = "how") { TiersExplained() }
             }
         }
     }
@@ -3753,7 +3774,7 @@ private fun LeaderboardRow(entry: TradeLeaderboardEntry, modifier: Modifier = Mo
 private fun TiersExplained() {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(20.dp)).background(AppColors.card).padding(14.dp)
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(AppColors.card).padding(14.dp)
     ) {
         Text(AppLocale.tradeRadarTiersTitle, fontWeight = FontWeight.Bold, color = AppColors.textPrimary)
         listOf("bronze", "silver", "gold", "platinum").forEach { tier ->
