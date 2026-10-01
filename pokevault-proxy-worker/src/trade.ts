@@ -141,6 +141,49 @@ async function catalogSetSizes(env: TradeEnv): Promise<Map<string, number>> {
   return sizes;
 }
 
+interface CardLabel {
+  name: string;
+  setName: string;
+}
+
+let cardLabelsCache: { at: number; labels: Map<string, CardLabel> } | null = null;
+
+/**
+ * La chiave di una carta del catalogo, ricavata dal card_id come fa l'app
+ * (ItalianCatalogNormalizer.toImageReference): ME02_IT_001.png -> me02:1.
+ */
+function cardKeyOfCatalogId(cardId: string): string | null {
+  const match = /^([A-Za-z0-9-]+)_IT_([A-Za-z0-9_]+)\.(png|webp|jpe?g)$/i.exec(cardId.trim());
+  if (!match) return null;
+  const number = /^\d+$/.test(match[2]) ? String(parseInt(match[2], 10)) : match[2];
+  return `${match[1].toLowerCase()}:${number}`;
+}
+
+/**
+ * Nome italiano della carta e del suo set, per chiave, tenuti 6 ore come le
+ * dimensioni dei set. Il server degli scambi conosce solo le chiavi: senza
+ * questi l'app mostrerebbe "SWSH9 · 10" dove serve "Charizard".
+ */
+async function catalogCardLabels(env: TradeEnv): Promise<Map<string, CardLabel>> {
+  if (cardLabelsCache && Date.now() - cardLabelsCache.at < SET_SIZES_TTL_MS) return cardLabelsCache.labels;
+  const labels = new Map<string, CardLabel>();
+  const catalog = env.pokevault_catalog;
+  if (!catalog) return labels;
+  const { results } = await catalog
+    .prepare(
+      `SELECT c.card_id AS card_id, c.nome AS nome, COALESCE(e.name, e.id) AS set_name
+       FROM cards c JOIN expansions e ON e.id = c.expansion_id
+       WHERE e.published = 1 AND INSTR(c.card_id, '_IT_') > 0`
+    )
+    .all<{ card_id: string; nome: string; set_name: string }>();
+  for (const row of results) {
+    const key = cardKeyOfCatalogId(row.card_id);
+    if (key) labels.set(key, { name: row.nome, setName: row.set_name });
+  }
+  cardLabelsCache = { at: Date.now(), labels };
+  return labels;
+}
+
 // ── Profilo ─────────────────────────────────────────────────────────────────
 
 interface ProfileRow {
@@ -325,6 +368,12 @@ interface MatchItem {
   level: Level;
   /** Perche' e' cercata: 'wishlist' | 'album' | 'set', o null. */
   reason: string | null;
+  /** Dal catalogo; assenti se la chiave non c'e'. */
+  name?: string;
+  setName?: string;
+  /** Solo con reason 'set': quante carte del set ha chi la riceve, su quante. */
+  setOwned?: number;
+  setSize?: number;
 }
 
 interface Wishes {
@@ -335,14 +384,22 @@ interface Wishes {
   collecting: Set<string>;
   /** Set oltre NEAR_COMPLETE_RATIO: ogni loro carta mancante e' cercata. */
   nearComplete: Set<string>;
+  /** Per i set di nearComplete: [possedute, totale]. */
+  progress: Map<string, [number, number]>;
 }
 
-function classify(key: string, wishes: Wishes): { level: Level; reason: string | null } | null {
+function classify(
+  key: string,
+  wishes: Wishes
+): { level: Level; reason: string | null; setOwned?: number; setSize?: number } | null {
   if (wishes.owned.has(key)) return null;
   const explicit = wishes.explicit.get(key);
   if (explicit) return { level: 'wanted', reason: explicit };
   const set = setCodeOf(key);
-  if (wishes.nearComplete.has(set)) return { level: 'wanted', reason: 'set' };
+  if (wishes.nearComplete.has(set)) {
+    const [setOwned, setSize] = wishes.progress.get(set) ?? [0, 0];
+    return { level: 'wanted', reason: 'set', setOwned, setSize };
+  }
   if (wishes.collecting.has(set)) return { level: 'useful', reason: null };
   return { level: 'possible', reason: null };
 }
@@ -351,7 +408,7 @@ function classify(key: string, wishes: Wishes): { level: Level; reason: string |
 async function loadWishes(db: D1Database, uids: string[], setSizes: Map<string, number>): Promise<Map<string, Wishes>> {
   const byUid = new Map<string, Wishes>();
   for (const uid of uids) {
-    byUid.set(uid, { explicit: new Map(), owned: new Set(), collecting: new Set(), nearComplete: new Set() });
+    byUid.set(uid, { explicit: new Map(), owned: new Set(), collecting: new Set(), nearComplete: new Set(), progress: new Map() });
   }
   if (uids.length === 0) return byUid;
   const marks = uids.map(() => '?').join(', ');
@@ -380,7 +437,10 @@ async function loadWishes(db: D1Database, uids: string[], setSizes: Map<string, 
     const wishes = byUid.get(uid)!;
     for (const [set, count] of counts) {
       const size = setSizes.get(set) ?? 0;
-      if (size > 0 && count / size >= NEAR_COMPLETE_RATIO && count < size) wishes.nearComplete.add(set);
+      if (size > 0 && count / size >= NEAR_COMPLETE_RATIO && count < size) {
+        wishes.nearComplete.add(set);
+        wishes.progress.set(set, [count, size]);
+      }
     }
   }
   return byUid;
@@ -462,6 +522,17 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
       theyGive: sortItems(theyGive),
       iGive: sortItems(iGive),
     });
+  }
+
+  const labels = await catalogCardLabels(env);
+  for (const match of matches) {
+    for (const item of [...match.theyGive, ...match.iGive]) {
+      const label = labels.get(item.key);
+      if (label) {
+        item.name = label.name;
+        item.setName = label.setName;
+      }
+    }
   }
 
   // Prima i reciproci, poi il livello migliore, poi quante carte.

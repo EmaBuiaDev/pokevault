@@ -61,6 +61,20 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     var busy by mutableStateOf(false)
         private set
 
+    /** Una richiesta dei match in corso: fa girare il radar. */
+    var refreshing by mutableStateOf(false)
+        private set
+
+    /** Vero dalla prima risposta dei match: da li' le schede entrano a cascata, una volta sola. */
+    var matchesLoaded by mutableStateOf(false)
+        private set
+
+    private val prefs = application.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+
+    /** La spiegazione delle etichette si mostra finche' non si preme "Ho capito". */
+    var levelsExplained by mutableStateOf(prefs.getBoolean(KEY_LEVELS_EXPLAINED, false))
+        private set
+
     /** Un messaggio da mostrare una volta (snackbar), poi da consumare. */
     var notice by mutableStateOf<Problem?>(null)
         private set
@@ -71,6 +85,11 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
 
     fun consumeNotice() {
         notice = null
+    }
+
+    fun dismissLevelsIntro() {
+        levelsExplained = true
+        prefs.edit().putBoolean(KEY_LEVELS_EXPLAINED, true).apply()
     }
 
     fun load() {
@@ -163,10 +182,19 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun refreshMatches() {
+        if (refreshing) return
         viewModelScope.launch {
-            when (val result = TradeApi.matches()) {
-                is TradeApi.Result.Ok -> matches = result.value.matches.orEmpty()
-                else -> notice = problemOf(result)
+            refreshing = true
+            try {
+                when (val result = TradeApi.matches()) {
+                    is TradeApi.Result.Ok -> {
+                        matches = result.value.matches.orEmpty()
+                        matchesLoaded = true
+                    }
+                    else -> notice = problemOf(result)
+                }
+            } finally {
+                refreshing = false
             }
         }
     }
@@ -227,6 +255,11 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         }
         val result = TradeApi.putHaves(TradeHavesPayload(items))
         if (result !is TradeApi.Result.Ok) notice = problemOf(result)
+    }
+
+    private companion object {
+        const val PREFS = "trade_radar"
+        const val KEY_LEVELS_EXPLAINED = "levels_explained"
     }
 
     private fun problemOf(result: TradeApi.Result<*>): Problem = when (result) {

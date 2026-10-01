@@ -82,7 +82,13 @@ data class TradeMatchItem(
     /** "wanted" | "useful" | "possible" */
     @SerializedName("level") val level: String? = null,
     /** "wishlist" | "album" | "set", o null */
-    @SerializedName("reason") val reason: String? = null
+    @SerializedName("reason") val reason: String? = null,
+    /** Nome italiano della carta e del set, dal catalogo; null se il server non li trova. */
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("setName") val setName: String? = null,
+    /** Solo con reason "set": carte del set possedute da chi la riceve, su quante. */
+    @SerializedName("setOwned") val setOwned: Int? = null,
+    @SerializedName("setSize") val setSize: Int? = null
 )
 
 data class TradeMatch(
