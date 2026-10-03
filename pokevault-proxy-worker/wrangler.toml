@@ -33,9 +33,10 @@ IT_CATALOG_KEY = "it/catalog/cards.cleaned.json"
 # Vedi src/cardmarket-prices.ts.
 CARDMARKET_PRICES = "1"
 
-# Triggers for the Worker
+# Triggers for the Worker. Ogni 15 minuti per TradeRadar (promemoria, notifiche);
+# i prezzi girano solo ai minuti :00 e :30 (vedi scheduled() in src/index.ts).
 [triggers]
-crons = ["*/30 * * * *"]
+crons = ["*/15 * * * *"]
 
 # ── TradeRadar in staging ───────────────────────────────────────────────────
 # Un Worker a parte (pokevault-trade-staging), deployato con
@@ -57,6 +58,10 @@ name = "pokevault-trade-staging"
 TRADE_ENABLED = "1"
 TRADE_ONLY = "1"
 FIREBASE_PROJECT_ID = "pokevault-staging"
+# Classifica fresca per le prove (in produzione: ogni notte dal cron).
+TRADE_LEADERBOARD_TTL_MIN = "10"
+# Gli account di prova non hanno mai un abbonamento: avatar Premium senza controllo.
+TRADE_AVATAR_PREMIUM_CHECK = "0"
 
 [[env.staging.d1_databases]]
 binding = "trade_db"

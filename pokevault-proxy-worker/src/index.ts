@@ -2580,11 +2580,17 @@ export default {
     }
   },
 
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     // TradeRadar (solo dove e' acceso): promemoria, carte cercate, coda delle notifiche.
-    if (env.TRADE_ENABLED === '1') ctx.waitUntil(tradeScheduled(env));
+    if (env.TRADE_ENABLED === '1') ctx.waitUntil(tradeScheduled(env, controller.scheduledTime));
 
     if (!env.CACHE) {
+      return;
+    }
+
+    // Il cron gira ogni 15 minuti per TradeRadar; i prezzi restano ogni 30
+    // (ai minuti :00 e :30), come prima: nessuna chiamata PokeWallet in piu'.
+    if (new Date(controller.scheduledTime).getUTCMinutes() % 30 >= 15) {
       return;
     }
 

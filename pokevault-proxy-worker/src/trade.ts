@@ -17,7 +17,7 @@
 
 import { romeNow, slotTime, romeToEpoch, addDays, type Slot } from './trade-time';
 import { enqueue, deliver, prefsOf, type Outgoing, type PushEnv } from './trade-push';
-import { verifyFirebaseIdToken } from './billing';
+import { activeGiftUntilMs, isEntitled, verifyFirebaseIdToken } from './billing';
 import { GEOHASH5_REGEX, cellAndNeighbors, cellCenter, encode } from './geohash';
 
 export interface TradeEnv extends PushEnv {
@@ -30,6 +30,17 @@ export interface TradeEnv extends PushEnv {
   /** Progetto Firebase contro cui si verifica l'ID token. */
   FIREBASE_PROJECT_ID?: string;
   CACHE?: KVNamespace;
+  /**
+   * Minuti per cui la classifica calcolata al bisogno resta buona. Assente
+   * (produzione) = 24 ore: la rifa' il cron ogni notte, e al bisogno si
+   * ricalcola solo se quel giro e' saltato. Lo staging mette "10" per le prove.
+   */
+  TRADE_LEADERBOARD_TTL_MIN?: string;
+  /**
+   * "0" = il server non controlla l'abbonamento per gli avatar Premium. Solo
+   * staging: i suoi account di prova non hanno mai un abbonamento vero.
+   */
+  TRADE_AVATAR_PREMIUM_CHECK?: string;
 }
 
 // ── Limiti ──────────────────────────────────────────────────────────────────
@@ -300,7 +311,7 @@ async function putProfile(request: Request, db: D1Database, uid: string): Promis
   return json(row ? profileJson(row) : {});
 }
 
-async function getProfile(db: D1Database, uid: string): Promise<Response> {
+async function getProfile(db: D1Database, uid: string, env: TradeEnv): Promise<Response> {
   const row = await loadProfile(db, uid);
   if (!row) return json({ error: 'no_profile' }, 404);
   const counts = await db
@@ -312,7 +323,7 @@ async function getProfile(db: D1Database, uid: string): Promise<Response> {
     .bind(uid)
     .first<{ haves: number; wants: number; owned: number }>();
   const reputation = (await reputationOf(db, '?', [uid])).get(uid) ?? null;
-  await refreshLeaderboard(db);
+  await refreshLeaderboard(db, leaderboardTtlMs(env));
   const tier = (await tiersOf(db, '?', [uid])).get(uid) ?? null;
   return json({
     ...profileJson(row, counts ?? { haves: 0, wants: 0, owned: 0 }),
@@ -2007,8 +2018,19 @@ async function spotStats(db: D1Database, spotIds: string[]): Promise<Map<string,
 
 // ── Classifica e livelli (fase 2e) ──────────────────────────────────────────
 
-/** La classifica si ricalcola al massimo con questa frequenza (al lancio: una volta al giorno, dal cron). */
-const LEADERBOARD_TTL_MS = 10 * 60 * 1000;
+/**
+ * Quanto resta buona la classifica calcolata al bisogno. In produzione la rifa'
+ * il cron ogni notte (tradeScheduled), e qui si ricalcola solo se quel giro e'
+ * saltato; lo staging la vuole fresca per le prove (TRADE_LEADERBOARD_TTL_MIN).
+ */
+const LEADERBOARD_DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
+/** Ora (UTC) del ricalcolo notturno: le 4 in Italia d'estate, le 3 d'inverno. */
+const LEADERBOARD_NIGHTLY_HOUR_UTC = 2;
+
+function leaderboardTtlMs(env: TradeEnv): number {
+  const minutes = Number(env.TRADE_LEADERBOARD_TTL_MIN);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes * 60 * 1000 : LEADERBOARD_DEFAULT_TTL_MS;
+}
 /** La stessa coppia conta al massimo una volta in questo periodo: due amici non si gonfiano a vicenda. */
 const PAIR_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 /** Per entrare in classifica: tanti scambi validi, con almeno tante persone diverse. */
@@ -2044,8 +2066,8 @@ function wilsonLower(good: number, total: number): number {
  * policy promette al massimo 12 mesi. Segnalazioni e "non si e' presentato"
  * dopo 12 mesi se ne vanno per tutti; i voti solo se uno dei due non ha
  * piu' il profilo (fra profili attivi sono la reputazione). Le sospensioni
- * messe da parte spariscono quando scadono. Gira insieme alla classifica,
- * quindi al piu' ogni LEADERBOARD_TTL_MS; al lancio andra' nel cron.
+ * messe da parte spariscono quando scadono. Gira insieme alla classifica:
+ * ogni notte dal cron (tradeScheduled).
  */
 const RETENTION_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -2069,14 +2091,14 @@ async function purgeExpired(db: D1Database): Promise<void> {
 }
 
 /**
- * Ricalcola trade_leaderboard per tutti, se e' piu' vecchia di
- * LEADERBOARD_TTL_MS. Conta solo scambi chiusi da entrambi e voti gia'
+ * Ricalcola trade_leaderboard per tutti, se e' piu' vecchia di `ttlMs`
+ * (vedi leaderboardTtlMs). Conta solo scambi chiusi da entrambi e voti gia'
  * visibili; per ogni coppia, uno ogni 30 giorni.
  */
-async function refreshLeaderboard(db: D1Database, force = false): Promise<void> {
+async function refreshLeaderboard(db: D1Database, ttlMs: number, force = false): Promise<void> {
   if (!force) {
     const last = await db.prepare(`SELECT MAX(computed_at) AS at FROM trade_leaderboard`).first<{ at: number | null }>();
-    if (last?.at && Date.now() - last.at < LEADERBOARD_TTL_MS) return;
+    if (last?.at && Date.now() - last.at < ttlMs) return;
   }
   await purgeExpired(db);
   const now = Date.now();
@@ -2175,8 +2197,8 @@ async function tiersOf(db: D1Database, uidSql: string, params: unknown[]): Promi
  * ha scelto di comparire e ne ha diritto, e sempre la mia, anche fuori dai
  * 50 o fuori classifica (con cosa manca). La zona e' quella dei match.
  */
-async function getLeaderboard(db: D1Database, uid: string, url: URL): Promise<Response> {
-  await refreshLeaderboard(db);
+async function getLeaderboard(db: D1Database, uid: string, url: URL, env: TradeEnv): Promise<Response> {
+  await refreshLeaderboard(db, leaderboardTtlMs(env));
   const me = await loadProfile(db, uid);
   if (!me) return json({ error: 'no_profile' }, 404);
   const scope = url.searchParams.get('scope') === 'italy' ? 'italy' : 'zone';
@@ -2253,16 +2275,49 @@ const AVATAR_MAX = 1025;
 const AVATAR_ANIMATED_MAX = 649;
 
 /**
- * PUT /v1/trade/avatar — { avatar: 1..1025 | null, animated }: il Pokemon
- * che compare sul podio al posto dell'iniziale. Quali sono gratis e quali
- * Premium lo decide l'app per ora; al lancio va controllato anche qui.
+ * Gli avatar di tutti: Pikachu, Eevee, Snorlax e gli starter di ogni
+ * generazione. DEVE restare uguale a TradeAvatars.FREE nell'app: un id che
+ * l'app mostra gratis e il server no darebbe "premium_required" a chi non paga.
  */
-async function putAvatar(request: Request, db: D1Database, uid: string): Promise<Response> {
+const FREE_AVATARS = new Set([
+  25, 133, 143,
+  1, 4, 7, 152, 155, 158, 252, 255, 258, 387, 390, 393,
+  495, 498, 501, 650, 653, 656, 722, 725, 728, 810, 813, 816, 906, 909, 912,
+]);
+
+/**
+ * Premium = abbonamento Play valido o mese regalo attivo: le stesse due fonti
+ * di /v1/billing/entitlement (src/billing.ts), lette dal catalogo D1, dove le
+ * scrive il billing. Senza catalogo collegato, nessuno e' Premium.
+ */
+async function hasPremium(env: TradeEnv, uid: string): Promise<boolean> {
+  const catalog = env.pokevault_catalog;
+  if (!catalog) return false;
+  if (await activeGiftUntilMs(catalog, uid)) return true;
+  const row = await catalog
+    .prepare(`SELECT state, expiry_time_ms FROM entitlements WHERE uid = ?1`)
+    .bind(uid)
+    .first<{ state: string; expiry_time_ms: number | null }>();
+  return !!row && isEntitled(row.state, row.expiry_time_ms);
+}
+
+/**
+ * PUT /v1/trade/avatar — { avatar: 1..1025 | null, animated }: il Pokemon
+ * che compare sul podio al posto dell'iniziale. I 30 di FREE_AVATARS sono di
+ * tutti; gli altri e gli sprite animati sono Premium, e qui lo si controlla
+ * (prima lo decideva solo l'app). Un avatar gia' scelto non si toglie a chi
+ * smette di pagare: vale per le scelte nuove.
+ */
+async function putAvatar(request: Request, db: D1Database, uid: string, env: TradeEnv): Promise<Response> {
   const body = await readJson<{ avatar?: number | null; animated?: boolean }>(request);
   if (!body) return json({ error: 'bad_json' }, 400);
   const avatar = body.avatar ?? null;
   if (avatar !== null && (!Number.isInteger(avatar) || avatar < 1 || avatar > AVATAR_MAX)) return json({ error: 'bad_avatar' }, 400);
   const animated = avatar !== null && avatar <= AVATAR_ANIMATED_MAX && body.animated === true;
+  const needsPremium = avatar !== null && (!FREE_AVATARS.has(avatar) || animated);
+  if (needsPremium && env.TRADE_AVATAR_PREMIUM_CHECK !== '0' && !(await hasPremium(env, uid))) {
+    return json({ error: 'premium_required' }, 403);
+  }
   const result = await db
     .prepare(`UPDATE trade_profiles SET avatar = ?, avatar_animated = ?, updated_at = ? WHERE uid = ?`)
     .bind(avatar, animated ? 1 : 0, Date.now(), uid)
@@ -2732,11 +2787,16 @@ async function enqueueWantsDigest(db: D1Database, env: TradeEnv): Promise<void> 
  * Il cron di TradeRadar (ogni 15 minuti): chiude gli appuntamenti rimasti
  * senza esito, promemoria e "com'e' andata", carte cercate la sera, poi
  * spedisce quello che e' pronto (anche cio' che di notte era stato rimandato
- * al mattino).
+ * al mattino). Il giro delle 02:00 UTC rifa' anche classifica e pulizia.
  */
-export async function tradeScheduled(env: TradeEnv): Promise<void> {
+export async function tradeScheduled(env: TradeEnv, scheduledTime = Date.now()): Promise<void> {
   const db = env.trade_db;
   if (!db || env.TRADE_ENABLED !== '1') return;
+  const at = new Date(scheduledTime);
+  if (at.getUTCHours() === LEADERBOARD_NIGHTLY_HOUR_UTC && at.getUTCMinutes() < 15) {
+    // Un solo giro su quattro dell'ora, e un errore qui non ferma il resto.
+    await refreshLeaderboard(db, 0, true).catch((error) => console.warn('traderadar classifica notturna', error));
+  }
   try {
     // Un errore qui non deve fermare promemoria e notifiche.
     await closeStaleMeetings(db).catch((error) => console.warn('traderadar chiusura automatica', error));
@@ -2782,7 +2842,7 @@ export async function handleTradeRequest(
   }
 
   if (pathname === '/v1/trade/profile') {
-    if (method === 'GET') return getProfile(db, uid);
+    if (method === 'GET') return getProfile(db, uid, env);
     if (method === 'PUT') return putProfile(request, db, uid);
     if (method === 'DELETE') return deleteProfile(db, uid);
   }
@@ -2825,9 +2885,9 @@ export async function handleTradeRequest(
     if (closing[2] === 'rate') return rateTrade(request, db, uid, closing[1]);
     return voteSpot(request, db, uid, closing[1]);
   }
-  if (pathname === '/v1/trade/leaderboard' && method === 'GET') return getLeaderboard(db, uid, new URL(request.url));
+  if (pathname === '/v1/trade/leaderboard' && method === 'GET') return getLeaderboard(db, uid, new URL(request.url), env);
   if (pathname === '/v1/trade/leaderboard/optin' && method === 'PUT') return putLeaderboardOptIn(request, db, uid);
-  if (pathname === '/v1/trade/avatar' && method === 'PUT') return putAvatar(request, db, uid);
+  if (pathname === '/v1/trade/avatar' && method === 'PUT') return putAvatar(request, db, uid, env);
   if (pathname === '/v1/trade/spots/search' && method === 'GET') return searchSpots(db, uid, new URL(request.url));
   if (pathname === '/v1/trade/spots' && method === 'POST') return addSpot(request, db, uid);
   if (pathname === '/v1/trade/spots/cell' && method === 'POST') return putCellSpots(request, db);
