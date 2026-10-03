@@ -169,6 +169,29 @@ test('quando il listino si puo usare e quando no', () => {
   assert.equal(cardmarketBlobProblem(blob({ createdAt: appenaInTempo }), NOW), null);
 });
 
+test('con idProduct il link diventa quello diretto alla versione del prezzo', () => {
+  const cm = blob({
+    expansions: {
+      svp: { prices: { '1': { low: 1.5, avg: 6.5, idProduct: 715758 } } },
+      xy1: { prices: { '1': { low: 0.4, idProduct: 274409 } } },
+      neo1: { prices: { '9': { low: 44.9, idProduct: 274409 } } },
+    },
+  });
+  const merged = mergeCardmarketPrices(pokewallet(), cm, NOW);
+  const direct = 'https://www.cardmarket.com/it/Pokemon/Products?idProduct=';
+  assert.equal(merged.expansions.svp.prices['1'].url, `${direct}715758`, 'sostituisce il link PokeWallet');
+  assert.equal(merged.expansions.xy1.prices['1'].url, `${direct}274409`, 'al posto del link TCGplayer');
+  assert.equal(merged.expansions.neo1.prices['9'].url, `${direct}274409`, 'anche dove PokeWallet non aveva niente');
+  assert.equal((merged.expansions.svp.prices['1'] as Record<string, unknown>).idProduct, undefined, 'idProduct non finisce nello snapshot');
+});
+
+test('un idProduct non valido non produce link', () => {
+  const cm = blob({ expansions: { neo1: { prices: { '9': { low: 44.9, idProduct: 0 } }, aliases: [] }, xy1: { prices: { '1': { low: 1, idProduct: -3 } } } } });
+  const merged = mergeCardmarketPrices(pokewallet(), cm, NOW);
+  assert.equal(merged.expansions.neo1.prices['9'].url, undefined);
+  assert.equal(merged.expansions.xy1.prices['1'].url, undefined, 'e il TCGplayer resta tolto');
+});
+
 test('riconosce i link Cardmarket', () => {
   assert.ok(isCardmarketUrl(CM_URL));
   assert.ok(isCardmarketUrl('https://cardmarket.com/it/Pokemon'));

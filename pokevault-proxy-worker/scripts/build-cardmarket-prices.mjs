@@ -72,7 +72,8 @@ for (const row of rows) {
   const price = eurPrice(byProduct.get(row.id_product));
   if (!key || !price) { missing.push(row.card_id); continue; }
   const exp = (expansions[row.expansion_id] ??= { aliases: [], prices: {} });
-  exp.prices[key] = price;
+  // idProduct: il Worker ne fa il link diretto alla versione esatta.
+  exp.prices[key] = { ...price, idProduct: row.id_product };
   const alias = rawSetCode(row.card_id);
   if (alias && !exp.aliases.includes(alias)) exp.aliases.push(alias);
   found += 1;

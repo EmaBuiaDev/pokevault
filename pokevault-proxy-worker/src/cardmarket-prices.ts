@@ -10,10 +10,13 @@
 // Regole, scelte perche' nessuna carta stia peggio di oggi:
 //  - una carta col prezzo Cardmarket prende i suoi euro (avg, low, trend,
 //    avg1, avg7, avg30); quella senza resta com'era, con PokeWallet;
-//  - il link resta quello di PokeWallet se punta a cardmarket.com. Un link
-//    TCGplayer invece si toglie: l'app mostra `url` come link Cardmarket
-//    quando ci sono prezzi in euro (toPriceData()), e una carta che oggi ha
-//    solo dollari passerebbe a un link TCGplayer etichettato Cardmarket;
+//  - il link diventa quello diretto al prodotto di cui mostriamo il prezzo
+//    (cardmarketProductUrl, provato a mano il 03/10/2026: apre la carta
+//    giusta). Senza idProduct resta quello di PokeWallet se punta a
+//    cardmarket.com. Un link TCGplayer invece si toglie sempre: l'app mostra
+//    `url` come link Cardmarket quando ci sono prezzi in euro (toPriceData()),
+//    e una carta che oggi ha solo dollari passerebbe a un link TCGplayer
+//    etichettato Cardmarket;
 //  - i dollari (usd, usdLow) restano dove c'erano;
 //  - un listino piu' vecchio di CARDMARKET_MAX_AGE_MS non si usa affatto, e
 //    torna tutto PokeWallet: meglio un prezzo di ieri che uno fermo da giorni.
@@ -54,6 +57,8 @@ export interface CardmarketPrice {
   avg1?: number | null;
   avg7?: number | null;
   avg30?: number | null;
+  /** Il prodotto Cardmarket da cui vengono questi prezzi: da qui il link diretto. */
+  idProduct?: number | null;
 }
 
 export interface CardmarketExpansion {
@@ -82,6 +87,15 @@ function isPositive(value: unknown): value is number {
 
 export function isCardmarketUrl(url: string | undefined): boolean {
   return !!url && /^https?:\/\/(www\.)?cardmarket\.com\//i.test(url);
+}
+
+/** Pagina Cardmarket di un prodotto, dal suo idProduct (stessa versione del prezzo). */
+export function cardmarketProductUrl(idProduct: number): string {
+  return `https://www.cardmarket.com/it/Pokemon/Products?idProduct=${idProduct}`;
+}
+
+function isProductId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 /** Motivo per cui il listino non si puo' usare, o null se va bene. */
@@ -130,7 +144,8 @@ export function mergeCardmarketPrices(
       const next: PriceEntry = { ...eur };
       if (isPositive(previous?.usd)) next.usd = previous.usd;
       if (isPositive(previous?.usdLow)) next.usdLow = previous.usdLow;
-      if (isCardmarketUrl(previous?.url)) next.url = previous!.url;
+      if (isProductId(cmPrice.idProduct)) next.url = cardmarketProductUrl(cmPrice.idProduct);
+      else if (isCardmarketUrl(previous?.url)) next.url = previous!.url;
       prices[number] = next;
       changed += 1;
     }
