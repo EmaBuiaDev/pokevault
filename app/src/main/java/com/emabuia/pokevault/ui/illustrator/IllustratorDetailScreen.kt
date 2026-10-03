@@ -119,11 +119,16 @@ fun IllustratorDetailScreen(
             }
     }
 
+    // Il prezzo della carta aperta: anche scorrendo da una carta all'altra.
+    LaunchedEffect(selectedCard?.id) { viewModel.loadSheetPrices(selectedCard) }
+
     selectedCard?.let { sheetCard ->
         CardDetailBottomSheet(
             card = sheetCard,
             isOwned = viewModel.isOwned(sheetCard.id),
             isLoading = viewModel.isAddingCard == sheetCard.id,
+            pokeWalletPrices = viewModel.sheetPrices,
+            isLoadingPokeWalletPrices = viewModel.isSheetPriceLoading,
             onAddCard = { variant, quantity, condition, language ->
                 viewModel.addCard(sheetCard, variant, quantity, condition, language)
             },

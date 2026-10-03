@@ -216,6 +216,26 @@ class ItalianPriceSnapshotRepository {
         return mapped
     }
 
+    /**
+     * Prezzi di una carta italiana del catalogo, per il suo apiCardId
+     * ("ita:me05:30"), o null se non e' una carta italiana o lo snapshot non
+     * la conosce. Passa da [getPriceMap]: un set gia' aperto non costa niente,
+     * e mai una chiamata a PokeWallet.
+     *
+     * Serve dove la carta arriva dal catalogo, che di suo non ha prezzi:
+     * Artisti, Scanner, il recupero dei prezzi mancanti in Collezione.
+     */
+    suspend fun priceForItalianCard(context: Context, apiCardId: String): PokeWalletPriceData? {
+        if (!apiCardId.startsWith("ita:", ignoreCase = true)) return null
+        val parts = apiCardId.substring(4).split(':')
+        if (parts.size != 2) return null
+        val setCode = parts[0].trim()
+        val rawNumber = parts[1].trim()
+        if (setCode.isBlank() || rawNumber.isBlank()) return null
+        val number = rawNumber.toIntOrNull()?.toString() ?: rawNumber.uppercase(Locale.ROOT)
+        return runCatching { getPriceMap(context, setCode) }.getOrNull()?.get(number)
+    }
+
     private fun cacheExpansion(
         requestedCode: String,
         payload: ItalianExpansionPrices

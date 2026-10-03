@@ -22,6 +22,7 @@ import com.emabuia.pokevault.ocr.ScanAggregator
 import com.emabuia.pokevault.ocr.ScanConsensus
 import com.emabuia.pokevault.ocr.ScannedFrame
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.minimumEurOrZero
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -109,8 +110,14 @@ data class ScannerUiState(
      */
     val notFound: Boolean = false,
     /** Si sono scartate tutte le carte proponibili: si possono riproporre. */
-    val canRetryRejected: Boolean = false
+    val canRetryRejected: Boolean = false,
+    /** Prezzo dallo snapshot italiano per id carta, per chi non ne porta uno suo. */
+    val snapshotPrices: Map<String, Double> = emptyMap()
 ) {
+    /** Il prezzo da mostrare per una carta proposta: il suo, se no lo snapshot. */
+    fun priceOf(card: TcgCard): Double =
+        card.cardmarket?.prices.minimumEurPriceOrZero().takeIf { it > 0.0 } ?: snapshotPrices[card.id] ?: 0.0
+
     /**
      * Il tempo in cui si trova lo scanner adesso.
      *
@@ -434,6 +441,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     hintMessage = null
                 )
             }
+            loadSnapshotPrices(listOfNotNull(uiState.pendingCard) + uiState.candidateCards)
         } catch (e: Exception) {
             Timber.w("Search failed: ${e.message}")
             uiState = uiState.copy(
@@ -483,6 +491,28 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         val chosen = variant?.takeIf { it.isNotBlank() } ?: defaultVariant(card)
         uiState = uiState.copy(pendingCard = null, candidateCards = emptyList(), isSearching = true)
         viewModelScope.launch { addToFirestore(card, chosen) }
+    }
+
+    /**
+     * I prezzi dallo snapshot italiano delle carte proposte: quelle del
+     * catalogo di loro non ne hanno, e conferma e rosa mostravano "N/D".
+     * Nessuna chiamata a PokeWallet: lo snapshot e' per set e in cache.
+     */
+    private fun loadSnapshotPrices(cards: List<TcgCard>) {
+        val missing = cards.map { it.id }
+            .filter { it.startsWith("ita:", ignoreCase = true) && it !in uiState.snapshotPrices }
+            .distinct()
+        if (missing.isEmpty()) return
+        viewModelScope.launch {
+            val found = missing
+                .associateWith { id ->
+                    RepositoryProvider.italianPriceSnapshotRepository
+                        .priceForItalianCard(appContext, id)
+                        .minimumEurOrZero()
+                }
+                .filterValues { it > 0.0 }
+            if (found.isNotEmpty()) uiState = uiState.copy(snapshotPrices = uiState.snapshotPrices + found)
+        }
     }
 
     fun selectCandidate(card: TcgCard) {
@@ -598,7 +628,12 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     private suspend fun addToFirestore(tcgCard: TcgCard, variant: String) {
         val resolvedCard = repository.getCard(tcgCard.id, preferNetwork = true).getOrNull() ?: tcgCard
-        val price = resolvedCard.cardmarket?.prices.minimumEurPriceOrZero()
+        // Una carta italiana del catalogo di suo non ha prezzi: senza lo
+        // snapshot entrava in collezione a 0, e restava "N/D".
+        val price = resolvedCard.cardmarket?.prices.minimumEurPriceOrZero().takeIf { it > 0.0 }
+            ?: RepositoryProvider.italianPriceSnapshotRepository
+                .priceForItalianCard(appContext, resolvedCard.id)
+                .minimumEurOrZero()
 
         val pokemonCard = PokemonCard(
             name = resolvedCard.name,

@@ -9,12 +9,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.util.IllustratorEntry
 import com.emabuia.pokevault.util.IllustratorRow
 import com.emabuia.pokevault.util.Illustrators
+import com.emabuia.pokevault.util.minimumEurOrZero
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
@@ -31,6 +34,7 @@ class IllustratorViewModel : ViewModel() {
 
     private val repository = FirestoreRepository()
     private val tcgRepository = RepositoryProvider.tcgRepository
+    private val snapshotPrices = RepositoryProvider.italianPriceSnapshotRepository
 
     // ── Stato ──────────────────────────────────────────────────────────────
 
@@ -64,6 +68,23 @@ class IllustratorViewModel : ViewModel() {
         private set
 
     private var loadedDetailKey: String? = null
+
+    /**
+     * Prezzi della carta aperta nella scheda, dallo snapshot italiano: le carte
+     * di questa pagina arrivano dal catalogo, che di suo non ha prezzi, e la
+     * scheda mostrava "N/D" anche per carte che nel Pokedex hanno il prezzo.
+     */
+    var sheetPrices by mutableStateOf<PokeWalletPriceData?>(null)
+        private set
+
+    var isSheetPriceLoading by mutableStateOf(false)
+        private set
+
+    private var sheetPriceJob: Job? = null
+
+    // Per leggere lo snapshot (cache su disco) anche dall'aggiunta rapida
+    // della griglia, che il Context non lo riceve.
+    private var appContext: Context? = null
 
     init {
         loadOwnedCards()
@@ -161,6 +182,7 @@ class IllustratorViewModel : ViewModel() {
     // ── Dettaglio ──────────────────────────────────────────────────────────
 
     fun loadDetail(context: Context, key: String, forceRefresh: Boolean = false) {
+        appContext = context.applicationContext
         if (loadedDetailKey == key && !forceRefresh) return
         val entry = entryFor(key)
         if (entry == null) {
@@ -175,6 +197,30 @@ class IllustratorViewModel : ViewModel() {
             detailCards = tcgRepository.italianCardsByIllustrator(context, entry, forceRefresh)
             isDetailLoading = false
         }
+    }
+
+    /** Carica i prezzi della carta aperta nella scheda; null chiude la scheda. */
+    fun loadSheetPrices(card: TcgCard?) {
+        sheetPriceJob?.cancel()
+        sheetPrices = null
+        val context = appContext
+        if (card == null || context == null) {
+            isSheetPriceLoading = false
+            return
+        }
+        sheetPriceJob = viewModelScope.launch {
+            isSheetPriceLoading = true
+            sheetPrices = snapshotPrices.priceForItalianCard(context, card.id)
+            isSheetPriceLoading = false
+        }
+    }
+
+    /** Il prezzo da salvare: quello della carta se c'e', se no lo snapshot italiano. */
+    private suspend fun priceFor(card: TcgCard): Double {
+        val own = card.cardmarket?.prices.minimumEurPriceOrZero()
+        if (own > 0.0) return own
+        val context = appContext ?: return 0.0
+        return snapshotPrices.priceForItalianCard(context, card.id).minimumEurOrZero()
     }
 
     /** Le stampe possedute di ogni carta, per i badge sulla miniatura. */
@@ -215,7 +261,7 @@ class IllustratorViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             isAddingCard = card.id
-            val price = card.cardmarket?.prices.minimumEurPriceOrZero()
+            val price = priceFor(card)
             val pokemonCard = PokemonCard(
                 name = card.name,
                 imageUrl = card.images.small,

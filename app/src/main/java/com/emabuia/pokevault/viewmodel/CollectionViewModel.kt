@@ -25,6 +25,7 @@ import com.emabuia.pokevault.util.CollectionSort
 import com.emabuia.pokevault.util.ExpansionGroupSection
 import com.emabuia.pokevault.util.ExpansionOrder
 import com.emabuia.pokevault.util.ValueBucket
+import com.emabuia.pokevault.util.minimumEurOrZero
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,7 +33,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
 data class CollectionUiState(
     val cards: List<PokemonCard> = emptyList(),
@@ -240,25 +240,39 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
                     card.id !in hydratedPriceCardIds &&
                     card.id !in hydratingPriceCardIds
             }
-            .take(PRICE_HYDRATION_BATCH_SIZE)
 
         if (candidates.isEmpty()) return
 
+        // Prima lo snapshot italiano, che non costa chiamate: cosi' si fanno
+        // tutte le carte italiane in un giro. Il lotto da
+        // PRICE_HYDRATION_BATCH_SIZE resta solo per le carte che vanno chieste
+        // in rete. Prima il lotto valeva per tutte, e il giro dopo partiva solo
+        // se una carta veniva aggiornata: otto carte senza prezzo trovabile in
+        // testa alla lista bastavano a lasciare a 0 per sempre (nella sessione)
+        // le carte aggiunte da Artisti o dallo Scanner.
         hydrationJob = viewModelScope.launch {
-            candidates.forEach { card ->
+            var networkLookups = PRICE_HYDRATION_BATCH_SIZE
+            for (card in candidates) {
                 hydratingPriceCardIds += card.id
+                var attempted = true
                 try {
-                    val remoteCard = tcgRepository.getCard(card.apiCardId).getOrNull()
-                    val eurPrice = remoteCard?.cardmarket?.prices.minimumEurPriceOrZero()
-                        .takeIf { it > 0.0 }
-                        ?: italianSnapshotPrice(card.apiCardId)
+                    var eurPrice = italianSnapshotPrice(card.apiCardId)
+                    if (eurPrice <= 0.0) {
+                        if (networkLookups > 0) {
+                            networkLookups -= 1
+                            eurPrice = tcgRepository.getCard(card.apiCardId).getOrNull()
+                                ?.cardmarket?.prices.minimumEurPriceOrZero()
+                        } else {
+                            attempted = false // ci pensa il prossimo giro
+                        }
+                    }
 
                     if (eurPrice > 0.0) {
                         repository.updateCard(card.id, card.copy(estimatedValue = eurPrice))
                     }
                 } finally {
                     hydratingPriceCardIds -= card.id
-                    hydratedPriceCardIds += card.id
+                    if (attempted) hydratedPriceCardIds += card.id
                 }
             }
         }
@@ -273,19 +287,8 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
      * worker, per set e in cache: nessuna chiamata a PokeWallet. Il minimo
      * prima di tutto, come nel resto dell'app.
      */
-    private suspend fun italianSnapshotPrice(apiCardId: String): Double {
-        if (!apiCardId.startsWith("ita:", ignoreCase = true)) return 0.0
-        val parts = apiCardId.substring(4).split(':')
-        if (parts.size != 2) return 0.0
-        val setCode = parts[0].trim()
-        val rawNumber = parts[1].trim()
-        val number = rawNumber.toIntOrNull()?.toString() ?: rawNumber.uppercase(Locale.ROOT)
-        val data = runCatching { italianPriceSnapshotRepository.getPriceMap(getApplication(), setCode) }
-            .getOrNull()
-            ?.get(number)
-            ?: return 0.0
-        return listOf(data.eurLow, data.eurTrend, data.eurAvg).firstOrNull { (it ?: 0.0) > 0.0 } ?: 0.0
-    }
+    private suspend fun italianSnapshotPrice(apiCardId: String): Double =
+        italianPriceSnapshotRepository.priceForItalianCard(getApplication(), apiCardId).minimumEurOrZero()
 
     /**
      * Corregge le carte salvate con il CODICE dell'espansione al posto del nome
