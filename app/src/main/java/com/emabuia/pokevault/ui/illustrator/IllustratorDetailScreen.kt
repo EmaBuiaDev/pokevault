@@ -122,7 +122,10 @@ fun IllustratorDetailScreen(
     // Il prezzo della carta aperta: anche scorrendo da una carta all'altra.
     LaunchedEffect(selectedCard?.id) { viewModel.loadSheetPrices(selectedCard) }
 
-    selectedCard?.let { sheetCard ->
+    selectedCard?.let { tapped ->
+        // La versione piu' recente della carta: aperta prima che arrivassero i
+        // prezzi, si aggiorna da sola invece di restare a "N/D".
+        val sheetCard = cards.firstOrNull { it.id == tapped.id } ?: tapped
         CardDetailBottomSheet(
             card = sheetCard,
             isOwned = viewModel.isOwned(sheetCard.id),

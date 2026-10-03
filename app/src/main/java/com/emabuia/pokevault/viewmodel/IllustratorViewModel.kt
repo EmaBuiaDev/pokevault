@@ -17,6 +17,7 @@ import com.emabuia.pokevault.util.IllustratorRow
 import com.emabuia.pokevault.util.Illustrators
 import com.emabuia.pokevault.util.minimumEurOrZero
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
+import com.emabuia.pokevault.util.withSnapshotPrices
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
@@ -194,10 +195,48 @@ class IllustratorViewModel : ViewModel() {
         loadedDetailKey = key
         viewModelScope.launch {
             isDetailLoading = true
-            detailCards = tcgRepository.italianCardsByIllustrator(context, entry, forceRefresh)
+            val cards = tcgRepository.italianCardsByIllustrator(context, entry, forceRefresh)
+            detailCards = cards
             isDetailLoading = false
+            // Poi i prezzi, senza far aspettare la griglia: le carte arrivano dal
+            // catalogo, che non ne ha, e la scheda mostrava "N/D" anche per carte
+            // che nel Pokedex hanno il prezzo.
+            val priced = withSnapshotPrices(context, cards)
+            if (loadedDetailKey == key) detailCards = priced
         }
     }
+
+    /**
+     * Le carte con il prezzo dello snapshot italiano, dove c'e'. Uno snapshot
+     * per set ("ita:<set>:<numero>"), che [getPriceMap] tiene in cache: un
+     * artista con carte in venti set costa venti letture, mai PokeWallet.
+     */
+    private suspend fun withSnapshotPrices(context: Context, cards: List<TcgCard>): List<TcgCard> {
+        val setCodes = cards.mapNotNull { italianSetCode(it.id) }.toSet()
+        if (setCodes.isEmpty()) return cards
+        val bySet = setCodes.associateWith { set ->
+            runCatching { snapshotPrices.getPriceMap(context, set) }.getOrDefault(emptyMap())
+        }
+        return cards.map { card ->
+            val set = italianSetCode(card.id) ?: return@map card
+            val number = card.id.substringAfterLast(':').trim()
+            val key = number.toIntOrNull()?.toString() ?: number.uppercase(java.util.Locale.ROOT)
+            val data = bySet[set]?.get(key)
+            if (data != null && data.hasEurPrices && card.cardmarket?.prices.minimumEurPriceOrZero() <= 0.0) {
+                card.withSnapshotPrices(data)
+            } else {
+                card
+            }
+        }
+    }
+
+    private fun italianSetCode(cardId: String): String? =
+        cardId.takeIf { it.startsWith("ita:", ignoreCase = true) }
+            ?.split(':')
+            ?.takeIf { it.size == 3 }
+            ?.get(1)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
 
     /** Carica i prezzi della carta aperta nella scheda; null chiude la scheda. */
     fun loadSheetPrices(card: TcgCard?) {

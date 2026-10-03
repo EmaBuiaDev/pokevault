@@ -53,12 +53,24 @@ data class ItalianPriceSnapshot(
     val expansions: Map<String, ItalianPriceExpansionEntry> = emptyMap(),
     val aliases: Map<String, String> = emptyMap()
 ) {
-    /** Resolves an expansion id or raw set code alias to its price map. */
+    /**
+     * Resolves an expansion id or raw set code alias to its price map.
+     *
+     * Un id di espansione che un alias porta altrove (swsh9 -> la sua Galleria
+     * Allenatori swsh9tg, che ha lo stesso prefisso nel card_id) risponde con
+     * le carte sue piu' quelle della galleria: prima dava solo la galleria, e
+     * il set restava senza prezzi. Stessa regola del Worker (src/price-lookup.ts).
+     */
     fun priceMapFor(lookupCode: String): Map<String, ItalianPriceEntry> {
         val normalized = lookupCode.trim().lowercase(Locale.ROOT)
         if (normalized.isBlank()) return emptyMap()
-        val expansionId = aliases[normalized] ?: normalized
-        return expansions[expansionId]?.prices ?: emptyMap()
+        val aliasTarget = aliases[normalized]
+        val own = expansions[normalized]?.prices
+        if (own != null) {
+            val other = aliasTarget?.takeIf { it != normalized }?.let { expansions[it]?.prices }
+            return if (other.isNullOrEmpty()) own else other + own
+        }
+        return expansions[aliasTarget ?: normalized]?.prices ?: emptyMap()
     }
 }
 
