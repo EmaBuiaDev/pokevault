@@ -2228,10 +2228,37 @@ object AppLocale {
      * completo sta nella schermata Premium, che è il posto giusto per un
      * confronto riga per riga.
      */
-    val premiumSettingsSubtitleFree: String get() = if (isItalian)
-        "Album, deck, wishlist e tornei senza limiti, più export ed extra"
+    val premiumSettingsSubtitleFree: String get() = when {
+        // Con TradeRadar (3.1.6) e' la prima cosa che il Premium sblocca.
+        com.emabuia.pokevault.BuildConfig.TRADE_ENABLED && isItalian -> "TradeRadar senza limiti, album, deck, wishlist e tornei illimitati, più extra"
+        com.emabuia.pokevault.BuildConfig.TRADE_ENABLED -> "Unlimited TradeRadar, albums, decks, wishlists and tournaments, plus extras"
+        isItalian -> "Album, deck, wishlist e tornei senza limiti, più export ed extra"
+        else -> "Unlimited albums, decks, wishlists and tournaments, plus export and extras"
+    }
+
+    // Schermata Premium rifatta (03/10/2026): TradeRadar in evidenza, poi le tessere.
+    val premiumTradeRadarTitle: String get() = if (isItalian) "TradeRadar senza limiti" else "Unlimited TradeRadar"
+    val premiumTradeRadarText: String get() = if (isItalian)
+        "Cerca le carte che ti mancano vicino a te e proponi scambi, senza scadenza. Senza Premium è gratis per 30 giorni, poi puoi solo ricevere proposte."
     else
-        "Unlimited albums, decks, wishlists and tournaments, plus export and extras"
+        "Find the cards you're missing near you and propose trades, with no time limit. Without Premium it's free for 30 days, then you can only receive offers."
+    val premiumUnlockTitle: String get() = if (isItalian) "Cosa sblocchi" else "What you unlock"
+    val premiumBenefitDecks: String get() = if (isItalian) "Mazzi illimitati" else "Unlimited decks"
+    val premiumBenefitAlbums: String get() = if (isItalian) "Album illimitati" else "Unlimited albums"
+    val premiumBenefitGoalAlbums: String get() = if (isItalian) "Album obiettivo illimitati" else "Unlimited goal albums"
+    val premiumBenefitWishlists: String get() = if (isItalian) "Wishlist illimitate" else "Unlimited wishlists"
+    val premiumBenefitTournaments: String get() = if (isItalian) "Tornei illimitati" else "Unlimited tournaments"
+    val premiumBenefitMeta: String get() = if (isItalian) "Meta deck senza limiti" else "Unlimited meta decks"
+    val premiumBenefitHandSim: String get() = if (isItalian) "Hand Simulator illimitato" else "Unlimited Hand Simulator"
+    val premiumBenefitExport: String get() = if (isItalian) "Export decklist PTCG" else "PTCG decklist export"
+    val premiumBenefitHomeSprite: String get() = if (isItalian) "Il tuo Pokémon in Home" else "Your Pokémon on Home"
+    val premiumBenefitAvatars: String get() = if (isItalian) "Tutti gli avatar, anche animati" else "All avatars, animated too"
+    fun premiumFreeAmount(amount: String): String = if (isItalian) "Gratis: $amount" else "Free: $amount"
+    val premiumOnly: String get() = if (isItalian) "Solo Premium" else "Premium only"
+    val premiumFreeOne: String get() = "1"
+    val premiumFreeMetaViews: String get() = if (isItalian) "10 consultazioni" else "10 views"
+    val premiumFreeHandSim: String get() = if (isItalian) "1 per mazzo" else "1 per deck"
+    val premiumFreeAvatars: String get() = if (isItalian) "30 avatar" else "30 avatars"
     val premiumSettingsSubtitleActive: String get() = if (isItalian)
         "Abbonamento attivo — grazie, davvero"
     else
