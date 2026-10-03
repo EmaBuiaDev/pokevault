@@ -290,6 +290,12 @@ object AppLocale {
     val navCards: String get() = if (isItalian) "Carte" else "Cards"
     val navPokedex: String get() = "Pokédex"
     val navStats: String get() = "Stats"
+    val navTradeRadar: String get() = "Radar"
+    fun navTradeRadarDescription(pending: Int): String = when {
+        pending <= 0 -> "TradeRadar"
+        isItalian -> if (pending == 1) "TradeRadar, 1 proposta ti aspetta" else "TradeRadar, $pending proposte ti aspettano"
+        else -> if (pending == 1) "TradeRadar, 1 offer is waiting for you" else "TradeRadar, $pending offers are waiting for you"
+    }
 
     val back: String get() = if (isItalian) "Indietro" else "Back"
     val save: String get() = if (isItalian) "Salva" else "Save"

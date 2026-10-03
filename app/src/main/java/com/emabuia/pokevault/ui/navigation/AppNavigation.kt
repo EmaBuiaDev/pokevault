@@ -28,11 +28,13 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.pointerInput
@@ -40,6 +42,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -49,6 +54,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
+import com.emabuia.pokevault.data.trade.TradeBadge
 import com.emabuia.pokevault.data.trade.TradePush
 import com.emabuia.pokevault.ui.album.AlbumCollectionListScreen
 import com.emabuia.pokevault.ui.album.AlbumDetailScreen
@@ -90,6 +96,7 @@ import com.emabuia.pokevault.util.PokemonSpriteResolver
 import com.emabuia.pokevault.viewmodel.AuthViewModel
 import java.net.URLDecoder
 import java.net.URLEncoder
+import kotlinx.coroutines.launch
 
 // ── Richiesta di recensione ─────────────────────────────────────────────────
 // Chiavi e soglie in un posto solo: erano letterali sparsi nel composable, e
@@ -202,6 +209,20 @@ fun AppNavigation(
                 navController.navigate(Routes.TRADE_RADAR) { launchSingleTop = true }
             }
         }
+        // Il numero sul tasto TradeRadar della barra: si rilegge quando l'app
+        // torna in primo piano (dentro TradeRadar lo aggiorna il ViewModel).
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val badgeScope = rememberCoroutineScope()
+        DisposableEffect(lifecycleOwner, loggedIn) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME && loggedIn) {
+                    badgeScope.launch { TradeBadge.refresh(context) }
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        LaunchedEffect(loggedIn) { if (!loggedIn) TradeBadge.update(0) }
     }
     var showReviewPrompt by remember { mutableStateOf(false) }
     var navigationCount by remember { mutableIntStateOf(0) }
@@ -820,7 +841,15 @@ fun AppNavigation(
             PokeVaultBottomBar(
                 selected = selectedTab,
                 onSelect = { tab -> navController.navigateToBottomTab(tab) },
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier.align(Alignment.BottomCenter),
+                // Al centro, fra Carte e Pokedex: solo dove TradeRadar c'e'.
+                tradeRadar = if (BuildConfig.TRADE_ENABLED) {
+                    TradeRadarBarButton(pending = TradeBadge.pending) {
+                        navController.navigate(Routes.TRADE_RADAR) { launchSingleTop = true }
+                    }
+                } else {
+                    null
+                }
             )
         }
 

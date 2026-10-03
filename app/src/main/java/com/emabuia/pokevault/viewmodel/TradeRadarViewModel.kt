@@ -39,6 +39,7 @@ import com.emabuia.pokevault.data.trade.dto.TradeWantItem
 import com.emabuia.pokevault.data.trade.dto.TradeWantsRequest
 import com.emabuia.pokevault.data.trade.OverpassClient
 import com.emabuia.pokevault.data.trade.TradeApi
+import com.emabuia.pokevault.data.trade.TradeBadge
 import com.emabuia.pokevault.data.trade.TradeCardKey
 import com.emabuia.pokevault.data.trade.TradeLists
 import com.emabuia.pokevault.data.trade.TradePush
@@ -254,6 +255,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                 matches = emptyList()
                 cards = emptyList()
                 proposals = emptyList()
+                TradeBadge.update(0)
                 composer = null
                 screen = Screen.Onboarding
             } else {
@@ -347,7 +349,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         private set
 
     /** Quelle in cui tocca a me rispondere: il numero sulla tab. */
-    val proposalsToAnswer: Int get() = proposals.count { it.actionNeeded == true || it.myTurn == true || needsCollectionUpdate(it) }
+    val proposalsToAnswer: Int get() = TradeBadge.countOf(proposals, appliedClosings)
 
     /** La proposta su cui si sta agendo (accetta, rifiuta...), per il caricamento sul tasto. */
     var actingOn by mutableStateOf<String?>(null)
@@ -408,6 +410,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             when (val result = TradeApi.proposals()) {
                 is TradeApi.Result.Ok -> {
                     proposals = result.value.proposals.orEmpty()
+                    TradeBadge.update(proposalsToAnswer)
                     proposalsLoaded = true
                     ensurePrices(proposals.flatMap { it.give.orEmpty() + it.take.orEmpty() }.mapNotNull { it.key })
                 }
@@ -970,6 +973,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             }
             appliedClosings = appliedClosings + current.proposalId
             prefs.edit().putStringSet(KEY_APPLIED_CLOSINGS, appliedClosings).apply()
+            TradeBadge.update(proposalsToAnswer)
             closing = null
             info = Info.COLLECTION_UPDATED
             syncAndRefresh()
@@ -1356,10 +1360,11 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         listOf(item.key.orEmpty(), item.variant.orEmpty(), item.condition.orEmpty(), item.language.orEmpty()).joinToString("|")
 
     private companion object {
-        const val PREFS = "trade_radar"
+        const val PREFS = TradeBadge.PREFS
         const val KEY_LEVELS_EXPLAINED = "levels_explained"
         const val KEY_PUSH_ASKED = "push_permission_asked"
-        const val KEY_APPLIED_CLOSINGS = "applied_closings"
+        // Letta anche da TradeBadge (il numero sul tasto della barra): stessa chiave.
+        const val KEY_APPLIED_CLOSINGS = TradeBadge.KEY_APPLIED_CLOSINGS
         const val KEY_LAST_TIER = "last_tier"
         /** La risposta del server a chi, finita la prova, chiede qualcosa da Premium. */
         const val PREMIUM_REQUIRED = "premium_required"
