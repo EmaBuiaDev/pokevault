@@ -53,8 +53,37 @@ data class TradeProfilePayload(
     @SerializedName("suspendedUntil") val suspendedUntil: Long? = null,
     @SerializedName("suspensionReason") val suspensionReason: String? = null,
     /** Le categorie di notifiche (fase 3). */
-    @SerializedName("notify") val notify: TradeNotifyPrefs? = null
+    @SerializedName("notify") val notify: TradeNotifyPrefs? = null,
+    /** Prova gratuita / Premium / solo ricevere (schema 13). Null da un server piu' vecchio. */
+    @SerializedName("access") val access: TradeAccess? = null
 )
+
+/**
+ * Cosa puo' fare l'utente in TradeRadar: 30 giorni di prova dall'attivazione,
+ * poi Premium. Senza Premium, finita la prova, "solo ricevere": risponde alle
+ * proposte e finisce gli scambi avviati, ma non sfoglia i match ne' ne manda
+ * di nuove. [enforced] dice se il server lo fa gia' rispettare.
+ */
+data class TradeAccess(
+    /** trial | premium | receive_only */
+    @SerializedName("mode") val mode: String? = null,
+    @SerializedName("trialEndsAt") val trialEndsAt: Long? = null,
+    @SerializedName("enforced") val enforced: Boolean? = null
+) {
+    val isTrial: Boolean get() = mode == "trial"
+    val isReceiveOnly: Boolean get() = mode == "receive_only"
+
+    /** Giorni di prova rimasti, arrotondati in su (l'ultimo giorno e' "1"). */
+    fun trialDaysLeft(now: Long = System.currentTimeMillis()): Int {
+        val end = trialEndsAt ?: return 0
+        val left = end - now
+        return if (left <= 0) 0 else ((left + DAY_MS - 1) / DAY_MS).toInt()
+    }
+
+    private companion object {
+        const val DAY_MS = 24L * 60 * 60 * 1000
+    }
+}
 
 data class TradeHaveItem(
     @SerializedName("key") val key: String? = null,

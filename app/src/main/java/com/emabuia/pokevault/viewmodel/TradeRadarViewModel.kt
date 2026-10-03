@@ -2,6 +2,7 @@ package com.emabuia.pokevault.viewmodel
 
 import android.app.Application
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -130,6 +131,18 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
 
     /** Vero dalla prima risposta dei match: da li' le schede entrano a cascata, una volta sola. */
     var matchesLoaded by mutableStateOf(false)
+        private set
+
+    /**
+     * Finita la prova senza Premium, col blocco acceso sul server: niente radar
+     * e niente proposte nuove (si risponde e si finisce cio' che e' avviato).
+     * Lo dice il server, rispondendo premium_required ai match.
+     */
+    var searchLocked by mutableStateOf(false)
+        private set
+
+    /** Cresce a ogni "serve il Premium" dal server: la schermata apre la pagina Premium. */
+    var premiumRequired by mutableIntStateOf(0)
         private set
 
     private val prefs = application.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
@@ -307,8 +320,16 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                         matches = result.value.matches.orEmpty()
                         cards = result.value.cards.orEmpty()
                         matchesLoaded = true
+                        searchLocked = false
                     }
-                    else -> notice = problemOf(result)
+                    else -> if (result is TradeApi.Result.Rejected && result.error == PREMIUM_REQUIRED) {
+                        matches = emptyList()
+                        cards = emptyList()
+                        matchesLoaded = true
+                        searchLocked = true
+                    } else {
+                        notice = problemOf(result)
+                    }
                 }
             } finally {
                 refreshing = false
@@ -402,6 +423,10 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun openComposer(match: TradeMatch, presetKey: String? = null) {
         val id = match.id ?: return
+        if (searchLocked) {
+            premiumRequired++
+            return
+        }
         composer = Composer(id, match.nickname.orEmpty(), match.distance)
         viewModelScope.launch {
             val theirs = (TradeApi.userHaves(id) as? TradeApi.Result.Ok)?.value?.items.orEmpty()
@@ -477,6 +502,12 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                     proposalsBucket = "WAITING"
                     focusProposals++
                     refreshProposals()
+                }
+                // Solo per una proposta nuova: le controproposte restano sempre libere.
+                result is TradeApi.Result.Rejected && result.error == PREMIUM_REQUIRED -> {
+                    composer = null
+                    searchLocked = true
+                    premiumRequired++
                 }
                 result is TradeApi.Result.Rejected && result.error == "already_open" -> {
                     composer = null
@@ -1330,6 +1361,8 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         const val KEY_PUSH_ASKED = "push_permission_asked"
         const val KEY_APPLIED_CLOSINGS = "applied_closings"
         const val KEY_LAST_TIER = "last_tier"
+        /** La risposta del server a chi, finita la prova, chiede qualcosa da Premium. */
+        const val PREMIUM_REQUIRED = "premium_required"
         const val PUSH_DEBOUNCE_MS = 600L
         const val SEARCH_DEBOUNCE_MS = 450L
         const val MAX_SLOTS = 3

@@ -1441,6 +1441,23 @@ object AppLocale {
     val tradeRadarDeactivateText: String get() = if (isItalian) "Il tuo profilo, le carte caricate e le proposte verranno cancellati dal server di TradeRadar. La tua collezione resta com'è. Per la sicurezza degli altri restano, senza il tuo nickname, segnalazioni, voti ed eventuali sospensioni (al massimo 12 mesi)." else "Your profile, uploaded cards and proposals will be deleted from the TradeRadar server. Your collection stays as it is. For the safety of others, reports, ratings and any suspension are kept without your nickname (at most 12 months)."
     val tradeRadarActiveLabel: String get() = if (isItalian) "Visibile nella tua zona" else "Visible in your area"
     val tradeRadarPausedLabel: String get() = if (isItalian) "In pausa: nessuno ti vede" else "Paused: nobody can see you"
+
+    // Prova gratuita di 30 giorni, poi Premium (schema 13).
+    fun tradeRadarTrialDays(days: Int): String = when {
+        days <= 1 -> if (isItalian) "🎁 Prova gratuita · ultimo giorno" else "🎁 Free trial · last day"
+        else -> if (isItalian) "🎁 Prova gratuita · $days giorni" else "🎁 Free trial · $days days"
+    }
+    val tradeRadarPremiumLabel: String get() = "⭐ Premium"
+    val tradeRadarTrialEndedTitle: String get() = if (isItalian) "La prova gratuita è finita" else "Your free trial has ended"
+    val tradeRadarTrialEndedText: String get() = if (isItalian)
+        "Resti visibile: puoi ricevere proposte, rispondere e finire gli scambi già avviati. Con Premium torni a cercare carte e a proporre scambi."
+    else
+        "You stay visible: you can receive offers, reply and finish trades already started. With Premium you can search for cards and propose trades again."
+    val tradeRadarSearchLocked: String get() = if (isItalian)
+        "Cercare carte e proporre scambi è incluso in Premium. Chi è vicino può ancora trovarti e proporti uno scambio."
+    else
+        "Searching for cards and proposing trades is part of Premium. People nearby can still find you and send you offers."
+    val tradeRadarDiscoverPremium: String get() = if (isItalian) "Scopri Premium" else "Discover Premium"
     val tradeRadarAvailable: String get() = if (isItalian) "Visibile" else "Visible"
     val tradeRadarTabMatches: String get() = if (isItalian) "Match" else "Matches"
     val tradeRadarTabMyCards: String get() = if (isItalian) "Le mie carte" else "My cards"

@@ -186,6 +186,7 @@ import coil.ImageLoader
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.trade.CoarseLocation
+import com.emabuia.pokevault.data.trade.dto.TradeAccess
 import com.emabuia.pokevault.data.trade.dto.TradeCardHolder
 import com.emabuia.pokevault.data.trade.dto.TradeCardOffer
 import com.emabuia.pokevault.data.trade.dto.TradeLeaderboardEntry
@@ -438,6 +439,10 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
     LaunchedEffect(viewModel.focusProposals) {
         if (viewModel.focusProposals > 0) tab = 1
     }
+    // Il server ha detto che serve il Premium (prova finita): la pagina Premium.
+    LaunchedEffect(viewModel.premiumRequired) {
+        if (viewModel.premiumRequired > 0) onPremiumRequired()
+    }
 
     // Notifiche: il telefono si registra entrando, e il permesso di Android 13
     // si chiede qui e una volta sola, non all'apertura dell'app.
@@ -471,8 +476,12 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
             tier = ready.profile.tier,
             // Al terzo scambio si chiede se comparire in classifica (finche' non si risponde).
             inviteToLeaderboard = (ready.profile.tradesDone ?: 0) >= 3 && ready.profile.leaderboardOptIn == null,
-            onOpenLeaderboard = { viewModel.openLeaderboard() }
+            onOpenLeaderboard = { viewModel.openLeaderboard() },
+            access = ready.profile.access
         )
+        if (ready.profile.access?.isReceiveOnly == true) {
+            TrialEndedCard(onDiscoverPremium = onPremiumRequired, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
         ready.profile.suspendedUntil?.let { until ->
             SuspensionBanner(until, ready.profile.suspensionReason, ready.profile.nickname.orEmpty(), modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
@@ -498,7 +507,7 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
             modifier = Modifier.fillMaxSize()
         ) { page ->
             when (page) {
-                0 -> MatchesTab(viewModel, paused, cascadeStarted, onGoToMyCards = { tab = 2 })
+                0 -> MatchesTab(viewModel, paused, cascadeStarted, onGoToMyCards = { tab = 2 }, onPremiumRequired = onPremiumRequired)
                 1 -> ProposalsTab(viewModel, onGoToMatches = { tab = 0 })
                 else -> MyCardsTab(viewModel)
             }
@@ -536,6 +545,27 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
     LaunchedEffect(ready.profile.tier) { viewModel.checkTier(ready.profile.tier) }
 }
 
+/** Finita la prova senza Premium: cosa si puo' ancora fare, e la strada per il Premium. */
+@Composable
+private fun TrialEndedCard(onDiscoverPremium: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.gold.copy(alpha = 0.12f))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(AppLocale.tradeRadarTrialEndedTitle, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AppColors.textPrimary)
+        Text(AppLocale.tradeRadarTrialEndedText, fontSize = 12.sp, color = AppColors.textSecondary)
+        Button(
+            onClick = onDiscoverPremium,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.padding(top = 2.dp)
+        ) { Text(AppLocale.tradeRadarDiscoverPremium, fontWeight = FontWeight.Bold) }
+    }
+}
+
 @Composable
 private fun ProfileHeader(
     nickname: String,
@@ -544,7 +574,8 @@ private fun ProfileHeader(
     reputation: String = "",
     tier: String? = null,
     inviteToLeaderboard: Boolean = false,
-    onOpenLeaderboard: () -> Unit = {}
+    onOpenLeaderboard: () -> Unit = {},
+    access: TradeAccess? = null
 ) {
     val statusColor by animateColorAsState(
         if (paused) AppColors.orange else AppColors.green,
@@ -577,6 +608,23 @@ private fun ProfileHeader(
                 )
             }
             if (reputation.isNotBlank()) Text(reputation, fontSize = 11.sp, color = AppColors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // La prova (giorni rimasti) o il Premium. "Solo ricevere" ha il suo riquadro sotto.
+            when {
+                access?.isTrial == true -> Text(
+                    AppLocale.tradeRadarTrialDays(access.trialDaysLeft()),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppColors.green,
+                    maxLines = 1
+                )
+                access?.mode == "premium" -> Text(
+                    AppLocale.tradeRadarPremiumLabel,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppColors.gold,
+                    maxLines = 1
+                )
+            }
             if (inviteToLeaderboard) {
                 Text(
                     "🏆 " + AppLocale.tradeRadarInviteLeaderboard,
@@ -684,7 +732,8 @@ private fun MatchesTab(
     viewModel: TradeRadarViewModel,
     paused: Boolean,
     cascadeStarted: Boolean,
-    onGoToMyCards: () -> Unit
+    onGoToMyCards: () -> Unit,
+    onPremiumRequired: () -> Unit
 ) {
     var level by rememberSaveable { mutableStateOf("all") }
     var view by rememberSaveable { mutableStateOf(MatchView.CARDS) }
@@ -789,6 +838,13 @@ private fun MatchesTab(
             when {
                 paused -> item(key = "paused") {
                     EmptyState(text = AppLocale.tradeRadarPausedHint)
+                }
+                // Finita la prova senza Premium: il radar resta, la ricerca no.
+                viewModel.searchLocked -> item(key = "locked") {
+                    EmptyState(
+                        text = AppLocale.tradeRadarSearchLocked,
+                        action = AppLocale.tradeRadarDiscoverPremium to onPremiumRequired
+                    )
                 }
                 matches.isEmpty() && viewModel.matchesLoaded -> item(key = "empty") {
                     val noHaves = viewModel.enabledIds.isEmpty()
