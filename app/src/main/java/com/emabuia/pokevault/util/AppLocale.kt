@@ -2288,9 +2288,9 @@ object AppLocale {
 
     val giftSettingsLabel: String get() = if (isItalian) "Codici regalo" else "Gift codes"
     val giftSettingsSubtitle: String get() = if (isItalian)
-        "Regala un mese Premium a un amico, o riscatta un codice"
+        "Regala un mese Premium a un amico e ricevine uno anche tu"
     else
-        "Gift a Premium month to a friend, or redeem a code"
+        "Gift a Premium month to a friend and get one too"
     val giftTitle: String get() = if (isItalian) "Codici regalo" else "Gift codes"
     val giftHeadline: String get() = if (isItalian)
         "Un mese Premium, offerto da te"
@@ -2303,6 +2303,17 @@ object AppLocale {
         "Your friend code gives 30 days of Premium to someone who has never had it. " +
         "It costs you nothing and it does not expire."
 
+    /** Con il premio a chi invita (Worker schema 014): lo dice subito, in cima. */
+    fun giftHeadlineBodyWithReward(days: Int): String = if (isItalian)
+        "Il tuo codice AMICO regala $days giorni di Premium a chi non l'ha mai avuto, " +
+        "e altri $days giorni a te per ogni amico che lo usa."
+    else
+        "Your friend code gives $days days of Premium to someone who has never had it, " +
+        "and $days more days to you for every friend who uses it."
+    fun giftReferralEarned(days: Int, until: String): String = if (isItalian)
+        "🎁 Hai guadagnato $days giorni di Premium · fino al $until"
+    else
+        "🎁 You've earned $days days of Premium · until $until"
     val giftMyCodeTitle: String get() = if (isItalian) "Il tuo codice AMICO" else "Your friend code"
     fun giftInvitesUsed(used: Int, max: Int): String = if (isItalian)
         "Usato da $used amici su $max"
