@@ -27,6 +27,11 @@ CACHE_TTL_SECONDS = "259200"
 BACKFILL_BATCH_SIZE = "3"
 IT_IMAGE_PREFIX = "it"
 IT_CATALOG_KEY = "it/catalog/cards.cleaned.json"
+# Prezzi dal listino pubblico Cardmarket sopra quelli PokeWallet (acceso il
+# 03/10/2026). Per tornare ai soli prezzi PokeWallet basta togliere questa riga
+# e rifare il deploy: lo snapshot PokeWallet si costruisce comunque.
+# Vedi src/cardmarket-prices.ts.
+CARDMARKET_PRICES = "1"
 
 # Triggers for the Worker
 [triggers]
