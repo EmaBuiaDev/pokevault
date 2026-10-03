@@ -250,9 +250,23 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
         // se una carta veniva aggiornata: otto carte senza prezzo trovabile in
         // testa alla lista bastavano a lasciare a 0 per sempre (nella sessione)
         // le carte aggiunte da Artisti o dallo Scanner.
+        // Le scritture pero' restano poche per giro: ogni updateCard fa ricalcolare
+        // la Collezione, e centinaia di carte in fila la farebbero scattare. Il
+        // giro dopo riparte da solo, dopo una pausa, sulla lista aggiornata
+        // (uiState.cards): non resta appeso, e non riscrive carte vecchie.
         hydrationJob = viewModelScope.launch {
             var networkLookups = PRICE_HYDRATION_BATCH_SIZE
+            var writes = 0
             for (card in candidates) {
+                if (writes >= PRICE_HYDRATION_WRITES_PER_ROUND) {
+                    val current = this.coroutineContext[Job]
+                    viewModelScope.launch {
+                        current?.join()
+                        delay(PRICE_HYDRATION_ROUND_PAUSE_MS)
+                        scheduleMissingPriceHydration(uiState.cards)
+                    }
+                    break
+                }
                 hydratingPriceCardIds += card.id
                 var attempted = true
                 try {
@@ -269,6 +283,7 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
 
                     if (eurPrice > 0.0) {
                         repository.updateCard(card.id, card.copy(estimatedValue = eurPrice))
+                        writes += 1
                     }
                 } finally {
                     hydratingPriceCardIds -= card.id
@@ -476,6 +491,8 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 250L
         const val PRICE_HYDRATION_BATCH_SIZE = 8
+        const val PRICE_HYDRATION_WRITES_PER_ROUND = 20
+        const val PRICE_HYDRATION_ROUND_PAUSE_MS = 1_500L
         const val PREF_GRID = "collection_grid"
         const val PREF_COLUMNS = "collection_columns"
         const val PREF_LAYOUT = "collection_layout"
