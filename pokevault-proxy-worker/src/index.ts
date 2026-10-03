@@ -15,6 +15,7 @@ import {
   mergeCardmarketPrices,
   type CardmarketBlob,
 } from './cardmarket-prices';
+import { resolveExpansionPrices } from './price-lookup';
 
 interface Env {
   CACHE: KVNamespace;
@@ -1882,11 +1883,13 @@ async function handleItalianExpansionPricesRequest(
     return notFound('Italian price snapshot not available');
   }
 
-  const expansionId = snapshot.aliases?.[rawCode] ?? rawCode;
-  const entry = snapshot.expansions?.[expansionId];
-  if (!entry) {
+  // Non solo l'alias: un id di espansione rubato da un alias (swsh9 -> la sua
+  // galleria swsh9tg) deve rispondere con le carte sue. Vedi src/price-lookup.ts.
+  const resolved = resolveExpansionPrices(snapshot, rawCode);
+  if (!resolved) {
     return notFound(`no prices for "${rawCode}"`);
   }
+  const { expansionId, entry } = resolved;
 
   const body = JSON.stringify({
     expansionId,
