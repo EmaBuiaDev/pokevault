@@ -175,10 +175,14 @@ function plausible(eur, usd) {
   const p = Math.max(eur, 0.01);
   return Math.abs(p - ref) <= 3 || (p / ref <= 8 && ref / p <= 8);
 }
+// `a` (TCGdex) batte `b` (il prezzo di oggi) solo se e' piu' vicino a TCGplayer
+// di almeno una volta e mezza: nel dubbio resta quello che l'utente vede gia'.
+// Senza margine il Mew di Evoluzioni passava da 5 a 130 EUR con TCGplayer a 28.
+const SWITCH_MARGIN = Math.log(1.5);
 const closer = (a, b, usd) => {
   const ref = Math.max(usd * USD_TO_EUR, 0.01);
   const d = (x) => Math.abs(Math.log(Math.max(x, 0.01) / ref));
-  return d(a) <= d(b);
+  return d(a) + SWITCH_MARGIN < d(b);
 };
 
 const tCount = new Map();
