@@ -41,6 +41,52 @@ export interface TradeEnv extends PushEnv {
    * staging: i suoi account di prova non hanno mai un abbonamento vero.
    */
   TRADE_AVATAR_PREMIUM_CHECK?: string;
+  /**
+   * "1" = finita la prova di 30 giorni, chi non e' Premium resta "solo
+   * ricevere": niente match e niente proposte nuove (vedi trialAccessOf).
+   * Spento, la prova si conta e si mostra ma non blocca niente: la si accende
+   * prima che scadano le prime prove, senza una release dell'app.
+   */
+  TRADE_TRIAL_ENFORCE?: string;
+}
+
+// ── Prova gratuita (schema 13) ──────────────────────────────────────────────
+//
+// Decisione dell'utente del 03/10/2026: 30 giorni dall'attivazione, poi
+// Premium. Senza Premium, finita la prova, si resta visibili e si risponde,
+// ma non si cerca: cosi' il radar dei Premium resta pieno, e chi riceve una
+// proposta ha un motivo per abbonarsi. Gli scambi avviati si finiscono sempre.
+
+const TRIAL_MS = 30 * 24 * 60 * 60 * 1000;
+
+type TradeAccessMode = 'premium' | 'trial' | 'receive_only';
+
+interface TradeAccess {
+  mode: TradeAccessMode;
+  /** Fine della prova (anche per chi e' Premium: serve se smette di esserlo). */
+  trialEndsAt: number;
+  /** Se il server blocca davvero chi e' "solo ricevere" (TRADE_TRIAL_ENFORCE). */
+  enforced: boolean;
+}
+
+async function trialAccessOf(env: TradeEnv, db: D1Database, uid: string): Promise<TradeAccess> {
+  let started = (await db.prepare(`SELECT started_at FROM trade_trials WHERE uid = ?`).bind(uid).first<{ started_at: number }>())?.started_at;
+  if (started == null) {
+    // Un profilo nato prima dello schema 13 e sfuggito alla migrazione: la
+    // prova parte adesso, mai prima.
+    started = Date.now();
+    await db.prepare(`INSERT OR IGNORE INTO trade_trials (uid, started_at) VALUES (?, ?)`).bind(uid, started).run();
+  }
+  const trialEndsAt = started + TRIAL_MS;
+  const mode: TradeAccessMode = (await hasPremium(env, uid))
+    ? 'premium'
+    : Date.now() < trialEndsAt ? 'trial' : 'receive_only';
+  return { mode, trialEndsAt, enforced: env.TRADE_TRIAL_ENFORCE === '1' };
+}
+
+/** La risposta per chi e' "solo ricevere" e chiede qualcosa da Premium. */
+function trialEndedResponse(access: TradeAccess): Response {
+  return json({ error: 'premium_required', reason: 'trial_ended', trialEndsAt: access.trialEndsAt }, 403);
 }
 
 // ── Limiti ──────────────────────────────────────────────────────────────────
@@ -262,7 +308,7 @@ function profileJson(row: ProfileRow, counts?: { haves: number; wants: number; o
   };
 }
 
-async function putProfile(request: Request, db: D1Database, uid: string): Promise<Response> {
+async function putProfile(request: Request, db: D1Database, uid: string, env: TradeEnv): Promise<Response> {
   const body = await readJson<{
     nickname?: string;
     geohash5?: string;
@@ -294,6 +340,8 @@ async function putProfile(request: Request, db: D1Database, uid: string): Promis
     )
     .bind(uid, nickname, geohash5, now, body.paused === true ? 1 : 0)
     .run();
+  // La prova parte alla prima attivazione e non riparte con le successive.
+  await db.prepare(`INSERT OR IGNORE INTO trade_trials (uid, started_at) VALUES (?, ?)`).bind(uid, now).run();
   // Chi ha disattivato il profilo mentre era sospeso ritrova la sospensione.
   await db.batch([
     db
@@ -308,7 +356,7 @@ async function putProfile(request: Request, db: D1Database, uid: string): Promis
   ]);
 
   const row = await loadProfile(db, uid);
-  return json(row ? profileJson(row) : {});
+  return json(row ? { ...profileJson(row), access: await trialAccessOf(env, db, uid) } : {});
 }
 
 async function getProfile(db: D1Database, uid: string, env: TradeEnv): Promise<Response> {
@@ -330,6 +378,7 @@ async function getProfile(db: D1Database, uid: string, env: TradeEnv): Promise<R
     reputation,
     tier,
     leaderboardOptIn: row.leaderboard_asked_at === null ? null : row.leaderboard_opt_in === 1,
+    access: await trialAccessOf(env, db, uid),
   });
 }
 
@@ -2081,6 +2130,8 @@ async function purgeExpired(db: D1Database): Promise<void> {
     // Le notifiche spedite servono solo a non rimandarle: un mese basta.
     db.prepare(`DELETE FROM trade_notifications WHERE created_at < ?`).bind(now - 30 * 24 * 60 * 60 * 1000),
     db.prepare(`DELETE FROM trade_wants_seen WHERE seen_at < ?`).bind(now - 90 * 24 * 60 * 60 * 1000),
+    // La prova di chi non ha piu' il profilo: ricordata 12 mesi, poi via.
+    db.prepare(`DELETE FROM trade_trials WHERE started_at < ? AND uid NOT IN (SELECT uid FROM trade_profiles)`).bind(before),
     db
       .prepare(
         `DELETE FROM trade_ratings WHERE created_at < ?
@@ -2843,7 +2894,7 @@ export async function handleTradeRequest(
 
   if (pathname === '/v1/trade/profile') {
     if (method === 'GET') return getProfile(db, uid, env);
-    if (method === 'PUT') return putProfile(request, db, uid);
+    if (method === 'PUT') return putProfile(request, db, uid, env);
     if (method === 'DELETE') return deleteProfile(db, uid);
   }
 
@@ -2863,6 +2914,15 @@ export async function handleTradeRequest(
   }
   if (pathname === '/v1/trade/wants' && method === 'PUT') return putWants(request, db, uid);
   if (pathname === '/v1/trade/owned' && method === 'PUT') return putOwned(request, db, uid);
+  // Finita la prova senza Premium (e col blocco acceso): niente radar, niente
+  // proposte nuove. Rispondere, appuntamenti e chiusure restano sempre aperti.
+  const searching = (pathname === '/v1/trade/matches' && method === 'GET') ||
+    (pathname === '/v1/trade/proposals' && method === 'POST');
+  if (searching && env.TRADE_TRIAL_ENFORCE === '1') {
+    const access = await trialAccessOf(env, db, uid);
+    if (access.mode === 'receive_only') return trialEndedResponse(access);
+  }
+
   if (pathname === '/v1/trade/matches' && method === 'GET') return getMatches(db, uid, env);
 
   if (pathname === '/v1/trade/proposals') {
