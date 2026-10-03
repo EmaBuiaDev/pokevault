@@ -247,6 +247,12 @@ export async function handleGiftRequest(
       .prepare('SELECT code, granted_until_ms FROM gift_redemptions WHERE uid = ?1')
       .bind(uid)
       .first<{ code: string; granted_until_ms: number }>();
+    // Quello che ho guadagnato invitando (schema 014). Senza la tabella, niente.
+    const bonus = await db
+      .prepare('SELECT granted_until_ms, invites FROM gift_referral_bonus WHERE uid = ?1')
+      .bind(uid)
+      .first<{ granted_until_ms: number; invites: number }>()
+      .catch(() => null);
 
     return json({
       code: row.code,
@@ -255,6 +261,10 @@ export async function handleGiftRequest(
       invitesMax: row.max_redemptions,
       alreadyRedeemed: mine !== null,
       giftUntilMs: mine && mine.granted_until_ms > Date.now() ? mine.granted_until_ms : null,
+      // Chi invita riceve gli stessi giorni dell'amico, per ogni amico.
+      referralRewardDays: row.grant_days,
+      referralInvites: bonus?.invites ?? 0,
+      referralUntilMs: bonus && bonus.granted_until_ms > Date.now() ? bonus.granted_until_ms : null,
     });
   }
 
@@ -350,6 +360,24 @@ async function handleRedeem(
            WHERE code = ?1 AND disabled = 0 AND redeemed_count < max_redemptions`
         )
         .bind(row.code),
+      // Il premio a chi ha condiviso il codice AMICO (schema 014): gli stessi
+      // giorni dell'amico, sommati a quelli che ha gia'. Nella stessa
+      // transazione, e solo se la riga del riscatto qui sopra e' stata scritta:
+      // con il codice esaurito nel frattempo, niente riscatto e niente premio.
+      ...(row.kind === 'friend' && row.owner_uid
+        ? [
+            db
+              .prepare(
+                `INSERT INTO gift_referral_bonus (uid, granted_until_ms, invites, updated_at)
+                 SELECT ?1, ?2 + ?3, 1, ?2 FROM gift_redemptions WHERE uid = ?4 AND code = ?5
+                 ON CONFLICT(uid) DO UPDATE SET
+                   granted_until_ms = MAX(granted_until_ms, ?2) + ?3,
+                   invites = invites + 1,
+                   updated_at = ?2`
+              )
+              .bind(row.owner_uid, Date.now(), row.grant_days * 86_400_000, uid, row.code),
+          ]
+        : []),
     ]);
   } catch (error) {
     // I controlli di sopra sono una fotografia: fra la SELECT e questa INSERT
