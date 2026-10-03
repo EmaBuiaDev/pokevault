@@ -30,7 +30,7 @@ class ItalianPriceSnapshotLookupTest {
         val prices = snapshot.priceMapFor("SWSH9")
         assertEquals(20.0, prices["183"]?.low)
         assertEquals(3.0, prices["TG01"]?.low)
-        assertEquals("dove ci sono tutte e due vince il set chiesto", 5.0, prices["TG24"]?.low)
+        assertEquals("un numero in tutte e due resta quello della galleria, come prima", 4.0, prices["TG24"]?.low)
     }
 
     @Test

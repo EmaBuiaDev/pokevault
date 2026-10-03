@@ -13,9 +13,10 @@
 // Togliere l'alias non basta: l'app cerca le carte della galleria con lo
 // stesso prefisso ("ita:swsh10:TG01"). Quindi un codice che e' esso stesso
 // un'espansione risponde con le sue carte PIU' quelle dell'espansione a cui
-// punta l'alias; dove un numero c'e' in tutte e due vince l'espansione
-// chiesta. I numeri delle gallerie (TG01..., SV001...) non si sovrappongono a
-// quelli del set, salvo le 30 TG che swsh9 ha anche fra le sue.
+// punta l'alias. I numeri delle gallerie (TG01..., SV001...) non si
+// sovrappongono a quelli del set, salvo le 30 TG che swsh9 ha anche fra le
+// sue: li chiedono solo le carte della galleria ("ita:swsh9:TG01"), quindi
+// li vince la galleria, come prima della correzione.
 
 export interface LookupExpansion<P> {
   prices: Record<string, P>;
@@ -35,7 +36,7 @@ export function resolveExpansionPrices<E extends LookupExpansion<unknown>>(
   if (own) {
     const other = aliasTarget && aliasTarget !== code ? snapshot.expansions[aliasTarget] : undefined;
     if (!other) return { expansionId: code, entry: own };
-    return { expansionId: code, entry: { ...own, prices: { ...other.prices, ...own.prices } } };
+    return { expansionId: code, entry: { ...own, prices: { ...own.prices, ...other.prices } } };
   }
   const expansionId = aliasTarget ?? code;
   const entry = snapshot.expansions[expansionId];

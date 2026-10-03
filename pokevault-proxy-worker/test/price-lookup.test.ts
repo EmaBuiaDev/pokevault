@@ -20,7 +20,7 @@ test('un set rubato da un alias risponde con le sue carte piu quelle della galle
   assert.equal(r?.expansionId, 'swsh9');
   assert.deepEqual(r?.entry.prices['183'], { low: 20 }, 'il Moltres 183 c e');
   assert.deepEqual(r?.entry.prices.TG01, { low: 3 }, 'e anche le carte della galleria');
-  assert.deepEqual(r?.entry.prices.TG24, { low: 5 }, 'dove ci sono tutte e due vince il set chiesto');
+  assert.deepEqual(r?.entry.prices.TG24, { low: 4 }, 'un numero in tutte e due resta quello della galleria, come prima');
   assert.equal(r?.entry.baseSetCode, 'BRS');
 });
 

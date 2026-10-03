@@ -68,7 +68,9 @@ data class ItalianPriceSnapshot(
         val own = expansions[normalized]?.prices
         if (own != null) {
             val other = aliasTarget?.takeIf { it != normalized }?.let { expansions[it]?.prices }
-            return if (other.isNullOrEmpty()) own else other + own
+            // Un numero in tutte e due (le TG di swsh9) lo chiedono solo le carte
+            // della galleria: resta il suo, come prima.
+            return if (other.isNullOrEmpty()) own else own + other
         }
         return expansions[aliasTarget ?: normalized]?.prices ?: emptyMap()
     }
