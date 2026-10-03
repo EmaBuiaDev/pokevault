@@ -38,3 +38,7 @@ ingest-*-official.sql
 
 # Report di scripts/verifica-catalogo-live.mjs (in CI finisce negli artifact)
 report-catalogo/
+
+# File di lavoro degli script del listino Cardmarket
+.cardmarket-tmp/
+.cardmarket-prices.json

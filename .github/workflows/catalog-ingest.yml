@@ -83,6 +83,20 @@ jobs:
           node scripts/backfill-illustratore-tcgdex.mjs $SETS --apply | tee illustrator-output.log
           ! grep -q "Espansioni con errore" illustrator-output.log
 
+      # Collega le carte nuove ai prodotti Cardmarket (card_cardmarket): senza,
+      # il set nuovo resta coi soli prezzi PokeWallet. I prezzi arrivano col
+      # listino del mattino dopo (workflow "Listino Cardmarket").
+      - name: Link ingested sets to Cardmarket products
+        id: cardmarket
+        if: ${{ !cancelled() && steps.ingest.outcome == 'success' && hashFiles('pokevault-proxy-worker/ingested-sets.txt') != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -o pipefail
+          SETS=$(cat ingested-sets.txt)
+          if [ -z "$SETS" ]; then echo "Nessun set importato, niente da fare"; exit 0; fi
+          node scripts/map-cardmarket-tcgdex.mjs $SETS --only-missing --apply | tee cardmarket-output.log
+
       # Parte anche se un backfill e' fallito: l'import e' comunque avvenuto,
       # e la issue e' il posto dove lo si viene a sapere.
       - name: Open an issue if a new set was ingested
@@ -95,6 +109,7 @@ jobs:
             SUMMARY=$(grep -A2 "Set DAVVERO nuovi" ingest-output.log | head -3)
             RARITY=$( { grep -E "^\[|Riepilogo|Carte totali|Espansioni con errore" rarity-output.log 2>/dev/null || echo "non eseguito"; } | head -20)
             ILLUSTRATOR=$( { grep -E "^\[|Riepilogo|Carte totali|Espansioni con errore" illustrator-output.log 2>/dev/null || echo "non eseguito"; } | head -20)
+            CARDMARKET=$( { grep -E "^Esito|^Collegate|^Fatto|ERRORE" cardmarket-output.log 2>/dev/null || echo "non eseguito"; } | head -10)
             gh issue create \
               --title "Catalogo: nuova espansione rilevata e importata" \
               --body "Il job schedulato ha trovato e importato almeno un'espansione nuova.
@@ -111,6 +126,11 @@ jobs:
           Backfill illustratore (esito: ${{ steps.illustrator.outcome }}):
           \`\`\`
           $ILLUSTRATOR
+          \`\`\`
+
+          Collegamento Cardmarket (esito: ${{ steps.cardmarket.outcome }}):
+          \`\`\`
+          $CARDMARKET
           \`\`\`
 
           Vedi il log completo nella run di Actions per i dettagli (copertura immagini, published/unpublished, carte rimaste senza rarita')." \
