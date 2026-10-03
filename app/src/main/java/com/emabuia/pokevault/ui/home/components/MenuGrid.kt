@@ -168,8 +168,8 @@ fun MenuGrid(
             )
         }
 
-        // TradeRadar e' in sviluppo: la card c'e' solo dove il flag e' acceso,
-        // oggi l'app di staging. In prod la Home resta com'e'.
+        // La card c'e' solo dove il flag e' acceso: dalla 3.1.6 anche in prod,
+        // accanto al tasto al centro della barra.
         if (BuildConfig.TRADE_ENABLED) {
             CascadeIn(index = 7, visible = cascadeVisible) {
                 FeaturedCard(

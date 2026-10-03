@@ -1429,7 +1429,7 @@ object AppLocale {
     val wishlistTitle: String get() = if (isItalian) "Wishlist" else "Wishlist"
     val wishlistSubtitle: String get() = if (isItalian) "Le carte che ti mancano" else "The cards you are missing"
 
-    // TradeRadar: in sviluppo, visibile solo nell'app di staging.
+    // TradeRadar (dalla 3.1.6).
     val tradeRadarTitle: String get() = "TradeRadar"
     val tradeRadarSubtitle: String get() = if (isItalian) "Scambia doppioni con chi è vicino" else "Trade duplicates with people nearby"
     val tradeRadarOnboardingTitle: String get() = if (isItalian) "Scambia con chi è vicino a te" else "Trade with people near you"

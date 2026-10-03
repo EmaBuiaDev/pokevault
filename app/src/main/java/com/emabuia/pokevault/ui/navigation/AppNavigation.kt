@@ -142,7 +142,7 @@ object Routes {
     const val GRADED = "graded"
     const val SETTINGS = "settings"
 
-    /** Registrata solo se BuildConfig.TRADE_ENABLED: oggi nel solo flavor staging. */
+    /** Registrata solo se BuildConfig.TRADE_ENABLED (dalla 3.1.6 acceso in entrambi i flavor). */
     const val TRADE_RADAR = "trade_radar"
 
     const val PREMIUM = "premium"

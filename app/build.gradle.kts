@@ -22,8 +22,8 @@ android {
         applicationId = "com.emabuia.pokevault"
         minSdk = 26
         targetSdk = 36
-        versionCode = 38
-        versionName = "3.1.5"
+        versionCode = 39
+        versionName = "3.1.6"
 
         buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
         buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "${localProperties.getProperty("POKEWALLET_PROXY_ENABLED", "false")}")
@@ -56,11 +56,11 @@ android {
             // esattamente com.emabuia.pokevault, altrimenti saltano insieme
             // billing, firma di Play e Google Sign-In.
 
-            // TradeRadar e' in sviluppo: in prod non esiste, ne' la tile ne'
-            // la rotta. TradeRadarFlagTest fallisce se qualcuno lo accende qui
-            // prima del lancio.
-            buildConfigField("Boolean", "TRADE_ENABLED", "false")
-            buildConfigField("String", "TRADE_API_URL", "\"\"")
+            // TradeRadar esce con la 3.1.6: sul Worker di produzione, che lo
+            // serve solo con TRADE_ENABLED acceso nelle sue vars (wrangler.toml).
+            // TradeRadarFlagTest controlla che resti cosi'.
+            buildConfigField("Boolean", "TRADE_ENABLED", "true")
+            buildConfigField("String", "TRADE_API_URL", "\"https://pokevault-proxy.pokevault-emanu.workers.dev\"")
         }
         create("staging") {
             dimension = "environment"
@@ -215,10 +215,9 @@ dependencies {
     implementation(libs.firebase.auth.ktx)
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.firebase.storage.ktx)
-    // Notifiche di TradeRadar: SOLO nello staging. In prod la libreria
-    // aggiungerebbe il permesso per le notifiche e un ricevitore che non
-    // servono (vedi src/prod/.../TradePush.kt). Al lancio torna implementation.
-    "stagingImplementation"(libs.firebase.messaging.ktx)
+    // Notifiche di TradeRadar: in tutte le versioni dalla 3.1.6 (prima solo
+    // nello staging). Il servizio e i permessi stanno nel manifest principale.
+    implementation(libs.firebase.messaging.ktx)
 
     // ── Navigation Compose ──
     implementation(libs.androidx.navigation.compose)

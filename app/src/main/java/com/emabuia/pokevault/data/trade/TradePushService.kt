@@ -10,8 +10,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Riceve le notifiche di TradeRadar. Dichiarato solo nel manifest dello
- * staging: in prod non esiste.
+ * Riceve le notifiche di TradeRadar (dichiarato nel manifest principale dalla
+ * 3.1.6, quando TradeRadar e' uscito; prima solo nello staging).
  *
  * Con l'app in background la notifica la mostra il sistema e questo servizio
  * non viene chiamato; con l'app aperta arriva qui e la mostra [TradePush.show].
@@ -27,6 +27,8 @@ class TradePushService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        // Il numero sul tasto Radar della barra: una proposta nuova lo cambia.
+        scope.launch { TradeBadge.refresh(applicationContext) }
         val notification = message.notification ?: return
         TradePush.show(
             context = this,
