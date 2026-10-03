@@ -87,6 +87,16 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleStagingDebug --no-daemon --stacktrace
 
+      # L'accesso con Google funziona solo se questa impronta e' fra quelle
+      # registrate in Firebase (pokevault-staging, app .staging): se manca, dopo
+      # la scelta dell'account l'app torna indietro senza dire niente.
+      # E' un dato pubblico (sta in ogni APK), non un segreto.
+      - name: Impronta della firma
+        run: |
+          APKSIGNER=$(ls "$ANDROID_SDK_ROOT"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/staging/debug/app-staging-debug.apk | grep -E 'SHA-1|SHA-256'
+          echo "Registrata in Firebase (debug del PC): SHA-1 13:b0:ec:19:58:32:39:2c:41:81:cd:31:2d:6d:6e:76:f8:4e:a8:64"
+
       - name: Note di rilascio
         run: |
           {
