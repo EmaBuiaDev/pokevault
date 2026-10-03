@@ -1,0 +1,52 @@
+name: Listino Cardmarket
+
+# Ogni mattina: scarica il listino pubblico Cardmarket (price_guide_6.json),
+# ne tira fuori i prezzi delle carte collegate in D1 (card_cardmarket) e li
+# carica su R2, dove il Worker li fonde sopra i prezzi PokeWallet -- solo se
+# la variabile CARDMARKET_PRICES del Worker e' "1". Spenta, questo job prepara
+# il file e basta: l'app non vede niente.
+# Vedi scripts/build-cardmarket-prices.mjs e src/cardmarket-prices.ts.
+#
+# Due giri: Cardmarket pubblica il listino verso le 00:40 UTC, ma il 01/10/2026
+# non e' uscito affatto. Il secondo giro recupera un'uscita in ritardo; se il
+# listino e' gia' su R2 non carica niente. Il job FALLISCE (ed e' l'avviso) se
+# il listino e' fermo da piu' di 48 ore o sembra rotto. Il Worker, per conto
+# suo, smette di usare un listino piu' vecchio di 72 ore e torna a PokeWallet.
+#
+# Serve il secret CLOUDFLARE_API_TOKEN (lo stesso del Catalog Ingest: D1 Edit
+# + Workers R2 Storage Edit). Le run pianificate partono solo da master.
+
+on:
+  schedule:
+    - cron: '30 1 * * *'
+    - cron: '30 8 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listino-cardmarket
+  cancel-in-progress: false
+
+jobs:
+  listino:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: pokevault-proxy-worker
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Listino del giorno su R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/build-cardmarket-prices.mjs --upload
