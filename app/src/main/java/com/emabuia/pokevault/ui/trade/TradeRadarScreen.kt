@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.ui.trade
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.Manifest
@@ -60,6 +61,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -106,13 +109,16 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Toys
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.Icons
@@ -166,9 +172,11 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -245,8 +253,11 @@ fun TradeRadarScreen(onBack: () -> Unit, onPremiumRequired: () -> Unit = {}, vie
         }
     }
     val info = viewModel.info
+    val haptic = LocalHapticFeedback.current
     LaunchedEffect(info) {
         if (info != null) {
+            // I momenti che contano si sentono anche in mano, non solo a schermo.
+            if (info in HapticInfos) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             snackbar.showSnackbar(infoText(info))
             viewModel.consumeInfo()
         }
@@ -306,7 +317,7 @@ fun TradeRadarScreen(onBack: () -> Unit, onPremiumRequired: () -> Unit = {}, vie
                 Screen.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     RadarScope(blips = emptyList(), scanning = true, modifier = Modifier.size(140.dp))
                 }
-                Screen.Onboarding -> Onboarding(viewModel)
+                Screen.Onboarding -> if (viewModel.introSeen) Onboarding(viewModel) else TradeIntro(onDone = { viewModel.markIntroSeen() })
                 is Screen.Ready -> Hub(viewModel, screen, onPremiumRequired)
                 is Screen.Error -> Column(
                     modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -438,6 +449,11 @@ private fun Hub(viewModel: TradeRadarViewModel, ready: Screen.Ready, onPremiumRe
     // Dopo aver mandato una proposta si va a vederla.
     LaunchedEffect(viewModel.focusProposals) {
         if (viewModel.focusProposals > 0) tab = 1
+    }
+    // Un aggiornamento con piu' match di prima: un tocco leggero.
+    val hubHaptic = LocalHapticFeedback.current
+    LaunchedEffect(viewModel.newMatches) {
+        if (viewModel.newMatches > 0) hubHaptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
     // Il server ha detto che serve il Premium (prova finita): la pagina Premium.
     LaunchedEffect(viewModel.premiumRequired) {
@@ -848,9 +864,12 @@ private fun MatchesTab(
                 }
                 matches.isEmpty() && viewModel.matchesLoaded -> item(key = "empty") {
                     val noHaves = viewModel.enabledIds.isEmpty()
+                    val context = LocalContext.current
                     EmptyState(
                         text = if (noHaves) AppLocale.tradeRadarNoHavesHint else AppLocale.tradeRadarNoMatches,
-                        action = if (noHaves) AppLocale.tradeRadarGoToMyCards to onGoToMyCards else null
+                        action = if (noHaves) AppLocale.tradeRadarGoToMyCards to onGoToMyCards else null,
+                        // Una zona vuota si riempie invitando: ogni persona in piu' e' un match possibile.
+                        secondary = AppLocale.tradeRadarInviteFriend to { shareInvite(context) }
                     )
                 }
                 matches.isEmpty() -> Unit
@@ -4955,7 +4974,12 @@ private fun RadarScope(blips: List<Blip>, scanning: Boolean, modifier: Modifier 
 }
 
 @Composable
-private fun EmptyState(text: String, action: Pair<String, () -> Unit>? = null, radar: Boolean = true) {
+private fun EmptyState(
+    text: String,
+    action: Pair<String, () -> Unit>? = null,
+    radar: Boolean = true,
+    secondary: Pair<String, () -> Unit>? = null
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -4967,6 +4991,106 @@ private fun EmptyState(text: String, action: Pair<String, () -> Unit>? = null, r
             Button(onClick = action.second, shape = RoundedCornerShape(14.dp)) {
                 Text(action.first, fontWeight = FontWeight.SemiBold)
             }
+        }
+        if (secondary != null) {
+            OutlinedButton(onClick = secondary.second, shape = RoundedCornerShape(14.dp)) {
+                Icon(Icons.Default.Share, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(secondary.first, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+/** Le conferme che vibrano: quelle in cui uno scambio fa un passo avanti. */
+private val HapticInfos = setOf(
+    TradeRadarViewModel.Info.PROPOSAL_SENT,
+    TradeRadarViewModel.Info.COUNTER_SENT,
+    TradeRadarViewModel.Info.ACCEPTED,
+    TradeRadarViewModel.Info.MEETING_CONFIRMED,
+    TradeRadarViewModel.Info.TRADE_DONE,
+)
+
+/** Il foglio di condivisione di Android con l'invito e il link al Play Store. */
+private fun shareInvite(context: Context) {
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, AppLocale.tradeRadarInviteMessage)
+    }
+    runCatching { context.startActivity(Intent.createChooser(send, AppLocale.tradeRadarInviteFriend)) }
+}
+
+/**
+ * Il primo ingresso: tre schermate che raccontano TradeRadar prima del modulo
+ * di attivazione (che resta quello di sempre). Si vedono una volta sola;
+ * "Salta" porta subito al modulo.
+ */
+@Composable
+private fun TradeIntro(onDone: () -> Unit) {
+    val pages = listOf(
+        Triple(AppLocale.tradeRadarIntro1Title, AppLocale.tradeRadarIntro1Text, null as ImageVector?),
+        Triple(AppLocale.tradeRadarIntro2Title, AppLocale.tradeRadarIntro2Text, Icons.Default.Storefront),
+        Triple(AppLocale.tradeRadarIntro3Title, AppLocale.tradeRadarIntro3Text, Icons.Default.VerifiedUser),
+    )
+    val pager = rememberPagerState(pageCount = { pages.size })
+    val scope = rememberCoroutineScope()
+    val last = pager.currentPage == pages.lastIndex
+
+    Column(Modifier.fillMaxSize().padding(20.dp)) {
+        Box(Modifier.fillMaxWidth()) {
+            TextButton(onClick = onDone, modifier = Modifier.align(Alignment.CenterEnd)) {
+                Text(AppLocale.tradeRadarIntroSkip, color = AppColors.textSecondary)
+            }
+        }
+        HorizontalPager(state = pager, modifier = Modifier.weight(1f).fillMaxWidth()) { index ->
+            val (title, text, icon) = pages[index]
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)
+            ) {
+                if (icon == null) {
+                    RadarScope(blips = DemoBlips, scanning = true, modifier = Modifier.size(170.dp))
+                } else {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(132.dp)
+                            .clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(AppColors.green, AppColors.blue)))
+                    ) {
+                        Icon(icon, null, tint = AppColors.onAccent, modifier = Modifier.size(64.dp))
+                    }
+                }
+                Spacer(Modifier.height(28.dp))
+                Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = AppColors.textPrimary, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(10.dp))
+                Text(text, fontSize = 15.sp, color = AppColors.textSecondary, textAlign = TextAlign.Center)
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+        ) {
+            repeat(pages.size) { index ->
+                val selected = index == pager.currentPage
+                val width by animateDpAsState(if (selected) 22.dp else 8.dp, tween(AppMotion.state), label = "introDot")
+                Box(
+                    Modifier
+                        .padding(horizontal = 4.dp)
+                        .height(8.dp)
+                        .width(width)
+                        .clip(CircleShape)
+                        .background(if (selected) AppColors.green else AppColors.textMuted.copy(alpha = 0.35f))
+                )
+            }
+        }
+        Button(
+            onClick = { if (last) onDone() else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } },
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().height(52.dp)
+        ) {
+            Text(if (last) AppLocale.tradeRadarIntroStart else AppLocale.tradeRadarIntroNext, fontWeight = FontWeight.Bold)
         }
     }
 }

@@ -1434,6 +1434,31 @@ object AppLocale {
     val tradeRadarSubtitle: String get() = if (isItalian) "Scambia doppioni con chi è vicino" else "Trade duplicates with people nearby"
     val tradeRadarOnboardingTitle: String get() = if (isItalian) "Scambia con chi è vicino a te" else "Trade with people near you"
     val tradeRadarOnboardingText: String get() = if (isItalian) "TradeRadar trova collezionisti nella tua zona che hanno le carte che ti mancano e cercano i tuoi doppioni. Tu scegli quali doppioni offrire." else "TradeRadar finds collectors in your area who have the cards you are missing and want your duplicates. You choose which duplicates to offer."
+    // Il primo ingresso: tre schermate prima del modulo di attivazione.
+    val tradeRadarIntro1Title: String get() = if (isItalian) "Le carte che ti mancano, vicino a te" else "The cards you're missing, near you"
+    val tradeRadarIntro1Text: String get() = if (isItalian)
+        "TradeRadar incrocia i tuoi doppioni con le carte cercate da chi colleziona nella tua zona, e ti mostra chi ha quelle che cerchi tu."
+    else
+        "TradeRadar matches your duplicates with the cards wanted by collectors in your area, and shows you who has the ones you're looking for."
+    val tradeRadarIntro2Title: String get() = if (isItalian) "Proponi, scegliete un posto, scambiate" else "Propose, pick a place, trade"
+    val tradeRadarIntro2Text: String get() = if (isItalian)
+        "Niente chat: proposte guidate con le carte già scelte. Vi incontrate in un negozio di carte o in un luogo pubblico, all'ora che decidete insieme."
+    else
+        "No chat: guided offers with the cards already picked. You meet in a card shop or a public place, at a time you agree on."
+    val tradeRadarIntro3Title: String get() = if (isItalian) "Scambi sicuri, reputazione vera" else "Safe trades, real reputation"
+    val tradeRadarIntro3Text: String get() = if (isItalian)
+        "Dopo ogni scambio vi votate: livelli e classifica premiano chi è affidabile, e chi si comporta male si segnala e si blocca. I primi 30 giorni sono gratis."
+    else
+        "After every trade you rate each other: levels and the leaderboard reward reliable traders, and anyone who misbehaves can be reported and blocked. The first 30 days are free."
+    val tradeRadarIntroNext: String get() = if (isItalian) "Avanti" else "Next"
+    val tradeRadarIntroStart: String get() = if (isItalian) "Inizia" else "Get started"
+    val tradeRadarIntroSkip: String get() = if (isItalian) "Salta" else "Skip"
+    // Zona vuota: invitare qualcuno.
+    val tradeRadarInviteFriend: String get() = if (isItalian) "Invita un amico" else "Invite a friend"
+    val tradeRadarInviteMessage: String get() = if (isItalian)
+        "Scambiamo carte Pokémon? Su PokeVault c'è TradeRadar: trovi chi vicino a te ha le carte che ti mancano. https://play.google.com/store/apps/details?id=com.emabuia.pokevault"
+    else
+        "Want to trade Pokémon cards? PokeVault has TradeRadar: find people near you who have the cards you're missing. https://play.google.com/store/apps/details?id=com.emabuia.pokevault"
     val tradeRadarSafetyTitle: String get() = if (isItalian) "Scambi sicuri" else "Trade safely"
     val tradeRadarSafetyText: String get() = if (isItalian) "Incontratevi solo in luoghi pubblici, come un negozio di carte, e di giorno. Non condividere indirizzo o numero di telefono. Controlla le carte prima di scambiarle." else "Meet only in public places, such as a card shop, during the day. Never share your address or phone number. Check the cards before trading."
     val tradeRadarNickname: String get() = if (isItalian) "Nickname" else "Nickname"

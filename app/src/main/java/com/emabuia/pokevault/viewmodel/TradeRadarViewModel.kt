@@ -142,11 +142,24 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
     var searchLocked by mutableStateOf(false)
         private set
 
+    /** Cresce quando un aggiornamento porta piu' match di prima: la schermata vibra. */
+    var newMatches by mutableIntStateOf(0)
+        private set
+
     /** Cresce a ogni "serve il Premium" dal server: la schermata apre la pagina Premium. */
     var premiumRequired by mutableIntStateOf(0)
         private set
 
     private val prefs = application.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+
+    /** Le tre schermate di presentazione: una volta sola, poi dritti al modulo. */
+    var introSeen by mutableStateOf(prefs.getBoolean(KEY_INTRO_SEEN, false))
+        private set
+
+    fun markIntroSeen() {
+        introSeen = true
+        prefs.edit().putBoolean(KEY_INTRO_SEEN, true).apply()
+    }
 
     /** La spiegazione delle etichette si mostra finche' non si preme "Ho capito". */
     var levelsExplained by mutableStateOf(prefs.getBoolean(KEY_LEVELS_EXPLAINED, false))
@@ -319,7 +332,10 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             try {
                 when (val result = TradeApi.matches()) {
                     is TradeApi.Result.Ok -> {
-                        matches = result.value.matches.orEmpty()
+                        val fresh = result.value.matches.orEmpty()
+                        // Non al primo caricamento: li' non sono "nuovi", ci sono e basta.
+                        if (matchesLoaded && fresh.size > matches.size) newMatches++
+                        matches = fresh
                         cards = result.value.cards.orEmpty()
                         matchesLoaded = true
                         searchLocked = false
@@ -1366,6 +1382,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         // Letta anche da TradeBadge (il numero sul tasto della barra): stessa chiave.
         const val KEY_APPLIED_CLOSINGS = TradeBadge.KEY_APPLIED_CLOSINGS
         const val KEY_LAST_TIER = "last_tier"
+        const val KEY_INTRO_SEEN = "intro_seen"
         /** La risposta del server a chi, finita la prova, chiede qualcosa da Premium. */
         const val PREMIUM_REQUIRED = "premium_required"
         const val PUSH_DEBOUNCE_MS = 600L
