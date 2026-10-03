@@ -68,6 +68,10 @@ jobs:
         run: |
           mkdir -p ~/.android
           echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+          # L'impronta della chiave nel secret (dato pubblico): se e' diversa da
+          # quella dell'APK, Gradle firmava con una chiave sua.
+          KEY_SHA1=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep 'SHA1:' | awk '{print $NF}' | tr -d ':' | tr 'A-F' 'a-f')
+          echo "::notice title=Chiave nel secret::SHA-1 ${KEY_SHA1:-illeggibile}"
 
       - name: local.properties
         env:
@@ -85,7 +89,13 @@ jobs:
       - name: Build APK staging debug
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleStagingDebug --no-daemon --stacktrace
+          # Firma esplicita con la chiave del secret: senza, il 03/10 l'APK e'
+          # uscito con un'altra firma e l'accesso con Google non funzionava.
+          ./gradlew :app:assembleStagingDebug --no-daemon --stacktrace \
+            -Pandroid.injected.signing.store.file="$HOME/.android/debug.keystore" \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android
 
       # L'accesso con Google funziona solo se questa impronta e' fra quelle
       # registrate in Firebase (pokevault-staging, app .staging): se manca, dopo
