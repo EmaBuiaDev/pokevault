@@ -353,12 +353,14 @@ private fun Onboarding(viewModel: TradeRadarViewModel) {
     var nickname by rememberSaveable { mutableStateOf("") }
     var adult by rememberSaveable { mutableStateOf(false) }
     var consent by rememberSaveable { mutableStateOf(false) }
+    // Play chiede che le regole sui contenuti degli utenti siano accettate prima di crearne.
+    var rules by rememberSaveable { mutableStateOf(false) }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) viewModel.activate(nickname, adult, consent)
     }
     val nicknameOk = nickname.trim().length in 3..20
-    val canActivate = nicknameOk && adult && consent && !viewModel.busy
+    val canActivate = nicknameOk && adult && consent && rules && !viewModel.busy
 
     LazyColumn(
         contentPadding = PaddingValues(20.dp),
@@ -405,6 +407,15 @@ private fun Onboarding(viewModel: TradeRadarViewModel) {
         }
         item { CheckRow(adult, { adult = it }, AppLocale.tradeRadarAdult) }
         item { CheckRow(consent, { consent = it }, AppLocale.tradeRadarConsent) }
+        item {
+            Column {
+                CheckRow(rules, { rules = it }, AppLocale.tradeRadarRules)
+                TextButton(
+                    onClick = { openUrl(context, AppLocale.tradeRadarRulesUrl) },
+                    modifier = Modifier.padding(start = 40.dp)
+                ) { Text(AppLocale.tradeRadarRulesLink) }
+            }
+        }
         item {
             Text(AppLocale.tradeRadarLocationNote, fontSize = 12.sp, color = AppColors.textMuted)
         }

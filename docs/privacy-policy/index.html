@@ -95,6 +95,7 @@
         <li><strong>INTERNET</strong> — necessario per autenticazione, sincronizzazione cloud e recupero dati pubblici carte.</li>
         <li><strong>CAMERA</strong> — usato solo quando attivi volontariamente la scansione OCR delle carte.</li>
         <li><strong>POSIZIONE APPROSSIMATIVA</strong> (<code>ACCESS_COARSE_LOCATION</code>) — usata solo se attivi TradeRadar, per capire in quale zona ti trovi (vedi il punto 2-ter). L'app non chiede mai la posizione precisa.</li>
+        <li><strong>NOTIFICHE</strong> (<code>POST_NOTIFICATIONS</code>) — chiesto solo se attivi TradeRadar, per avvisarti di proposte, appuntamenti e carte che cerchi (vedi il punto 2-ter).</li>
     </ul>
     <p>PokeVault non accede a microfono, contatti, posizione precisa (GPS), SMS o registro chiamate.</p>
 
@@ -110,6 +111,7 @@
         <li><strong>Feedback</strong> — il voto che dai e ricevi dopo uno scambio (positivo, neutro o negativo, con qualche aggettivo predefinito). Gli altri vedono la percentuale di voti positivi, il livello (Bronzo, Argento, Oro, Platino) e, nella classifica, quanti voti positivi, neutri e negativi hai ricevuto e gli aggettivi più frequenti; mai chi li ha dati.</li>
         <li><strong>Luoghi</strong> — i negozi o i luoghi d'incontro che segnali e i voti che dai ai luoghi in cui hai scambiato.</li>
         <li><strong>Sicurezza</strong> — le persone che blocchi, le segnalazioni che fai e ricevi, e le eventuali sospensioni (vedi sotto).</li>
+        <li><strong>Notifiche</strong> — se le permetti, l'identificativo che Firebase Cloud Messaging assegna all'app sul tuo telefono (token di notifica), la lingua dell'app e quali tipi di avviso vuoi ricevere (proposte, appuntamenti, promemoria, carte che cerchi). Serve solo a mandarti gli avvisi di TradeRadar: niente pubblicità. Puoi spegnerli dal menu di TradeRadar o negare il permesso nelle impostazioni del telefono. Gli avvisi già inviati vengono cancellati dopo 30 giorni; il token viene annullato quando esci dall'account, e cancellato dai nostri server quando disattivi TradeRadar o elimini l'account.</li>
     </ul>
 
     <p><strong>Cosa vedono gli altri</strong></p>
@@ -158,6 +160,7 @@
         <li><strong>Pokewallet.io (api.pokewallet.io)</strong> — per il recupero di prezzi di mercato e del catalogo carte in altre lingue, contattato solo dalla nostra infrastruttura Cloudflare, mai direttamente dal tuo dispositivo. Nessun dato utente viene inviato.</li>
         <li><strong>TCGdex (tcgdex/cards-database, licenza MIT)</strong> — fonte dati per l'aggiornamento automatico del catalogo italiano con le nuove espansioni; nessun dato utente e coinvolto, l'importazione avviene una tantum lato server.</li>
         <li><strong>OpenStreetMap (servizio Overpass, overpass-api.de)</strong> — solo con TradeRadar attivo: per trovare negozi e luoghi d'incontro, il tuo telefono chiede a Overpass i luoghi pubblici della tua zona. Overpass riceve l'area da cercare (la tua zona o una di quelle vicine) e, come ogni servizio internet, l'indirizzo IP del telefono; nessun altro dato.</li>
+        <li><strong>Firebase Cloud Messaging (Google)</strong> — solo con TradeRadar attivo e le notifiche permesse: consegna al tuo telefono gli avvisi di TradeRadar. Riceve il token di notifica e il testo dell'avviso (per esempio "Nuova proposta da" e il nickname di chi l'ha mandata).</li>
         <li><strong>Photon (photon.komoot.io)</strong> — solo con TradeRadar attivo: quando cerchi un luogo per nome o ne segnali uno, la nostra infrastruttura Cloudflare chiede a Photon le coordinate del nome o dell'indirizzo scritto. Photon non riceve nessun dato su di te.</li>
     </ul>
     <p>PokeVault non utilizza SDK pubblicitari, non effettua data brokering e non usa i dati personali per profilazione pubblicitaria.</p>
