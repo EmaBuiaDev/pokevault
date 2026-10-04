@@ -9,6 +9,13 @@
 
 import { handleBillingRequest } from './billing';
 import { handleGiftRequest } from './gift';
+import { handleTradeRequest, tradeScheduled } from './trade';
+import {
+  cardmarketBlobProblem,
+  mergeCardmarketPrices,
+  type CardmarketBlob,
+} from './cardmarket-prices';
+import { resolveExpansionPrices } from './price-lookup';
 
 interface Env {
   CACHE: KVNamespace;
@@ -36,6 +43,18 @@ interface Env {
   // quindi cambiarlo cambia il codice di tutti.
   GIFT_CODE_SECRET?: string;
   GIFT_ADMIN_SECRET?: string;
+
+  // TradeRadar (vedi src/trade.ts). In produzione queste tre non esistono e il
+  // modulo resta spento; oggi le imposta solo [env.staging] in wrangler.toml.
+  TRADE_ENABLED?: string;
+  /** "1" su un Worker che serve SOLO TradeRadar: ogni altra rotta e' 404. */
+  TRADE_ONLY?: string;
+  trade_db?: D1Database;
+
+  // "1" = l'app riceve i prezzi del listino Cardmarket fusi sopra quelli di
+  // PokeWallet (src/cardmarket-prices.ts). Toglierla riporta subito l'app ai
+  // soli prezzi PokeWallet: quello snapshot si costruisce sempre, acceso o no.
+  CARDMARKET_PRICES?: string;
 }
 
 interface CachedResponse {
@@ -114,6 +133,8 @@ interface ItalianPriceExpansionEntry {
   baseSetCode: string;
   updatedAt: number;
   prices: Record<string, ItalianPriceEntry>;
+  /** Set once the keys went through ITA_EXPANSION_NUMBER_REMAP. */
+  numbering?: 'catalog';
 }
 
 interface ItalianPriceSnapshot {
@@ -209,6 +230,11 @@ const FORCED_REAL_TOTALS_BY_SET_ID: Record<string, number> = {
 // /search is the only price-bearing endpoint, so the snapshot is built by
 // paging /search with the English set-name prefix (e.g. "ME01").
 const ITA_PRICE_SNAPSHOT_KEY = 'it:prices:snapshot:v2';
+// Con CARDMARKET_PRICES acceso l'app legge questa: lo snapshot qui sopra (solo
+// PokeWallet, che resta intatto) con sopra il listino Cardmarket. Si riscrive a
+// ogni cron. Il listino lo carica su R2 scripts/build-cardmarket-prices.mjs.
+const ITA_PRICE_SERVED_KEY = 'it:prices:served:v1';
+const CARDMARKET_PRICES_R2_KEY = 'prezzi/cardmarket-it-v1.json';
 const ITA_PRICE_SNAPSHOT_TTL = 7 * 24 * 60 * 60; // survives missed rebuilds
 const ITA_PRICE_EXPANSION_STALE_MS = 24 * 60 * 60 * 1000; // refresh cadence per expansion
 const ITA_PRICE_INLINE_REBUILD_MIN_AGE_MS = 30 * 60 * 1000; // ?rebuild=1 throttle
@@ -332,6 +358,21 @@ const ITA_EXPANSION_UPSTREAM_SET_IDS: Record<string, string[]> = {
   xy11: ['1815'], // Steam Siege
   xy12: ['1842'], // Evolutions
   xyp: ['1451'], // XY Promos
+};
+// Upstream card number -> catalog card number, for expansions whose catalog
+// numbers the cards differently from Cardmarket. 30th-c is 1..30 in the
+// Italian release, while Cardmarket files each reprint under the number of
+// the original card (Charizard 30CBS-4, Lugia 30CAQ-149): unmapped, the app
+// showed Charizard's price on Genesect EX (n.4). Paired by name on 2026-10-01;
+// Genesect EX (4), Palkia (22) and M Gardevoir EX (23) are not listed upstream.
+const ITA_EXPANSION_NUMBER_REMAP: Record<string, Record<string, string>> = {
+  '30th-c': {
+    '4': '1', '5': '2', '11': '3', '18': '5', '19': '6', '25': '7', '33': '8',
+    '41': '9', '43': '10', '47': '11', '50': '12', '57': '13', '58': '14',
+    '69': '15', '85': '16', '89': '17', '94': '18', '99': '19', '100': '20',
+    '101': '21', '106': '24', '108': '25', '114': '26', '123': '27',
+    '138': '28', '149': '29', '203': '30',
+  },
 };
 // Search query overrides for sets whose derived name queries return nothing upstream.
 const ITA_EXPANSION_QUERY_OVERRIDE: Record<string, string[]> = {
@@ -1626,16 +1667,24 @@ async function buildItalianPriceSnapshot(
   const budget = { remaining: ITA_PRICE_MAX_UPSTREAM_FETCHES };
   const now = Date.now();
 
+  // An entry built before its remap existed is keyed by upstream numbers:
+  // wrong, not just old, so it is rebuilt first regardless of age.
+  const needsRenumber = (expansionId: string): boolean =>
+    !!ITA_EXPANSION_NUMBER_REMAP[expansionId]
+    && !!snapshot.expansions[expansionId]
+    && snapshot.expansions[expansionId].numbering !== 'catalog';
+
   // Process stalest expansions first so refresh effort is spread fairly.
   const orderedExpansions = [...rawCodeCountsByExpansion.entries()].sort((a, b) => {
-    const updatedA = snapshot.expansions[a[0]]?.updatedAt ?? 0;
-    const updatedB = snapshot.expansions[b[0]]?.updatedAt ?? 0;
+    const updatedA = needsRenumber(a[0]) ? 0 : snapshot.expansions[a[0]]?.updatedAt ?? 0;
+    const updatedB = needsRenumber(b[0]) ? 0 : snapshot.expansions[b[0]]?.updatedAt ?? 0;
     return updatedA - updatedB;
   });
 
   for (const [expansionId, rawCodeCounts] of orderedExpansions) {
     const existingEntry = snapshot.expansions[expansionId];
-    if (!options.force && existingEntry && now - existingEntry.updatedAt < ITA_PRICE_EXPANSION_STALE_MS) {
+    const renumber = needsRenumber(expansionId);
+    if (!options.force && !renumber && existingEntry && now - existingEntry.updatedAt < ITA_PRICE_EXPANSION_STALE_MS) {
       continue;
     }
 
@@ -1698,14 +1747,28 @@ async function buildItalianPriceSnapshot(
       }
     }
 
-    const mergedPrices = { ...(existingEntry?.prices ?? {}), ...prices };
+    const remap = ITA_EXPANSION_NUMBER_REMAP[expansionId];
+    if (remap) {
+      const renumbered: Record<string, ItalianPriceEntry> = {};
+      for (const [upstreamNumber, entry] of Object.entries(prices)) {
+        const catalogNumber = remap[upstreamNumber];
+        if (catalogNumber) renumbered[catalogNumber] = entry;
+      }
+      prices = renumbered;
+    }
+    // Upstream-keyed leftovers would land on the wrong cards: drop, never merge.
+    const mergedPrices = { ...(renumber ? {} : existingEntry?.prices ?? {}), ...prices };
     const baseCode = resolvedBase || existingEntry?.baseSetCode || '';
+    if (renumber && Object.keys(prices).length === 0) {
+      delete snapshot.expansions[expansionId]; // no price beats a wrong one
+    }
     if (baseCode && Object.keys(mergedPrices).length > 0) {
       snapshot.expansions[expansionId] = {
         baseSetCode: baseCode,
         // Incomplete runs stay stale so the next run resumes (KV pages are warm).
         updatedAt: complete ? now : (existingEntry?.updatedAt ?? 0),
         prices: mergedPrices,
+        ...(remap ? { numbering: 'catalog' as const } : {}),
       };
       snapshot.aliases[expansionId] = expansionId;
       snapshot.aliases[baseCode.toLowerCase()] = expansionId;
@@ -1723,6 +1786,57 @@ async function buildItalianPriceSnapshot(
     expirationTtl: ITA_PRICE_SNAPSHOT_TTL,
   });
   return snapshot;
+}
+
+function cardmarketPricesEnabled(env: Env): boolean {
+  return env.CARDMARKET_PRICES === '1';
+}
+
+async function loadCardmarketBlob(env: Env): Promise<CardmarketBlob | null> {
+  if (!env.IMAGES_BUCKET) return null;
+  try {
+    const object = await env.IMAGES_BUCKET.get(CARDMARKET_PRICES_R2_KEY);
+    if (!object) return null;
+    return JSON.parse(await object.text()) as CardmarketBlob;
+  } catch (error) {
+    console.error('Listino Cardmarket: lettura da R2 fallita:', error);
+    return null;
+  }
+}
+
+/**
+ * Riscrive lo snapshot servito all'app: PokeWallet piu' listino Cardmarket.
+ * Se il listino manca o e' troppo vecchio, lo snapshot servito e' quello di
+ * PokeWallet tale e quale: l'app non resta mai senza prezzi per colpa sua.
+ */
+async function refreshServedPriceSnapshot(
+  env: Env,
+  cache: KVNamespace,
+  pokewallet?: ItalianPriceSnapshot | null,
+): Promise<ItalianPriceSnapshot | null> {
+  if (!cardmarketPricesEnabled(env)) return null;
+  const base = pokewallet ?? await cache.get(ITA_PRICE_SNAPSHOT_KEY, 'json') as ItalianPriceSnapshot | null;
+  const blob = await loadCardmarketBlob(env);
+  const now = Date.now();
+  const problem = cardmarketBlobProblem(blob, now);
+  if (problem) console.warn(`Listino Cardmarket non usato: ${problem}`);
+  const served = problem
+    ? base
+    : mergeCardmarketPrices(base, blob as CardmarketBlob, now) as ItalianPriceSnapshot;
+  if (!served) return null;
+  await cache.put(ITA_PRICE_SERVED_KEY, JSON.stringify(served), {
+    expirationTtl: ITA_PRICE_SNAPSHOT_TTL,
+  });
+  return served;
+}
+
+/** Lo snapshot che vede l'app: con l'interruttore spento, quello di sempre. */
+async function getServedPriceSnapshot(env: Env, cache: KVNamespace): Promise<ItalianPriceSnapshot | null> {
+  if (cardmarketPricesEnabled(env)) {
+    const served = await cache.get(ITA_PRICE_SERVED_KEY, 'json') as ItalianPriceSnapshot | null;
+    if (served) return served;
+  }
+  return await cache.get(ITA_PRICE_SNAPSHOT_KEY, 'json') as ItalianPriceSnapshot | null;
 }
 
 
@@ -1764,16 +1878,18 @@ async function handleItalianExpansionPricesRequest(
     return notFound('expansion code required');
   }
 
-  const snapshot = await cache.get(ITA_PRICE_SNAPSHOT_KEY, 'json') as ItalianPriceSnapshot | null;
+  const snapshot = await getServedPriceSnapshot(env, cache);
   if (!snapshot) {
     return notFound('Italian price snapshot not available');
   }
 
-  const expansionId = snapshot.aliases?.[rawCode] ?? rawCode;
-  const entry = snapshot.expansions?.[expansionId];
-  if (!entry) {
+  // Non solo l'alias: un id di espansione rubato da un alias (swsh9 -> la sua
+  // galleria swsh9tg) deve rispondere con le carte sue. Vedi src/price-lookup.ts.
+  const resolved = resolveExpansionPrices(snapshot, rawCode);
+  if (!resolved) {
     return notFound(`no prices for "${rawCode}"`);
   }
+  const { expansionId, entry } = resolved;
 
   const body = JSON.stringify({
     expansionId,
@@ -1799,7 +1915,7 @@ async function handleItalianPricesRequest(
   env: Env,
   cache: KVNamespace
 ): Promise<Response> {
-  let snapshot = await cache.get(ITA_PRICE_SNAPSHOT_KEY, 'json') as ItalianPriceSnapshot | null;
+  let snapshot = await getServedPriceSnapshot(env, cache);
   const wantsRebuild = requestUrl.searchParams.get('rebuild') === '1';
   const coveredCount = snapshot ? Object.keys(snapshot.expansions).length : 0;
   const coverageIncomplete = !snapshot
@@ -1814,9 +1930,11 @@ async function handleItalianPricesRequest(
     // force=1 bypasses per-expansion freshness (warm KV pages keep it cheap);
     // otherwise staleness directs the budget to incomplete/stale expansions.
     const wantsForce = requestUrl.searchParams.get('force') === '1';
-    snapshot = await buildItalianPriceSnapshot(env, cache, { force: wantsForce }) ?? snapshot;
+    const rebuilt = await buildItalianPriceSnapshot(env, cache, { force: wantsForce });
+    snapshot = (rebuilt ? await refreshServedPriceSnapshot(env, cache, rebuilt) ?? rebuilt : null) ?? snapshot;
   } else if (!snapshot) {
-    snapshot = await buildItalianPriceSnapshot(env, cache);
+    const built = await buildItalianPriceSnapshot(env, cache);
+    snapshot = built ? await refreshServedPriceSnapshot(env, cache, built) ?? built : null;
   }
 
   if (!snapshot) {
@@ -1954,7 +2072,35 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
         console.error('/v1/health: price snapshot read failed:', error);
       }
     }
-    return jsonResponse({ status: 'ok', catalog_version: row?.catalog_version ?? null, prices });
+    // Il listino Cardmarket: acceso o no, di quando e', quante carte porta.
+    // `problem` non nullo = l'app sta ricevendo i soli prezzi PokeWallet.
+    let cardmarket: Record<string, unknown> = { enabled: cardmarketPricesEnabled(env) };
+    try {
+      const blob = await loadCardmarketBlob(env);
+      if (blob) {
+        const now = Date.now();
+        const created = Date.parse(blob.createdAt);
+        const cards = Object.values(blob.expansions ?? {})
+          .reduce((sum, expansion) => sum + Object.keys(expansion.prices ?? {}).length, 0);
+        cardmarket = {
+          ...cardmarket,
+          created_at: blob.createdAt,
+          age_hours: Number.isFinite(created) ? Math.round(((now - created) / 3_600_000) * 10) / 10 : null,
+          expansions: Object.keys(blob.expansions ?? {}).length,
+          cards,
+          problem: cardmarketBlobProblem(blob, now),
+        };
+      } else {
+        cardmarket = { ...cardmarket, problem: 'listino assente' };
+      }
+      if (cardmarketPricesEnabled(env) && env.CACHE) {
+        const served = await env.CACHE.get(ITA_PRICE_SERVED_KEY, 'json') as ItalianPriceSnapshot | null;
+        cardmarket = { ...cardmarket, served_built_at: served ? new Date(served.builtAt).toISOString() : null };
+      }
+    } catch (error) {
+      console.error('/v1/health: listino Cardmarket illeggibile:', error);
+    }
+    return jsonResponse({ status: 'ok', catalog_version: row?.catalog_version ?? null, prices, cardmarket });
   }
 
   if (pathname === '/v1/expansions') {
@@ -2192,6 +2338,15 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestUrl = new URL(request.url);
 
+    // Il Worker di staging di TradeRadar risponde SOLO a /v1/trade/*, e deve
+    // deciderlo per primo: vede il catalogo D1 (in lettura, per trade.ts), e
+    // se billing o regali passassero di qui un account di test potrebbe
+    // scrivere entitlement nel database vero.
+    if (env.TRADE_ONLY === '1') {
+      const tradeOnly = await handleTradeRequest(request, requestUrl.pathname, env, ctx);
+      return tradeOnly ?? new Response('Not found', { status: 404 });
+    }
+
     // Le rotte di billing e regalo usano POST: vanno risolte PRIMA del filtro
     // sui GET, e non passano mai dalla cache.
     const billingResponse = await handleBillingRequest(request, requestUrl.pathname, env);
@@ -2199,6 +2354,11 @@ export default {
 
     const giftResponse = await handleGiftRequest(request, requestUrl.pathname, env);
     if (giftResponse) return giftResponse;
+
+    // In produzione TRADE_ENABLED non c'e': questa restituisce null e /v1/trade/*
+    // prosegue fino al 404 di sempre.
+    const tradeResponse = await handleTradeRequest(request, requestUrl.pathname, env, ctx);
+    if (tradeResponse) return tradeResponse;
 
     // Only cache GET requests
     if (request.method !== 'GET') {
@@ -2420,14 +2580,30 @@ export default {
     }
   },
 
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // TradeRadar (solo dove e' acceso): promemoria, carte cercate, coda delle notifiche.
+    if (env.TRADE_ENABLED === '1') ctx.waitUntil(tradeScheduled(env, controller.scheduledTime));
+
     if (!env.CACHE) {
+      return;
+    }
+
+    // Il cron gira ogni 15 minuti per TradeRadar; i prezzi restano ogni 30
+    // (ai minuti :00 e :30), come prima: nessuna chiamata PokeWallet in piu'.
+    if (new Date(controller.scheduledTime).getUTCMinutes() % 30 >= 15) {
       return;
     }
 
     ctx.waitUntil(Promise.allSettled([
       backfillRealSetTotals(env, env.CACHE),
-      buildItalianPriceSnapshot(env, env.CACHE),
+      // Lo snapshot servito si rifa' anche se quello di PokeWallet fallisce:
+      // il listino Cardmarket del mattino deve arrivare comunque all'app.
+      buildItalianPriceSnapshot(env, env.CACHE)
+        .catch((error) => {
+          console.error('ITA price snapshot: build failed:', error);
+          return null;
+        })
+        .then((built) => refreshServedPriceSnapshot(env, env.CACHE, built)),
     ]));
   },
 };

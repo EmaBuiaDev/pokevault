@@ -17,7 +17,9 @@ r2_buckets = [
 # Queryable catalog store (2026-09-07 migration), additive alongside the
 # legacy R2 JSON blob served by /ita/catalog.json -- see schema/001_init.sql
 d1_databases = [
-  { binding = "pokevault_catalog", database_name = "pokevault-catalog", database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7" }
+  { binding = "pokevault_catalog", database_name = "pokevault-catalog", database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7" },
+  # TradeRadar (04/10/2026), migrazioni schema-trade/ applicate una alla volta.
+  { binding = "trade_db", database_name = "pokevault-trade", database_id = "ff58d55d-08f4-43de-9333-d07ddab75aa8" }
 ]
 
 # Environment variables
@@ -27,7 +29,59 @@ CACHE_TTL_SECONDS = "259200"
 BACKFILL_BATCH_SIZE = "3"
 IT_IMAGE_PREFIX = "it"
 IT_CATALOG_KEY = "it/catalog/cards.cleaned.json"
+# Prezzi dal listino pubblico Cardmarket sopra quelli PokeWallet (acceso il
+# 03/10/2026). Per tornare ai soli prezzi PokeWallet basta togliere questa riga
+# e rifare il deploy: lo snapshot PokeWallet si costruisce comunque.
+# Vedi src/cardmarket-prices.ts.
+CARDMARKET_PRICES = "1"
+# TradeRadar acceso in produzione (04/10/2026, esce con l'app 3.1.6). Solo
+# dopo le migrazioni di schema-trade/: senza, la lista proposte si rompe.
+# FIREBASE_PROJECT_ID e FCM_SERVICE_ACCOUNT sono secret.
+# TRADE_TRIAL_ENFORCE = "1" va aggiunto entro il ~02/11 (prime prove che scadono).
+TRADE_ENABLED = "1"
 
-# Triggers for the Worker
+# Triggers for the Worker. Ogni 15 minuti per TradeRadar (promemoria, notifiche);
+# i prezzi girano solo ai minuti :00 e :30 (vedi scheduled() in src/index.ts).
 [triggers]
-crons = ["*/30 * * * *"]
+crons = ["*/15 * * * *"]
+
+# ── TradeRadar in staging ───────────────────────────────────────────────────
+# Un Worker a parte (pokevault-trade-staging), deployato con
+#   npx wrangler deploy --env staging
+# Stesso codice, ma di suo ha solo TradeRadar: TRADE_ONLY chiude ogni altra
+# rotta, e non riceve nessuna delle risorse qui sopra -- in wrangler vars e
+# binding non si ereditano negli ambienti, quindi niente KV della cache,
+# niente R2, niente catalogo D1, niente chiave PokeWallet.
+# I cron invece si erediterebbero: per questo lo staging ha il suo. Ogni 15
+# minuti gira SOLO la parte TradeRadar (notifiche): scheduled() esce prima
+# dei prezzi perche' qui non c'e' la cache KV, quindi nessuna chiamata
+# PokeWallet della produzione.
+# L'ID token si verifica contro il progetto Firebase di staging, quindi da qui
+# passano solo gli account di test dell'app staging.
+[env.staging]
+name = "pokevault-trade-staging"
+
+[env.staging.vars]
+TRADE_ENABLED = "1"
+TRADE_ONLY = "1"
+FIREBASE_PROJECT_ID = "pokevault-staging"
+# Classifica fresca per le prove (in produzione: ogni notte dal cron).
+TRADE_LEADERBOARD_TTL_MIN = "10"
+# Gli account di prova non hanno mai un abbonamento: avatar Premium senza controllo.
+TRADE_AVATAR_PREMIUM_CHECK = "0"
+
+[[env.staging.d1_databases]]
+binding = "trade_db"
+database_name = "pokevault-trade-staging"
+database_id = "1fa0733d-144d-4acb-8925-397df933c138"
+
+# Il catalogo vero, ma solo in LETTURA: trade.ts ci fa una SELECT per sapere
+# quante carte ha ogni set (i "set quasi completi"). Nessuna rotta dello
+# staging ci scrive: TRADE_ONLY chiude tutte quelle del catalogo.
+[[env.staging.d1_databases]]
+binding = "pokevault_catalog"
+database_name = "pokevault-catalog"
+database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7"
+
+[env.staging.triggers]
+crons = ["*/15 * * * *"]

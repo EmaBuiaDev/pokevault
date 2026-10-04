@@ -1,5 +1,6 @@
 package com.emabuia.pokevault
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.navigation.compose.rememberNavController
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.data.trade.TradePush
 import com.emabuia.pokevault.ui.legal.FirstLaunchLegalFlow
 import com.emabuia.pokevault.ui.legal.hasCompletedLegalChecks
 import com.emabuia.pokevault.ui.legal.markLegalChecksCompleted
@@ -41,6 +43,12 @@ class MainActivity : ComponentActivity() {
         PremiumManager.getInstance().refreshEntitlement()
     }
 
+    /** Una notifica di TradeRadar toccata con l'app gia' aperta. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        TradePush.handleIntent(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Edge-to-edge chiesto esplicitamente, non solo subito dall'imposizione
         // di Android 15: sotto API 35 il sistema non lo applica da solo, e
@@ -49,6 +57,8 @@ class MainActivity : ComponentActivity() {
         // deprecati da API 35 e le icone le governa SystemBarsFollowTheme.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // Una notifica di TradeRadar toccata con l'app chiusa (non a ogni rotazione).
+        if (savedInstanceState == null) TradePush.handleIntent(intent)
 
         addOnPictureInPictureModeChangedListener { info ->
             inPictureInPicture = info.isInPictureInPictureMode

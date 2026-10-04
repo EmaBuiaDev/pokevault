@@ -1,6 +1,11 @@
 package com.emabuia.pokevault.ui.premium
 
 import android.app.Activity
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
@@ -85,178 +92,67 @@ fun PremiumScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Hero section
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(AppColors.gold, AppColors.gold.copy(alpha = 0.6f))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.WorkspacePremium,
-                        contentDescription = null,
-                        tint = AppColors.background,
-                        modifier = Modifier.size(40.dp)
-                    )
-                }
+            // Intestazione: un riquadro pieno al posto dell'icona sola.
+            PremiumHero(
+                isPremium = isPremium,
+                subtitle = when {
+                    !isPremium -> AppLocale.premiumSubtitle
+                    // Un mese regalo e un abbonamento danno lo stesso
+                    // accesso ma non la stessa cosa: dire "attivo" e basta
+                    // a chi ha un regalo gli nasconde che ha una scadenza.
+                    giftUntilMs > System.currentTimeMillis() -> AppLocale.giftActiveUntil(formatGiftDate(giftUntilMs))
+                    else -> AppLocale.premiumActiveSubtitle
+                },
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (isPremium) {
-                    Text(
-                        text = AppLocale.premiumActiveTitle,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black,
-                        color = AppColors.gold,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        // Un mese regalo e un abbonamento danno lo stesso
-                        // accesso ma non la stessa cosa: dire "attivo" e basta
-                        // a chi ha un regalo gli nasconde che ha una scadenza.
-                        text = if (giftUntilMs > System.currentTimeMillis())
-                            AppLocale.giftActiveUntil(formatGiftDate(giftUntilMs))
-                        else
-                            AppLocale.premiumActiveSubtitle,
-                        fontSize = 14.sp,
-                        color = AppColors.textSecondary,
-                        textAlign = TextAlign.Center
-                    )
-                } else {
-                    Text(
-                        text = AppLocale.premiumTitle,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black,
-                        color = AppColors.textPrimary,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = AppLocale.premiumSubtitle,
-                        fontSize = 14.sp,
-                        color = AppColors.textSecondary,
-                        textAlign = TextAlign.Center
-                    )
-                }
+            // TradeRadar, la novita' della 3.1.6: prima di tutto il resto.
+            if (BuildConfig.TRADE_ENABLED) {
+                Spacer(modifier = Modifier.height(14.dp))
+                TradeRadarHighlight(modifier = Modifier.padding(horizontal = 20.dp))
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Feature comparison
+            // Cosa sblocca il Premium, con quanto si ha gratis: prima erano
+            // sedici righe alternate gratis/premium, ora una tessera per cosa.
+            Text(
+                text = AppLocale.premiumUnlockTitle,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppColors.textPrimary,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            val benefits = buildList {
+                add(Benefit(Icons.Default.Layers, AppLocale.premiumBenefitDecks, AppLocale.premiumFreeAmount(AppLocale.premiumFreeOne)))
+                add(Benefit(Icons.Default.PhotoAlbum, AppLocale.premiumBenefitAlbums, AppLocale.premiumFreeAmount(AppLocale.premiumFreeOne)))
+                add(Benefit(Icons.Default.Flag, AppLocale.premiumBenefitGoalAlbums, AppLocale.premiumFreeAmount(AppLocale.premiumFreeOne)))
+                add(Benefit(Icons.Default.Favorite, AppLocale.premiumBenefitWishlists, AppLocale.premiumFreeAmount(AppLocale.premiumFreeOne)))
+                add(Benefit(Icons.Default.EmojiEvents, AppLocale.premiumBenefitTournaments, AppLocale.premiumFreeAmount(AppLocale.premiumFreeOne)))
+                add(Benefit(Icons.Default.Visibility, AppLocale.premiumBenefitMeta, AppLocale.premiumFreeAmount(AppLocale.premiumFreeMetaViews)))
+                add(Benefit(Icons.Default.Casino, AppLocale.premiumBenefitHandSim, AppLocale.premiumFreeAmount(AppLocale.premiumFreeHandSim)))
+                add(Benefit(Icons.Default.Share, AppLocale.premiumBenefitExport, AppLocale.premiumOnly))
+                add(Benefit(Icons.Default.CatchingPokemon, AppLocale.premiumBenefitHomeSprite, AppLocale.premiumOnly))
+                if (BuildConfig.TRADE_ENABLED) {
+                    add(Benefit(Icons.Default.AutoAwesome, AppLocale.premiumBenefitAvatars, AppLocale.premiumFreeAmount(AppLocale.premiumFreeAvatars)))
+                }
+            }
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(AppColors.card)
-                    .padding(20.dp)
+                modifier = Modifier.padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = AppLocale.premiumFeaturesTitle,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColors.textPrimary
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                FeatureRow(
-                    icon = Icons.Default.PhotoAlbum,
-                    feature = AppLocale.premiumFeatureAlbumFree,
-                    isFree = true
-                )
-                FeatureRow(
-                    icon = Icons.Default.CollectionsBookmark,
-                    feature = AppLocale.premiumFeatureAlbumPremium,
-                    isFree = false
-                )
-                FeatureRow(
-                    icon = Icons.Default.Style,
-                    feature = AppLocale.premiumFeatureDeckFree,
-                    isFree = true
-                )
-                FeatureRow(
-                    icon = Icons.Default.Layers,
-                    feature = AppLocale.premiumFeatureDeckPremium,
-                    isFree = false
-                )
-                FeatureRow(
-                    icon = Icons.Default.EmojiEvents,
-                    feature = AppLocale.premiumFeatureTournamentFree,
-                    isFree = true
-                )
-                FeatureRow(
-                    icon = Icons.Default.MilitaryTech,
-                    feature = AppLocale.premiumFeatureTournamentPremium,
-                    isFree = false
-                )
-                FeatureRow(
-                    icon = Icons.Default.Visibility,
-                    feature = AppLocale.premiumFeatureMetaFree,
-                    isFree = true
-                )
-                FeatureRow(
-                    icon = Icons.Default.AllInclusive,
-                    feature = AppLocale.premiumFeatureMetaPremium,
-                    isFree = false
-                )
-                // Wishlist, album obiettivo e hand-simulator hanno un limite
-                // free come tutto il resto: la riga "premium" da sola faceva
-                // credere che nella versione gratuita non esistessero.
-                FeatureRow(
-                    icon = Icons.Default.FavoriteBorder,
-                    feature = AppLocale.premiumFeatureWishlistFree,
-                    isFree = true
-                )
-                FeatureRow(
-                    icon = Icons.Default.Favorite,
-                    feature = AppLocale.premiumFeatureWishlistPremium,
-                    isFree = false
-                )
-                FeatureRow(
-                    icon = Icons.Default.Flag,
-                    feature = AppLocale.premiumFeatureGoalAlbumFree,
-                    isFree = true
-                )
-                FeatureRow(
-                    icon = Icons.Default.EmojiFlags,
-                    feature = AppLocale.premiumFeatureGoalAlbumPremium,
-                    isFree = false
-                )
-                FeatureRow(
-                    icon = Icons.Default.BackHand,
-                    feature = AppLocale.premiumFeatureHandSimFree,
-                    isFree = true
-                )
-                FeatureRow(
-                    icon = Icons.Default.Casino,
-                    feature = AppLocale.premiumFeatureHandSimPremium,
-                    isFree = false
-                )
-                FeatureRow(
-                    icon = Icons.Default.Share,
-                    feature = AppLocale.premiumFeatureExportPremium,
-                    isFree = false
-                )
-                FeatureRow(
-                    icon = Icons.Default.CatchingPokemon,
-                    feature = AppLocale.premiumFeatureHomeSpritePremium,
-                    isFree = false
-                )
+                benefits.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        row.forEach { benefit ->
+                            BenefitTile(benefit, isPremium = isPremium, modifier = Modifier.weight(1f))
+                        }
+                        // Una tessera sola nell'ultima riga resta larga meta'.
+                        if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
 
             // Chi arriva qui e non vuole pagare ha comunque una strada: un
@@ -538,37 +434,136 @@ private fun formatGiftDate(epochMs: Long): String =
     java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
         .format(java.util.Date(epochMs))
 
+private data class Benefit(val icon: ImageVector, val title: String, val freeNote: String)
+
+/** L'intestazione: riquadro oro-arancio, corona che respira piano (ferma se le animazioni sono spente). */
 @Composable
-private fun FeatureRow(
-    icon: ImageVector,
-    feature: String,
-    isFree: Boolean
-) {
-    Row(
-        modifier = Modifier
+private fun PremiumHero(isPremium: Boolean, subtitle: String, modifier: Modifier = Modifier) {
+    val breathing = if (AppMotion.enabled) {
+        val transition = rememberInfiniteTransition(label = "premiumCrown")
+        val value by transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.06f,
+            animationSpec = infiniteRepeatable(tween(1600), RepeatMode.Reverse),
+            label = "premiumCrownScale"
+        )
+        value
+    } else {
+        1f
+    }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clip(RoundedCornerShape(24.dp))
+            .background(Brush.linearGradient(listOf(AppColors.gold, AppColors.orange)))
+            .padding(horizontal = 20.dp, vertical = 24.dp)
     ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = if (isFree) AppColors.textMuted else AppColors.gold,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(68.dp)
+                .graphicsLayer {
+                    scaleX = breathing
+                    scaleY = breathing
+                }
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.22f))
+        ) {
+            Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = Color.White, modifier = Modifier.size(38.dp))
+        }
+        Spacer(modifier = Modifier.height(14.dp))
         Text(
-            text = feature,
+            text = if (isPremium) AppLocale.premiumActiveTitle else AppLocale.premiumTitle,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Black,
+            color = Color.White,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = subtitle,
+            fontSize = 14.sp,
+            color = Color.White.copy(alpha = 0.88f),
+            textAlign = TextAlign.Center,
+            lineHeight = 19.sp
+        )
+    }
+}
+
+/** TradeRadar, la funzione di punta: un riquadro coi colori del radar. */
+@Composable
+private fun TradeRadarHighlight(modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(listOf(AppColors.green, AppColors.blue)))
+            .padding(16.dp)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.2f))
+        ) {
+            Icon(Icons.Default.Radar, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(AppLocale.premiumTradeRadarTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(AppLocale.premiumTradeRadarText, fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f), lineHeight = 16.sp)
+        }
+    }
+}
+
+/**
+ * Una cosa che il Premium sblocca. Bordo sempre visibile: nel tema chiaro
+ * card e sfondo sono lo stesso bianco, e senza bordo la tessera sparirebbe.
+ */
+@Composable
+private fun BenefitTile(benefit: Benefit, isPremium: Boolean, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.card)
+            .border(1.dp, AppColors.gold.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+            .padding(14.dp)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(AppColors.gold.copy(alpha = 0.15f))
+        ) {
+            Icon(benefit.icon, contentDescription = null, tint = AppColors.gold, modifier = Modifier.size(19.dp))
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = benefit.title,
             fontSize = 13.sp,
-            color = if (isFree) AppColors.textSecondary else AppColors.textPrimary,
-            modifier = Modifier.weight(1f)
+            fontWeight = FontWeight.Bold,
+            color = AppColors.textPrimary,
+            lineHeight = 17.sp,
+            minLines = 2
         )
-        Icon(
-            if (isFree) Icons.Default.CheckCircleOutline else Icons.Default.Stars,
-            contentDescription = null,
-            tint = if (isFree) AppColors.green else AppColors.gold,
-            modifier = Modifier.size(18.dp)
-        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (isPremium) {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = AppColors.green, modifier = Modifier.size(13.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+            Text(
+                text = benefit.freeNote,
+                fontSize = 11.sp,
+                color = AppColors.textMuted,
+                maxLines = 1
+            )
+        }
     }
 }
 

@@ -154,7 +154,11 @@ fun GiftCodeScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = AppLocale.giftHeadlineBody,
+                    // Col premio a chi invita lo si dice subito; un Worker di
+                    // prima del premio non manda i giorni, e resta il testo di sempre.
+                    text = status?.referralRewardDays?.takeIf { it > 0 }
+                        ?.let { AppLocale.giftHeadlineBodyWithReward(it) }
+                        ?: AppLocale.giftHeadlineBody,
                     fontSize = 13.sp,
                     color = AppColors.textSecondary,
                     textAlign = TextAlign.Center,
@@ -351,6 +355,23 @@ private fun FriendCodeCard(
             modifier = Modifier.fillMaxWidth(),
             textAlign = TextAlign.Center
         )
+
+        // Quanto hai guadagnato invitando, finche' vale.
+        val referralUntil = status.referralUntilMs
+        if (status.referralInvites > 0 && referralUntil != null && referralUntil > System.currentTimeMillis()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = AppLocale.giftReferralEarned(
+                    status.referralInvites * status.referralRewardDays,
+                    formatDate(referralUntil)
+                ),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppColors.green,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 

@@ -5,6 +5,14 @@
     <!-- Permessi -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!--
+        TradeRadar (dalla 3.1.6): posizione APPROSSIMATIVA, mai quella precisa
+        e mai in background; sul server arriva solo una cella di circa 5 km.
+        Si chiede solo attivando TradeRadar.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Notifiche di TradeRadar (Android 13+): chiesto solo entrando in TradeRadar. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -43,6 +51,29 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+            Firebase Messaging spento finche' non serve: senza questa riga la
+            libreria creerebbe un identificativo del telefono a ogni avvio.
+            Lo accende TradePush.register, solo entrando in TradeRadar.
+        -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+        <service
+            android:name="com.emabuia.pokevault.data.trade.TradePushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <!-- Per le notifiche mostrate dal sistema con l'app chiusa. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="traderadar" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_traderadar" />
 
     </application>
 

@@ -1,0 +1,135 @@
+name: APK staging sul telefono
+
+# Per provare le modifiche senza il PC: a ogni push su un ramo claude/** (le
+# sessioni di Claude Code nel cloud) o lanciandolo a mano da GitHub, costruisce
+# l'APK staging debug e lo manda con Firebase App Distribution ai tester del
+# progetto pokevault-staging. Arriva una notifica su Firebase App Tester e si
+# installa da li'.
+#
+# Solo il flavor STAGING: niente prod, niente release, niente Play.
+#
+# Firmato con la stessa chiave debug del PC (secret DEBUG_KEYSTORE_BASE64):
+# cosi' si installa sopra l'app staging gia' sul telefono, senza disinstallare.
+# Il repo e' pubblico: l'APK NON va negli artifact (li scarica chiunque abbia
+# un account) e l'email del tester sta in un secret, non qui.
+#
+# Secret richiesti:
+#   DEBUG_KEYSTORE_BASE64            ~/.android/debug.keystore del PC, in base64
+#   POKEWALLET_PROXY_URL             come in local.properties
+#   ITALIAN_CATALOG_URL              come in local.properties
+#   FIREBASE_STAGING_DISTRIBUTOR     JSON dell'account di servizio con il ruolo
+#                                    "Firebase App Distribution Admin" su pokevault-staging
+#   APP_DISTRIBUTION_TESTERS         email dei tester, separate da virgola
+on:
+  push:
+    branches: [ 'claude/**' ]
+  workflow_dispatch:
+
+concurrency:
+  group: apk-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Costruisci e distribuisci l'APK staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Controlla i secret
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+          POKEWALLET_PROXY_URL: ${{ secrets.POKEWALLET_PROXY_URL }}
+          ITALIAN_CATALOG_URL: ${{ secrets.ITALIAN_CATALOG_URL }}
+          FIREBASE_STAGING_DISTRIBUTOR: ${{ secrets.FIREBASE_STAGING_DISTRIBUTOR }}
+          APP_DISTRIBUTION_TESTERS: ${{ secrets.APP_DISTRIBUTION_TESTERS }}
+        run: |
+          missing=0
+          for name in DEBUG_KEYSTORE_BASE64 POKEWALLET_PROXY_URL ITALIAN_CATALOG_URL FIREBASE_STAGING_DISTRIBUTOR APP_DISTRIBUTION_TESTERS; do
+            if [ -z "${!name}" ]; then echo "::error::Manca il secret $name"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Chiave debug del PC
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p ~/.android
+          echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+          # L'impronta della chiave nel secret (dato pubblico): se e' diversa da
+          # quella dell'APK, Gradle firmava con una chiave sua.
+          KEY_SHA1=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep 'SHA1:' | awk '{print $NF}' | tr -d ':' | tr 'A-F' 'a-f')
+          echo "::notice title=Chiave nel secret::SHA-1 ${KEY_SHA1:-illeggibile}"
+
+      - name: local.properties
+        env:
+          POKEWALLET_PROXY_URL: ${{ secrets.POKEWALLET_PROXY_URL }}
+          ITALIAN_CATALOG_URL: ${{ secrets.ITALIAN_CATALOG_URL }}
+        run: |
+          {
+            echo "sdk.dir=$ANDROID_SDK_ROOT"
+            echo "POKEWALLET_API_KEY="
+            echo "POKEWALLET_PROXY_ENABLED=true"
+            echo "POKEWALLET_PROXY_URL=$POKEWALLET_PROXY_URL"
+            echo "ITALIAN_CATALOG_URL=$ITALIAN_CATALOG_URL"
+          } > local.properties
+
+      - name: Build APK staging debug
+        run: |
+          chmod +x gradlew
+          # Firma esplicita con la chiave del secret: senza, il 03/10 l'APK e'
+          # uscito con un'altra firma e l'accesso con Google non funzionava.
+          ./gradlew :app:assembleStagingDebug --no-daemon --stacktrace \
+            -Pandroid.injected.signing.store.file="$HOME/.android/debug.keystore" \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android
+
+      # L'accesso con Google funziona solo se questa impronta e' fra quelle
+      # registrate in Firebase (pokevault-staging, app .staging): se manca, dopo
+      # la scelta dell'account l'app torna indietro senza dire niente.
+      # E' un dato pubblico (sta in ogni APK), non un segreto.
+      - name: Impronta della firma
+        run: |
+          APKSIGNER=$(ls "$ANDROID_SDK_ROOT"/build-tools/*/apksigner | sort -V | tail -1)
+          SHA1=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/staging/debug/app-staging-debug.apk | grep 'SHA-1' | head -1 | awk '{print $NF}')
+          # Come annotazione: si legge dalla pagina della run anche senza login.
+          if [ "$SHA1" = "13b0ec195832392c4181cd312d6d6e76f84ea864" ]; then
+            echo "::notice title=Impronta firma::SHA-1 $SHA1 = debug del PC, registrata in Firebase"
+          else
+            echo "::warning title=Impronta firma::SHA-1 $SHA1 NON e' il debug del PC (13b0ec19...): l'accesso con Google non funziona finche' non la si registra in Firebase"
+          fi
+
+      - name: Note di rilascio
+        run: |
+          {
+            echo "${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}"
+            git log -1 --pretty=%B | head -c 3000
+          } > release-notes.txt
+
+      - name: Invia a Firebase App Distribution
+        env:
+          FIREBASE_STAGING_DISTRIBUTOR: ${{ secrets.FIREBASE_STAGING_DISTRIBUTOR }}
+          APP_DISTRIBUTION_TESTERS: ${{ secrets.APP_DISTRIBUTION_TESTERS }}
+        run: |
+          echo "$FIREBASE_STAGING_DISTRIBUTOR" > "$RUNNER_TEMP/distributor.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/distributor.json"
+          # mobilesdk_app_id di com.emabuia.pokevault.staging in app/src/staging/google-services.json
+          npx --yes firebase-tools@13 appdistribution:distribute \
+            app/build/outputs/apk/staging/debug/app-staging-debug.apk \
+            --app 1:917208571381:android:2b40b471e2701874c954bc \
+            --testers "$APP_DISTRIBUTION_TESTERS" \
+            --release-notes-file release-notes.txt
+          rm -f "$RUNNER_TEMP/distributor.json"

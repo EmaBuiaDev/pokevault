@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.ui.components.CascadeIn
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.components.pressSlide
@@ -92,6 +93,13 @@ fun MenuGrid(
         routeKey = "wishlist"
     )
 
+    val tradeRadarItem = MenuItemData(
+        title = AppLocale.tradeRadarTitle,
+        icon = Icons.Default.SwapHoriz,
+        gradientColors = listOf(AppColors.green, AppColors.blue),
+        routeKey = "trade_radar"
+    )
+
     Column(
         modifier = modifier.padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -158,6 +166,18 @@ fun MenuGrid(
                 subtitle = AppLocale.wishlistSubtitle,
                 onClick = { onItemClick(wishlistItem.routeKey) }
             )
+        }
+
+        // La card c'e' solo dove il flag e' acceso: dalla 3.1.6 anche in prod,
+        // accanto al tasto al centro della barra.
+        if (BuildConfig.TRADE_ENABLED) {
+            CascadeIn(index = 7, visible = cascadeVisible) {
+                FeaturedCard(
+                    item = tradeRadarItem,
+                    subtitle = AppLocale.tradeRadarSubtitle,
+                    onClick = { onItemClick(tradeRadarItem.routeKey) }
+                )
+            }
         }
     }
 }

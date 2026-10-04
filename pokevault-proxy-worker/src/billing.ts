@@ -364,8 +364,15 @@ export async function activeGiftUntilMs(db: D1Database, uid: string): Promise<nu
     .prepare('SELECT granted_until_ms FROM gift_redemptions WHERE uid = ?1')
     .bind(uid)
     .first<{ granted_until_ms: number }>();
-  const until = row?.granted_until_ms ?? null;
-  return until !== null && until > Date.now() ? until : null;
+  // Il Premium guadagnato invitando amici col proprio codice (schema 014).
+  // Un errore qui (tabella non ancora creata) non deve togliere il regalo.
+  const bonus = await db
+    .prepare('SELECT granted_until_ms FROM gift_referral_bonus WHERE uid = ?1')
+    .bind(uid)
+    .first<{ granted_until_ms: number }>()
+    .catch(() => null);
+  const until = Math.max(row?.granted_until_ms ?? 0, bonus?.granted_until_ms ?? 0);
+  return until > Date.now() ? until : null;
 }
 
 // ── Rotte ───────────────────────────────────────────────────────────────────

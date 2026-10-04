@@ -39,7 +39,15 @@ object GiftCodeRepository {
         val invitesMax: Int = 0,
         val alreadyRedeemed: Boolean = false,
         /** Scadenza del mese regalo attivo, o null se non ce n'e' uno. */
-        val giftUntilMs: Long? = null
+        val giftUntilMs: Long? = null,
+        /**
+         * Il premio a chi invita (schema 014 del Worker): giorni per ogni amico,
+         * amici che l'hanno gia' portato, fino a quando vale. 0 = un Worker
+         * di prima del premio, e l'app non ne parla.
+         */
+        val referralRewardDays: Int = 0,
+        val referralInvites: Int = 0,
+        val referralUntilMs: Long? = null
     )
 
     /**
@@ -107,7 +115,10 @@ object GiftCodeRepository {
         @SerializedName("invitesUsed") val invitesUsed: Int? = null,
         @SerializedName("invitesMax") val invitesMax: Int? = null,
         @SerializedName("alreadyRedeemed") val alreadyRedeemed: Boolean? = null,
-        @SerializedName("giftUntilMs") val giftUntilMs: Long? = null
+        @SerializedName("giftUntilMs") val giftUntilMs: Long? = null,
+        @SerializedName("referralRewardDays") val referralRewardDays: Int? = null,
+        @SerializedName("referralInvites") val referralInvites: Int? = null,
+        @SerializedName("referralUntilMs") val referralUntilMs: Long? = null
     )
 
     private data class RedeemPayload(
@@ -149,7 +160,10 @@ object GiftCodeRepository {
                     invitesUsed = payload.invitesUsed ?: 0,
                     invitesMax = payload.invitesMax ?: 0,
                     alreadyRedeemed = payload.alreadyRedeemed == true,
-                    giftUntilMs = payload.giftUntilMs
+                    giftUntilMs = payload.giftUntilMs,
+                    referralRewardDays = payload.referralRewardDays ?: 0,
+                    referralInvites = payload.referralInvites ?: 0,
+                    referralUntilMs = payload.referralUntilMs
                 )
             }
         }.onFailure { Timber.w(it, "Lettura codice AMICO fallita") }.getOrNull()

@@ -22,8 +22,8 @@ android {
         applicationId = "com.emabuia.pokevault"
         minSdk = 26
         targetSdk = 36
-        versionCode = 38
-        versionName = "3.1.5"
+        versionCode = 39
+        versionName = "3.1.6"
 
         buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
         buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "${localProperties.getProperty("POKEWALLET_PROXY_ENABLED", "false")}")
@@ -55,11 +55,23 @@ android {
             // Nessun suffisso, e va lasciato cosi': l'app su Play deve restare
             // esattamente com.emabuia.pokevault, altrimenti saltano insieme
             // billing, firma di Play e Google Sign-In.
+
+            // TradeRadar esce con la 3.1.6: sul Worker di produzione, che lo
+            // serve solo con TRADE_ENABLED acceso nelle sue vars (wrangler.toml).
+            // TradeRadarFlagTest controlla che resti cosi'.
+            buildConfigField("Boolean", "TRADE_ENABLED", "true")
+            buildConfigField("String", "TRADE_API_URL", "\"https://pokevault-proxy.pokevault-emanu.workers.dev\"")
         }
         create("staging") {
             dimension = "environment"
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
+
+            // Worker a parte (pokevault-trade-staging, vedi wrangler.toml):
+            // verifica i token del progetto Firebase di staging, quindi da qui
+            // passano solo gli account di test.
+            buildConfigField("Boolean", "TRADE_ENABLED", "true")
+            buildConfigField("String", "TRADE_API_URL", "\"https://pokevault-trade-staging.pokevault-emanu.workers.dev\"")
         }
     }
 
@@ -203,6 +215,9 @@ dependencies {
     implementation(libs.firebase.auth.ktx)
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.firebase.storage.ktx)
+    // Notifiche di TradeRadar: in tutte le versioni dalla 3.1.6 (prima solo
+    // nello staging). Il servizio e i permessi stanno nel manifest principale.
+    implementation(libs.firebase.messaging.ktx)
 
     // ── Navigation Compose ──
     implementation(libs.androidx.navigation.compose)

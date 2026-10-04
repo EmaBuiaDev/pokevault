@@ -1486,6 +1486,21 @@ class CatalogRepository {
      * Pokedex. Vuota se il manifest non e' raggiungibile: i chiamanti devono
      * trattare l'assenza come "non so", mai come "nessuna espansione".
      */
+    /**
+     * Carte italiane per apiCardId ("ita:me02:5"), lette set per set come le apre
+     * il Pokedex. Serve a TradeRadar: le carte ricevute in uno scambio entrano in
+     * collezione con gli stessi dati (immagine, rarita', tipo) di quelle aggiunte
+     * a mano. Una carta che non si trova manca dalla mappa.
+     */
+    suspend fun italianCardsByApiIds(context: Context, apiCardIds: Set<String>): Map<String, TcgCard> {
+        val result = HashMap<String, TcgCard>()
+        apiCardIds.groupBy { it.removePrefix("ita:").substringBefore(':').lowercase(Locale.ROOT) }.forEach { (setCode, ids) ->
+            val cards = getCardsBySet(buildItalianSetId(setCode), context).getOrNull().orEmpty()
+            for (card in cards) if (card.id in ids) result[card.id] = card
+        }
+        return result
+    }
+
     suspend fun italianExpansionSummariesById(): Map<String, ItalianExpansionSummary> {
         val summaries = italianCatalogRepository
             .getExpansionsSummary(baseUrl = PokeVaultApiClient.imageBaseUrl)

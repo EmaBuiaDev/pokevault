@@ -101,7 +101,6 @@ import com.emabuia.pokevault.ui.components.CardVariants
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.Constants
 import com.emabuia.pokevault.util.ImageUrlUtils
-import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import com.emabuia.pokevault.ui.pip.LocalInPictureInPicture
 import com.emabuia.pokevault.ui.pip.PictureInPictureWhenLeaving
 import com.emabuia.pokevault.ui.theme.*
@@ -483,6 +482,7 @@ fun ScannerScreen(
 
                         is ScannerPanel.Confirm -> PendingCardConfirmation(
                             card = panel.card,
+                            price = state.priceOf(panel.card),
                             condition = state.condition,
                             variants = remember(panel.card.id) { viewModel.variantsFor(panel.card) },
                             onConfirm = { variant -> viewModel.confirmAdd(variant) },
@@ -491,6 +491,7 @@ fun ScannerScreen(
 
                         is ScannerPanel.Choose -> CandidateCardPicker(
                             cards = panel.cards,
+                            priceOf = state::priceOf,
                             onSelect = { viewModel.selectCandidate(it) },
                             onDismiss = { viewModel.dismissCard() },
                             onManualSearch = onManualSearch
@@ -804,6 +805,7 @@ private fun AddedCardBanner(card: com.emabuia.pokevault.data.remote.TcgCard) {
 @Composable
 private fun CandidateCardPicker(
     cards: List<com.emabuia.pokevault.data.remote.TcgCard>,
+    priceOf: (com.emabuia.pokevault.data.remote.TcgCard) -> Double,
     onSelect: (com.emabuia.pokevault.data.remote.TcgCard) -> Unit,
     onDismiss: () -> Unit,
     onManualSearch: () -> Unit
@@ -831,7 +833,7 @@ private fun CandidateCardPicker(
 
         cards.forEachIndexed { index, card ->
             if (index > 0) Spacer(modifier = Modifier.height(7.dp))
-            CandidateRow(card = card, onSelect = { onSelect(card) })
+            CandidateRow(card = card, price = priceOf(card), onSelect = { onSelect(card) })
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -955,9 +957,10 @@ private fun NotFoundActions(
 @Composable
 private fun CandidateRow(
     card: com.emabuia.pokevault.data.remote.TcgCard,
+    /** Quello della carta o dello snapshot italiano: vedi ScannerUiState.priceOf. */
+    price: Double,
     onSelect: () -> Unit
 ) {
-    val price = card.cardmarket?.prices.minimumEurPriceOrZero()
 
     Row(
         modifier = Modifier
@@ -1026,12 +1029,13 @@ private fun CandidateRow(
 @Composable
 private fun PendingCardConfirmation(
     card: com.emabuia.pokevault.data.remote.TcgCard,
+    /** Quello della carta o dello snapshot italiano: vedi ScannerUiState.priceOf. */
+    price: Double,
     condition: String,
     variants: List<String>,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val price = card.cardmarket?.prices.minimumEurPriceOrZero()
     // La stampa parte dalla prima possibile per questa carta: per una rara
     // holo e' la Holo. Prima lo scanner non la impostava, e tutto entrava come
     // "Normale", anche le carte che normali non esistono.

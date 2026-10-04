@@ -1,13 +1,15 @@
 package com.emabuia.pokevault.data.firebase
 
-import com.google.firebase.auth.FirebaseAuth
+import com.emabuia.pokevault.data.trade.TradeApi
+import com.emabuia.pokevault.data.trade.TradePush
 import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
 
 class FirebaseAuthManager {
@@ -156,6 +158,17 @@ class FirebaseAuthManager {
             val user = currentUser ?: throw Exception("Nessun utente autenticato")
             val uid = user.uid
 
+            // Prima il profilo TradeRadar, finche' c'e' l'account per autenticarsi:
+            // dopo non ci sarebbe piu' modo di cancellarlo. Se il server non
+            // risponde ci si ferma, e l'utente riprova.
+            if (TradeApi.isEnabled) {
+                when (TradeApi.deleteProfile()) {
+                    is TradeApi.Result.Ok, TradeApi.Result.NoProfile -> Unit
+                    else -> throw Exception("TradeRadar non raggiungibile: riprova tra poco")
+                }
+                TradePush.forget()
+            }
+
             val userDoc = firestore.collection("users").document(uid)
             val subcollections = listOf(
                 "cards",
@@ -196,6 +209,8 @@ class FirebaseAuthManager {
 
     // ── Logout ──
     fun logout() {
+        // Sullo stesso telefono il prossimo account non deve ricevere le notifiche di questo.
+        TradePush.forget()
         auth.signOut()
     }
 }

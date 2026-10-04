@@ -53,12 +53,26 @@ data class ItalianPriceSnapshot(
     val expansions: Map<String, ItalianPriceExpansionEntry> = emptyMap(),
     val aliases: Map<String, String> = emptyMap()
 ) {
-    /** Resolves an expansion id or raw set code alias to its price map. */
+    /**
+     * Resolves an expansion id or raw set code alias to its price map.
+     *
+     * Un id di espansione che un alias porta altrove (swsh9 -> la sua Galleria
+     * Allenatori swsh9tg, che ha lo stesso prefisso nel card_id) risponde con
+     * le carte sue piu' quelle della galleria: prima dava solo la galleria, e
+     * il set restava senza prezzi. Stessa regola del Worker (src/price-lookup.ts).
+     */
     fun priceMapFor(lookupCode: String): Map<String, ItalianPriceEntry> {
         val normalized = lookupCode.trim().lowercase(Locale.ROOT)
         if (normalized.isBlank()) return emptyMap()
-        val expansionId = aliases[normalized] ?: normalized
-        return expansions[expansionId]?.prices ?: emptyMap()
+        val aliasTarget = aliases[normalized]
+        val own = expansions[normalized]?.prices
+        if (own != null) {
+            val other = aliasTarget?.takeIf { it != normalized }?.let { expansions[it]?.prices }
+            // Un numero in tutte e due (le TG di swsh9) lo chiedono solo le carte
+            // della galleria: resta il suo, come prima.
+            return if (other.isNullOrEmpty()) own else own + other
+        }
+        return expansions[aliasTarget ?: normalized]?.prices ?: emptyMap()
     }
 }
 
@@ -214,6 +228,26 @@ class ItalianPriceSnapshotRepository {
             expansionMemoryCache[normalized] = mapped to System.currentTimeMillis()
         }
         return mapped
+    }
+
+    /**
+     * Prezzi di una carta italiana del catalogo, per il suo apiCardId
+     * ("ita:me05:30"), o null se non e' una carta italiana o lo snapshot non
+     * la conosce. Passa da [getPriceMap]: un set gia' aperto non costa niente,
+     * e mai una chiamata a PokeWallet.
+     *
+     * Serve dove la carta arriva dal catalogo, che di suo non ha prezzi:
+     * Artisti, Scanner, il recupero dei prezzi mancanti in Collezione.
+     */
+    suspend fun priceForItalianCard(context: Context, apiCardId: String): PokeWalletPriceData? {
+        if (!apiCardId.startsWith("ita:", ignoreCase = true)) return null
+        val parts = apiCardId.substring(4).split(':')
+        if (parts.size != 2) return null
+        val setCode = parts[0].trim()
+        val rawNumber = parts[1].trim()
+        if (setCode.isBlank() || rawNumber.isBlank()) return null
+        val number = rawNumber.toIntOrNull()?.toString() ?: rawNumber.uppercase(Locale.ROOT)
+        return runCatching { getPriceMap(context, setCode) }.getOrNull()?.get(number)
     }
 
     private fun cacheExpansion(

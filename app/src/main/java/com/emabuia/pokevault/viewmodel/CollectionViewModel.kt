@@ -1,10 +1,11 @@
 package com.emabuia.pokevault.viewmodel
 
+import android.app.Application
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.CollectionStats
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
@@ -12,6 +13,7 @@ import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.collectionCardKey
 import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.data.remote.CatalogRepository
+import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.CardCategory
 import com.emabuia.pokevault.util.CardGroup
@@ -23,6 +25,7 @@ import com.emabuia.pokevault.util.CollectionSort
 import com.emabuia.pokevault.util.ExpansionGroupSection
 import com.emabuia.pokevault.util.ExpansionOrder
 import com.emabuia.pokevault.util.ValueBucket
+import com.emabuia.pokevault.util.minimumEurOrZero
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -56,10 +59,11 @@ data class CollectionUiState(
     val visibleValue: Double get() = visibleGroups.sumOf { it.totalValue }
 }
 
-class CollectionViewModel : ViewModel() {
+class CollectionViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = FirestoreRepository()
     private val tcgRepository = CatalogRepository()
+    private val italianPriceSnapshotRepository = RepositoryProvider.italianPriceSnapshotRepository
     // Synchronized perché emissioni rapide del Flow possono lanciare hydration concorrenti
     // e questi insiemi tracciano lo stato condiviso fra di esse.
     private val hydratedPriceCardIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
@@ -236,27 +240,70 @@ class CollectionViewModel : ViewModel() {
                     card.id !in hydratedPriceCardIds &&
                     card.id !in hydratingPriceCardIds
             }
-            .take(PRICE_HYDRATION_BATCH_SIZE)
 
         if (candidates.isEmpty()) return
 
+        // Prima lo snapshot italiano, che non costa chiamate: cosi' si fanno
+        // tutte le carte italiane in un giro. Il lotto da
+        // PRICE_HYDRATION_BATCH_SIZE resta solo per le carte che vanno chieste
+        // in rete. Prima il lotto valeva per tutte, e il giro dopo partiva solo
+        // se una carta veniva aggiornata: otto carte senza prezzo trovabile in
+        // testa alla lista bastavano a lasciare a 0 per sempre (nella sessione)
+        // le carte aggiunte da Artisti o dallo Scanner.
+        // Le scritture pero' restano poche per giro: ogni updateCard fa ricalcolare
+        // la Collezione, e centinaia di carte in fila la farebbero scattare. Il
+        // giro dopo riparte da solo, dopo una pausa, sulla lista aggiornata
+        // (uiState.cards): non resta appeso, e non riscrive carte vecchie.
         hydrationJob = viewModelScope.launch {
-            candidates.forEach { card ->
+            var networkLookups = PRICE_HYDRATION_BATCH_SIZE
+            var writes = 0
+            for (card in candidates) {
+                if (writes >= PRICE_HYDRATION_WRITES_PER_ROUND) {
+                    val current = this.coroutineContext[Job]
+                    viewModelScope.launch {
+                        current?.join()
+                        delay(PRICE_HYDRATION_ROUND_PAUSE_MS)
+                        scheduleMissingPriceHydration(uiState.cards)
+                    }
+                    break
+                }
                 hydratingPriceCardIds += card.id
+                var attempted = true
                 try {
-                    val remoteCard = tcgRepository.getCard(card.apiCardId).getOrNull()
-                    val eurPrice = remoteCard?.cardmarket?.prices.minimumEurPriceOrZero()
+                    var eurPrice = italianSnapshotPrice(card.apiCardId)
+                    if (eurPrice <= 0.0) {
+                        if (networkLookups > 0) {
+                            networkLookups -= 1
+                            eurPrice = tcgRepository.getCard(card.apiCardId).getOrNull()
+                                ?.cardmarket?.prices.minimumEurPriceOrZero()
+                        } else {
+                            attempted = false // ci pensa il prossimo giro
+                        }
+                    }
 
                     if (eurPrice > 0.0) {
                         repository.updateCard(card.id, card.copy(estimatedValue = eurPrice))
+                        writes += 1
                     }
                 } finally {
                     hydratingPriceCardIds -= card.id
-                    hydratedPriceCardIds += card.id
+                    if (attempted) hydratedPriceCardIds += card.id
                 }
             }
         }
     }
+
+    /**
+     * Il prezzo di una carta italiana ("ita:<set>:<numero>") dallo snapshot
+     * italiano, 0 se non c'e'. Serve perche' la carta italiana del catalogo
+     * prende il prezzo Cardmarket solo dalla carta inglese di appoggio, che
+     * quasi sempre manca: senza, una carta italiana salvata a 0 (dagli scambi,
+     * per esempio) non veniva mai recuperata. Lo snapshot e' quello del
+     * worker, per set e in cache: nessuna chiamata a PokeWallet. Il minimo
+     * prima di tutto, come nel resto dell'app.
+     */
+    private suspend fun italianSnapshotPrice(apiCardId: String): Double =
+        italianPriceSnapshotRepository.priceForItalianCard(getApplication(), apiCardId).minimumEurOrZero()
 
     /**
      * Corregge le carte salvate con il CODICE dell'espansione al posto del nome
@@ -444,6 +491,8 @@ class CollectionViewModel : ViewModel() {
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 250L
         const val PRICE_HYDRATION_BATCH_SIZE = 8
+        const val PRICE_HYDRATION_WRITES_PER_ROUND = 20
+        const val PRICE_HYDRATION_ROUND_PAUSE_MS = 1_500L
         const val PREF_GRID = "collection_grid"
         const val PREF_COLUMNS = "collection_columns"
         const val PREF_LAYOUT = "collection_layout"
