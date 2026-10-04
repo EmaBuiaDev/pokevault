@@ -19,6 +19,10 @@ import { fileURLToPath } from 'url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const arg = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
+/** --prod: il D1 di PRODUZIONE (pokevault-trade). Senza, lo staging come sempre. */
+const PROD = args.includes('--prod');
+const D1_TARGET = PROD ? ['pokevault-trade', '--env='] : ['pokevault-trade-staging', '--env', 'staging'];
+if (PROD) console.log('== D1 di PRODUZIONE (pokevault-trade) ==');
 const KINDS = ['card_shop', 'comics', 'games', 'video_games', 'toys', 'mall', 'library', 'other'];
 
 /**
@@ -28,7 +32,7 @@ const KINDS = ['card_shop', 'comics', 'games', 'video_games', 'toys', 'mall', 'l
  */
 function sql(query) {
   const wrangler = path.join(here, '..', 'node_modules', 'wrangler', 'bin', 'wrangler.js');
-  const out = execFileSync(process.execPath, [wrangler, 'd1', 'execute', 'pokevault-trade-staging', '--env', 'staging', '--remote', '--json', '--command', query], {
+  const out = execFileSync(process.execPath, [wrangler, 'd1', 'execute', ...D1_TARGET, '--remote', '--json', '--command', query], {
     cwd: path.join(here, '..'),
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
