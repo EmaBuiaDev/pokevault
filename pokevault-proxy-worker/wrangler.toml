@@ -17,7 +17,9 @@ r2_buckets = [
 # Queryable catalog store (2026-09-07 migration), additive alongside the
 # legacy R2 JSON blob served by /ita/catalog.json -- see schema/001_init.sql
 d1_databases = [
-  { binding = "pokevault_catalog", database_name = "pokevault-catalog", database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7" }
+  { binding = "pokevault_catalog", database_name = "pokevault-catalog", database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7" },
+  # TradeRadar (04/10/2026), migrazioni schema-trade/ applicate una alla volta.
+  { binding = "trade_db", database_name = "pokevault-trade", database_id = "ff58d55d-08f4-43de-9333-d07ddab75aa8" }
 ]
 
 # Environment variables
@@ -32,6 +34,11 @@ IT_CATALOG_KEY = "it/catalog/cards.cleaned.json"
 # e rifare il deploy: lo snapshot PokeWallet si costruisce comunque.
 # Vedi src/cardmarket-prices.ts.
 CARDMARKET_PRICES = "1"
+# TradeRadar acceso in produzione (04/10/2026, esce con l'app 3.1.6). Solo
+# dopo le migrazioni di schema-trade/: senza, la lista proposte si rompe.
+# FIREBASE_PROJECT_ID e FCM_SERVICE_ACCOUNT sono secret.
+# TRADE_TRIAL_ENFORCE = "1" va aggiunto entro il ~02/11 (prime prove che scadono).
+TRADE_ENABLED = "1"
 
 # Triggers for the Worker. Ogni 15 minuti per TradeRadar (promemoria, notifiche);
 # i prezzi girano solo ai minuti :00 e :30 (vedi scheduled() in src/index.ts).
