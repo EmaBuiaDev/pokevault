@@ -710,6 +710,12 @@
   "fonte": "carta"
  },
  {
+  "numero": "143",
+  "nome": "Kommo-o",
+  "fonte": "carta",
+  "rarita": "Illustration rare"
+ },
+ {
   "numero": "144",
   "nome": "Meowth",
   "fonte": "carta"
@@ -745,9 +751,27 @@
   "fonte": "carta"
  },
  {
+  "numero": "151",
+  "nome": "Mewtwo-ex",
+  "fonte": "carta",
+  "rarita": "Special illustration rare"
+ },
+ {
+  "numero": "152",
+  "nome": "Mew-ex",
+  "fonte": "carta",
+  "rarita": "Special illustration rare"
+ },
+ {
   "numero": "153",
   "nome": "Sylveon-ex",
   "fonte": "carta"
+ },
+ {
+  "numero": "154",
+  "nome": "Gengar-ex",
+  "fonte": "carta",
+  "rarita": "Special illustration rare"
  },
  {
   "numero": "155",
@@ -770,5 +794,23 @@
   "nome": "Mew-ex",
   "fonte": "carta",
   "rarita": "Futuristic rare"
+ },
+ {
+  "numero": "B",
+  "nome": "Mew",
+  "fonte": "limitless",
+  "rarita": "RGB Rare"
+ },
+ {
+  "numero": "G",
+  "nome": "Mew",
+  "fonte": "limitless",
+  "rarita": "RGB Rare"
+ },
+ {
+  "numero": "R",
+  "nome": "Mew",
+  "fonte": "limitless",
+  "rarita": "RGB Rare"
  }
 ]
