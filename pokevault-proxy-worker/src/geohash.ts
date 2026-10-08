@@ -2,7 +2,7 @@
  * Celle geohash vicine, per TradeRadar.
  *
  * Il telefono manda solo la sua cella di 5 caratteri (~4,9 x 4,9 km): qui si
- * calcolano le celle intorno, cosi' due utenti a 200 metri ma ai due lati di
+ * calcolano le 8 celle intorno, cosi' due utenti a 200 metri ma ai due lati di
  * un bordo di cella si trovano lo stesso. Il server non vede mai coordinate.
  */
 
@@ -66,16 +66,12 @@ export function encode(lat: number, lon: number, precision: number): string {
   return hash;
 }
 
-/**
- * La cella e gli anelli intorno: con [rings] 1 le 8 vicine (~15 km), con 2 le
- * 24 (~25 km). Meno celle vicino ai poli, dove si ripetono.
- */
-export function cellAndNeighbors(hash: string, rings = 1): string[] {
+/** La cella e le 8 intorno (meno, vicino ai poli, dove si ripetono). */
+export function cellAndNeighbors(hash: string): string[] {
   const { lat, lon, latErr, lonErr } = decode(hash);
   const cells = new Set<string>();
-  const steps = Array.from({ length: rings * 2 + 1 }, (_, i) => i - rings);
-  for (const dLat of steps) {
-    for (const dLon of steps) {
+  for (const dLat of [-1, 0, 1]) {
+    for (const dLon of [-1, 0, 1]) {
       const nLat = Math.max(-89.999, Math.min(89.999, lat + dLat * latErr * 2));
       let nLon = lon + dLon * lonErr * 2;
       if (nLon > 180) nLon -= 360;

@@ -99,14 +99,15 @@ const NEAR_COMPLETE_RATIO = 0.5;
 /** Profili vicini esaminati per richiesta, i piu' recenti per primi. */
 const MAX_CANDIDATES = 1000;
 /**
- * Anelli di celle attorno alla mia per match, classifica di zona e avvisi:
- * 2 = ~25 km. Con pochi utenti per citta' un anello solo (~15 km) lasciava
- * divise persone della stessa citta' (08/10/2026: Roma, Napoli e provincia).
+ * La zona di match, classifica e avvisi: la cella grande (geohash di 4
+ * caratteri, ~39 x 20 km) e le 8 intorno, cioe' almeno ~20 km in ogni
+ * direzione e al massimo ~60. Con le celle di 5 e un anello (~10 km) restavano
+ * divise persone della stessa citta' o provincia (08/10/2026: Pozzuoli e
+ * Pomigliano da Napoli centro, Roma e Ostia). Nelle query va confrontata con
+ * `substr(geohash5, 1, 4)`.
  */
-const ZONE_RINGS = 2;
-
 function zoneCells(hash: string): string[] {
-  return cellAndNeighbors(hash, ZONE_RINGS);
+  return cellAndNeighbors(hash.slice(0, 4));
 }
 
 /**
@@ -622,7 +623,7 @@ interface Nearby {
 function nearbyOf(cells: string[], uid: string): Nearby {
   return {
     sql: `SELECT uid FROM trade_profiles
-          WHERE geohash5 IN (${cells.map(() => '?').join(', ')}) AND uid <> ? AND paused = 0
+          WHERE substr(geohash5, 1, 4) IN (${cells.map(() => '?').join(', ')}) AND uid <> ? AND paused = 0
             AND (suspended_until IS NULL OR suspended_until < ${Date.now()})
             AND uid NOT IN (SELECT blocked_uid FROM trade_blocks WHERE blocker_uid = ?)
             AND uid NOT IN (SELECT blocker_uid FROM trade_blocks WHERE blocked_uid = ?)
@@ -1507,7 +1508,11 @@ async function proposalParties(db: D1Database, id: string, uid: string) {
   if (!mine || !theirs) return null;
   const a = cellCenter(mine);
   const b = cellCenter(theirs);
-  return { proposal, other, cells: [...new Set([mine, theirs])], mid: { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 } };
+  const mid = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
+  // Anche la zona a meta' strada: con la zona larga (fino a ~60 km) i luoghi
+  // scaricati attorno ai due possono non arrivarci.
+  const zones = [...new Set([mine, theirs, encode(mid.lat, mid.lon, 5)])];
+  return { proposal, other, cells: zones, mid, ends: [a, b], halfKm: distanceKm(a.lat, a.lon, b.lat, b.lon) / 2 };
 }
 
 /**
@@ -1522,19 +1527,30 @@ async function getProposalSpots(db: D1Database, uid: string, id: string): Promis
   // Le zone da aggiornare le scarica il telefono (vedi overpassQuery) e poi richiede.
   const missing = await staleCells(db, parties.cells);
   const { lat, lon } = parties.mid;
+  const [a, b] = parties.ends;
+  // Il rettangolo che contiene tutti e due, con un margine: cosi' anche quando
+  // abitano lontani i negozi vicino a ciascuno restano fra i candidati.
   const { results } = await db
     .prepare(
       `SELECT * FROM trade_spots
        WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? AND (approved = 1 OR added_by IN (?, ?))`
     )
-    .bind(lat - 0.15, lat + 0.15, lon - 0.2, lon + 0.2, uid, parties.other)
+    .bind(
+      Math.min(lat - 0.15, a.lat - 0.1, b.lat - 0.1), Math.max(lat + 0.15, a.lat + 0.1, b.lat + 0.1),
+      Math.min(lon - 0.2, a.lon - 0.13, b.lon - 0.13), Math.max(lon + 0.2, a.lon + 0.13, b.lon + 0.13),
+      uid, parties.other
+    )
     .all<SpotRow>();
   // Dove si scambia davvero sale: mezzo gradino ogni scambio chiuso (fino a
-  // 5) e uno per badge, oltre a tipo e distanza.
+  // 5) e uno per badge, oltre a tipo e distanza. La distanza e' quella di chi
+  // dei due ha piu' strada da fare: vince il posto comodo per entrambi, non
+  // quello sotto casa di uno. Si toglie meta' del loro distacco, che nessun
+  // luogo puo' evitare, cosi' le soglie restano quelle di due vicini.
   const stats = await spotStats(db, results.map((spot) => spot.id));
   const score = (spot: SpotRow) => {
     const extra = stats.get(spot.id);
-    return (SPOT_KIND_RANK[spot.kind] ?? 1) - distanceKm(lat, lon, spot.lat, spot.lon) / 3 +
+    const far = Math.max(distanceKm(a.lat, a.lon, spot.lat, spot.lon), distanceKm(b.lat, b.lon, spot.lat, spot.lon)) - parties.halfKm;
+    return (SPOT_KIND_RANK[spot.kind] ?? 1) - far / 3 +
       Math.min(extra?.trades ?? 0, 10) * 0.5 + (extra?.badges.length ?? 0);
   };
   const spots = results.sort((a, b) => score(b) - score(a)).slice(0, 25).map((spot) => spotJson(spot, lat, lon, stats.get(spot.id)));
@@ -1546,8 +1562,17 @@ async function searchSpots(db: D1Database, uid: string, url: URL): Promise<Respo
   const q = cleanText(url.searchParams.get('q'), 60);
   if (q.length < 2) return json({ results: [] });
   let center: { lat: number; lon: number } | null = null;
+  // Fra due che abitano lontani il punto a meta' strada dista da ciascuno la
+  // meta' del loro distacco: il raggio cresce con quello.
+  let maxKm = SEARCH_MAX_KM;
   const proposalId = url.searchParams.get('proposal');
-  if (proposalId) center = (await proposalParties(db, proposalId, uid))?.mid ?? null;
+  if (proposalId) {
+    const parties = await proposalParties(db, proposalId, uid);
+    if (parties) {
+      center = parties.mid;
+      maxKm = Math.max(SEARCH_MAX_KM, parties.halfKm + 15);
+    }
+  }
   if (!center) {
     const me = await loadProfile(db, uid);
     if (me) center = cellCenter(me.geohash5);
@@ -1585,7 +1610,7 @@ async function searchSpots(db: D1Database, uid: string, url: URL): Promise<Respo
     // Photon da' solo una precedenza ai vicini: "fumetteria" tornava Milano e Torino.
     // Si tengono quelli entro SEARCH_MAX_KM, dal piu' vicino.
     const near = results
-      .filter((r) => r.distanceKm == null || r.distanceKm <= SEARCH_MAX_KM)
+      .filter((r) => r.distanceKm == null || r.distanceKm <= maxKm)
       .sort((x, y) => (x.distanceKm ?? 0) - (y.distanceKm ?? 0))
       .slice(0, 8);
     return json({ results: near });
@@ -2273,7 +2298,7 @@ async function getLeaderboard(db: D1Database, uid: string, url: URL, env: TradeE
   if (!me) return json({ error: 'no_profile' }, 404);
   const scope = url.searchParams.get('scope') === 'italy' ? 'italy' : 'zone';
   const cells = zoneCells(me.geohash5);
-  const zoneFilter = scope === 'zone' ? `AND p.geohash5 IN (${cells.map(() => '?').join(', ')})` : '';
+  const zoneFilter = scope === 'zone' ? `AND substr(p.geohash5, 1, 4) IN (${cells.map(() => '?').join(', ')})` : '';
   const { results } = await db
     .prepare(
       `SELECT p.uid, p.public_id, p.nickname, p.created_at, p.avatar, p.avatar_animated, l.trades, l.partners, l.good, l.ok, l.bad, l.score, l.tier
@@ -2818,7 +2843,7 @@ async function enqueueWantsDigest(db: D1Database, env: TradeEnv): Promise<void> 
     const { results: found } = await db
       .prepare(
         `SELECT DISTINCT h.card_key, h.uid AS holder FROM trade_haves h JOIN trade_profiles o ON o.uid = h.uid
-         WHERE o.geohash5 IN (${cells.map(() => '?').join(', ')}) AND o.uid <> ? AND o.paused = 0
+         WHERE substr(o.geohash5, 1, 4) IN (${cells.map(() => '?').join(', ')}) AND o.uid <> ? AND o.paused = 0
            AND (o.suspended_until IS NULL OR o.suspended_until < ?)
            AND h.notify = 1
            AND h.card_key IN (SELECT card_key FROM trade_wants WHERE uid = ?)
