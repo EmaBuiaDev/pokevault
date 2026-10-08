@@ -98,6 +98,25 @@ const MAX_OWNED = 20000;
 const NEAR_COMPLETE_RATIO = 0.5;
 /** Profili vicini esaminati per richiesta, i piu' recenti per primi. */
 const MAX_CANDIDATES = 1000;
+/**
+ * Anelli di celle attorno alla mia per match, classifica di zona e avvisi:
+ * 2 = ~25 km. Con pochi utenti per citta' un anello solo (~15 km) lasciava
+ * divise persone della stessa citta' (08/10/2026: Roma, Napoli e provincia).
+ */
+const ZONE_RINGS = 2;
+
+function zoneCells(hash: string): string[] {
+  return cellAndNeighbors(hash, ZONE_RINGS);
+}
+
+/**
+ * Stessa cella: meno di ~5 km; anello accanto: meno di ~15 km. Oltre, "far":
+ * l'app 3.1.6 lo scrive "Fuori zona" e conosce solo questi tre valori.
+ */
+function distanceOf(mine: string, theirs: string): 'lt5' | 'lt15' | 'far' {
+  if (mine === theirs) return 'lt5';
+  return cellAndNeighbors(mine).includes(theirs) ? 'lt15' : 'far';
+}
 /** Persone restituite, le migliori per punteggio (vedi matchScore). */
 const MAX_MATCHES = 100;
 /** Righe della vista per carta, e persone elencate per ogni carta. */
@@ -686,11 +705,12 @@ const LEVEL_WEIGHT: Record<Level, number> = { wanted: 100, useful: 30, possible:
  * reciprocita' prima di tutto, poi quanto interessano le carte (quelle che
  * ricevi pesano il doppio di quelle che dai), poi la vicinanza. Le carte di
  * un lato contano fino a MAX_ITEMS_PER_SIDE, come quelle che si mostrano.
+ * Chi non ha niente per me finisce in fondo, ma c'e'.
  */
 function matchScore(theyGive: MatchItem[], iGive: MatchItem[], near: boolean): number {
   const sum = (items: MatchItem[]) =>
     items.slice(0, MAX_ITEMS_PER_SIDE).reduce((total, item) => total + LEVEL_WEIGHT[item.level], 0);
-  return (iGive.length > 0 ? 1000 : 0) + sum(theyGive) + sum(iGive) / 2 + (near ? 20 : 0);
+  return (theyGive.length > 0 && iGive.length > 0 ? 1000 : 0) + sum(theyGive) + sum(iGive) / 2 + (near ? 20 : 0);
 }
 
 interface CardHolder {
@@ -755,7 +775,7 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
   if (me.paused === 1) return json({ paused: true, matches: [], cards: [] });
   if ((me.suspended_until ?? 0) > Date.now()) return json({ suspended: true, matches: [], cards: [] });
 
-  const cells = cellAndNeighbors(me.geohash5);
+  const cells = zoneCells(me.geohash5);
   const nearby = nearbyOf(cells, uid);
   const neighborRows = await db
     .prepare(`SELECT uid, public_id, nickname, geohash5, trades_done, created_at FROM trade_profiles WHERE uid IN (${nearby.sql})`)
@@ -806,7 +826,8 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
       const verdict = classify(have.card_key, myWishes);
       if (verdict) theyGive.push({ key: have.card_key, variant: have.variant, condition: have.condition, language: have.language, qty: have.qty, ...verdict });
     }
-    if (theyGive.length === 0) continue;
+    // Anche chi oggi non ha niente per me: con pochi iscritti per zona, vedere
+    // che c'e' qualcuno conta, e chi cerca le mie carte puo' ricevere proposte.
 
     const wishes = theirWishes.get(neighbor.uid) ?? emptyWishes();
     const iGive: MatchItem[] = [];
@@ -815,22 +836,21 @@ async function getMatches(db: D1Database, uid: string, env: TradeEnv): Promise<R
       if (verdict) iGive.push({ key: have.card_key, variant: have.variant, condition: have.condition, language: have.language, qty: have.qty, ...verdict });
     }
 
-    // Stessa cella: meno di ~5 km; cella accanto: meno di ~15 km.
-    const near = neighbor.geohash5 === me.geohash5;
+    const distance = distanceOf(me.geohash5, neighbor.geohash5);
     sortItems(theyGive);
     sortItems(iGive);
     scored.push({
-      score: matchScore(theyGive, iGive, near),
+      score: matchScore(theyGive, iGive, distance === 'lt5'),
       // L'id pubblico: con questo l'app manda una proposta o legge le sue offerte.
       id: neighbor.public_id,
       nickname: neighbor.nickname,
-      distance: near ? 'lt5' : 'lt15',
+      distance,
       tradesDone: neighbor.trades_done,
       memberSince: neighbor.created_at,
       reputation: reputation.get(neighbor.uid) ?? null,
       tier: tiers.get(neighbor.uid) ?? null,
       level: bestLevel(theyGive),
-      mutual: iGive.length > 0,
+      mutual: theyGive.length > 0 && iGive.length > 0,
       theyGive,
       iGive,
     });
@@ -1183,7 +1203,6 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
     .bind(JSON.stringify(proposals.map((p) => p.id)))
     .all<{ proposal_id: string; giver_uid: string; card_key: string; variant: string; condition: string; language: string; qty: number }>();
   const labels = await catalogCardLabels(env);
-  const near = me ? cellAndNeighbors(me.geohash5) : [];
 
   return json({
     proposals: proposals.map((p) => {
@@ -1243,7 +1262,7 @@ async function listProposals(db: D1Database, uid: string, env: TradeEnv): Promis
         counterpart: {
           id: p.other_public_id,
           nickname: p.other_nickname,
-          distance: me && p.other_cell === me.geohash5 ? 'lt5' : near.includes(p.other_cell) ? 'lt15' : 'far',
+          distance: me ? distanceOf(me.geohash5, p.other_cell) : 'far',
           tradesDone: p.other_trades,
           reputation: reputation.get(iAmFrom ? p.to_uid : p.from_uid) ?? null,
           tier: tiers.get(iAmFrom ? p.to_uid : p.from_uid) ?? null,
@@ -2253,7 +2272,7 @@ async function getLeaderboard(db: D1Database, uid: string, url: URL, env: TradeE
   const me = await loadProfile(db, uid);
   if (!me) return json({ error: 'no_profile' }, 404);
   const scope = url.searchParams.get('scope') === 'italy' ? 'italy' : 'zone';
-  const cells = cellAndNeighbors(me.geohash5);
+  const cells = zoneCells(me.geohash5);
   const zoneFilter = scope === 'zone' ? `AND p.geohash5 IN (${cells.map(() => '?').join(', ')})` : '';
   const { results } = await db
     .prepare(
@@ -2793,7 +2812,7 @@ async function enqueueWantsDigest(db: D1Database, env: TradeEnv): Promise<void> 
   if (users.length === 0) return;
   const labels = await catalogCardLabels(env);
   for (const user of users) {
-    const cells = cellAndNeighbors(user.geohash5);
+    const cells = zoneCells(user.geohash5);
     // Le carte cercate che qualcuno vicino offre con la campanella accesa, non
     // gia' possedute, non gia' segnalate da quella persona, fra chi non si e' bloccato.
     const { results: found } = await db
