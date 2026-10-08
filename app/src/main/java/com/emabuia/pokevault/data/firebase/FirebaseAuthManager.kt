@@ -2,15 +2,19 @@ package com.emabuia.pokevault.data.firebase
 
 import com.emabuia.pokevault.data.trade.TradeApi
 import com.emabuia.pokevault.data.trade.TradePush
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
+import java.util.Date
 
 class FirebaseAuthManager {
 
@@ -49,16 +53,18 @@ class FirebaseAuthManager {
             val result = auth.createUserWithEmailAndPassword(email, password).await()
             val user = result.user ?: throw Exception("Registrazione fallita")
 
-            // Crea profilo utente su Firestore
+            // Crea profilo utente su Firestore. In merge: isPremium o lastSeen
+            // possono essere gia' arrivati (vedi UserProfileFields), e set()
+            // pieno li cancellerebbe.
             val profile = hashMapOf(
                 "name" to displayName,
                 "email" to email,
-                "createdAt" to com.google.firebase.Timestamp.now(),
+                "createdAt" to Timestamp.now(),
                 "totalCards" to 0
             )
             firestore.collection("users")
                 .document(user.uid)
-                .set(profile)
+                .set(profile, SetOptions.merge())
                 .await()
 
             Result.success(user)
@@ -85,25 +91,37 @@ class FirebaseAuthManager {
             val result = auth.signInWithCredential(credential).await()
             val user = result.user ?: throw Exception("Login Google fallito")
 
-            // Crea profilo se primo accesso
-            val doc = firestore.collection("users").document(user.uid).get().await()
-            if (!doc.exists()) {
-                val profile = hashMapOf(
-                    "name" to (user.displayName ?: "Allenatore"),
-                    "email" to (user.email ?: ""),
-                    "createdAt" to com.google.firebase.Timestamp.now(),
-                    "totalCards" to 0
-                )
-                firestore.collection("users")
-                    .document(user.uid)
-                    .set(profile)
-                    .await()
-            }
+            // Completa il profilo dove manca: il documento puo' gia' esistere
+            // senza (lo crea la sync di isPremium), vedi UserProfileFields.
+            completeProfile(user)
 
             Result.success(user)
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Scrive in merge i campi del profilo che mancano nel documento utente.
+     * Lancia se Firestore non risponde: al login l'errore risale come prima.
+     *
+     * Solo dal server: offline la cache puo' avere il documento a meta' (la
+     * sola scrittura di isPremium in coda), e "mancante" li' vorrebbe dire
+     * rimettere totalCards a 0 e il nome dell'account sopra quello scelto.
+     */
+    suspend fun completeProfile(user: FirebaseUser) {
+        val ref = firestore.collection("users").document(user.uid)
+        val missing = UserProfileFields.missing(
+            existing = ref.get(Source.SERVER).await().data,
+            name = user.displayName,
+            email = user.email,
+            createdAtMs = user.metadata?.creationTimestamp ?: System.currentTimeMillis()
+        )
+        if (missing.isEmpty()) return
+        val fields = missing.mapValues { (key, value) ->
+            if (key == "createdAt") Timestamp(Date(value as Long)) else value
+        }
+        ref.set(fields, SetOptions.merge()).await()
     }
 
     // ── Reset password ──
