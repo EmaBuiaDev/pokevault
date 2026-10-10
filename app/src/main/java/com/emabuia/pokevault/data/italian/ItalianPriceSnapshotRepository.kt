@@ -39,7 +39,9 @@ data class ItalianPriceEntry(
     /** TCGPlayer USD fallback for sets without CardMarket data upstream. */
     val usd: Double? = null,
     val usdLow: Double? = null,
-    val url: String? = null
+    val url: String? = null,
+    /** Prezzi per stampa (vedi PokeWalletPriceData.variantPrices). */
+    val v: Map<String, ItalianPriceEntry>? = null
 )
 
 data class ItalianPriceExpansionEntry(
@@ -373,6 +375,10 @@ fun ItalianPriceEntry.toPriceData(): PokeWalletPriceData {
         usdMarket = usd,
         usdLow = usdLow,
         cardMarketUrl = url.takeIf { hasEur },
-        tcgPlayerUrl = url.takeIf { !hasEur }
+        tcgPlayerUrl = url.takeIf { !hasEur },
+        variantPrices = v.orEmpty()
+            .filterKeys { it.isNotBlank() }
+            .mapValues { (_, entry) -> entry.copy(v = null).toPriceData() }
+            .filterValues { it.hasEurPrices }
     )
 }

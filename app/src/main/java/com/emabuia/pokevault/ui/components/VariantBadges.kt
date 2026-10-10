@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emabuia.pokevault.data.model.VariantKeys
 import com.emabuia.pokevault.util.AppLocale
 
 /**
@@ -34,51 +35,45 @@ import com.emabuia.pokevault.util.AppLocale
  */
 object CardVariants {
 
-    /** Una lettera, due per le prime edizioni: sulla miniatura non c'e' spazio. */
-    fun shortLabel(variant: String): String = when (variant) {
-        "Normal" -> "N"
-        "Reverse" -> "R"
-        "Holo" -> "H"
-        "1st Edition" -> "1ª"
-        "1st Edition Holo" -> "1ªH"
-        "Unlimited Holo" -> "UH"
-        else -> variant.take(1).uppercase()
+    /**
+     * Una lettera, due per le prime edizioni: sulla miniatura non c'e' spazio.
+     * Le stampe speciali (timbrate, Poke Ball...) hanno una stella: il nome
+     * intero sta nel dettaglio della carta.
+     */
+    fun shortLabel(variant: String): String {
+        if (VariantKeys.isSpecial(variant)) return "★"
+        return when (variant) {
+            "Normal" -> "N"
+            "Reverse" -> "R"
+            "Holo" -> "H"
+            "1st Edition" -> "1ª"
+            "1st Edition Holo" -> "1ªH"
+            "Unlimited Holo" -> "UH"
+            else -> variant.take(1).uppercase()
+        }
     }
 
     /** Il nome per esteso, tradotto, per i posti dove lo spazio c'e'. */
-    fun label(variant: String): String {
-        val isIt = AppLocale.isItalian
-        return when (variant) {
-            "Normal" -> if (isIt) "Normale" else "Normal"
-            "Reverse" -> "Reverse"
-            "Holo" -> "Holo"
-            "1st Edition" -> if (isIt) "1ª Edizione" else "1st Edition"
-            "1st Edition Holo" -> if (isIt) "1ª Ed. Holo" else "1st Ed. Holo"
-            "Unlimited Holo" -> if (isIt) "Unlimited Holo" else "Unlimited Holo"
-            else -> variant
-        }
-    }
+    fun label(variant: String): String = VariantKeys.label(variant, AppLocale.isItalian)
 
     /**
      * Un colore per stampa, cosi' la lettera si riconosce senza leggerla:
      * la reverse tira all'argento-azzurro e l'holo all'oro, come in mano.
+     * Le speciali hanno il loro, uguale per tutte: la stella dice gia' cosa sono.
      */
-    fun color(variant: String): Color = when (variant) {
-        "Normal" -> Color(0xFF94A3B8)
-        "Reverse" -> Color(0xFF60A5FA)
-        "Holo" -> Color(0xFFEAB308)
-        "1st Edition", "1st Edition Holo" -> Color(0xFFA855F7)
-        else -> Color(0xFF94A3B8)
+    fun color(variant: String): Color {
+        if (VariantKeys.isSpecial(variant)) return Color(0xFFEC4899)
+        return when (variant) {
+            "Normal" -> Color(0xFF94A3B8)
+            "Reverse" -> Color(0xFF60A5FA)
+            "Holo" -> Color(0xFFEAB308)
+            "1st Edition", "1st Edition Holo" -> Color(0xFFA855F7)
+            else -> Color(0xFF94A3B8)
+        }
     }
 
     /** L'ordine in cui si mostrano, sempre lo stesso a prescindere dai dati. */
-    private val ORDER = listOf("Normal", "Reverse", "Holo", "1st Edition", "1st Edition Holo", "Unlimited Holo")
-
-    /** Posizione di una stampa nell'ordine; le sconosciute vanno in fondo. */
-    fun order(variant: String): Int = ORDER.indexOf(variant).takeIf { it >= 0 } ?: ORDER.size
-
-    fun sorted(variants: Collection<String>): List<String> =
-        variants.distinct().sortedBy(::order)
+    fun sorted(variants: Collection<String>): List<String> = VariantKeys.sorted(variants)
 }
 
 /**

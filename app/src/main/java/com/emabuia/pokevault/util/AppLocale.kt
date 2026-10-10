@@ -386,6 +386,8 @@ object AppLocale {
      * la parola che si usa e' "stampa".
      */
     val printLabel: String get() = if (isItalian) "Stampa" else "Print"
+    val specialPrintsLabel: String get() = if (isItalian) "Stampe speciali" else "Special prints"
+    val noPriceForPrint: String get() = if (isItalian) "Nessun prezzo per questa stampa" else "No price for this print"
     val alreadyOwnedPrint: String get() = if (isItalian) "Già in collezione" else "Already owned"
     val removeFromCollection: String get() = if (isItalian) "Rimuovi" else "Remove"
     /** Il testo del tasto quando si stanno aggiungendo piu' copie in un colpo solo. */

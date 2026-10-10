@@ -315,11 +315,7 @@ fun IllustratorDetailScreen(
                             // sulla tessera. Le stampe possibili dipendono dalla
                             // data del set, che qui arriva dal manifest D1.
                             onQuickAddClick = {
-                                val variants = CardOptions.getVariantsForCard(
-                                    card.tcgplayer?.prices?.keys ?: emptySet(),
-                                    card.rarity,
-                                    card.set?.releaseDate
-                                )
+                                val variants = CardOptions.getBaseVariantsForCard(card)
                                 if (variants.size <= 1) {
                                     viewModel.addCard(card, variants.firstOrNull() ?: "Holo", 1, "Near Mint", "")
                                 } else {

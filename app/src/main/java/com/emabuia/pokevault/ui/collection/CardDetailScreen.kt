@@ -206,7 +206,10 @@ fun CardDetailScreen(
                                 it.apiCardId == cardId ||
                                 it.id == cardId
                         }
-                        .sortedBy { CardVariants.order(it.variant) }
+                        .let { cards ->
+                            val order = CardVariants.sorted(cards.map { it.variant })
+                            cards.sortedBy { order.indexOf(it.variant) }
+                        }
                     variants = found
                     editedQuantities = found.associate { it.id to it.quantity }
                 }
@@ -635,7 +638,7 @@ fun CardDetailScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                DetailSection(title = "${AppLocale.details} ${currentCard.variant}") {
+                DetailSection(title = "${AppLocale.details} ${CardVariants.label(currentCard.variant)}") {
                     DetailRow(AppLocale.condition, currentCard.condition)
                     DetailRow(AppLocale.languageLabel, currentCard.language)
                     DetailRow(AppLocale.estimatedValue, "€${"%.2f".format(currentCard.estimatedValue)}")
@@ -874,7 +877,7 @@ fun VariantRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = variant.variant,
+                    text = CardVariants.label(variant.variant),
                     color = if (isSelected) accent else AppColors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,

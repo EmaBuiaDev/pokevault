@@ -117,8 +117,28 @@ data class PokeWalletPriceData(
     val usdLow: Double? = null,
     // Source URLs
     val cardMarketUrl: String? = null,
-    val tcgPlayerUrl: String? = null
+    val tcgPlayerUrl: String? = null,
+    /**
+     * I prezzi delle stampe che costano diverso da questa voce (snapshot
+     * italiano, campo `v`): la Reverse di una comune, una timbrata col suo
+     * prodotto Cardmarket. Vuoto dove la fonte non li ha.
+     */
+    val variantPrices: Map<String, PokeWalletPriceData> = emptyMap()
 ) {
+    /**
+     * Il prezzo di UNA stampa della carta.
+     *
+     * Una stampa con un prezzo suo prende quello. Una stampa base senza
+     * prezzo suo costa come questa voce: il worker scrive solo i prezzi che
+     * differiscono. Una stampa speciale senza prezzo suo non ne ha: dare a
+     * una Master Ball il prezzo della comune sarebbe un numero falso.
+     */
+    fun forVariant(variant: String?): PokeWalletPriceData? {
+        if (variant.isNullOrBlank()) return this
+        variantPrices[variant]?.let { return it }
+        return if (com.emabuia.pokevault.data.model.VariantKeys.isSpecial(variant)) null else this
+    }
+
     /** True if at least one EUR price is available. */
     val hasEurPrices: Boolean
         get() = eurAvg != null || eurLow != null || eurTrend != null

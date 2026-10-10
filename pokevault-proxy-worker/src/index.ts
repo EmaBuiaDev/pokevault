@@ -883,7 +883,8 @@ type D1CardRow = {
 // and /v1/expansions/{id}/cards, so the two endpoints can never drift apart on field
 // names -- both must match ItalianCardRecord on the Android side (cardId, espansioneId,
 // nome, tipo, ps, attacchi, regolaSpeciale, rarity, stage).
-function mapCardRow(r: D1CardRow) {
+function mapCardRow(r: D1CardRow, variants?: Map<string, string[]>) {
+  const stampe = variants?.get(r.card_id);
   return {
     cardId: r.card_id,
     espansioneId: r.expansion_id,
@@ -900,7 +901,41 @@ function mapCardRow(r: D1CardRow) {
     // storico preso dal wiki, e /ita/catalog.json porta sedicimila carte --
     // una chiave nulla per ognuna sarebbe peso puro per ogni client.
     ...(r.illustratore ? { illustratore: r.illustratore } : {}),
+    // Le stampe vere della carta (schema/015, scripts/build-card-variants.mjs):
+    // "Normal", "Reverse", "Holo", "1st Edition"... e le speciali
+    // ("Reverse|foil=pokeball"). Omesse quando non ci sono: l'app ripiega
+    // sulla rarita', come prima che la tabella esistesse.
+    ...(stampe && stampe.length ? { stampe } : {}),
   };
+}
+
+/**
+ * Le stampe delle carte che `scopeSql` seleziona (una condizione su `c`, la
+ * tabella cards), per card_id.
+ *
+ * Mai un motivo per far fallire il catalogo: se la tabella non c'e' o la
+ * query cade, torna una mappa vuota e le carte escono come prima, senza
+ * stampe -- /ita/catalog.json non deve mai ripiegare sul blob R2 per colpa
+ * di un campo in piu'.
+ */
+async function loadCardVariants(db: D1Database, scopeSql: string, ...binds: unknown[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT v.card_id, v.variant FROM card_variants v JOIN cards c ON c.card_id = v.card_id
+         WHERE ${scopeSql} ORDER BY v.card_id, v.kind, v.variant`
+      )
+      .bind(...binds)
+      .all<{ card_id: string; variant: string }>();
+    for (const row of results) {
+      const list = out.get(row.card_id);
+      if (list) list.push(row.variant); else out.set(row.card_id, [row.variant]);
+    }
+  } catch (error) {
+    console.error('loadCardVariants failed, cards go out without stampe:', error);
+  }
+  return out;
 }
 
 async function buildCatalogJsonFromD1(db: D1Database): Promise<string | null> {
@@ -915,7 +950,8 @@ async function buildCatalogJsonFromD1(db: D1Database): Promise<string | null> {
 
     if (results.length === 0) return null; // suspiciously empty -- prefer the R2 fallback over serving nothing
 
-    const cards = results.map(mapCardRow);
+    const variants = await loadCardVariants(db, 'c.expansion_id IN (SELECT id FROM expansions WHERE published = 1)');
+    const cards = results.map((r) => mapCardRow(r, variants));
     return JSON.stringify(cards);
   } catch (error) {
     console.error('buildCatalogJsonFromD1 failed, falling back to R2 blob:', error);
@@ -2184,7 +2220,8 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
     if (results.length === 0) {
       return jsonResponse({ error: 'expansion not found or has no cards' }, 404);
     }
-    return jsonResponse({ expansionId, cards: results.map(mapCardRow) }, 200, V1_CATALOG_CACHE_CONTROL);
+    const variants = await loadCardVariants(db, 'c.expansion_id = ?1', expansionId);
+    return jsonResponse({ expansionId, cards: results.map((r) => mapCardRow(r, variants)) }, 200, V1_CATALOG_CACHE_CONTROL);
   }
 
   if (pathname === '/v1/illustrators') {
@@ -2306,7 +2343,8 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
     if (results.length === 0) {
       return jsonResponse({ error: 'illustrator not found or has no cards' }, 404);
     }
-    return jsonResponse({ illustrator, cards: results.map(mapCardRow) }, 200, V1_CATALOG_CACHE_CONTROL);
+    const variants = await loadCardVariants(db, 'c.illustratore = ?1', illustrator);
+    return jsonResponse({ illustrator, cards: results.map((r) => mapCardRow(r, variants)) }, 200, V1_CATALOG_CACHE_CONTROL);
   }
 
   const cardMatch = pathname.match(/^\/v1\/cards\/([A-Za-z0-9._-]+)$/);

@@ -233,11 +233,7 @@ class GoalAlbumViewModel : ViewModel() {
 
     fun addMissingCardToCollection(card: TcgCard, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            val variants = CardOptions.getVariantsForCard(
-                card.tcgplayer?.prices?.keys ?: emptySet(),
-                card.rarity,
-                card.set?.releaseDate
-            )
+            val variants = CardOptions.getBaseVariantsForCard(card)
             val selectedVariant = variants.firstOrNull() ?: "Holo"
 
             val market = card.cardmarket?.prices

@@ -254,12 +254,16 @@ class IllustratorViewModel : ViewModel() {
         }
     }
 
-    /** Il prezzo da salvare: quello della carta se c'e', se no lo snapshot italiano. */
-    private suspend fun priceFor(card: TcgCard): Double {
-        val own = card.cardmarket?.prices.minimumEurPriceOrZero()
-        if (own > 0.0) return own
-        val context = appContext ?: return 0.0
-        return snapshotPrices.priceForItalianCard(context, card.id).minimumEurOrZero()
+    /**
+     * Il prezzo da salvare: quello della STAMPA scelta dallo snapshot italiano
+     * dove la carta c'e' (una Reverse non vale quanto la Normale), se no
+     * quello della carta, come prima.
+     */
+    private suspend fun priceFor(card: TcgCard, variant: String): Double {
+        val context = appContext
+        val italian = context?.let { snapshotPrices.priceForItalianCard(it, card.id) }
+        if (italian != null) return italian.forVariant(variant).minimumEurOrZero()
+        return card.cardmarket?.prices.minimumEurPriceOrZero()
     }
 
     /** Le stampe possedute di ogni carta, per i badge sulla miniatura. */
@@ -300,7 +304,7 @@ class IllustratorViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             isAddingCard = card.id
-            val price = priceFor(card)
+            val price = priceFor(card, variant)
             val pokemonCard = PokemonCard(
                 name = card.name,
                 imageUrl = card.images.small,

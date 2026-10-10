@@ -37,7 +37,16 @@ data class ItalianCardRecord(
      * null -- /ita/catalog.json porta diciottomila carte a ogni client -- per
      * questo qui il default e' null e non "".
      */
-    val illustratore: String? = null
+    val illustratore: String? = null,
+    /**
+     * Le stampe che la carta ha davvero, dal worker (D1 card_variants):
+     * "Normal", "Reverse", "Holo", "1st Edition"... e le speciali con
+     * lavorazione o timbri ("Reverse|foil=pokeball", "Normal|stamp=pokemon-day").
+     *
+     * Null quando il worker non le manda (carta senza dati, o worker di prima):
+     * allora le stampe si deducono dalla rarita', come prima.
+     */
+    val stampe: List<String>? = null
 ) {
     fun imageReference(): ItalianImageReference? = ItalianCatalogNormalizer.toImageReference(cardId)
 

@@ -31,6 +31,12 @@ export interface PriceEntry {
   usd?: number;
   usdLow?: number;
   url?: string;
+  /**
+   * Prezzi delle singole stampe, per chiave di stampa (schema/015): solo
+   * quelle che costano diverso dalla voce principale -- la Reverse di una
+   * comune, una timbrata col suo prodotto. Chi non lo conosce lo ignora.
+   */
+  v?: Record<string, PriceEntry>;
 }
 
 export interface PriceExpansionEntry {
@@ -59,6 +65,8 @@ export interface CardmarketPrice {
   avg30?: number | null;
   /** Il prodotto Cardmarket da cui vengono questi prezzi: da qui il link diretto. */
   idProduct?: number | null;
+  /** Prezzi per stampa, stessa forma (vedi PriceEntry.v). */
+  v?: Record<string, CardmarketPrice>;
 }
 
 export interface CardmarketExpansion {
@@ -119,6 +127,20 @@ function eurEntry(price: CardmarketPrice): PriceEntry | null {
   return entry;
 }
 
+/** I prezzi per stampa, con lo stesso filtro della voce principale. */
+function variantEntries(v: Record<string, CardmarketPrice> | undefined): Record<string, PriceEntry> | null {
+  if (!v || typeof v !== 'object') return null;
+  const out: Record<string, PriceEntry> = {};
+  for (const [variant, price] of Object.entries(v)) {
+    if (!variant || !price || typeof price !== 'object') continue;
+    const eur = eurEntry(price);
+    if (!eur) continue;
+    if (isProductId(price.idProduct)) eur.url = cardmarketProductUrl(price.idProduct);
+    out[variant] = eur;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 /**
  * Snapshot da servire all'app: quello di PokeWallet con sopra i prezzi
  * Cardmarket. Non modifica gli argomenti.
@@ -146,6 +168,8 @@ export function mergeCardmarketPrices(
       if (isPositive(previous?.usdLow)) next.usdLow = previous.usdLow;
       if (isProductId(cmPrice.idProduct)) next.url = cardmarketProductUrl(cmPrice.idProduct);
       else if (isCardmarketUrl(previous?.url)) next.url = previous!.url;
+      const variants = variantEntries(cmPrice.v);
+      if (variants) next.v = variants;
       prices[number] = next;
       changed += 1;
     }

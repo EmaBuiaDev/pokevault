@@ -133,6 +133,8 @@ const MAX_ITEMS_PER_SIDE = 60;
  */
 const MAX_PARAMS_PER_STATEMENT = 100;
 
+/** Lunghezza massima di una stampa: le speciali del catalogo arrivano a ~40. */
+const VARIANT_MAX = 64;
 const CARD_KEY_REGEX = /^[a-z0-9-]{1,20}:[A-Za-z0-9_]{1,20}$/;
 const NICKNAME_REGEX = /^[\p{L}\p{N}_.\- ]{3,20}$/u;
 
@@ -459,7 +461,10 @@ async function putHaves(request: Request, db: D1Database, uid: string): Promise<
     const notify = manual ? item.notify === true : true;
     rows.push([
       uid, key, setCodeOf(key),
-      cleanText(item.variant, 30), cleanText(item.condition, 30), cleanText(item.language, 30),
+      // La stampa arriva fino a 64: le speciali ("Reverse|foil=league|stamp=30th-pokeday",
+      // schema/015 del catalogo) superano i 30, e mozzate non combaciano piu'
+      // con la stessa carta in collezione.
+      cleanText(item.variant, VARIANT_MAX), cleanText(item.condition, 30), cleanText(item.language, 30),
       qty, manual ? 1 : 0, notify ? 1 : 0,
     ]);
   }
@@ -917,7 +922,7 @@ function parseItems(raw: unknown): ProposalItem[] | null {
     if (!CARD_KEY_REGEX.test(key) || !Number.isInteger(qty) || qty < 1 || qty > 99) return null;
     const item = {
       key,
-      variant: cleanText(value.variant, 30),
+      variant: cleanText(value.variant, VARIANT_MAX),
       condition: cleanText(value.condition, 30),
       language: cleanText(value.language, 30),
       qty,

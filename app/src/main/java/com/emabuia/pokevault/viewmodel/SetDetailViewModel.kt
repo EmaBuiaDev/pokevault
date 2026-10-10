@@ -25,6 +25,7 @@ import com.emabuia.pokevault.data.remote.TranslationService
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.hasPositiveEurPrice
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
+import com.emabuia.pokevault.util.minimumEurOrZero
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -512,7 +513,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {
         viewModelScope.launch {
             uiState = uiState.copy(isAddingCard = tcgCard.id)
-            val price = priced(tcgCard).cardmarket?.prices.minimumEurPriceOrZero()
+            val price = priceForVariant(tcgCard, variant)
             val resolvedLanguage = language.ifBlank { defaultCollectionLanguage() }
 
             val card = PokemonCard(
@@ -552,12 +553,10 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     fun addMultipleCards(cards: List<TcgCard>, preferredVariant: String) {
         viewModelScope.launch {
             val preparedCards = cards.map { tcgCard ->
-                val availableVariants = CardOptions.getVariantsForCard(
-                    tcgCard.tcgplayer?.prices?.keys ?: emptySet(), tcgCard.rarity, tcgCard.set?.releaseDate
-                )
+                val availableVariants = CardOptions.getBaseVariantsForCard(tcgCard)
                 val actualVariant = if (preferredVariant in availableVariants) preferredVariant
                     else availableVariants.firstOrNull() ?: "Holo"
-                val price = priced(tcgCard).cardmarket?.prices.minimumEurPriceOrZero()
+                val price = priceForVariant(tcgCard, actualVariant)
 
                 PokemonCard(
                     name = tcgCard.name, imageUrl = tcgCard.images.small,
@@ -684,6 +683,20 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
      * disponibili. Le varianti si leggono sempre dalla carta com'e' a catalogo.
      */
     private fun priced(card: TcgCard): TcgCard = pricedCards[card.id] ?: card
+
+    /**
+     * Il valore di UNA stampa della carta, per salvarla: la Reverse di una
+     * comune o una timbrata non valgono quanto la Normale. Il prezzo per
+     * stampa sta nella mappa del set (snapshot italiano, campo v); dove la
+     * mappa non c'e' resta il prezzo della carta, come prima. Una stampa
+     * speciale senza prezzo suo si salva a 0 -- il recupero dei prezzi in
+     * Collezione la riprovera' -- invece che col prezzo della comune.
+     */
+    private fun priceForVariant(card: TcgCard, variant: String): Double {
+        val entry = normalizeCardNumberKey(card.number)?.let { italianSetPriceMap[it] }
+            ?: return priced(card).cardmarket?.prices.minimumEurPriceOrZero()
+        return entry.forVariant(variant).minimumEurOrZero()
+    }
 
     fun ensureCardPrice(card: TcgCard) {
         val current = pricedCards[card.id] ?: card

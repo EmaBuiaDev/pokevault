@@ -199,3 +199,24 @@ test('riconosce i link Cardmarket', () => {
   assert.ok(!isCardmarketUrl('https://evil.com/?u=https://www.cardmarket.com/'));
   assert.ok(!isCardmarketUrl(undefined));
 });
+
+test('i prezzi per stampa passano nello snapshot, col link al loro prodotto', () => {
+  const cm = blob();
+  cm.expansions.svp.prices['1'].v = {
+    Reverse: { avg: 0.4, low: 0.1, trend: 0.45 },
+    'Normal|stamp=set-logo': { avg: 74.37, low: 75, trend: 61.4, idProduct: 720365 },
+    'Reverse|foil=cosmos': { avg: null, low: null, trend: null },
+  };
+  const merged = mergeCardmarketPrices(pokewallet(), cm, NOW);
+  const v = merged.expansions.svp.prices['1'].v!;
+  assert.deepEqual(v.Reverse, { avg: 0.4, low: 0.1, trend: 0.45 });
+  assert.equal(v['Normal|stamp=set-logo'].low, 75);
+  assert.equal(v['Normal|stamp=set-logo'].url, 'https://www.cardmarket.com/it/Pokemon/Products?idProduct=720365');
+  // Una stampa senza nessun prezzo in euro non entra: l'app usa la voce principale.
+  assert.equal(v['Reverse|foil=cosmos'], undefined);
+});
+
+test('una carta senza prezzi per stampa resta senza il campo v', () => {
+  const merged = mergeCardmarketPrices(pokewallet(), blob(), NOW);
+  assert.equal(merged.expansions.svp.prices['1'].v, undefined);
+});

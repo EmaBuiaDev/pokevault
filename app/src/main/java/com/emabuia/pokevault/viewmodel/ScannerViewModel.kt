@@ -476,11 +476,14 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
      */
     fun variantsFor(card: TcgCard): List<String> {
         val priceKeys = card.tcgplayer?.prices?.keys ?: emptySet()
-        // Senza rarita' e senza prezzi, CardOptions risponde "Holo": per una
-        // carta di cui non sappiamo niente e' una stampa inventata. Qui si
-        // resta su "Normale", che e' quello che lo scanner salvava da sempre.
-        if (card.rarity.isNullOrBlank() && priceKeys.isEmpty()) return listOf(FALLBACK_VARIANT)
-        return CardOptions.getVariantsForCard(priceKeys, card.rarity, card.set?.releaseDate)
+        // Senza stampe dal catalogo, senza rarita' e senza prezzi, CardOptions
+        // risponde "Holo": per una carta di cui non sappiamo niente e' una
+        // stampa inventata. Qui si resta su "Normale", che e' quello che lo
+        // scanner salvava da sempre.
+        if (card.variants.isNullOrEmpty() && card.rarity.isNullOrBlank() && priceKeys.isEmpty()) return listOf(FALLBACK_VARIANT)
+        // Solo le base: dallo scanner si conferma al volo, e una timbrata si
+        // riconosce e si sceglie meglio dal dettaglio della carta.
+        return CardOptions.getBaseVariantsForCard(card)
             .ifEmpty { listOf(FALLBACK_VARIANT) }
     }
 
@@ -630,10 +633,16 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         val resolvedCard = repository.getCard(tcgCard.id, preferNetwork = true).getOrNull() ?: tcgCard
         // Una carta italiana del catalogo di suo non ha prezzi: senza lo
         // snapshot entrava in collezione a 0, e restava "N/D".
-        val price = resolvedCard.cardmarket?.prices.minimumEurPriceOrZero().takeIf { it > 0.0 }
-            ?: RepositoryProvider.italianPriceSnapshotRepository
-                .priceForItalianCard(appContext, resolvedCard.id)
-                .minimumEurOrZero()
+        // Dove lo snapshot conosce la carta vale il prezzo della STAMPA scelta
+        // (una Reverse non costa quanto la Normale); altrimenti quello della
+        // carta, come prima.
+        val italianPrices = RepositoryProvider.italianPriceSnapshotRepository
+            .priceForItalianCard(appContext, resolvedCard.id)
+        val price = if (italianPrices != null) {
+            italianPrices.forVariant(variant).minimumEurOrZero()
+        } else {
+            resolvedCard.cardmarket?.prices.minimumEurPriceOrZero()
+        }
 
         val pokemonCard = PokemonCard(
             name = resolvedCard.name,

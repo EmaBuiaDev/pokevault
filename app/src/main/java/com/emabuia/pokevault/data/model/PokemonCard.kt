@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.data.model
 
 import com.emabuia.pokevault.data.local.ItalianTranslations
+import com.emabuia.pokevault.data.remote.TcgCard
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.PropertyName
 
@@ -202,7 +203,23 @@ object CardOptions {
         return date >= REVERSE_HOLO_FROM
     }
 
-    fun getVariantsForCard(priceKeys: Set<String>, rarity: String?, setReleaseDate: String? = null): List<String> {
+    /**
+     * Le stampe fra cui scegliere per una carta.
+     *
+     * [knownVariants] sono quelle vere, dal catalogo (TcgCard.variants, D1
+     * card_variants): quando ci sono decidono loro, e tutto il resto di questa
+     * funzione e' il ripiego per le carte che il catalogo non conosce. Prima
+     * era l'unica strada, e deduceva dalla rarita' anche dove sbagliava: il 30
+     * Anniversario si prendeva una Reverse che non esiste.
+     */
+    fun getVariantsForCard(
+        priceKeys: Set<String>,
+        rarity: String?,
+        setReleaseDate: String? = null,
+        knownVariants: List<String>? = null
+    ): List<String> {
+        knownVariants?.filter { it.isNotBlank() }?.takeIf { it.isNotEmpty() }?.let { return VariantKeys.sorted(it) }
+
         // Vedi [USD_ONLY_PRICE_KEY]: quella chiave porta un prezzo, non una
         // stampa, e scartandola la carta ricade sul ramo della rarita' qui
         // sotto -- che per le carte italiane e' l'unica fonte vera.
@@ -244,6 +261,21 @@ object CardOptions {
             // Rarita' che non conosciamo: una stampa sola, senza inventarne.
             else -> listOf("Holo")
         }
+    }
+
+    /** Tutte le stampe della carta, speciali comprese: per il dettaglio carta. */
+    fun getVariantsForCard(card: TcgCard): List<String> =
+        getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity, card.set?.releaseDate, card.variants)
+
+    /**
+     * Solo le stampe base (Normale, Reverse, Holo, 1a Edizione): per l'aggiunta
+     * veloce dalla griglia, la selezione multipla e lo scanner, dove decine di
+     * timbrate non si possono scegliere a colpo d'occhio. Le speciali si
+     * aggiungono dal dettaglio della carta.
+     */
+    fun getBaseVariantsForCard(card: TcgCard): List<String> {
+        val all = getVariantsForCard(card)
+        return all.filterNot(VariantKeys::isSpecial).ifEmpty { all }
     }
 
     fun getVariantsFromApi(priceKeys: Set<String>): List<String> {
