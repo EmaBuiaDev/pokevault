@@ -316,5 +316,10 @@ object CollectionBrowser {
  */
 internal object CardVariantOrder {
     private val ORDER = listOf("Normal", "Reverse", "Holo", "1st Edition", "1st Edition Holo", "Unlimited Holo")
-    fun of(variant: String): Int = ORDER.indexOf(variant).let { if (it < 0) ORDER.size else it }
+    // Le speciali ("Reverse|foil=pokeball") dopo tutte le base, ognuna vicino
+    // alle altre della sua base: prima la Normale timbrata, poi le Reverse.
+    fun of(variant: String): Int {
+        val base = ORDER.indexOf(variant.substringBefore('|')).let { if (it < 0) ORDER.size else it }
+        return if ('|' in variant) ORDER.size + 1 + base else base
+    }
 }

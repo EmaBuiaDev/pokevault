@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.CardOptions
+import com.emabuia.pokevault.data.model.VariantKeys
 import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ui.theme.*
@@ -98,7 +99,13 @@ fun CardDetailBottomSheet(
 
     // Varianti disponibili (API + fallback per rarità)
     val availableVariants = remember(card) {
-        CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity, card.set?.releaseDate)
+        CardOptions.getVariantsForCard(card)
+    }
+    val baseVariants = remember(availableVariants) {
+        availableVariants.filterNot(VariantKeys::isSpecial).ifEmpty { availableVariants.take(1) }
+    }
+    val specialVariants = remember(availableVariants, baseVariants) {
+        availableVariants.filter { VariantKeys.isSpecial(it) && it !in baseVariants }
     }
     val resolvedLanguageOptions = remember(languageOptions) {
         languageOptions.distinct().ifEmpty { CardOptions.LANGUAGES }
@@ -118,8 +125,9 @@ fun CardDetailBottomSheet(
         mutableStateOf(
             // Si parte da una stampa che manca: chi riapre una carta che ha
             // gia' quasi sempre sta aggiungendo l'altra versione.
-            availableVariants.firstOrNull { it !in ownedVariants }
-                ?: availableVariants.firstOrNull()
+            // Fra le base: una timbrata non e' mai la scelta di partenza.
+            baseVariants.firstOrNull { it !in ownedVariants }
+                ?: baseVariants.firstOrNull()
                 ?: "Normal"
         )
     }
@@ -149,7 +157,11 @@ fun CardDetailBottomSheet(
     // sparivano subito. Un indirizzo, una volta noto, non torna mai ignoto --
     // il fallback sulla carta inglese regge anche se PokeWallet non risponde
     // -- quindi cosi' le pastiglie possono solo comparire, mai svanire.
-    val cardMarketUrl = pokeWalletPrices?.cardMarketUrl?.takeIf { it.isNotBlank() }
+    // Il prezzo della stampa scelta (snapshot italiano, campo v): una timbrata
+    // ha il suo prodotto Cardmarket, e il link porta a quello.
+    val shownPrices = pokeWalletPrices?.forVariant(selectedVariant)
+    val cardMarketUrl = shownPrices?.cardMarketUrl?.takeIf { it.isNotBlank() }
+        ?: pokeWalletPrices?.cardMarketUrl?.takeIf { it.isNotBlank() }
         ?: card.cardmarket?.url?.takeIf { it.isNotBlank() }
     val tcgPlayerUrl = pokeWalletPrices?.tcgPlayerUrl?.takeIf { it.isNotBlank() }
         ?: card.tcgplayer?.url?.takeIf { it.isNotBlank() }
@@ -507,14 +519,14 @@ fun CardDetailBottomSheet(
                         // ognuna sa dire se quella stampa e' gia' in
                         // collezione -- in una tendina chiusa non si vedeva.
                         FormField(label = AppLocale.printLabel) {
-                            if (availableVariants.size > 1) {
+                            if (baseVariants.size > 1) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    availableVariants.forEach { variant ->
+                                    baseVariants.forEach { variant ->
                                         PrintChoiceChip(
                                             variant = variant,
                                             selected = variant == selectedVariant,
@@ -523,10 +535,46 @@ fun CardDetailBottomSheet(
                                         )
                                     }
                                 }
-                            } else {
+                            } else if (specialVariants.isEmpty()) {
                                 // Una stampa sola non e' una scelta, ma va
                                 // detto lo stesso quale finira' in collezione.
                                 StaticFieldValue(text = CardVariants.label(selectedVariant))
+                            } else {
+                                // Una sola base ma ci sono speciali: la base
+                                // resta sceglibile, per tornarci dopo aver
+                                // toccato una timbrata.
+                                baseVariants.forEach { variant ->
+                                    PrintChoiceChip(
+                                        variant = variant,
+                                        selected = variant == selectedVariant,
+                                        alreadyOwned = variant in ownedVariants,
+                                        onClick = { selectedVariant = variant }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Le stampe speciali (timbrate, Poke Ball, Master
+                        // Ball...) in una riga a parte: possono essere tante,
+                        // e mescolate alle base nasconderebbero la scelta di
+                        // tutti i giorni.
+                        if (specialVariants.isNotEmpty()) {
+                            FormField(label = AppLocale.specialPrintsLabel) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    specialVariants.forEach { variant ->
+                                        PrintChoiceChip(
+                                            variant = variant,
+                                            selected = variant == selectedVariant,
+                                            alreadyOwned = variant in ownedVariants,
+                                            onClick = { selectedVariant = variant }
+                                        )
+                                    }
+                                }
                             }
                         }
 
@@ -636,7 +684,11 @@ fun CardDetailBottomSheet(
                             )
                             Text(AppLocale.loadingPrices, color = AppColors.textMuted, fontSize = 12.sp)
                         }
-                    } else if (pokeWalletPrices != null && pokeWalletPrices.hasEurPrices) {
+                    } else if (pokeWalletPrices != null && shownPrices == null) {
+                        // Una stampa speciale senza un prezzo suo: meglio dirlo
+                        // che mostrare quello della Normale.
+                        Text(AppLocale.noPriceForPrint, color = AppColors.textMuted, fontSize = 12.sp)
+                    } else if (shownPrices != null && shownPrices.hasEurPrices) {
                         // Qui l'intestazione e' solo il titolo: i tasti verso
                         // Cardmarket e TCGplayer sono saliti sotto l'immagine,
                         // e tenerne una seconda copia qui voleva dire due
@@ -660,7 +712,7 @@ fun CardDetailBottomSheet(
                                 .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            val mainEurPrice = pokeWalletPrices.eurAvg ?: pokeWalletPrices.eurLow
+                            val mainEurPrice = shownPrices.eurAvg ?: shownPrices.eurLow
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -677,11 +729,11 @@ fun CardDetailBottomSheet(
                                         )
                                     }
                                 }
-                                if (pokeWalletPrices.eurTrend != null) {
+                                if (shownPrices.eurTrend != null) {
                                     Column(horizontalAlignment = Alignment.End) {
                                         Text(AppLocale.trend, color = AppColors.textMuted, fontSize = 11.sp)
                                         Text(
-                                            "€${String.format("%.2f", pokeWalletPrices.eurTrend)}",
+                                            "€${String.format("%.2f", shownPrices.eurTrend)}",
                                             color = AppColors.textPrimary,
                                             fontWeight = FontWeight.Medium,
                                             fontSize = 14.sp
@@ -690,24 +742,24 @@ fun CardDetailBottomSheet(
                                 }
                             }
 
-                            if (pokeWalletPrices.hasSparklineData) {
+                            if (shownPrices.hasSparklineData) {
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text("Cardmarket History", color = AppColors.textSecondary, fontWeight = FontWeight.Medium, fontSize = 12.sp)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 PriceSparkline(
-                                    avg30 = pokeWalletPrices.eurAvg30 ?: 0.0,
-                                    avg7 = pokeWalletPrices.eurAvg7 ?: 0.0,
-                                    avg1 = pokeWalletPrices.eurAvg1 ?: 0.0
+                                    avg30 = shownPrices.eurAvg30 ?: 0.0,
+                                    avg7 = shownPrices.eurAvg7 ?: 0.0,
+                                    avg1 = shownPrices.eurAvg1 ?: 0.0
                                 )
                             }
 
-                            if (pokeWalletPrices.eurLow != null) {
+                            if (shownPrices.eurLow != null) {
                                 HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.15f), modifier = Modifier.padding(vertical = 2.dp))
-                                DetailInfoRow(AppLocale.minPrice, "€${String.format("%.2f", pokeWalletPrices.eurLow)}")
+                                DetailInfoRow(AppLocale.minPrice, "€${String.format("%.2f", shownPrices.eurLow)}")
                             }
                         }
 
-                        if (pokeWalletPrices.usdMarket != null) {
+                        if (shownPrices.usdMarket != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(
                                 modifier = Modifier
@@ -726,7 +778,7 @@ fun CardDetailBottomSheet(
                                     Text("TCGPlayer", color = AppColors.textSecondary, fontSize = 13.sp)
                                 }
                                 Text(
-                                    "\$${String.format("%.2f", pokeWalletPrices.usdMarket)}",
+                                    "\$${String.format("%.2f", shownPrices.usdMarket)}",
                                     color = AppColors.textPrimary,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 14.sp

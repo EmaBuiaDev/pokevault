@@ -211,6 +211,7 @@ import com.emabuia.pokevault.data.trade.TradeCardKey
 import com.emabuia.pokevault.data.trade.TradeLists
 import com.emabuia.pokevault.data.trade.TradePush
 import com.emabuia.pokevault.ui.components.CardImageSkeleton
+import com.emabuia.pokevault.ui.components.CardVariants
 import com.emabuia.pokevault.ui.components.CascadeIn
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.AppColors
@@ -1778,7 +1779,7 @@ private fun CardDetailDialog(item: TradeMatchItem, theirs: Boolean, onDismiss: (
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                listOfNotNull(item.variant, item.condition, item.language, item.qty?.let { AppLocale.tradeRadarCopies(it) })
+                listOfNotNull(item.variant?.let(CardVariants::label), item.condition, item.language, item.qty?.let { AppLocale.tradeRadarCopies(it) })
                     .filter { it.isNotBlank() }
                     .forEach { InfoPill(it) }
             }
@@ -3683,7 +3684,7 @@ private fun ClosingDialog(viewModel: TradeRadarViewModel, closing: TradeRadarVie
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                listOfNotNull(line.item.variant, line.item.condition).filter { it.isNotBlank() }.joinToString(" · "),
+                                listOfNotNull(line.item.variant?.let(CardVariants::label), line.item.condition).filter { it.isNotBlank() }.joinToString(" · "),
                                 fontSize = 11.sp,
                                 color = AppColors.textMuted
                             )
@@ -4606,7 +4607,7 @@ private fun OfferRow(
                     fontSize = 12.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    InfoPill(offer.variant)
+                    InfoPill(CardVariants.label(offer.variant))
                     InfoPill(offer.condition)
                     if (manual) {
                         InfoPill(AppLocale.tradeRadarOnlyCopy, AppColors.orange)
@@ -4800,7 +4801,7 @@ private fun SinglesPicker(singles: List<TradeLists.Duplicate>, onPick: (TradeLis
                         Column(Modifier.weight(1f)) {
                             Text(single.name, fontWeight = FontWeight.SemiBold, color = AppColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
-                                "${single.setName} · ${single.cardNumber} · ${single.variant}",
+                                "${single.setName} · ${single.cardNumber} · ${CardVariants.label(single.variant)}",
                                 fontSize = 12.sp, color = AppColors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                         }

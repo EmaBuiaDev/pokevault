@@ -3071,7 +3071,8 @@ class CatalogRepository {
             // inglese di appoggio arriva da PokeWallet, che non lo espone:
             // il fallback resta per simmetria con gli altri campi, ma in
             // pratica non scatta mai.
-            artist = record.illustratore?.takeIf { it.isNotBlank() } ?: baseCard?.artist
+            artist = record.illustratore?.takeIf { it.isNotBlank() } ?: baseCard?.artist,
+            variants = record.stampe?.filter { it.isNotBlank() }?.takeIf { it.isNotEmpty() }
         )
     }
 

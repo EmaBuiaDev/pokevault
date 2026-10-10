@@ -60,6 +60,12 @@ class FirestoreRepository {
         } catch (_: Exception) {
             // Solo un'informazione per la console: non deve mai disturbare l'app.
         }
+        // Ripara i documenti nati senza profilo (nome, email...): vedi
+        // UserProfileFields. Una lettura per apertura; scrive solo se manca qualcosa.
+        try {
+            auth.currentUser?.let { FirebaseAuthManager().completeProfile(it) }
+        } catch (_: Exception) {
+        }
     }
 
     private val cardsCollection

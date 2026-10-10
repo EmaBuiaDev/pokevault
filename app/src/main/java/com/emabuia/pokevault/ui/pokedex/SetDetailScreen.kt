@@ -789,9 +789,7 @@ fun SetDetailScreen(
                                     onQuickAddClick = {
                                         if (!isSelectionMode) {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            val variants = CardOptions.getVariantsForCard(
-                                                card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity, card.set?.releaseDate
-                                            )
+                                            val variants = CardOptions.getBaseVariantsForCard(card)
                                             if (variants.size <= 1) {
                                                 viewModel.addCardWithDetails(card, variants.firstOrNull() ?: "Holo", 1, "Near Mint", collectionLanguage)
                                             } else {
@@ -858,11 +856,7 @@ fun SetDetailScreen(
                     val selectionVariantOptions = remember(selectedCardIds, displayedCards) {
                         val selected = displayedCards.filter { it.id in selectedCardIds }
                         val union = selected.flatMapTo(mutableSetOf()) { card ->
-                            CardOptions.getVariantsForCard(
-                                card.tcgplayer?.prices?.keys ?: emptySet(),
-                                card.rarity,
-                                card.set?.releaseDate
-                            )
+                            CardOptions.getBaseVariantsForCard(card)
                         }
                         CardVariants.sorted(union).ifEmpty { CardOptions.DEFAULT_VARIANTS }
                     }
@@ -1241,7 +1235,7 @@ fun TcgCardCompactItem(
     onVariantSelected: (String) -> Unit = {}
 ) {
     val variantOptions = remember(card.tcgplayer?.prices?.keys, card.rarity, card.set?.releaseDate) {
-        CardOptions.getVariantsForCard(card.tcgplayer?.prices?.keys ?: emptySet(), card.rarity, card.set?.releaseDate)
+        CardOptions.getBaseVariantsForCard(card)
     }
     var currentImageUrl by remember(card.id, card.images.small, card.images.large) {
         mutableStateOf(card.images.small.ifBlank { card.images.large })

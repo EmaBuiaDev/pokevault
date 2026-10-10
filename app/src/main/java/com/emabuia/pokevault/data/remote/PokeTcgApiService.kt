@@ -47,7 +47,14 @@ data class TcgCard(
      * CachedCardEntity non ha una colonna per lui: la cache Room serve solo
      * il ramo PokeWallet, dove il campo sarebbe null su ogni riga.
      */
-    val artist: String? = null
+    val artist: String? = null,
+    /**
+     * Le stampe vere della carta, dal catalogo italiano (ItalianCardRecord.stampe):
+     * hanno la precedenza sulle chiavi TCGplayer e sulla rarita' in
+     * [com.emabuia.pokevault.data.model.CardOptions.getVariantsForCard].
+     * Null sulle carte PokeWallet e dove il catalogo non le conosce.
+     */
+    val variants: List<String>? = null
 )
 
 @Immutable

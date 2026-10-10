@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import sharp from 'sharp';
 import { canonicalStage } from './lib/tcgdex-stage.mjs';
+import { TCGDEX_ID_OVERRIDES } from './lib/tcgdex-set-id-map.mjs';
 import { normalizeNumber, detectConvention, detectR2Layout, r2KeyFor } from './lib/set-convention.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -120,7 +121,10 @@ async function main() {
   const convention = detectConvention(existing, setCodeUpper);
   console.log(`In D1: ${existing.length} carte. Grafia del set: numero ${convention.padWidth > 0 ? `con padding a ${convention.padWidth}` : 'senza padding'}, cardId .${convention.cardIdExt}`);
 
-  const setSummary = await fetchJson(`https://api.tcgdex.net/v2/it/sets/${setId}`);
+  // Alcuni nostri id non sono quelli di TCGdex (pgo = swsh10.5): stessa mappa
+  // dei backfill, altrimenti TCGdex risponde 404 e il set non si completa.
+  const tcgdexId = TCGDEX_ID_OVERRIDES[setId] ?? setId;
+  const setSummary = await fetchJson(`https://api.tcgdex.net/v2/it/sets/${tcgdexId}`);
   const uniqueByLocalId = new Map();
   for (const c of setSummary.cards ?? []) {
     if (!uniqueByLocalId.has(c.localId)) uniqueByLocalId.set(c.localId, c);

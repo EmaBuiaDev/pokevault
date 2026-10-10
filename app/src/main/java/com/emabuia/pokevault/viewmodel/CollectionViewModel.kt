@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.firebase.CollectionStats
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
+import com.emabuia.pokevault.data.model.VariantKeys
 import com.emabuia.pokevault.data.model.collectionCardKey
 import com.emabuia.pokevault.data.model.collectionGroupKey
 import com.emabuia.pokevault.data.remote.CatalogRepository
@@ -270,8 +271,10 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
                 hydratingPriceCardIds += card.id
                 var attempted = true
                 try {
-                    var eurPrice = italianSnapshotPrice(card.apiCardId)
-                    if (eurPrice <= 0.0) {
+                    var eurPrice = italianSnapshotPrice(card.apiCardId, card.variant)
+                    // Una stampa speciale senza prezzo suo resta senza: la
+                    // carta inglese di appoggio darebbe il prezzo della Normale.
+                    if (eurPrice <= 0.0 && !VariantKeys.isSpecial(card.variant)) {
                         if (networkLookups > 0) {
                             networkLookups -= 1
                             eurPrice = tcgRepository.getCard(card.apiCardId).getOrNull()
@@ -302,8 +305,10 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
      * worker, per set e in cache: nessuna chiamata a PokeWallet. Il minimo
      * prima di tutto, come nel resto dell'app.
      */
-    private suspend fun italianSnapshotPrice(apiCardId: String): Double =
-        italianPriceSnapshotRepository.priceForItalianCard(getApplication(), apiCardId).minimumEurOrZero()
+    private suspend fun italianSnapshotPrice(apiCardId: String, variant: String): Double =
+        italianPriceSnapshotRepository.priceForItalianCard(getApplication(), apiCardId)
+            ?.forVariant(variant)
+            .minimumEurOrZero()
 
     /**
      * Corregge le carte salvate con il CODICE dell'espansione al posto del nome
