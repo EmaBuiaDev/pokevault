@@ -25,9 +25,12 @@
 //    (maggio 2002) le semplici escono Normale e Reverse se il set ha le
 //    reverse, le Rare Holo Holo e Reverse, le rarita' a stampa unica Holo.
 //
-// Le stampe base sono l'UNIONE delle fonti che reggono: l'errore tipico di
-// queste fonti e' omettere una stampa (niente prezzo, niente riga), non
-// inventarla. Un timbro presente su tutto il set (il "30th" del 30
+// Le stampe base sono quelle di pokemontcg.io, piu' da TCGdex solo cio' che
+// pokemontcg.io tipicamente omette (1a Edizione, Reverse, Holo delle rarita'
+// olografiche, Normale con un prodotto suo); dove si contraddicono su QUALE
+// stampa vince pokemontcg.io (vedi il commento sulla scelta). I Trainer Kit
+// stanno su TCGdex: il listino li confonde con il set principale. Un timbro
+// presente su tutto il set (il "30th" del 30
 // Anniversario) e' la stampa del set, non una speciale. I timbri fuori da
 // KNOWN_STAMPS (i giocatori dei World Championship Deck) non entrano e
 // finiscono nel rapporto. Il rapporto mostra set per set fonti, conteggi e
@@ -183,6 +186,12 @@ const KNOWN_STAMPS = new Set([
   'pokemon-together', 'origins-2008', 'comic-con', 'platinum', 'd-edition-error', 'pikachu-tail',
   '1st-edition-scratch-error', 'ultra-ball-league', 'trick-or-trade', 'asia-2023-24', 'poketour-99', 'w-promo',
   'horizons',
+  // Visti nel giro completo del 10/10/2026: eventi, leghe, campionati.
+  '10th-anniversary', 'ace-trainer', 'asia-promo', 'champion', 'chicago-2009', 'destiny-deoxys', 'fossil-museum',
+  'games-expo', 'gen-con', 'great-ball-league', 'gym-challenge', 'inquest-gamer', 'international-championship-europe',
+  'international-championship-latin-america', 'international-championship-north-america', 'judge', 'kraze-club',
+  'master-ball-league', 'nintendo-world', 'origins', 'poke-ball-league', 'pokemon-rocks-america', 'quarter-finalist',
+  'scrye', 'stadium-challenge', 'thank-you', 'wizard-world-chicago', 'wizard-world-philadelphia', 'worlds-2022',
 ]);
 
 // ── 1. catalogo ──
@@ -275,10 +284,14 @@ for (const [expansionId, list] of byExpansion) {
     if (d && (d.detailed.some((v) => v.type === 'reverse' && !v.foil) || d.variants?.reverse)) tRev += 1;
     if (hasHoloPrice(guide.get(c.id_product))) cmRev += 1;
   });
-  const tcgdexReliable = !(reverseEra && semplici >= 5 && tRev / semplici < 0.2 && cmRev / semplici > 0.3);
+  // I Trainer Kit (tk-*) sono ristampe: le loro carte sono collegate ai
+  // prodotti Cardmarket del set principale, che le reverse le hanno, e il
+  // listino "vedrebbe" reverse che nel kit non esistono. Li' vale TCGdex.
+  const isTrainerKit = expansionId.startsWith('tk-');
+  const tcgdexReliable = isTrainerKit || !(reverseEra && semplici >= 5 && tRev / semplici < 0.2 && cmRev / semplici > 0.3);
   // Per la regola di ripiego: il set ha le reverse? Lo dice il listino sul
   // set intero (una carta senza inserzioni "-holo" non vuol dire niente).
-  const setHasReverse = reverseEra && (tRev > 0 || (semplici > 0 && cmRev / semplici > 0.3));
+  const setHasReverse = reverseEra && (tRev > 0 || (!isTrainerKit && semplici > 0 && cmRev / semplici > 0.3));
 
   const counts = {}; const sources = {}; let specials = 0;
   list.forEach((c, i) => {
@@ -325,9 +338,29 @@ for (const [expansionId, list] of byExpansion) {
     // fonti e' OMETTERE una stampa (TCGplayer senza prezzo = niente chiave;
     // TCGdex che su BW/XY/SM non vede le reverse), non inventarla: una stampa
     // vista da una fonte affidabile entra. La regola solo se nessuna parla.
+    // Non un'unione cieca: misurato sul catalogo intero (10/10/2026), dove le
+    // due fonti si contraddicono su "quale" stampa (una promo Holo per
+    // pokemontcg.io, Normale per TCGdex: 465 casi) ha ragione pokemontcg.io --
+    // la promo esce in una stampa sola. Da TCGdex si aggiunge solo cio' che
+    // pokemontcg.io tipicamente omette: la 1a Edizione, le Reverse (e-Card,
+    // DP), la Holo delle rarita' olografiche, e una Normale solo se TCGdex le
+    // da' un prodotto Cardmarket suo (la Normale dei mazzi di una Holo Rara,
+    // ME01 10): senza prodotto non si puo' confermare che esista.
     let base; let source;
     const tcgdexUsable = fromTcgdex.size > 0 && (tcgdexReliable || [...fromTcgdex].some((k) => k.startsWith('1st Edition')));
-    if (fromPtcg.size && tcgdexUsable && tcgdexReliable) { base = new Set([...fromPtcg, ...fromTcgdex]); source = 'pokemontcg+tcgdex'; }
+    if (fromPtcg.size && tcgdexUsable && tcgdexReliable) {
+      base = new Set(fromPtcg);
+      for (const k of fromTcgdex) {
+        if (base.has(k)) continue;
+        const ownProduct = tcgdexProduct.get(k);
+        const add = k.startsWith('1st Edition')
+          || k === 'Reverse'
+          || (k === 'Holo' && (rc === 'holo' || rc === 'unica'))
+          || (k === 'Normal' && ownProduct && tcgdexMain && ownProduct !== tcgdexMain);
+        if (add) base.add(k);
+      }
+      source = 'pokemontcg+tcgdex';
+    }
     else if (fromPtcg.size) { base = new Set(fromPtcg); source = 'pokemontcg'; }
     else if (tcgdexReliable && fromTcgdex.size) { base = new Set(fromTcgdex); source = 'tcgdex'; }
     else { base = fromRule; source = 'regola'; }
