@@ -356,6 +356,16 @@ object AppLocale {
     val fewerCards: String get() = if (isItalian) "Meno carte" else "Fewer cards"
     val expandAll: String get() = if (isItalian) "Espandi tutte" else "Expand all"
     val collapseAll: String get() = if (isItalian) "Chiudi tutte" else "Collapse all"
+    val openAll: String get() = if (isItalian) "Apri tutte" else "Open all"
+    fun cardsPerRow(count: Int): String = if (isItalian) "$count per riga" else "$count per row"
+    val fewerPerRow: String get() = if (isItalian) "Meno carte per riga" else "Fewer cards per row"
+    val morePerRow: String get() = if (isItalian) "Più carte per riga" else "More cards per row"
+    fun collectionExpansionsCount(count: Int): String = when {
+        isItalian -> if (count == 1) "1 espansione" else "$count espansioni"
+        else -> if (count == 1) "1 set" else "$count sets"
+    }
+    val saveBeforeChangingCard: String get() =
+        if (isItalian) "Salva o annulla le modifiche prima di cambiare carta" else "Save or discard your changes before switching card"
     fun selectedCount(count: Int): String = if (isItalian) "$count selezionate" else "$count selected"
 
     val noCardFound: String get() = if (isItalian) "Carta non trovata" else "Card not found"

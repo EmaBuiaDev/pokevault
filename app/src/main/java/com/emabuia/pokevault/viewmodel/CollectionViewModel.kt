@@ -419,16 +419,11 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
         savePreferences()
     }
 
-    fun toggleGridColumns() {
-        val nextColumns = when (uiState.gridColumns) {
-            2 -> 3
-            3 -> 4
-            4 -> 5
-            5 -> 6
-            else -> 2
-        }
+    /** Una colonna in piu' o in meno, fra 2 e 6. */
+    fun changeGridColumns(delta: Int) {
+        val nextColumns = (uiState.gridColumns + delta).coerceIn(MIN_COLUMNS, MAX_COLUMNS)
+        if (nextColumns == uiState.gridColumns) return
         uiState = uiState.copy(gridColumns = nextColumns)
-        savePreferences()
     }
 
     // ── Cancellazione ──────────────────────────────────────────────────────
@@ -490,14 +485,16 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(errorMessage = null, successMessage = null)
     }
 
-    private companion object {
-        const val SEARCH_DEBOUNCE_MS = 250L
-        const val PRICE_HYDRATION_BATCH_SIZE = 8
-        const val PRICE_HYDRATION_WRITES_PER_ROUND = 20
-        const val PRICE_HYDRATION_ROUND_PAUSE_MS = 1_500L
-        const val PREF_GRID = "collection_grid"
-        const val PREF_LAYOUT = "collection_layout"
-        const val PREF_SORT = "collection_sort"
-        const val PREF_EXPANSION_ORDER = "collection_expansion_order"
+    companion object {
+        private const val SEARCH_DEBOUNCE_MS = 250L
+        private const val PRICE_HYDRATION_BATCH_SIZE = 8
+        private const val PRICE_HYDRATION_WRITES_PER_ROUND = 20
+        private const val PRICE_HYDRATION_ROUND_PAUSE_MS = 1_500L
+        const val MIN_COLUMNS = 2
+        const val MAX_COLUMNS = 6
+        private const val PREF_GRID = "collection_grid"
+        private const val PREF_LAYOUT = "collection_layout"
+        private const val PREF_SORT = "collection_sort"
+        private const val PREF_EXPANSION_ORDER = "collection_expansion_order"
     }
 }

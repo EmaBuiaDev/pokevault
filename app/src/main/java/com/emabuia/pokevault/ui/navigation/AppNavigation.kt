@@ -66,6 +66,7 @@ import com.emabuia.pokevault.ui.album.GoalAlbumDetailScreen
 import com.emabuia.pokevault.ui.auth.AuthScreen
 import com.emabuia.pokevault.ui.collection.AddCardScreen
 import com.emabuia.pokevault.ui.collection.CardDetailScreen
+import com.emabuia.pokevault.ui.collection.CollectionBrowse
 import com.emabuia.pokevault.ui.collection.CollectionScreen
 import com.emabuia.pokevault.ui.competitive.AddMatchScreen
 import com.emabuia.pokevault.ui.competitive.AddTournamentScreen
@@ -120,7 +121,7 @@ object Routes {
     const val COLLECTION = "collection"
     const val ADD_CARD = "add_card"
     const val EDIT_CARD = "edit_card/{cardId}"
-    const val CARD_DETAIL = "card_detail/{cardId}"
+    const val CARD_DETAIL = "card_detail/{cardId}?browse={browse}"
     const val POKEDEX = "pokedex"
 
     // Il Pokedex accetta un flag opzionale: arrivando dalla barra di ricerca
@@ -173,6 +174,8 @@ object Routes {
     fun pokedexSearch() = "pokedex?search=true"
 
     fun cardDetail(cardId: String) = "card_detail/$cardId"
+    /** Dalla collezione: il dettaglio scorre fra le carte con lo swipe. */
+    fun cardDetailBrowsing(cardId: String) = "card_detail/$cardId?browse=true"
     fun editCard(cardId: String) = "edit_card/$cardId"
     fun createAlbum(albumId: String? = null) = if (albumId != null) "create_album?albumId=$albumId" else "create_album"
     fun albumDetail(albumId: String) = "album_detail/$albumId"
@@ -427,7 +430,7 @@ fun AppNavigation(
                             CollectionScreen(
                                 onBack = { navController.popBackStack() },
                                 onAddCard = { navController.navigate(Routes.ADD_CARD) },
-                                onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
+                                onCardClick = { cardId -> navController.navigate(Routes.cardDetailBrowsing(cardId)) }
                             )
                         }
                     }
@@ -453,12 +456,25 @@ fun AppNavigation(
                 // ── Dettaglio Carta ──
                 composable(
                     route = Routes.CARD_DETAIL,
-                    arguments = listOf(navArgument("cardId") { type = NavType.StringType })
+                    arguments = listOf(
+                        navArgument("cardId") { type = NavType.StringType },
+                        navArgument("browse") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        }
+                    )
                 ) { backStackEntry ->
                     val cardId = backStackEntry.arguments?.getString("cardId") ?: ""
+                    val browse = backStackEntry.arguments?.getBoolean("browse") == true
+                    // Letto una volta: la collezione puo' riscriverlo, il
+                    // dettaglio gia' aperto deve tenere il suo.
+                    val browseKeys = remember(backStackEntry) {
+                        if (browse) CollectionBrowse.order else emptyList()
+                    }
                     CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
                         CardDetailScreen(
                             cardId = cardId,
+                            browseKeys = browseKeys,
                             onBack = { navController.popBackStack() },
                             onEdit = { navController.navigate(Routes.editCard(cardId)) },
                             onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) }

@@ -46,6 +46,7 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -228,6 +229,15 @@ fun CollectionScreen(
             selectedGroupKeys = if (key in selectedGroupKeys) selectedGroupKeys - key else selectedGroupKeys + key
             if (selectedGroupKeys.isEmpty()) isSelectionMode = false
         } else {
+            // Calcolato al tocco e non a ogni ricomposizione. Per espansione
+            // solo le sezioni aperte: si scorre fra le carte che si vedono.
+            CollectionBrowse.order = if (state.layout == CollectionLayout.ALL) {
+                state.visibleGroups.map { it.key }
+            } else {
+                state.sections
+                    .filter { it.expansion in expandedExpansions }
+                    .flatMap { section -> section.groups.map { it.key } }
+            }
             onCardClick(key)
         }
     }
@@ -247,7 +257,9 @@ fun CollectionScreen(
                     Text(
                         if (isSelectionMode) AppLocale.selectedCount(selectedGroupKeys.size) else AppLocale.myCardsSingleLine,
                         fontWeight = FontWeight.Bold,
-                        color = AppColors.textPrimary
+                        color = AppColors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 navigationIcon = {
@@ -295,18 +307,10 @@ fun CollectionScreen(
                         }
                     } else {
                         if (state.isGridView) {
-                            IconButton(onClick = { viewModel.toggleGridColumns() }) {
-                                Icon(
-                                    imageVector = when (state.gridColumns) {
-                                        2 -> Icons.Default.ViewModule
-                                        3 -> Icons.Default.GridView
-                                        4 -> Icons.Default.Apps
-                                        else -> Icons.Default.ViewComfy
-                                    },
-                                    contentDescription = AppLocale.changeGridDensity,
-                                    tint = AppColors.textPrimary
-                                )
-                            }
+                            ColumnsStepper(
+                                columns = state.gridColumns,
+                                onChange = viewModel::changeGridColumns
+                            )
                         }
                         IconButton(onClick = { viewModel.toggleViewMode() }) {
                             Icon(
@@ -540,81 +544,164 @@ private fun Toolbar(
     onToggleExpandAll: () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        SegmentedLayout(selected = state.layout, onSelect = onLayout)
-        Spacer(modifier = Modifier.weight(1f))
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SegmentedLayout(selected = state.layout, onSelect = onLayout)
+            Spacer(modifier = Modifier.weight(1f))
 
-        if (state.layout == CollectionLayout.BY_EXPANSION && state.sections.isNotEmpty()) {
-            IconButton(onClick = onToggleExpandAll, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    imageVector = if (canExpandAll) Icons.Default.UnfoldMore else Icons.Default.UnfoldLess,
-                    contentDescription = if (canExpandAll) AppLocale.expandAll else AppLocale.collapseAll,
-                    tint = AppColors.textSecondary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(4.dp))
-        }
-
-        Box {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(AppColors.searchBar)
-                    .clickable { menuOpen = true }
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Sort,
-                    contentDescription = AppLocale.sortMenuTitle,
-                    tint = AppColors.textSecondary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    state.sort.label(),
-                    color = AppColors.textPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
-                Icon(
-                    Icons.Default.ArrowDropDown,
-                    contentDescription = null,
-                    tint = AppColors.textMuted,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            DropdownMenu(
-                expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-                containerColor = AppColors.surface
-            ) {
-                MenuHeader(AppLocale.sortSectionCards)
-                CollectionSort.entries.forEach { sort ->
-                    MenuOption(
-                        label = sort.label(),
-                        selected = state.sort == sort,
-                        onClick = { onSort(sort); menuOpen = false }
+            Box {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AppColors.searchBar)
+                        .clickable { menuOpen = true }
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Sort,
+                        contentDescription = AppLocale.sortMenuTitle,
+                        tint = AppColors.textSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        state.sort.label(),
+                        color = AppColors.textPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                    Icon(
+                        Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        tint = AppColors.textMuted,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-                if (state.layout == CollectionLayout.BY_EXPANSION) {
-                    HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.2f))
-                    MenuHeader(AppLocale.sortSectionExpansions)
-                    ExpansionOrder.entries.forEach { order ->
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                    containerColor = AppColors.surface
+                ) {
+                    MenuHeader(AppLocale.sortSectionCards)
+                    CollectionSort.entries.forEach { sort ->
                         MenuOption(
-                            label = order.label(),
-                            selected = state.expansionOrder == order,
-                            onClick = { onExpansionOrder(order); menuOpen = false }
+                            label = sort.label(),
+                            selected = state.sort == sort,
+                            onClick = { onSort(sort); menuOpen = false }
                         )
+                    }
+                    if (state.layout == CollectionLayout.BY_EXPANSION) {
+                        HorizontalDivider(color = AppColors.textMuted.copy(alpha = 0.2f))
+                        MenuHeader(AppLocale.sortSectionExpansions)
+                        ExpansionOrder.entries.forEach { order ->
+                            MenuOption(
+                                label = order.label(),
+                                selected = state.expansionOrder == order,
+                                onClick = { onExpansionOrder(order); menuOpen = false }
+                            )
+                        }
                     }
                 }
             }
         }
+
+        // Una riga sua e non nella fila sopra: con "Prezzo più alto"
+        // nell'ordinamento una pillola in piu' lassu' non ci stava sui telefoni
+        // stretti. Prima era un'icona sola, e non si capiva cosa facesse.
+        if (state.layout == CollectionLayout.BY_EXPANSION && state.sections.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    AppLocale.collectionExpansionsCount(state.sections.size),
+                    color = AppColors.textMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AppColors.searchBar)
+                        .clickable(onClick = onToggleExpandAll)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = if (canExpandAll) Icons.Default.UnfoldMore else Icons.Default.UnfoldLess,
+                        contentDescription = null,
+                        tint = AppColors.textSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        if (canExpandAll) AppLocale.openAll else AppLocale.collapseAll,
+                        color = AppColors.textPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Quante carte per riga, scritto in chiaro. Prima era un'icona che cambiava
+ * disegno a ogni tocco, e non diceva ne' cosa fosse ne' in che verso andasse.
+ */
+@Composable
+private fun ColumnsStepper(columns: Int, onChange: (Int) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(end = 4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(AppColors.searchBar)
+    ) {
+        StepperButton(
+            icon = Icons.Default.Remove,
+            description = AppLocale.fewerPerRow,
+            enabled = columns > CollectionViewModel.MIN_COLUMNS,
+            onClick = { onChange(-1) }
+        )
+        Text(
+            AppLocale.cardsPerRow(columns),
+            color = AppColors.textPrimary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+        StepperButton(
+            icon = Icons.Default.Add,
+            description = AppLocale.morePerRow,
+            enabled = columns < CollectionViewModel.MAX_COLUMNS,
+            onClick = { onChange(1) }
+        )
+    }
+}
+
+@Composable
+private fun StepperButton(icon: ImageVector, description: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(34.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = description,
+            tint = if (enabled) AppColors.textPrimary else AppColors.textMuted.copy(alpha = 0.4f),
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 
