@@ -31,7 +31,10 @@
 // stampa vince pokemontcg.io (vedi il commento sulla scelta). I Trainer Kit
 // stanno su TCGdex: il listino li confonde con il set principale. Un timbro
 // presente su tutto il set (il "30th" del 30
-// Anniversario) e' la stampa del set, non una speciale. I timbri fuori da
+// Anniversario) e' la stampa del set, non una speciale. Le timbrate Play!
+// Pokemon delle buste premio (serie 1-9) vengono da lib/prize-packs.json,
+// cioe' dalle liste ufficiali italiane: TCGdex ne ha meno di un terzo e
+// chiama la stessa olografica ora holo, ora reverse. I timbri fuori da
 // KNOWN_STAMPS (i giocatori dei World Championship Deck) non entrano e
 // finiscono nel rapporto. Il rapporto mostra set per set fonti, conteggi e
 // disaccordi; --apply rifiuta di scrivere se pokemontcg.io non ha risposto
@@ -244,6 +247,43 @@ async function ptcgCards(setId) {
   return out;
 }
 
+// Buste premio Play! Pokemon: "<expansion_id>|<numero>" -> serie in cui la
+// carta esce normale (N) e olografica (H). Lo stesso timbro TCGdex lo usa
+// anche per le vecchie Player Rewards (HGSS, Platino): fuori da questa
+// lista quelle restano come le dice TCGdex.
+const PRIZE_STAMP = 'player-rewards-program';
+const PRIZE_PACKS = new Map();
+for (const [serie, list] of Object.entries(JSON.parse(fs.readFileSync(new URL('./lib/prize-packs.json', import.meta.url), 'utf8')).serie)) {
+  for (const line of list) {
+    const [exp, num, finishes] = line.split(' ');
+    const key = `${exp}|${localKey(num)}`;
+    const e = PRIZE_PACKS.get(key) ?? { N: [], H: [] };
+    for (const f of finishes) e[f].push(Number(serie));
+    PRIZE_PACKS.set(key, e);
+  }
+}
+const prizePackSeen = new Set();
+const isPrizeStamp = (stamps) => stamps?.length === 1 && (stamps[0] === PRIZE_STAMP || stamps[0] === 'player-reward');
+
+/**
+ * Le stampe Play! Pokemon di una carta delle buste premio. "Set standard" e'
+ * la carta senza olografia (anche una Rara Holo: Rillaboom SSH 14 esce solo
+ * cosi'); "set standard olografico" e' la Holo per le rarita' gia'
+ * olografiche (V, ex...), e per le altre la Holo cosmo dalla serie 3 in poi
+ * -- le serie 1 e 2 erano olografiche anche loro, ma con quale disegno
+ * nessuna fonte lo dice, quindi Holo e basta.
+ */
+function prizePackVariants(pp, rc) {
+  const out = [];
+  if (pp.N.length) out.push({ key: `Normal|stamp=${PRIZE_STAMP}`, type: 'normal', foil: null });
+  if (pp.H.length) {
+    const alreadyHolo = rc !== 'semplice';
+    if (alreadyHolo || pp.H.some((s) => s <= 2)) out.push({ key: `Holo|stamp=${PRIZE_STAMP}`, type: 'holo', foil: null });
+    if (!alreadyHolo && pp.H.some((s) => s >= 3)) out.push({ key: `Holo|foil=cosmos|stamp=${PRIZE_STAMP}`, type: 'holo', foil: 'cosmos' });
+  }
+  return out;
+}
+
 const rows = [];       // righe da scrivere
 const perSet = [];     // rapporto
 const anomalies = [];  // disaccordi da guardare
@@ -318,6 +358,26 @@ for (const [expansionId, list] of byExpansion) {
       if (!key) continue;
       if (isSpecial(key)) special.set(key, v); else { fromTcgdex.add(key); if (v.idProduct) tcgdexProduct.set(key, v.idProduct); }
     }
+    const pp = PRIZE_PACKS.get(`${expansionId}|${localKey(c.card_number)}`);
+    if (pp) {
+      prizePackSeen.add(`${expansionId}|${localKey(c.card_number)}`);
+      // Al posto delle Play! Pokemon di TCGdex; il loro prodotto Cardmarket
+      // passa alla stampa uguale, o almeno della stessa olografia.
+      const fromTcgdexPP = [...special].filter(([, v]) => isPrizeStamp(v.stamp));
+      for (const [k] of fromTcgdexPP) special.delete(k);
+      const products = new Map(fromTcgdexPP.filter(([, v]) => v.idProduct).map(([k, v]) => [k.replace('Reverse|', 'Holo|'), v]));
+      const wanted = prizePackVariants(pp, rc);
+      // Sulle ex e le V TCGdex chiama "normal" la loro unica stampa, che e'
+      // olografica (SV03 22): se la carta non esce non olografica, va bene.
+      const onlyHolo = rc !== 'semplice' && !wanted.some((x) => x.type === 'normal');
+      const productFor = (w) => {
+        const hit = products.get(w.key) ?? [...products].find(([k, v]) => (onlyHolo || (v.type === 'normal') === (w.type === 'normal')) && !wanted.some((x) => x.key === k))?.[1];
+        if (!hit) return null;
+        products.delete([...products].find(([, v]) => v === hit)[0]);
+        return hit.idProduct;
+      };
+      for (const w of wanted) special.set(w.key, { type: w.type, stamp: [PRIZE_STAMP], foil: w.foil, idProduct: productFor(w), source: 'prize-pack' });
+    }
     // Il prodotto "della carta" secondo TCGdex e' quello condiviso dalle sue
     // stampe principali; una stampa base con un prodotto diverso (la Normale
     // dei mazzi di una Holo Rara, ME01 10) ha un prezzo suo.
@@ -388,7 +448,7 @@ for (const [expansionId, list] of byExpansion) {
       // Una speciale con lo stesso prodotto della carta non ha un prezzo suo.
       const own = v.idProduct && v.idProduct !== c.id_product ? v.idProduct : null;
       const stamps = (v.stamp ?? []).filter((s) => !setStamps.has(s) && s !== '1st-edition');
-      rows.push({ card_id: c.card_id, variant: key, kind: 'special', type: v.type, stamp: stamps.join('+') || null, foil: v.foil, id_product: own, source: 'tcgdex' });
+      rows.push({ card_id: c.card_id, variant: key, kind: 'special', type: v.type, stamp: stamps.join('+') || null, foil: v.foil, id_product: own, source: v.source ?? 'tcgdex' });
     }
   });
   perSet.push({ expansionId, date, ptcg: pset?.id ?? null, ptcgFailed, tcgdexReliable, setStamps: [...setStamps], carte: list.length, semplici, tRev, cmRev, specials, counts, sources });
@@ -408,6 +468,8 @@ const byAnomaly = anomalies.reduce((m, a) => { m[a.tipo] = (m[a.tipo] ?? 0) + 1;
 console.log(`\nStampe: ${rows.length} (${JSON.stringify(byKind)}), disaccordi: ${JSON.stringify(byAnomaly)}`);
 const discardedStamps = discarded.reduce((m, x) => { m[x.stamp] = (m[x.stamp] ?? 0) + 1; return m; }, {});
 console.log(`Scartate (timbro fuori lista): ${discarded.length} ${JSON.stringify(discardedStamps)}`);
+const prizePackMissing = [...PRIZE_PACKS.keys()].filter((k) => !prizePackSeen.has(k) && byExpansion.has(k.split('|')[0]));
+console.log(`Buste premio: ${prizePackSeen.size} carte trovate${prizePackMissing.length ? `, NON nel catalogo: ${prizePackMissing.join(' ')}` : ''}`);
 if (unknownKeys.size) console.log(`Chiavi TCGplayer non riconosciute: ${JSON.stringify(Object.fromEntries(unknownKeys))}`);
 if (REPORT_FILE) {
   fs.writeFileSync(REPORT_FILE, JSON.stringify({ perSet, anomalies, discarded, rows }, null, 1));
