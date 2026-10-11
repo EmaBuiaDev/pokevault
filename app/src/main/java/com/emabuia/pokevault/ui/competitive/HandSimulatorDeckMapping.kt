@@ -29,7 +29,8 @@ internal fun buildDeckCardPool(deck: Deck, ownedCards: List<PokemonCard>): List<
             isSupporter = card.isSupporterCard(),
             isOutCard = card.isOutCard(),
             id = card.id,
-            imageUrl = card.imageUrl
+            imageUrl = card.imageUrl,
+            playableFirstTurnGoingFirst = card.isPlayableFirstTurnGoingFirst()
         )
     }
 }
@@ -119,15 +120,56 @@ internal fun PokemonCard.isSupporterCard(): Boolean {
     }
 }
 
+/**
+ * Carte che pescano o cercano, per nome: in inglese e in italiano.
+ *
+ * La collezione e' in italiano, e fino all'11/10/2026 la lista aveva solo i
+ * nomi inglesi: Minor Ball, Poffin del Cuore, Anfora Terrestre... non venivano
+ * riconosciuti, e restavano "out" solo gli Aiuti (riconosciuti dal sottotipo).
+ * Proprio gli Strumenti sono le carte che contano iniziando per primi, quando
+ * gli Aiuti al primo turno non si giocano. I nomi italiani sono verificati
+ * sul catalogo italiano di TCGdex.
+ */
+private val OUT_CARD_KEYWORDS = listOf(
+    // Strumenti e Stadi che cercano o pescano
+    "ultra ball",
+    "nest ball", "minor ball",
+    "buddy-buddy poffin", "poffin",
+    "earthen vessel", "anfora terrestre",
+    "pokégear", "pokegear",
+    "battle vip pass", "superpass vip lotta",
+    "quick ball", "velox ball",
+    "level ball",
+    "great ball", "mega ball",
+    "hisuian heavy ball", "peso ball di hisui",
+    "evolution incense", "evoaroma",
+    "capturing aroma", "catturaroma",
+    "trekking shoes", "scarpe da trekking",
+    "forest seal stone", "sigillo forestale",
+    "artazon", "los tazones",
+    // Aiuti per nome inglese (in italiano li riconosce il sottotipo "Aiuto")
+    "research", "professor", "iono", "colress",
+    // Pokemon con abilita' che pescano
+    "rotom", "lumineon", "squawk"
+)
+
 internal fun PokemonCard.isOutCard(): Boolean {
     val nameKey = name.lowercase().trim()
-    val outKeywords = listOf(
-        "ultra ball", "nest ball", "buddy-buddy poffin", "poffin", "earthen vessel",
-        "research", "professor", "iono", "pokégear", "pokegear", "colress",
-        "artazon", "forest seal stone", "rotom", "lumineon", "squawk"
-    )
-    val keywordMatch = outKeywords.any { key -> nameKey.contains(key) }
+    val keywordMatch = OUT_CARD_KEYWORDS.any { key -> nameKey.contains(key) }
     return keywordMatch || isSupporterCard()
+}
+
+/**
+ * Aiuti che si giocano al primo turno anche iniziando per primi, perche' lo
+ * dice la carta: Rubra (Carmine), "Se inizi per primo, puoi usare questa carta
+ * durante il tuo primo turno".
+ */
+private val FIRST_TURN_SUPPORTER_KEYWORDS = listOf("rubra", "carmine")
+
+internal fun PokemonCard.isPlayableFirstTurnGoingFirst(): Boolean {
+    if (!isSupporterCard()) return false
+    val nameKey = name.lowercase().trim()
+    return FIRST_TURN_SUPPORTER_KEYWORDS.any { nameKey.contains(it) }
 }
 
 /**
@@ -163,6 +205,8 @@ internal fun translateProblemTag(tag: String): String {
         "NO_OUT_T1" -> AppLocale.handSimulatorTagNoOutT1
         "SETUP_RISK_T2" -> AppLocale.handSimulatorTagSetupRiskT2
         "MISS_KEYCARD_T2" -> AppLocale.handSimulatorTagMissKeyT2
+        "SUPPORTER_ONLY_T1" -> AppLocale.handSimulatorTagSupporterOnlyT1
+        "KEY_CARD_PRIZED" -> AppLocale.handSimulatorTagKeyPrized
         "NO_BASIC_IN_DECK" -> AppLocale.handSimulatorTagNoBasicDeck
         else -> tag
     }

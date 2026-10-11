@@ -299,6 +299,12 @@ private fun ScoreCard(
                 fontSize = 18.sp
             )
             Text(
+                text = AppLocale.handSimulatorOrderScores(summary.goingFirst.score, summary.goingSecond.score),
+                color = AppColors.textPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
                 text = AppLocale.handSimulatorRunsRecap(summary.totalRuns),
                 color = AppColors.textSecondary,
                 fontSize = 12.sp
@@ -394,26 +400,45 @@ private fun MetricsCard(summary: HandSimulationSummary) {
                 index = 1,
                 advice = AppLocale.handSimulatorInsightEnergyMessage(summary.energyByT1Rate.roundPercent())
             )
+            // Out e setup dipendono da chi inizia: chi va per primo al T1 non
+            // gioca Aiuti, e un mazzo che si regge sugli Aiuti li' rallenta.
             MetricBar(
-                label = AppLocale.handSimulatorMetricOutShort,
-                percent = summary.outByT1Rate,
+                label = AppLocale.handSimulatorMetricOutFirst,
+                percent = summary.goingFirst.outByT1Rate,
                 target = TARGET_OUT_T1,
                 index = 2,
-                advice = AppLocale.handSimulatorInsightOutMessage(summary.outByT1Rate.roundPercent())
+                advice = AppLocale.handSimulatorInsightOutFirstMessage(summary.goingFirst.outByT1Rate.roundPercent())
             )
             MetricBar(
-                label = AppLocale.handSimulatorMetricSetupShort,
-                percent = summary.setupByT2Rate,
-                target = TARGET_SETUP_T2,
+                label = AppLocale.handSimulatorMetricOutSecond,
+                percent = summary.goingSecond.outByT1Rate,
+                target = TARGET_OUT_T1,
                 index = 3,
-                advice = AppLocale.handSimulatorInsightSetupMessage(summary.setupByT2Rate.roundPercent())
+                advice = AppLocale.handSimulatorInsightOutMessage(summary.goingSecond.outByT1Rate.roundPercent())
+            )
+            MetricBar(
+                label = AppLocale.handSimulatorMetricSetupFirst,
+                percent = summary.goingFirst.setupByT2Rate,
+                target = TARGET_SETUP_T2,
+                index = 4,
+                advice = AppLocale.handSimulatorInsightSetupMessage(summary.goingFirst.setupByT2Rate.roundPercent())
+            )
+            MetricBar(
+                label = AppLocale.handSimulatorMetricSetupSecond,
+                percent = summary.goingSecond.setupByT2Rate,
+                target = TARGET_SETUP_T2,
+                index = 5,
+                advice = AppLocale.handSimulatorInsightSetupMessage(summary.goingSecond.setupByT2Rate.roundPercent())
             )
             summary.keyCardByT2Rate?.let { keyRate ->
                 MetricBar(
                     label = AppLocale.handSimulatorMetricKeyShort,
                     percent = keyRate,
                     target = TARGET_KEY_T2,
-                    index = 4
+                    index = 6,
+                    advice = summary.keyCardPrizedRate?.let { prized ->
+                        AppLocale.handSimulatorInsightPrizedMessage(prized.roundPercent())
+                    }
                 )
             }
         }
@@ -488,17 +513,31 @@ private fun DetailsCard(summary: HandSimulationSummary) {
                         "${summary.energyByT1Rate.roundPercent()}%"
                     )
                     DetailRow(
-                        AppLocale.handSimulatorOutT1,
-                        "${summary.outByT1Rate.roundPercent()}%"
+                        AppLocale.handSimulatorMetricOutFirst,
+                        "${summary.goingFirst.outByT1Rate.roundPercent()}%"
                     )
                     DetailRow(
-                        AppLocale.handSimulatorSetupT2,
-                        "${summary.setupByT2Rate.roundPercent()}%"
+                        AppLocale.handSimulatorMetricOutSecond,
+                        "${summary.goingSecond.outByT1Rate.roundPercent()}%"
+                    )
+                    DetailRow(
+                        AppLocale.handSimulatorMetricSetupFirst,
+                        "${summary.goingFirst.setupByT2Rate.roundPercent()}%"
+                    )
+                    DetailRow(
+                        AppLocale.handSimulatorMetricSetupSecond,
+                        "${summary.goingSecond.setupByT2Rate.roundPercent()}%"
                     )
                     summary.keyCardByT2Rate?.let { keyRate ->
                         DetailRow(
                             AppLocale.handSimulatorKeyByT2,
                             "${keyRate.roundPercent()}%"
+                        )
+                    }
+                    summary.keyCardPrizedRate?.let { prized ->
+                        DetailRow(
+                            AppLocale.handSimulatorKeyPrizedRate,
+                            "${prized.roundPercent()}%"
                         )
                     }
                 }
