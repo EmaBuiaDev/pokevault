@@ -16,6 +16,7 @@ import {
   type CardmarketBlob,
 } from './cardmarket-prices';
 import { resolveExpansionPrices } from './price-lookup';
+import { buildItalianSetSymbolCandidates, isSetImagePath, parseSetSymbolCode } from './set-images';
 
 interface Env {
   CACHE: KVNamespace;
@@ -207,6 +208,13 @@ type ItalianAssetRequest =
     // the `source=ita` query marker the client attaches -- see
     // buildSetImageUrl(setRef, italianOnly) in PokeTcgRepository.kt.
     italianOnly: boolean;
+  }
+  | {
+    // Il simbolo dell'espansione (it/{SETCODE}/symbol.png, caricato da
+    // scripts/backfill-set-symbols-tcgdex.mjs). Nessun ripiego su PokeWallet:
+    // se non c'e', 404 e l'app mostra solo la sigla.
+    kind: 'setSymbol';
+    setCode: string;
   };
 
 const TTL_24_HOURS = 24 * 60 * 60;
@@ -466,7 +474,7 @@ function getBaseTtlSeconds(pathname: string, fallbackTtl: number): number {
 
   if (pathname === '/sets' || pathname.startsWith('/sets/')) {
     // Price-bearing set payloads should refresh daily, while static logos can stay long-lived.
-    return pathname.endsWith('/image') ? TTL_90_DAYS : TTL_24_HOURS;
+    return isSetImagePath(pathname) ? TTL_90_DAYS : TTL_24_HOURS;
   }
 
   if (pathname.startsWith('/cards/')) {
@@ -477,7 +485,7 @@ function getBaseTtlSeconds(pathname: string, fallbackTtl: number): number {
 }
 
 function getTtlSeconds(pathname: string, status: number, fallbackTtl: number): number {
-  if (status === 404 && (pathname.startsWith('/images/') || pathname.endsWith('/image'))) {
+  if (status === 404 && (pathname.startsWith('/images/') || isSetImagePath(pathname))) {
     if (pathname.startsWith('/images/it/')) {
       return TTL_24_HOURS;
     }
@@ -576,6 +584,11 @@ function buildItalianCatalogKeyCandidates(prefix: string, envKey: string | undef
 }
 
 function parseItalianAssetRequest(urlObj: URL): ItalianAssetRequest | null {
+  const symbolSetCode = parseSetSymbolCode(urlObj.pathname);
+  if (symbolSetCode) {
+    return { kind: 'setSymbol', setCode: symbolSetCode };
+  }
+
   const setLogoMatch = urlObj.pathname.match(/^\/sets\/([^/]+)\/image$/i);
   if (setLogoMatch) {
     const setCode = decodeURIComponent(setLogoMatch[1]).trim().toUpperCase();
@@ -769,7 +782,9 @@ async function handleItalianR2AssetRequest(
   const prefix = normalizeR2Prefix(env.IT_IMAGE_PREFIX);
   const keys = requestInfo.kind === 'card'
     ? buildItalianCardKeyCandidates(prefix, requestInfo.setCode, requestInfo.cardNumber, requestInfo.size)
-    : buildItalianSetLogoCandidates(prefix, requestInfo.setCode);
+    : requestInfo.kind === 'setSymbol'
+      ? buildItalianSetSymbolCandidates(prefix, requestInfo.setCode)
+      : buildItalianSetLogoCandidates(prefix, requestInfo.setCode);
 
   const hit = await getFirstExistingR2Object(env.IMAGES_BUCKET, keys);
 
@@ -1176,7 +1191,7 @@ async function maybeEnrichJsonBody(pathname: string, contentType: string, rawBod
     return enrichSetsPayload(rawBody, index);
   }
 
-  if (pathname.startsWith('/sets/') && !pathname.endsWith('/image')) {
+  if (pathname.startsWith('/sets/') && !isSetImagePath(pathname)) {
     return enrichSetDetailPayload(rawBody, index);
   }
 
@@ -2153,7 +2168,7 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
     // /v1 route consulted it, so the compliance kill-switch had no effect.
     const { results } = await db
       .prepare(
-        `SELECT e.id, e.name, e.card_count, e.official_count, e.sort_order, e.logo_key, e.base_set_code, e.release_date, e.series
+        `SELECT e.id, e.name, e.card_count, e.official_count, e.sort_order, e.logo_key, e.base_set_code, e.release_date, e.series, e.abbreviation
          FROM expansions e
          WHERE e.published = 1
            AND NOT EXISTS (
@@ -2162,7 +2177,7 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
            )
          ORDER BY (e.release_date IS NULL), e.release_date DESC, e.sort_order, e.id`
       )
-      .all<{ id: string; name: string | null; card_count: number; official_count: number | null; sort_order: number; logo_key: string | null; base_set_code: string | null; release_date: string | null; series: string | null }>();
+      .all<{ id: string; name: string | null; card_count: number; official_count: number | null; sort_order: number; logo_key: string | null; base_set_code: string | null; release_date: string | null; series: string | null; abbreviation: string | null }>();
     // Remapped to camelCase to match ItalianExpansionSummary on the Android side
     // (same reasoning as mapCardRow: raw D1 column names must never leak into the
     // client contract, so the two can't silently drift apart).
@@ -2178,6 +2193,8 @@ async function handleV1ApiRequest(pathname: string, env: Env): Promise<Response 
       sortOrder: r.sort_order,
       logoKey: r.logo_key,
       series: r.series,
+      // La sigla ufficiale ("PAF"), schema/016. Null dove TCGdex non la conosce.
+      abbreviation: r.abbreviation,
       baseSetCode: r.base_set_code,
       releaseDate: r.release_date,
     }));
