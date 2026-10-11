@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +55,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
+import com.emabuia.pokevault.data.network.NetworkMonitor
 import com.emabuia.pokevault.data.trade.TradeBadge
 import com.emabuia.pokevault.data.trade.TradePush
 import com.emabuia.pokevault.ui.album.AlbumCollectionListScreen
@@ -74,6 +76,7 @@ import com.emabuia.pokevault.ui.competitive.CompetitiveHubScreen
 import com.emabuia.pokevault.ui.competitive.HandSimulatorScreen
 import com.emabuia.pokevault.ui.competitive.MatchLogScreen
 import com.emabuia.pokevault.ui.competitive.TournamentDetailScreen
+import com.emabuia.pokevault.ui.components.OfflineBanner
 import com.emabuia.pokevault.ui.components.ReviewPromptBanner
 import com.emabuia.pokevault.ui.deck.DeckLabScreen
 import com.emabuia.pokevault.ui.graded.GradedCardsScreen
@@ -884,6 +887,20 @@ fun AppNavigation(
                     // Sopra la bottom bar quando c'e': coprirla nasconderebbe
                     // la navigazione proprio mentre chiediamo un favore.
                     bottom = if (showBottomBar) PokeVaultBottomBarHeight + 12.dp else 16.dp
+                )
+        )
+
+        // Come il banner della recensione: sopra la bottom bar, non modale.
+        // Con la recensione aperta sale sopra di lei invece di coprirla.
+        val isOnline by NetworkMonitor.isOnline.collectAsState()
+        OfflineBanner(
+            visible = !isOnline,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(
+                    bottom = (if (showBottomBar) PokeVaultBottomBarHeight + 12.dp else 16.dp) +
+                        (if (showReviewPrompt) 120.dp else 0.dp)
                 )
         )
     }

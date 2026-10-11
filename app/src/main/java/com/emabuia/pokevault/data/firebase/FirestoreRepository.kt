@@ -9,6 +9,8 @@ import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.Tournament
 import com.emabuia.pokevault.data.model.Wishlist
 import com.emabuia.pokevault.data.model.collectionCardKey
+import com.emabuia.pokevault.data.network.NetworkMonitor
+import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import timber.log.Timber
 
 class FirestoreRepository {
 
@@ -560,7 +563,7 @@ class FirestoreRepository {
                     "apiCardId" to card.apiCardId,
                     "cardNumber" to card.cardNumber
                 )
-            ).await()
+            ).localFirst("replacePlaceholderIdentity")
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -830,6 +833,34 @@ class FirestoreRepository {
      * cache e i listener riemettono lo stato vero; [onServerError] serve solo
      * a dirlo all'utente. Arriva sul thread principale.
      */
+    /**
+     * Come [commitLocalFirst], per le scritture singole: wishlist, deck,
+     * album, partite, tornei, illustratori seguiti.
+     *
+     * Prima aspettavano la conferma del server con `.await()`. Online era una
+     * frazione di secondo; offline la conferma arriva solo al ritorno della
+     * rete, e fino ad allora "Salva" restava con la rotellina -- la modifica
+     * pero' era gia' nella copia locale, e i listener l'avevano gia' mostrata.
+     * Ora si torna subito, come fanno da sempre le carte.
+     *
+     * Un rifiuto del server (regole, documento sparito) Firestore lo annulla
+     * da solo nella cache e i listener riemettono lo stato vero: qui resta
+     * solo da scriverlo nel log.
+     */
+    private fun Task<Void>.localFirst(what: String) {
+        addOnFailureListener { e -> Timber.w(e, "Scrittura rifiutata dal server: %s", what) }
+    }
+
+    /**
+     * Da dove leggere: senza rete direttamente dalla copia locale.
+     *
+     * Con la sorgente di default Firestore, quando la rete manca ma non se ne
+     * e' ancora accorto, aspetta fino a una decina di secondi prima di
+     * ripiegare sulla cache. [NetworkMonitor] lo sa gia'.
+     */
+    private fun readSource(): Source =
+        if (NetworkMonitor.isOnline.value) Source.DEFAULT else Source.CACHE
+
     private fun commitLocalFirst(
         batch: WriteBatch,
         onServerError: (Exception) -> Unit
@@ -873,7 +904,7 @@ class FirestoreRepository {
 
     suspend fun getCard(cardId: String): Result<PokemonCard> {
         return try {
-            val doc = cardsCollection.document(cardId).get().await()
+            val doc = cardsCollection.document(cardId).get(readSource()).await()
             val card = doc.toObject(PokemonCard::class.java)?.copy(id = doc.id)
                 ?: throw Exception("Carta non trovata")
             Result.success(card)
@@ -905,16 +936,21 @@ class FirestoreRepository {
     suspend fun getCollectionStats(): CollectionStats {
         return try {
             // Leggiamo il profilo utente e tutte le carte in parallelo (un solo round-trip extra)
-            val userSnapshot = userDoc.get().await()
+            val source = readSource()
+            val userSnapshot = userDoc.get(source).await()
             val cachedTotal = userSnapshot.getLong("totalCards")?.toInt() ?: 0
             val cachedValue = userSnapshot.getDouble("totalValue") ?: 0.0
 
             // Le carte solo-deck non sono possedute: se finissero qui dentro
             // riallineerebbero totalCards/totalValue a un valore gonfiato, e
             // questa funzione quel valore lo riscrive sul profilo.
-            val cards = cardsCollection.get().await()
+            val cardsSnapshot = cardsCollection.get(source).await()
+            val cards = cardsSnapshot
                 .documents.mapNotNull { it.toObject(PokemonCard::class.java) }
                 .filter { !it.deckOnly }
+            // La copia locale puo' essere incompleta: i totali sul profilo si
+            // riallineano solo con le carte lette dal server, mai da li'.
+            val readFromServer = !cardsSnapshot.metadata.isFromCache
 
             // Carte diverse, non stampe diverse: la collezione mostra una
             // tessera per carta e conta allo stesso modo (CollectionViewModel).
@@ -926,7 +962,7 @@ class FirestoreRepository {
             val totalValue = cards.sumOf { it.estimatedValue * it.quantity }
 
             // Aggiorna il profilo quando i totali cache risultano disallineati dal dato reale.
-            if (cachedTotal != totalCards || abs(cachedValue - totalValue) > 0.0001) {
+            if (readFromServer && (cachedTotal != totalCards || abs(cachedValue - totalValue) > 0.0001)) {
                 userDoc.update(mapOf("totalCards" to totalCards, "totalValue" to totalValue))
             }
 
@@ -972,19 +1008,15 @@ class FirestoreRepository {
                 "deckOnly" to deck.deckOnly,
                 "createdAt" to com.google.firebase.Timestamp.now()
             )
-            val docRef = if (deck.id.isEmpty()) {
-                decksCollection.add(data).await()
-            } else {
-                decksCollection.document(deck.id).set(data).await()
-                decksCollection.document(deck.id)
-            }
+            val docRef = if (deck.id.isEmpty()) decksCollection.document() else decksCollection.document(deck.id)
+            docRef.set(data).localFirst("decksCollection")
             Result.success(docRef.id)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun deleteDeck(deckId: String): Result<Unit> {
         return try {
-            decksCollection.document(deckId).delete().await()
+            decksCollection.document(deckId).delete().localFirst("decksCollection")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1020,19 +1052,15 @@ class FirestoreRepository {
                 "coverImageUrl" to album.coverImageUrl,
                 "createdAt" to (album.createdAt ?: com.google.firebase.Timestamp.now())
             )
-            val docRef = if (album.id.isEmpty()) {
-                albumsCollection.add(data).await()
-            } else {
-                albumsCollection.document(album.id).set(data).await()
-                albumsCollection.document(album.id)
-            }
+            val docRef = if (album.id.isEmpty()) albumsCollection.document() else albumsCollection.document(album.id)
+            docRef.set(data).localFirst("albumsCollection")
             Result.success(docRef.id)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun deleteAlbum(albumId: String): Result<Unit> {
         return try {
-            albumsCollection.document(albumId).delete().await()
+            albumsCollection.document(albumId).delete().localFirst("albumsCollection")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1041,7 +1069,7 @@ class FirestoreRepository {
         return try {
             albumsCollection.document(albumId)
                 .update("cardIds", FieldValue.arrayUnion(cardId))
-                .await()
+                .localFirst("update")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1050,7 +1078,7 @@ class FirestoreRepository {
         return try {
             albumsCollection.document(albumId)
                 .update("cardIds", FieldValue.arrayRemove(cardId))
-                .await()
+                .localFirst("update")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1061,7 +1089,7 @@ class FirestoreRepository {
         return try {
             albumsCollection.document(albumId)
                 .update("cardIds", FieldValue.arrayUnion(*cardIds.toTypedArray()))
-                .await()
+                .localFirst("update")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1077,7 +1105,7 @@ class FirestoreRepository {
         return try {
             albumsCollection.document(albumId)
                 .update("cardIds", cardIds)
-                .await()
+                .localFirst("update")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1087,7 +1115,7 @@ class FirestoreRepository {
         return try {
             albumsCollection.document(albumId)
                 .update("coverImageUrl", coverImageUrl)
-                .await()
+                .localFirst("update")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1119,19 +1147,15 @@ class FirestoreRepository {
                 "cardIds" to wishlist.cardIds,
                 "createdAt" to (wishlist.createdAt ?: com.google.firebase.Timestamp.now())
             )
-            val docRef = if (wishlist.id.isEmpty()) {
-                wishlistsCollection.add(data).await()
-            } else {
-                wishlistsCollection.document(wishlist.id).set(data).await()
-                wishlistsCollection.document(wishlist.id)
-            }
+            val docRef = if (wishlist.id.isEmpty()) wishlistsCollection.document() else wishlistsCollection.document(wishlist.id)
+            docRef.set(data).localFirst("wishlistsCollection")
             Result.success(docRef.id)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun deleteWishlist(wishlistId: String): Result<Unit> {
         return try {
-            wishlistsCollection.document(wishlistId).delete().await()
+            wishlistsCollection.document(wishlistId).delete().localFirst("wishlistsCollection")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1140,7 +1164,7 @@ class FirestoreRepository {
         return try {
             wishlistsCollection.document(wishlistId)
                 .update("cardIds", FieldValue.arrayUnion(cardId))
-                .await()
+                .localFirst("update")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1156,7 +1180,7 @@ class FirestoreRepository {
         return try {
             wishlistsCollection.document(wishlistId)
                 .update("cardIds", FieldValue.arrayUnion(*cardIds.toTypedArray()))
-                .await()
+                .localFirst("update")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1165,7 +1189,7 @@ class FirestoreRepository {
         return try {
             wishlistsCollection.document(wishlistId)
                 .update("cardIds", FieldValue.arrayRemove(cardId))
-                .await()
+                .localFirst("update")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1182,7 +1206,7 @@ class FirestoreRepository {
         return try {
             wishlistsCollection.document(wishlistId)
                 .update("cardIds", FieldValue.arrayRemove(*cardIds.toTypedArray()))
-                .await()
+                .localFirst("update")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1191,11 +1215,16 @@ class FirestoreRepository {
         return try {
             val snapshot = wishlistsCollection
                 .whereArrayContains("cardIds", cardId)
-                .get()
+                .get(readSource())
                 .await()
 
-            for (doc in snapshot.documents) {
-                doc.reference.update("cardIds", FieldValue.arrayRemove(cardId)).await()
+            // Un batch: una scrittura sola invece di una per lista, e locale.
+            if (!snapshot.isEmpty) {
+                val batch = firestore.batch()
+                for (doc in snapshot.documents) {
+                    batch.update(doc.reference, "cardIds", FieldValue.arrayRemove(cardId))
+                }
+                commitLocalFirst(batch) { e -> Timber.w(e, "Wishlist: carta non tolta sul server") }
             }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
@@ -1236,19 +1265,15 @@ class FirestoreRepository {
                 "notes" to match.notes,
                 "createdAt" to (match.createdAt ?: com.google.firebase.Timestamp.now())
             )
-            val docRef = if (match.id.isEmpty()) {
-                matchLogsCollection.add(data).await()
-            } else {
-                matchLogsCollection.document(match.id).set(data).await()
-                matchLogsCollection.document(match.id)
-            }
+            val docRef = if (match.id.isEmpty()) matchLogsCollection.document() else matchLogsCollection.document(match.id)
+            docRef.set(data).localFirst("matchLogsCollection")
             Result.success(docRef.id)
         } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun deleteMatchLog(matchId: String): Result<Unit> {
         return try {
-            matchLogsCollection.document(matchId).delete().await()
+            matchLogsCollection.document(matchId).delete().localFirst("matchLogsCollection")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1298,12 +1323,8 @@ class FirestoreRepository {
                 "deckId" to tournament.deckId,
                 "createdAt" to (tournament.createdAt ?: com.google.firebase.Timestamp.now())
             )
-            val docRef = if (tournament.id.isEmpty()) {
-                tournamentsCollection.add(data).await()
-            } else {
-                tournamentsCollection.document(tournament.id).set(data).await()
-                tournamentsCollection.document(tournament.id)
-            }
+            val docRef = if (tournament.id.isEmpty()) tournamentsCollection.document() else tournamentsCollection.document(tournament.id)
+            docRef.set(data).localFirst("tournamentsCollection")
             Result.success(docRef.id)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1313,11 +1334,14 @@ class FirestoreRepository {
             // Elimina anche tutte le partite del torneo
             val matches = matchLogsCollection
                 .whereEqualTo("tournamentId", tournamentId)
-                .get().await()
+                .get(readSource()).await()
+            // Torneo e partite insieme: o spariscono tutti o nessuno.
+            val batch = firestore.batch()
             for (doc in matches.documents) {
-                doc.reference.delete().await()
+                batch.delete(doc.reference)
             }
-            tournamentsCollection.document(tournamentId).delete().await()
+            batch.delete(tournamentsCollection.document(tournamentId))
+            commitLocalFirst(batch) { e -> Timber.w(e, "Torneo non cancellato sul server") }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1360,12 +1384,8 @@ class FirestoreRepository {
                 "targetCardApiIds" to album.targetCardApiIds,
                 "createdAt" to (album.createdAt ?: com.google.firebase.Timestamp.now())
             )
-            val docRef = if (album.id.isEmpty()) {
-                goalAlbumsCollection.add(data).await()
-            } else {
-                goalAlbumsCollection.document(album.id).set(data).await()
-                goalAlbumsCollection.document(album.id)
-            }
+            val docRef = if (album.id.isEmpty()) goalAlbumsCollection.document() else goalAlbumsCollection.document(album.id)
+            docRef.set(data).localFirst("goalAlbumsCollection")
             Result.success(docRef.id)
         } catch (e: Exception) { Result.failure(e) }
     }
@@ -1404,9 +1424,9 @@ class FirestoreRepository {
                     hashMapOf<String, Any?>(
                         "followedAt" to com.google.firebase.Timestamp.now()
                     )
-                ).await()
+                ).localFirst("followedIllustratorsCollection")
             } else {
-                followedIllustratorsCollection.document(id).delete().await()
+                followedIllustratorsCollection.document(id).delete().localFirst("followedIllustratorsCollection")
             }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
@@ -1414,7 +1434,7 @@ class FirestoreRepository {
 
     suspend fun deleteGoalAlbum(goalAlbumId: String): Result<Unit> {
         return try {
-            goalAlbumsCollection.document(goalAlbumId).delete().await()
+            goalAlbumsCollection.document(goalAlbumId).delete().localFirst("goalAlbumsCollection")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }

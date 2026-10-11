@@ -33,6 +33,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import com.emabuia.pokevault.data.network.NetworkMonitor
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
@@ -42,6 +43,7 @@ class PokeVaultApp : Application(), ImageLoaderFactory {
         super.onCreate()
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         FirebaseApp.initializeApp(this)
+        NetworkMonitor.init(this)
 
         // Abilita la cache locale persistente di Firestore: in questo modo tutte
         // le operazioni di lettura/scrittura colpiscono prima il database locale
