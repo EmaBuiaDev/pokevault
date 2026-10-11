@@ -738,7 +738,7 @@ private fun MenuOption(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SegmentedLayout(selected: CollectionLayout, onSelect: (CollectionLayout) -> Unit) {
+internal fun SegmentedLayout(selected: CollectionLayout, onSelect: (CollectionLayout) -> Unit) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
