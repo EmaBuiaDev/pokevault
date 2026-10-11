@@ -2,7 +2,12 @@
 
 package com.emabuia.pokevault.ui.competitive
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -31,8 +36,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +54,7 @@ import com.emabuia.pokevault.data.simulator.PracticeHand
 import com.emabuia.pokevault.data.simulator.PracticeTally
 import com.emabuia.pokevault.data.simulator.SavedProblemHand
 import com.emabuia.pokevault.data.simulator.SimulatorCard
+import com.emabuia.pokevault.data.simulator.TurnOrder
 import com.emabuia.pokevault.ui.theme.AppColors
 import com.emabuia.pokevault.util.AppLocale
 import java.text.SimpleDateFormat
@@ -68,6 +78,9 @@ internal fun LazyListScope.practiceSection(
     tally: PracticeTally,
     dealKey: Int,
     savedHands: List<SavedProblemHand>,
+    turnOrder: TurnOrder,
+    onTurnOrderChange: (TurnOrder) -> Unit,
+    onCoinFlip: () -> Unit,
     onDeal: () -> Unit,
     onKeep: () -> Unit,
     onMulligan: () -> Unit,
@@ -94,6 +107,16 @@ internal fun LazyListScope.practiceSection(
             )
         }
         return
+    }
+
+    // Chi inizia viene prima della mano: decide cosa si puo' giocare al primo
+    // turno, quindi come va letta la mano che esce.
+    item(key = "practice-turn-order") {
+        TurnOrderCard(
+            turnOrder = turnOrder,
+            onTurnOrderChange = onTurnOrderChange,
+            onCoinFlip = onCoinFlip
+        )
     }
 
     if (hand == null) {
@@ -279,6 +302,10 @@ private fun PracticeTable(
                 color = AppColors.textSecondary,
                 fontSize = 12.sp
             )
+
+            if (hand.prizes.isNotEmpty()) {
+                PrizesRow(prizes = hand.prizes, dealKey = dealKey, onCardClick = onCardClick)
+            }
 
             // La pescata del turno viene prima della decisione: e' il modo in
             // cui si scopre se la mano si sblocca da sola, e va provato mentre
@@ -543,6 +570,118 @@ private fun HandEvaluation.gapLabels(): List<String> {
     val gaps = mutableListOf<String>()
     if (energies == 0) gaps += AppLocale.handMissingEnergy
     if (outs == 0) gaps += AppLocale.handMissingOut
+    // Ci sono carte che pescano, ma sono Aiuti e si inizia per primi.
+    if (weaknesses.contains(HandTrait.SUPPORTER_LOCKED_T1)) gaps += AppLocale.handMissingUsableOut
     if (weaknesses.contains(HandTrait.MISS_KEY_CARD)) gaps += AppLocale.handMissingKeyCard
+    if (weaknesses.contains(HandTrait.KEY_CARD_PRIZED)) gaps += AppLocale.handKeyCardPrized
     return gaps
 }
+
+/**
+ * Chi inizia: due bottoni e la moneta, e sotto cosa cambia al primo turno.
+ * La regola e' scritta per esteso perche' e' proprio quella che si dimentica.
+ */
+@Composable
+private fun TurnOrderCard(
+    turnOrder: TurnOrder,
+    onTurnOrderChange: (TurnOrder) -> Unit,
+    onCoinFlip: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = AppColors.card),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ModeSwitch(
+                options = listOf(AppLocale.handSimulatorGoingFirst, AppLocale.handSimulatorGoingSecond),
+                selectedIndex = turnOrder.ordinal,
+                onSelect = { index -> onTurnOrderChange(TurnOrder.entries[index]) }
+            )
+            Text(
+                text = when (turnOrder) {
+                    TurnOrder.FIRST -> AppLocale.handSimulatorRuleGoingFirst
+                    TurnOrder.SECOND -> AppLocale.handSimulatorRuleGoingSecond
+                },
+                color = AppColors.textSecondary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp
+            )
+            TextButton(onClick = onCoinFlip, modifier = Modifier.align(Alignment.End)) {
+                Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(16.dp))
+                Text(
+                    text = AppLocale.handSimulatorCoinFlip,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * I 6 Premi: coperti, come al tavolo, e scopribili per capire perche' una
+ * carta non arriva. Si ricoprono a ogni mano nuova ([dealKey]).
+ */
+@Composable
+private fun PrizesRow(
+    prizes: List<SimulatorCard>,
+    dealKey: Int,
+    onCardClick: (SimulatorCard) -> Unit
+) {
+    var revealed by remember(dealKey) { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = AppLocale.handSimulatorPrizesTitle,
+                color = AppColors.textPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = { revealed = !revealed }) {
+                Text(
+                    text = if (revealed) AppLocale.handSimulatorHidePrizes else AppLocale.handSimulatorShowPrizes,
+                    fontSize = 12.sp
+                )
+            }
+        }
+        if (revealed) {
+            HandStrip(cards = prizes, onCardClick = onCardClick)
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                prizes.forEach { _ ->
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .width(44.dp)
+                            .aspectRatio(PRIZE_CARD_ASPECT_RATIO)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(AppColors.blue.copy(alpha = 0.25f))
+                            .border(1.dp, AppColors.blue.copy(alpha = 0.5f), RoundedCornerShape(5.dp))
+                    ) {
+                        Icon(
+                            Icons.Default.Style,
+                            contentDescription = null,
+                            tint = AppColors.blue.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+        Text(
+            text = AppLocale.handSimulatorPrizesHint,
+            color = AppColors.textMuted,
+            fontSize = 10.sp
+        )
+    }
+}
+
+/** Proporzioni di una carta, come in HandStrip. */
+private const val PRIZE_CARD_ASPECT_RATIO = 63f / 88f

@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.emabuia.pokevault.data.remote.SetImages
@@ -16,7 +17,11 @@ data class CachedSetEntity(
     val releaseDate: String,
     val symbolUrl: String,
     val logoUrl: String,
-    val cachedAt: Long = System.currentTimeMillis()
+    val cachedAt: Long = System.currentTimeMillis(),
+    // Il default sta anche nello schema: e' quello che scrive la migrazione
+    // 1 -> 2 sulle righe gia' in cache (vedi PokeVaultDatabase.MIGRATION_1_2).
+    @ColumnInfo(defaultValue = "")
+    val abbreviation: String = ""
 )
 
 fun CachedSetEntity.toTcgSet(): TcgSet = TcgSet(
@@ -27,7 +32,8 @@ fun CachedSetEntity.toTcgSet(): TcgSet = TcgSet(
     printedTotal = printedTotal,
     total = total,
     releaseDate = releaseDate,
-    images = SetImages(symbol = symbolUrl, logo = logoUrl)
+    images = SetImages(symbol = symbolUrl, logo = logoUrl),
+    abbreviation = abbreviation
 )
 
 fun TcgSet.toEntity(): CachedSetEntity = CachedSetEntity(
@@ -39,5 +45,6 @@ fun TcgSet.toEntity(): CachedSetEntity = CachedSetEntity(
     total = total,
     releaseDate = releaseDate,
     symbolUrl = images.symbol,
-    logoUrl = images.logo
+    logoUrl = images.logo,
+    abbreviation = abbreviation
 )

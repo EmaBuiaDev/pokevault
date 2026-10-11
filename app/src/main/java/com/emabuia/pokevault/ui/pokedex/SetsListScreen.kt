@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,7 +56,12 @@ import com.emabuia.pokevault.ui.components.RarityMarkWithLabel
 import com.emabuia.pokevault.ui.components.RarityOverlayBadge
 import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.data.model.CardOptions
+import com.emabuia.pokevault.ui.collection.ColumnsStepper
+import com.emabuia.pokevault.ui.collection.SegmentedLayout
+import com.emabuia.pokevault.viewmodel.WishlistViewModel
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.CollectionLayout
 import com.emabuia.pokevault.util.RarityUtils
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import com.emabuia.pokevault.viewmodel.SetsUiState
@@ -71,6 +77,16 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.Locale
+
+/** Carte per riga nella griglia dei risultati di ricerca. */
+private const val SEARCH_DEFAULT_COLUMNS = 3
+private const val SEARCH_MIN_COLUMNS = 2
+
+/** Oltre cinque il cuore e il + non ci stanno piu' sulla tessera. */
+private const val SEARCH_MAX_COLUMNS = 5
+
+/** Da qui la tessera tiene solo cuore e +: nome e prezzo non ci stanno. */
+private const val SEARCH_COMPACT_FROM_COLUMNS = 4
 
 // Formatta data
 fun formatDate(date: String): String {
@@ -179,7 +195,9 @@ fun SetsListScreen(
     onBack: () -> Unit,
     onSetClick: (String, String) -> Unit,
     onIllustratorClick: ((String) -> Unit)? = null,
-    viewModel: SetsViewModel = viewModel()
+    onPremiumRequired: () -> Unit = {},
+    viewModel: SetsViewModel = viewModel(),
+    wishlistViewModel: WishlistViewModel = viewModel()
 ) {
     val state = viewModel.uiState
     // Arrivando dalla barra della Home la schermata parte gia' sulla ricerca
@@ -190,9 +208,35 @@ fun SetsListScreen(
     var collapsedSeriesKeys by remember { mutableStateOf(emptySet<String>()) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var cardViewMode by remember { mutableStateOf(CardViewMode.GRID) }
+    // Risultati divisi per espansione (com'era) o tutti in una griglia sola.
+    var cardResultsLayout by rememberSaveable { mutableStateOf(CollectionLayout.BY_EXPANSION) }
+    val setReleaseDateById = remember(state.allSets) {
+        state.allSets.associate { it.id to it.releaseDate }
+    }
+    val searchGroups = remember(state.searchedCards, state.isCardNumberSearch, setReleaseDateById) {
+        groupSearchResults(state.searchedCards, state.isCardNumberSearch, setReleaseDateById)
+    }
+    // Le carte nell'ordine in cui sono a schermo: e' anche l'ordine dello
+    // swipe nella scheda. Prima la scheda scorreva nell'ordine della ricerca
+    // mentre la griglia per espansione ne mostrava un altro.
+    val displayedSearchCards = remember(searchGroups, state.searchedCards, cardResultsLayout) {
+        if (cardResultsLayout == CollectionLayout.ALL) state.searchedCards
+        else searchGroups.flatMap { it.cards }
+    }
     val setsGridState = rememberLazyGridState()
     val haptic = LocalHapticFeedback.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // La tessera dei risultati e' quella delle espansioni: quick add, cuore,
+    // bordo verde. In piu' simbolo e sigla, perche' qui i set sono tanti.
+    var quickAddCard by remember { mutableStateOf<TcgCard?>(null) }
+    val wishlistState = rememberCatalogWishlistState()
+    var searchGridColumns by rememberSaveable { mutableIntStateOf(SEARCH_DEFAULT_COLUMNS) }
+    val setBadges = remember(state.allSets) { SetBadge.byId(state.allSets) }
+
+    LaunchedEffect(isSearchingCards) {
+        if (isSearchingCards) viewModel.observeOwnedCards() else quickAddCard = null
+    }
 
     if (showFilterSheet) {
         CardFilterSheet(
@@ -245,6 +289,19 @@ fun SetsListScreen(
         val msg = state.successMessage ?: state.errorMessage
         if (msg != null) { snackbarHostState.showSnackbar(msg); viewModel.clearMessages() }
     }
+    LaunchedEffect(wishlistViewModel.successMessage, wishlistViewModel.errorMessage) {
+        val msg = wishlistViewModel.successMessage ?: wishlistViewModel.errorMessage
+        if (msg != null) {
+            snackbarHostState.showSnackbar(msg)
+            wishlistViewModel.clearMessages()
+        }
+    }
+
+    CatalogWishlistDialogs(
+        state = wishlistState,
+        wishlistViewModel = wishlistViewModel,
+        onPremiumRequired = onPremiumRequired
+    )
 
     if (selectedCard != null) {
         CardDetailBottomSheet(
@@ -257,9 +314,11 @@ fun SetsListScreen(
             },
             onRemoveCard = {},
             onDismiss = { selectedCard = null },
-            cardList = state.searchedCards,
+            cardList = displayedSearchCards,
             onIllustratorClick = onIllustratorClick,
-            onCardChange = { selectedCard = it }
+            onCardChange = { selectedCard = it },
+            // Le stampe gia' possedute, come nella scheda dell'espansione.
+            ownedVariants = state.owned.variants[selectedCard!!.id].orEmpty()
         )
     }
 
@@ -384,6 +443,8 @@ fun SetsListScreen(
 
                     Spacer(modifier = Modifier.weight(1f))
 
+                    SegmentedLayout(selected = cardResultsLayout, onSelect = { cardResultsLayout = it })
+
                     IconButton(onClick = { cardViewMode = cardViewMode.toggled() }) {
                         Icon(
                             imageVector = if (cardViewMode == CardViewMode.GRID) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
@@ -398,18 +459,54 @@ fun SetsListScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isSearchingCards) {
-            val setReleaseDateById = remember(state.allSets) {
-                state.allSets.associate { it.id to it.releaseDate }
-            }
             CardSearchResults(
                 cards = state.searchedCards,
+                groups = searchGroups,
+                layout = cardResultsLayout,
                 isLoading = state.isSearchingCards,
                 query = state.cardSearchQuery,
                 hasActiveFilters = state.hasActiveCardFilters,
-                preserveOrder = state.isCardNumberSearch,
                 unrecognizedPrintedTotal = state.unrecognizedPrintedTotal,
                 onClearFilters = viewModel::clearCardResultFilters,
                 viewMode = cardViewMode,
+                columns = searchGridColumns,
+                onColumnsChange = { delta ->
+                    searchGridColumns = (searchGridColumns + delta).coerceIn(SEARCH_MIN_COLUMNS, SEARCH_MAX_COLUMNS)
+                },
+                gridTile = { card ->
+                    TcgCardCompactItem(
+                        card = card,
+                        isOwned = card.id in state.owned.ids,
+                        isWishlisted = wishlistViewModel.isCardWishlisted(card.id),
+                        isAdding = state.isAddingCard == card.id,
+                        isPopupOpen = quickAddCard?.id == card.id,
+                        ownedVariants = state.owned.variants[card.id].orEmpty(),
+                        onClick = { selectedCard = card },
+                        // Come nell'espansione: con una sola stampa possibile
+                        // si aggiunge subito, altrimenti si sceglie quale.
+                        onQuickAddClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            val variants = CardOptions.getBaseVariantsForCard(card)
+                            if (variants.size <= 1) {
+                                viewModel.addCardWithDetails(card, variants.firstOrNull() ?: "Holo", 1, "Near Mint", CardOptions.LANGUAGES.first())
+                            } else {
+                                quickAddCard = if (quickAddCard?.id == card.id) null else card
+                            }
+                        },
+                        onWishlistClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            wishlistState.open(card, wishlistViewModel)
+                        },
+                        onVariantSelected = { variant ->
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.addCardWithDetails(card, variant, 1, "Near Mint", CardOptions.LANGUAGES.first())
+                            quickAddCard = null
+                        },
+                        setBadge = card.set?.id?.let { setBadges[it] },
+                        dimWhenNotOwned = false,
+                        compactFooter = searchGridColumns >= SEARCH_COMPACT_FROM_COLUMNS
+                    )
+                },
                 setReleaseDateById = setReleaseDateById,
                 onCardClick = { card -> selectedCard = card },
                 onCardSetClick = { setId -> onSetClick(setId, "ITA") }
@@ -983,17 +1080,60 @@ private fun MissingSetLogoFallback(setName: String) {
 }
 
 // ── Card search results ──
+
+/** Le carte di un'espansione fra i risultati, gia' in ordine di numero. */
+data class SearchResultGroup(val setId: String, val cards: List<TcgCard>)
+
+/**
+ * I risultati divisi per espansione, dalla piu' recente.
+ *
+ * Cercando per numero ([preserveOrder]) l'ordine che arriva e' gia' quello
+ * giusto: la prima espansione e' quella che il totale digitato ha
+ * riconosciuto. Riordinare per data di uscita, come si fa per le ricerche a
+ * nome, metterebbe in cima l'espansione piu' recente -- cioe' un'altra carta.
+ */
+fun groupSearchResults(
+    cards: List<TcgCard>,
+    preserveOrder: Boolean,
+    setReleaseDateById: Map<String, String>
+): List<SearchResultGroup> {
+    val grouped = cards.groupBy { it.set?.id?.takeIf { id -> id.isNotBlank() } ?: "unknown" }
+    val entries = if (preserveOrder) {
+        grouped.entries.toList()
+    } else {
+        grouped.entries.sortedWith(
+            compareByDescending<Map.Entry<String, List<TcgCard>>> { entry ->
+                parseReleaseDateToEpochUi(setReleaseDateById[entry.key].orEmpty())
+            }.thenBy { entry ->
+                entry.value.firstOrNull()?.set?.name?.lowercase(Locale.ROOT) ?: ""
+            }
+        )
+    }
+    return entries.map { (setId, setCards) ->
+        SearchResultGroup(
+            setId = setId,
+            cards = setCards.sortedBy { extractCardNumberForUi(it.number).toIntOrNull() ?: Int.MAX_VALUE }
+        )
+    }
+}
+
 @Composable
 fun CardSearchResults(
     cards: List<TcgCard>,
+    groups: List<SearchResultGroup>,
+    layout: CollectionLayout,
     isLoading: Boolean,
     query: String,
     setReleaseDateById: Map<String, String>,
     hasActiveFilters: Boolean = false,
-    preserveOrder: Boolean = false,
     unrecognizedPrintedTotal: Int? = null,
     onClearFilters: () -> Unit = {},
     viewMode: CardViewMode = CardViewMode.GRID,
+    /** Carte per riga nella vista griglia. */
+    columns: Int = SEARCH_DEFAULT_COLUMNS,
+    onColumnsChange: (Int) -> Unit = {},
+    /** La tessera della vista griglia. */
+    gridTile: @Composable (TcgCard) -> Unit,
     onCardClick: (TcgCard) -> Unit = {},
     onCardSetClick: (String) -> Unit
 ) {
@@ -1035,36 +1175,36 @@ fun CardSearchResults(
             }
         }
     } else {
-        val grouped = cards.groupBy { it.set?.id?.takeIf { id -> id.isNotBlank() } ?: "unknown" }
-        // Cercando per numero l'ordine che arriva e' gia' quello giusto: la prima
-        // espansione e' quella che il totale digitato ha riconosciuto. Riordinare
-        // per data di uscita, come si fa per le ricerche a nome, metterebbe in
-        // cima l'espansione piu' recente -- cioe' un'altra carta.
-        val orderedGroups = if (preserveOrder) {
-            grouped.entries.toList()
-        } else {
-            grouped.entries.sortedWith(
-                compareByDescending<Map.Entry<String, List<TcgCard>>> { entry ->
-                    parseReleaseDateToEpochUi(
-                        setReleaseDateById[entry.key].orEmpty()
-                    )
-                }.thenBy { entry ->
-                    entry.value.firstOrNull()?.set?.name?.lowercase(Locale.ROOT) ?: ""
-                }
-            )
-        }
-
-        val columns = if (viewMode == CardViewMode.GRID) 3 else 1
+        val isGrid = viewMode == CardViewMode.GRID
+        val gridColumns = if (isGrid) columns else 1
+        // Piu' fitta la griglia, piu' strette le fughe: a cinque per riga gli
+        // 8 dp di prima si mangiavano un quarto di carta.
+        val spacing = if (gridColumns >= SEARCH_COMPACT_FROM_COLUMNS) 5.dp else 8.dp
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(columns),
+            columns = GridCells.Fixed(gridColumns),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            verticalArrangement = Arrangement.spacedBy(spacing)
         ) {
-            item(span = { GridItemSpan(columns) }) {
+            item(span = { GridItemSpan(gridColumns) }) {
                 Column {
-                    Text(AppLocale.resultsCountInExpansions(cards.size, grouped.size), color = AppColors.textMuted, fontSize = 13.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            AppLocale.resultsCountInExpansions(cards.size, groups.size),
+                            color = AppColors.textMuted,
+                            fontSize = 13.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isGrid) {
+                            ColumnsStepper(
+                                columns = columns,
+                                onChange = onColumnsChange,
+                                min = SEARCH_MIN_COLUMNS,
+                                max = SEARCH_MAX_COLUMNS
+                            )
+                        }
+                    }
                     // Un totale che non conosciamo non puo' scegliere l'espansione:
                     // la lista qui sotto e' tutto quello che porta quel numero, e
                     // farla passare per la risposta esatta e' quello che faceva
@@ -1082,10 +1222,25 @@ fun CardSearchResults(
                     }
                 }
             }
-            orderedGroups.forEach { (setId, setCards) ->
+            if (layout == CollectionLayout.ALL) {
+                // Tutte in una griglia, nell'ordine della ricerca: il nome
+                // identico in cima. Senza le intestazioni l'espansione si
+                // legge sulla tessera.
+                // Chiave con la posizione: lo stesso id puo' tornare due volte
+                // (per espansione lo distingueva il set, qui no) e una chiave
+                // doppia fa cadere la griglia.
+                items(cards.size, key = { index -> "${cards[index].id}#$index" }) { index ->
+                    val card = cards[index]
+                    if (isGrid) {
+                        gridTile(card)
+                    } else {
+                        SearchResultListRow(card = card, onClick = { onCardClick(card) })
+                    }
+                }
+            } else groups.forEach { (setId, setCards) ->
                 val setName = setCards.firstOrNull()?.set?.name ?: AppLocale.unknown
                 val formattedReleaseDate = formatReleaseDateUi(setReleaseDateById[setId].orEmpty())
-                item(span = { GridItemSpan(columns) }) {
+                item(span = { GridItemSpan(gridColumns) }) {
                     Row(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AppColors.card)
                             .clickable {
@@ -1107,82 +1262,13 @@ fun CardSearchResults(
                         Icon(Icons.Default.ChevronRight, null, tint = AppColors.textMuted, modifier = Modifier.size(20.dp))
                     }
                 }
-                items(
-                    setCards.sortedBy { extractCardNumberForUi(it.number).toIntOrNull() ?: Int.MAX_VALUE },
-                    key = { "${it.id}_$setId" }
-                ) { card ->
-                    if (viewMode == CardViewMode.GRID) {
-                        SearchResultGridCard(card = card, onClick = { onCardClick(card) })
+                items(setCards, key = { "${it.id}_$setId" }) { card ->
+                    if (isGrid) {
+                        gridTile(card)
                     } else {
                         SearchResultListRow(card = card, onClick = { onCardClick(card) })
                     }
                 }
-            }
-        }
-    }
-}
-
-// ── Card di ricerca, vista griglia: immagine + badge rarita' + prezzo ──
-@Composable
-private fun SearchResultGridCard(card: TcgCard, onClick: () -> Unit) {
-    val price = card.cardmarket?.prices.minimumEurPriceOrZero()
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.72f)
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-    ) {
-        if (card.images.small.isNotBlank()) {
-            AsyncImage(
-                model = card.images.small,
-                contentDescription = card.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            if (!card.rarity.isNullOrBlank()) {
-                RarityOverlayBadge(
-                    info = RarityUtils.getRarityInfo(card.rarity),
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                )
-            }
-            if (price > 0) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                ) {
-                    Text("${"%.2f".format(price)} €", color = Color(0xFF4ADE80), fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .padding(horizontal = 6.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = "#${extractCardNumberForUi(card.number)} ${card.name}",
-                    color = AppColors.textPrimary,
-                    fontSize = 10.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(AppColors.surface),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(AppLocale.noImage, color = AppColors.textMuted, fontSize = 10.sp)
             }
         }
     }

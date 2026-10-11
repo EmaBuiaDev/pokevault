@@ -34,6 +34,9 @@ class PremiumManager private constructor(private val context: Context) {
         private const val KEY_HAND_SIM_RUN_PREFIX = "hand_sim_runs_"
         private const val KEY_GIFT_UNTIL_MS = "gift_until_ms"
         private const val KEY_GIFT_UID = "gift_uid"
+        private const val KEY_SUB_UID = "subscription_uid"
+        private const val KEY_SUB_ENTITLED = "subscription_entitled"
+        private const val KEY_SUB_CONFIRMED_AT = "subscription_confirmed_at"
 
         /**
          * Regola unica dei limiti free, in forma pura e testabile.
@@ -110,8 +113,14 @@ class PremiumManager private constructor(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    // All'avvio, la fonte di verità è sempre BillingClient/server, non SharedPreferences
-    private val _billingPremium = MutableStateFlow(false)
+    // All'avvio, la fonte di verità è sempre BillingClient/server, non SharedPreferences.
+    // null = Google Play non ha ancora risposto (o non risponde, senza rete):
+    // e' diverso da "nessun abbonamento", e in quel caso vale la copia salvata
+    // dell'ultima risposta (SubscriptionMemory).
+    private val _billingPremium = MutableStateFlow<Boolean?>(null)
+
+    /** L'ultimo esito certo, per quando ne' Google Play ne' il server rispondono. */
+    private val _rememberedSubscription = MutableStateFlow(storedSubscription())
 
     /**
      * Scadenza del mese regalo riscattato, in millisecondi epoch. 0 = nessuno.
@@ -159,17 +168,47 @@ class PremiumManager private constructor(private val context: Context) {
      * Per l'abbonamento, il server vince sul telefono quando ha una risposta.
      */
     val isPremium: StateFlow<Boolean> =
-        combine(_billingPremium, _serverEntitled, _giftUntilMs) { fromBilling, fromServer, giftUntil ->
-            (fromServer ?: fromBilling) || giftUntil > System.currentTimeMillis()
+        combine(_billingPremium, _serverEntitled, _giftUntilMs, _rememberedSubscription) { fromBilling, fromServer, giftUntil, remembered ->
+            val now = System.currentTimeMillis()
+            SubscriptionMemory.isSubscribed(fromServer, fromBilling, remembered, currentUid(), now) ||
+                giftUntil > now
         }.stateIn(
             scope,
             SharingStarted.Eagerly,
             // Il valore iniziale non può essere false a prescindere: stateIn
             // emette la prima combinazione sul dispatcher Main, cioè al giro
             // successivo del looper, e fino ad allora un utente con un regalo
-            // attivo si vedrebbe negare le funzioni premium.
-            storedGiftUntilMs() > System.currentTimeMillis()
+            // (o un abbonamento confermato di recente) si vedrebbe negare le
+            // funzioni premium.
+            storedGiftUntilMs() > System.currentTimeMillis() ||
+                SubscriptionMemory.isStillValid(storedSubscription(), currentUid(), System.currentTimeMillis())
         )
+
+    private fun currentUid(): String = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+
+    /** La copia salvata dell'ultimo esito, o null se non c'e' mai stato. */
+    private fun storedSubscription(): RememberedSubscription? {
+        val uid = prefs.getString(KEY_SUB_UID, null) ?: return null
+        if (!prefs.contains(KEY_SUB_CONFIRMED_AT)) return null
+        return RememberedSubscription(
+            uid = uid,
+            entitled = prefs.getBoolean(KEY_SUB_ENTITLED, false),
+            confirmedAtMs = prefs.getLong(KEY_SUB_CONFIRMED_AT, 0L)
+        )
+    }
+
+    /** Un esito certo per l'account corrente: si salva, con l'ora. */
+    private fun rememberSubscription(entitled: Boolean) {
+        val uid = currentUid()
+        if (uid.isBlank()) return
+        val remembered = RememberedSubscription(uid, entitled, System.currentTimeMillis())
+        prefs.edit()
+            .putString(KEY_SUB_UID, remembered.uid)
+            .putBoolean(KEY_SUB_ENTITLED, remembered.entitled)
+            .putLong(KEY_SUB_CONFIRMED_AT, remembered.confirmedAtMs)
+            .apply()
+        _rememberedSubscription.value = remembered
+    }
 
     /**
      * Copia locale del regalo, ma solo se è di chi ha fatto l'accesso adesso.
@@ -241,8 +280,16 @@ class PremiumManager private constructor(private val context: Context) {
         // Sia il regalo sia l'abbonamento appartengono a un account: tenersi le
         // risposte dell'utente precedente e' esattamente il bug per cui questo
         // binding esiste.
+        // Ogni esito certo (server, o Google Play quando il server tace) si
+        // salva per l'account corrente: e' la copia che vale offline.
+        scope.launch {
+            combine(_serverEntitled, _billingPremium) { fromServer, fromBilling -> fromServer ?: fromBilling }
+                .collect { decided -> if (decided != null) rememberSubscription(decided) }
+        }
+
         FirebaseAuth.getInstance().addAuthStateListener {
             _giftUntilMs.value = storedGiftUntilMs()
+            _rememberedSubscription.value = storedSubscription()
             _serverEntitled.value = null
             _subscriptionClaimedByOtherAccount.value = false
             refreshEntitlement()

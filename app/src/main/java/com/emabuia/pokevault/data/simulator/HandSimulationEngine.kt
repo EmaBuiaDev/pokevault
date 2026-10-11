@@ -17,7 +17,13 @@ data class SimulatorCard(
     val isSupporter: Boolean,
     val isOutCard: Boolean,
     val id: String = "",
-    val imageUrl: String = ""
+    val imageUrl: String = "",
+    /**
+     * Un Aiuto che si puo' giocare al primo turno anche iniziando per primi:
+     * lo dice la carta stessa (Rubra, "Se inizi per primo, puoi usare questa
+     * carta durante il tuo primo turno"). Vedi [FirstTurnRules].
+     */
+    val playableFirstTurnGoingFirst: Boolean = false
 )
 
 data class ProblemHandSample(
@@ -40,11 +46,30 @@ data class HandSimulationSummary(
     val averageBasics: Double,
     val averageMulligans: Double,
     val energyByT1Rate: Double,
-    val outByT1Rate: Double,
-    val setupByT2Rate: Double,
+    /** Iniziando per primi: niente Aiuti al primo turno. */
+    val goingFirst: OrderMetrics,
+    /** Andando per secondi: anche gli Aiuti, gia' al primo turno. */
+    val goingSecond: OrderMetrics,
     val keyCardByT2Rate: Double?,
+    /**
+     * Quante volte almeno una copia di una carta chiave e' finita fra i 6
+     * Premi: li' non si pesca, si recupera solo prendendo Premi. Null se non
+     * ci sono carte chiave scelte.
+     */
+    val keyCardPrizedRate: Double? = null,
     val problemHands: List<ProblemHandSample>
 )
+
+/** Le metriche che cambiano a seconda di chi inizia. */
+data class OrderMetrics(
+    /** Una carta che pesca o cerca, e che si puo' giocare al primo turno. */
+    val outByT1Rate: Double,
+    /** Basic, energia entro il 2° turno, e pescata/ricerca giocabile entro il 2° turno. */
+    val setupByT2Rate: Double,
+    /** Il punteggio 0-100 in questo caso. */
+    val score: Int
+)
+
 
 object HandSimulationEngine {
 
@@ -79,7 +104,7 @@ object HandSimulationEngine {
             return emptySummary()
         }
 
-        if (cardPool.size < 7) {
+        if (cardPool.size < FirstTurnRules.OPENING_HAND) {
             return emptySummary()
         }
 
@@ -89,8 +114,10 @@ object HandSimulationEngine {
             .map { it.lowercase().trim() }
             .filter { it.isNotBlank() }
             .toSet()
+        val hasKeyCards = normalizedKeyCards.isNotEmpty()
 
         if (basicsInDeck == 0) {
+            val none = OrderMetrics(outByT1Rate = 0.0, setupByT2Rate = 0.0, score = 0)
             return HandSimulationSummary(
                 totalRuns = runs,
                 consistencyScore = 0,
@@ -99,12 +126,13 @@ object HandSimulationEngine {
                 averageBasics = 0.0,
                 averageMulligans = 99.0,
                 energyByT1Rate = 0.0,
-                outByT1Rate = 0.0,
-                setupByT2Rate = 0.0,
-                keyCardByT2Rate = normalizedKeyCards.takeIf { it.isNotEmpty() }?.let { 0.0 },
+                goingFirst = none,
+                goingSecond = none,
+                keyCardByT2Rate = if (hasKeyCards) 0.0 else null,
+                keyCardPrizedRate = if (hasKeyCards) 0.0 else null,
                 problemHands = listOf(
                     ProblemHandSample(
-                        cards = cardPool.take(7),
+                        cards = cardPool.take(FirstTurnRules.OPENING_HAND),
                         tags = listOf("NO_BASIC_IN_DECK")
                     )
                 )
@@ -121,101 +149,170 @@ object HandSimulationEngine {
         var totalBasics = 0
         var totalMulligans = 0
         var energyByT1Hits = 0
-        var outByT1Hits = 0
-        var setupByT2Hits = 0
         var keyCardByT2Hits = 0
+        var keyCardPrizedHits = 0
+        val outT1Hits = IntArray(2)
+        val setupT2Hits = IntArray(2)
 
         val problemCandidates = mutableListOf<ProblemHandSample>()
 
         repeat(runs) {
-            var mulligansThisRun = 0
-            var opening: List<SimulatorCard>
-            var remaining: List<SimulatorCard>
+            val deal = dealLegalOpening(cardPool, random)
+            if (deal.mulligans == 0) firstHandStarterHits += 1 else firstHandMulligans += 1
+            totalMulligans += deal.mulligans
 
-            // Simulate mulligan loop until a legal opening hand is found.
-            while (true) {
-                val shuffled = cardPool.shuffled(random)
-                opening = shuffled.take(7)
-                remaining = shuffled.drop(7)
+            val result = evaluateDeal(deal, normalizedKeyCards)
 
-                val hasStarter = opening.any { it.isBasic }
-                if (mulligansThisRun == 0) {
-                    if (hasStarter) {
-                        firstHandStarterHits += 1
-                    } else {
-                        firstHandMulligans += 1
-                    }
-                }
-
-                if (hasStarter) break
-                mulligansThisRun += 1
-                if (mulligansThisRun >= 50) break
+            totalBasics += result.basics
+            if (result.energyByT1) energyByT1Hits += 1
+            if (result.keyCardByT2 == true) keyCardByT2Hits += 1
+            if (result.keyCardPrized) keyCardPrizedHits += 1
+            TurnOrder.entries.forEach { order ->
+                if (result.outByT1.getValue(order)) outT1Hits[order.ordinal] += 1
+                if (result.setupByT2.getValue(order)) setupT2Hits[order.ordinal] += 1
             }
 
-            totalMulligans += mulligansThisRun
-
-            val drawT1 = remaining.getOrNull(0)
-            val drawT2 = remaining.getOrNull(1)
-
-            val handT1 = opening + listOfNotNull(drawT1)
-            val handT2 = handT1 + listOfNotNull(drawT2)
-
-            val basics = opening.count { it.isBasic }
-            val hasEnergyT1 = handT1.any { it.isEnergy }
-            val hasSupporterT1 = handT1.any { it.isSupporter }
-            val hasOutT1 = handT1.any { it.isOutCard }
-            val hasEnergyT2 = handT2.any { it.isEnergy }
-            val keyCardByT2 = normalizedKeyCards.takeIf { it.isNotEmpty() }?.let { keys ->
-                handT2.any { keys.contains(it.name.lowercase().trim()) }
-            }
-
-            val setupByT2 = basics > 0 && hasEnergyT2 && (hasSupporterT1 || hasOutT1)
-
-            totalBasics += basics
-            if (hasEnergyT1) energyByT1Hits += 1
-            if (hasOutT1) outByT1Hits += 1
-            if (setupByT2) setupByT2Hits += 1
-            if (keyCardByT2 == true) keyCardByT2Hits += 1
-
-            val tags = mutableListOf<String>()
-            if (!hasEnergyT1) tags += "NO_ENERGY_T1"
-            if (!hasOutT1) tags += "NO_OUT_T1"
-            if (!setupByT2) tags += "SETUP_RISK_T2"
-            if (normalizedKeyCards.isNotEmpty() && keyCardByT2 == false) tags += "MISS_KEYCARD_T2"
-
-            if (tags.isNotEmpty() && problemCandidates.size < PROBLEM_HANDS_POOL) {
-                problemCandidates += ProblemHandSample(cards = opening, tags = tags)
+            if (result.tags.isNotEmpty() && problemCandidates.size < PROBLEM_HANDS_POOL) {
+                problemCandidates += ProblemHandSample(cards = deal.opening, tags = result.tags)
             }
         }
 
         val totalRuns = runs.toDouble()
-        val keyRate = normalizedKeyCards.takeIf { it.isNotEmpty() }?.let {
-            (keyCardByT2Hits / totalRuns) * 100.0
+        fun percent(hits: Int) = (hits / totalRuns) * 100.0
+
+        val keyRate = if (hasKeyCards) percent(keyCardByT2Hits) else null
+        val starterRate = percent(firstHandStarterHits)
+        val energyRate = percent(energyByT1Hits)
+
+        fun metricsFor(order: TurnOrder): OrderMetrics {
+            val outRate = percent(outT1Hits[order.ordinal])
+            val setupRate = percent(setupT2Hits[order.ordinal])
+            return OrderMetrics(
+                outByT1Rate = outRate,
+                setupByT2Rate = setupRate,
+                score = consistencyScore(
+                    starterRate = starterRate,
+                    setupByT2Rate = setupRate,
+                    outByT1Rate = outRate,
+                    energyByT1Rate = energyRate,
+                    keyCardByT2Rate = keyRate
+                )
+            )
         }
 
-        val starterRate = (firstHandStarterHits / totalRuns) * 100.0
-        val energyRate = (energyByT1Hits / totalRuns) * 100.0
-        val outRate = (outByT1Hits / totalRuns) * 100.0
-        val setupRate = (setupByT2Hits / totalRuns) * 100.0
+        val goingFirst = metricsFor(TurnOrder.FIRST)
+        val goingSecond = metricsFor(TurnOrder.SECOND)
 
         return HandSimulationSummary(
             totalRuns = runs,
-            consistencyScore = consistencyScore(
-                starterRate = starterRate,
-                setupByT2Rate = setupRate,
-                outByT1Rate = outRate,
-                energyByT1Rate = energyRate,
-                keyCardByT2Rate = keyRate
-            ),
+            // Chi inizia lo decide la moneta: il voto del mazzo e' la media
+            // dei due casi, che restano visibili uno per uno.
+            consistencyScore = ((goingFirst.score + goingSecond.score) / 2.0).roundToInt(),
             starterRate = starterRate,
-            mulliganRate = (firstHandMulligans / totalRuns) * 100.0,
+            mulliganRate = percent(firstHandMulligans),
             averageBasics = totalBasics / totalRuns,
             averageMulligans = totalMulligans / totalRuns,
             energyByT1Rate = energyRate,
-            outByT1Rate = outRate,
-            setupByT2Rate = setupRate,
+            goingFirst = goingFirst,
+            goingSecond = goingSecond,
             keyCardByT2Rate = keyRate,
+            keyCardPrizedRate = if (hasKeyCards) percent(keyCardPrizedHits) else null,
             problemHands = worstHands(problemCandidates)
+        )
+    }
+
+    /** Una mano legale con i suoi Premi e il resto del mazzo, in ordine di pescata. */
+    internal data class Deal(
+        val opening: List<SimulatorCard>,
+        val prizes: List<SimulatorCard>,
+        val library: List<SimulatorCard>,
+        val mulligans: Int
+    )
+
+    /**
+     * Mescola finche' la mano ha un Basic, poi mette da parte i Premi.
+     *
+     * L'ordine e' quello del tavolo: 7 carte, mulligan finche' serve, e solo
+     * con la mano tenuta le 6 carte Premio dalla cima del mazzo. Le pescate dei
+     * turni vengono dopo i Premi.
+     */
+    internal fun dealLegalOpening(cardPool: List<SimulatorCard>, random: Random): Deal {
+        var mulligans = 0
+        while (true) {
+            val shuffled = cardPool.shuffled(random)
+            val opening = shuffled.take(FirstTurnRules.OPENING_HAND)
+            if (opening.any { it.isBasic } || mulligans >= 50) {
+                val rest = shuffled.drop(FirstTurnRules.OPENING_HAND)
+                return Deal(
+                    opening = opening,
+                    prizes = rest.take(FirstTurnRules.PRIZE_CARDS),
+                    library = rest.drop(FirstTurnRules.PRIZE_CARDS),
+                    mulligans = mulligans
+                )
+            }
+            mulligans += 1
+        }
+    }
+
+    internal data class DealResult(
+        val basics: Int,
+        val energyByT1: Boolean,
+        val outByT1: Map<TurnOrder, Boolean>,
+        val setupByT2: Map<TurnOrder, Boolean>,
+        val keyCardByT2: Boolean?,
+        val keyCardPrized: Boolean,
+        val tags: List<String>
+    )
+
+    /**
+     * Cosa si riesce a fare con una mano, nei due casi.
+     *
+     * Turno 1: mano + 1 pescata (pescano tutti e due). Turno 2: + 1 pescata.
+     * - Pescata/ricerca al T1: chi inizia solo con Strumenti (o un Aiuto che
+     *   lo permette, Rubra); chi va secondo anche con gli Aiuti.
+     * - Setup entro il 2° turno: Basic, energia in mano entro il 2° turno, e
+     *   una pescata/ricerca giocabile entro il 2° turno. Al 2° turno l'Aiuto si
+     *   gioca anche iniziando per primi.
+     */
+    internal fun evaluateDeal(deal: Deal, normalizedKeyCards: Set<String>): DealResult {
+        val handT1 = deal.opening + listOfNotNull(deal.library.getOrNull(0))
+        val handT2 = handT1 + listOfNotNull(deal.library.getOrNull(1))
+
+        val basics = deal.opening.count { it.isBasic }
+        val energyByT1 = handT1.any { it.isEnergy }
+        val energyByT2 = handT2.any { it.isEnergy }
+        val anyOutByT2 = handT2.any { it.isOutCard }
+
+        val outByT1 = TurnOrder.entries.associateWith { order ->
+            handT1.any { FirstTurnRules.isUsableOutOnFirstTurn(it, order) }
+        }
+        val setupByT2 = TurnOrder.entries.associateWith { order ->
+            basics > 0 && energyByT2 && (outByT1.getValue(order) || anyOutByT2)
+        }
+
+        fun isKey(card: SimulatorCard) = normalizedKeyCards.contains(card.name.lowercase().trim())
+        val keyCardByT2 = if (normalizedKeyCards.isEmpty()) null else handT2.any(::isKey)
+        val keyCardPrized = normalizedKeyCards.isNotEmpty() && deal.prizes.any(::isKey)
+
+        // Le mani problematiche si giudicano iniziando per primi: e' il caso
+        // piu' duro, ed e' li' che una mano "da Aiuto" si inceppa.
+        val tags = mutableListOf<String>()
+        if (!energyByT1) tags += "NO_ENERGY_T1"
+        if (!outByT1.getValue(TurnOrder.FIRST)) {
+            tags += if (outByT1.getValue(TurnOrder.SECOND)) "SUPPORTER_ONLY_T1" else "NO_OUT_T1"
+        }
+        if (!setupByT2.getValue(TurnOrder.FIRST)) tags += "SETUP_RISK_T2"
+        if (keyCardByT2 == false) tags += "MISS_KEYCARD_T2"
+        if (keyCardPrized) tags += "KEY_CARD_PRIZED"
+
+        return DealResult(
+            basics = basics,
+            energyByT1 = energyByT1,
+            outByT1 = outByT1,
+            setupByT2 = setupByT2,
+            keyCardByT2 = keyCardByT2,
+            keyCardPrized = keyCardPrized,
+            tags = tags
         )
     }
 
@@ -265,6 +362,7 @@ object HandSimulationEngine {
     }
 
     private fun emptySummary(): HandSimulationSummary {
+        val none = OrderMetrics(outByT1Rate = 0.0, setupByT2Rate = 0.0, score = 0)
         return HandSimulationSummary(
             totalRuns = 0,
             consistencyScore = 0,
@@ -273,9 +371,10 @@ object HandSimulationEngine {
             averageBasics = 0.0,
             averageMulligans = 0.0,
             energyByT1Rate = 0.0,
-            outByT1Rate = 0.0,
-            setupByT2Rate = 0.0,
+            goingFirst = none,
+            goingSecond = none,
             keyCardByT2Rate = null,
+            keyCardPrizedRate = null,
             problemHands = emptyList()
         )
     }

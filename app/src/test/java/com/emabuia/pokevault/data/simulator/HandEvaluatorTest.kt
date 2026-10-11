@@ -120,7 +120,10 @@ class PracticeDealerTest {
 
         requireNotNull(hand)
         assertEquals(7, hand.opening.size)
-        assertEquals(53, hand.library.size)
+        // 60 - 7 di mano - 6 Premi messi da parte: le pescate vengono dopo.
+        assertEquals(6, hand.prizes.size)
+        assertEquals(47, hand.library.size)
+        assertEquals(60, hand.opening.size + hand.prizes.size + hand.library.size)
         assertEquals(0, hand.turn)
         assertTrue(hand.canDraw)
     }
@@ -138,7 +141,7 @@ class PracticeDealerTest {
         val afterDraw = PracticeDealer.drawOne(hand)
 
         assertEquals(listOf(expectedNext), afterDraw.draws)
-        assertEquals(52, afterDraw.library.size)
+        assertEquals(46, afterDraw.library.size)
         assertEquals(1, afterDraw.turn)
         assertEquals(hand.opening, afterDraw.opening)
     }
@@ -172,7 +175,8 @@ class PracticeDealerTest {
 
         assertEquals(1, second.mulligans)
         assertEquals(7, second.opening.size)
-        assertEquals(53, second.library.size)
+        assertEquals(6, second.prizes.size)
+        assertEquals(47, second.library.size)
     }
 
     @Test

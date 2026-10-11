@@ -29,3 +29,13 @@ object CollectionShortcut {
         return pending
     }
 }
+
+/**
+ * Le carte nell'ordine in cui la collezione le mostra, per lo swipe nel
+ * dettaglio. Fuori dalla rotta per lo stesso motivo di [CollectionShortcut]:
+ * una lista di chiavi in una rotta non ci sta. Se il processo muore resta
+ * vuota e il dettaglio semplicemente non scorre, come prima.
+ */
+object CollectionBrowse {
+    var order: List<String> = emptyList()
+}

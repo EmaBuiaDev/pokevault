@@ -146,7 +146,9 @@ fun CardDetailScreen(
     cardId: String,
     onBack: () -> Unit,
     onEdit: (String) -> Unit,
-    onIllustratorClick: ((String) -> Unit)? = null
+    onIllustratorClick: ((String) -> Unit)? = null,
+    /** Le carte fra cui scorrere con lo swipe; vuota se non si arriva dalla collezione. */
+    browseKeys: List<String> = emptyList()
 ) {
     val repository = remember { FirestoreRepository() }
     val tcgRepository = remember { RepositoryProvider.tcgRepository }
@@ -182,10 +184,40 @@ fun CardDetailScreen(
     // restare girata come l'utente l'ha lasciata.
     var isFlipped by rememberSaveable { mutableStateOf(false) }
 
-    fun loadData() {
+    // La carta mostrata: con lo swipe cambia senza cambiare rotta.
+    var currentKey by rememberSaveable { mutableStateOf(cardId) }
+    // La collezione letta al primo caricamento. Nello swipe si cercano qui le
+    // stampe della carta successiva: rileggere tutta la collezione (e prima
+    // ancora tentare getCard, un giro in rete) a ogni carta si sentiva.
+    var cachedCards by remember { mutableStateOf<List<PokemonCard>?>(null) }
+
+    fun variantsFor(allCards: List<PokemonCard>, key: String): List<PokemonCard> =
+        allCards
+            .filter {
+                it.collectionGroupKey() == key ||
+                    it.collectionCardKey() == key ||
+                    it.apiCardId == key ||
+                    it.id == key
+            }
+            .let { cards ->
+                val order = CardVariants.sorted(cards.map { it.variant })
+                cards.sortedBy { order.indexOf(it.variant) }
+            }
+
+    fun loadData(cardId: String) {
         scope.launch {
+            cachedCards?.let { allCards ->
+                val found = variantsFor(allCards, cardId)
+                if (found.isNotEmpty()) {
+                    variants = found
+                    editedQuantities = found.associate { it.id to it.quantity }
+                    isLoading = false
+                    return@launch
+                }
+            }
             repository.getCard(cardId).onSuccess { initialCard ->
                 repository.getCards().first().let { allCards ->
+                    cachedCards = allCards
                     val groupKey = initialCard.collectionGroupKey()
                     val found = allCards.filter { it.collectionGroupKey() == groupKey }
                     val resolved = found.ifEmpty { listOf(initialCard) }
@@ -194,22 +226,13 @@ fun CardDetailScreen(
                 }
             }.onFailure {
                 repository.getCards().first().let { allCards ->
+                    cachedCards = allCards
                     // `collectionCardKey` e' la chiave con cui la collezione
                     // apre una tessera: raccoglie tutte le stampe della carta,
                     // che la schermata sa gia' elencare una per riga con la
                     // sua quantita'. Le altre due forme restano per chi arriva
                     // qui con l'id del documento o della carta a catalogo.
-                    val found = allCards
-                        .filter {
-                            it.collectionGroupKey() == cardId ||
-                                it.collectionCardKey() == cardId ||
-                                it.apiCardId == cardId ||
-                                it.id == cardId
-                        }
-                        .let { cards ->
-                            val order = CardVariants.sorted(cards.map { it.variant })
-                            cards.sortedBy { order.indexOf(it.variant) }
-                        }
+                    val found = variantsFor(allCards, cardId)
                     variants = found
                     editedQuantities = found.associate { it.id to it.quantity }
                 }
@@ -218,8 +241,8 @@ fun CardDetailScreen(
         }
     }
 
-    LaunchedEffect(cardId) {
-        loadData()
+    LaunchedEffect(currentKey) {
+        loadData(currentKey)
     }
 
     LaunchedEffect(selectedVariantIndex, variants) {
@@ -334,6 +357,34 @@ fun CardDetailScreen(
 
     val pendingRemoval = pendingQuantities.any { (editedQuantities[it.id] ?: it.quantity) <= 0 }
 
+    // Ricordato: con migliaia di carte la ricerca non va rifatta a ogni
+    // tocco su + e -.
+    val browseIndex = remember(browseKeys, currentKey) { browseKeys.indexOf(currentKey) }
+    val canBrowse = browseIndex >= 0 && browseKeys.size > 1
+
+    // Il gesto vive in un pointerInput creato una volta sola, che si tiene la
+    // funzione qui sotto della prima composizione: se leggesse
+    // browseIndex e pendingCount direttamente, vedrebbe per sempre i valori
+    // della prima carta. Prima infatti si scorreva di una carta sola, e poi lo
+    // swipe ricalcolava sempre la stessa destinazione.
+    val latestBrowseIndex by rememberUpdatedState(browseIndex)
+    val hasPendingChanges by rememberUpdatedState(pendingCount > 0)
+
+    /**
+     * Swipe alla carta accanto. Con modifiche non salvate si resta qui: uno
+     * swipe distratto non deve buttare via quantita' e grading appena scritti.
+     */
+    fun browseBy(offset: Int) {
+        val target = browseKeys.getOrNull(latestBrowseIndex + offset) ?: return
+        if (hasPendingChanges) {
+            scope.launch { snackbarHostState.showSnackbar(AppLocale.saveBeforeChangingCard) }
+            return
+        }
+        selectedVariantIndex = 0
+        isFlipped = false
+        currentKey = target
+    }
+
     fun discardPendingChanges() {
         editedQuantities = variants.associate { it.id to it.quantity }
         selectedCard?.let {
@@ -406,6 +457,12 @@ fun CardDetailScreen(
                 }
             }
 
+            // La copia in memoria segue i salvataggi, o tornando con lo swipe
+            // su questa carta si rivedrebbero le quantita' di prima.
+            val savedIds = variants.map { it.id }.toSet()
+            val savedById = remaining.associateBy { it.id }
+            cachedCards = cachedCards?.mapNotNull { if (it.id in savedIds) savedById[it.id] else it }
+
             if (remaining.isEmpty()) {
                 onBack()
             } else {
@@ -461,20 +518,53 @@ fun CardDetailScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
+                    .let { base ->
+                        // Su tutta la pagina e non solo sull'immagine. Le righe
+                        // che scorrono in orizzontale (i chip sotto la carta)
+                        // consumano il gesto prima e restano scorrevoli.
+                        if (canBrowse) {
+                            base.pointerInput(Unit) {
+                                var totalDragX = 0f
+                                detectHorizontalDragGestures(
+                                    onHorizontalDrag = { change, dragAmount ->
+                                        change.consume()
+                                        totalDragX += dragAmount
+                                    },
+                                    onDragEnd = {
+                                        // Stessa soglia dello swipe nelle espansioni.
+                                        when {
+                                            totalDragX <= -80f -> browseBy(1)
+                                            totalDragX >= 80f -> browseBy(-1)
+                                        }
+                                        totalDragX = 0f
+                                    },
+                                    onDragCancel = { totalDragX = 0f }
+                                )
+                            }
+                        } else {
+                            base
+                        }
+                    }
                     .verticalScroll(rememberScrollState())
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Il palco della carta: e' lei il soggetto della pagina, e si
                 // gira col dito. Quando la carta e' gradata il palco diventa la
-                // slab, con l'etichetta dell'ente sopra.
-                CardStage(
-                    card = currentCard,
-                    sharedKey = cardId,
-                    totalQuantity = totalQty,
-                    isFlipped = isFlipped,
-                    onFlipChange = { isFlipped = it }
-                )
+                // slab, con l'etichetta dell'ente sopra. Arrivando dalla
+                // collezione il trascinamento cambia carta, e si gira col tocco.
+                // key: la carta nuova parte di fronte, senza il mezzo giro
+                // all'indietro di quella che c'era.
+                key(currentKey) {
+                    CardStage(
+                        card = currentCard,
+                        sharedKey = currentKey,
+                        totalQuantity = totalQty,
+                        isFlipped = isFlipped,
+                        onFlipChange = { isFlipped = it },
+                        dragToFlip = !canBrowse
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -1107,7 +1197,8 @@ private fun CardStage(
     sharedKey: String,
     totalQuantity: Int,
     isFlipped: Boolean,
-    onFlipChange: (Boolean) -> Unit
+    onFlipChange: (Boolean) -> Unit,
+    dragToFlip: Boolean
 ) {
     if (card.isGraded) {
         SlabFrame(card = card, modifier = Modifier.fillMaxWidth(0.88f)) {
@@ -1117,6 +1208,7 @@ private fun CardStage(
                 totalQuantity = totalQuantity,
                 isFlipped = isFlipped,
                 onFlipChange = onFlipChange,
+                dragToFlip = dragToFlip,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -1127,6 +1219,7 @@ private fun CardStage(
             totalQuantity = totalQuantity,
             isFlipped = isFlipped,
             onFlipChange = onFlipChange,
+            dragToFlip = dragToFlip,
             modifier = Modifier.fillMaxWidth(0.8f)
         )
     }
@@ -1152,6 +1245,7 @@ private fun FlipCard(
     totalQuantity: Int,
     isFlipped: Boolean,
     onFlipChange: (Boolean) -> Unit,
+    dragToFlip: Boolean,
     modifier: Modifier = Modifier
 ) {
     val motion = AppMotion.current
@@ -1213,7 +1307,9 @@ private fun FlipCard(
                 everFlipped = true
                 onFlipChange(!isFlipped)
             }
-            .pointerInput(Unit) {
+            .pointerInput(dragToFlip) {
+                // Spento, il gesto resta alla pagina, che lo usa per cambiare carta.
+                if (!dragToFlip) return@pointerInput
                 detectHorizontalDragGestures(
                     onDragEnd = {
                         val landed = spin.value > FlipCommitDegrees

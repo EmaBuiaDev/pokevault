@@ -48,6 +48,37 @@ enum class ItalianCardAttribute { RARITY, SUPERTYPE, TYPE, ILLUSTRATOR }
  */
 private const val ILLUSTRATOR_CARD_LIMIT = 5000
 
+/**
+ * Quante carte ha un'espansione italiana, per l'elenco del Pokedex: quelle del
+ * nostro catalogo (expansions.card_count, verificato l'11/10/2026 uguale alle
+ * carte servite per tutte le 142), cioe' le stesse che l'espansione mostra
+ * aperta. Prima era il totale del set inglese collegato: il 30 Anniversario
+ * diceva 30 e dentro ne aveva 161, e il numero si correggeva solo dopo aver
+ * aperto l'espansione (updateSetTotalsFromKnownCards).
+ *
+ * Il totale stampato (printedTotal, il "/128") resta un'altra cosa: serve alla
+ * ricerca per numero e non passa di qui.
+ */
+internal fun italianSetTotal(cardCount: Int, fallback: Int): Int =
+    cardCount.takeIf { it > 0 } ?: fallback
+
+/**
+ * Un set di cui si sono appena caricate tutte le carte.
+ *
+ * Si aggiorna il totale ([TcgSet.total]); il totale stampato no, a meno che
+ * non fosse sconosciuto. Prima si sovrascrivevano tutti e due col numero di
+ * carte caricate, segrete comprese: aperta Destino di Paldea, il suo "/91"
+ * diventava 245, e la ricerca "67/91" (performPreciseNumberSearch, usata dai
+ * ripieghi di scanner e aggiunta carta) non la proponeva piu'.
+ */
+internal fun TcgSet.withKnownCardCount(cardsCount: Int): TcgSet {
+    if (cardsCount <= 0) return this
+    return copy(
+        total = cardsCount,
+        printedTotal = printedTotal.takeIf { it > 0 } ?: cardsCount
+    )
+}
+
 class CatalogRepository {
 
     private val api = PokeVaultApiClient.create(com.emabuia.pokevault.BuildConfig.POKEWALLET_API_KEY)
@@ -2785,7 +2816,8 @@ class CatalogRepository {
                     setsByCanonicalRef = setsByCanonicalRef,
                     ourReleaseDate = summary.releaseDate,
                     ourSeries = summary.series,
-                    ourName = summary.name
+                    ourName = summary.name,
+                    ourAbbreviation = summary.abbreviation
                 )
             }
             return (nonItalianSets + italianSets).distinctBy { it.id }
@@ -2838,7 +2870,8 @@ class CatalogRepository {
         setsByCanonicalRef: Map<String, TcgSet>,
         ourReleaseDate: String? = null,
         ourSeries: String? = null,
-        ourName: String? = null
+        ourName: String? = null,
+        ourAbbreviation: String? = null
     ): TcgSet {
         val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
         val baseRawSetCode = preferredBaseSetCode ?: computedBaseSetCode ?: expansionId.uppercase(Locale.ROOT)
@@ -2891,13 +2924,14 @@ class CatalogRepository {
             series = setSeries,
             language = "ITA",
             printedTotal = resolvedCardCount,
-            total = resolvedCardCount,
+            total = italianSetTotal(cardCount = cardCount, fallback = resolvedCardCount),
             // Our own D1-backfilled release date (schema/002 + backfill-release-date-
             // tcgdex.mjs, sourced once from TCGdex -- see MIGRATION_PLAN.md M4.6) takes
             // priority; falls back to the borrowed English base set's date only for
             // expansions not yet covered (there are none as of the 2026-09-08 backfill).
             releaseDate = ourReleaseDate?.takeIf { it.isNotBlank() } ?: linkedBase?.releaseDate.orEmpty(),
-            images = setImages
+            images = setImages,
+            abbreviation = ourAbbreviation?.trim().orEmpty()
         )
     }
 
@@ -3323,12 +3357,10 @@ class CatalogRepository {
         val baseSets = memorySets ?: loadSetsFromRoom(ignoreExpiry = true) ?: return
         var hasChanged = false
         val updatedSets = baseSets.map { set ->
-            if (set.id == setId && (set.total != cardsCount || set.printedTotal != cardsCount)) {
-                hasChanged = true
-                set.copy(printedTotal = cardsCount, total = cardsCount)
-            } else {
-                set
-            }
+            if (set.id != setId) return@map set
+            val updated = set.withKnownCardCount(cardsCount)
+            if (updated != set) hasChanged = true
+            updated
         }
 
         if (hasChanged) {

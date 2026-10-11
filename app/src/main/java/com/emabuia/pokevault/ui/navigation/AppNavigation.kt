@@ -26,7 +26,10 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +57,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
+import com.emabuia.pokevault.data.firebase.SyncErrors
+import com.emabuia.pokevault.data.network.NetworkMonitor
 import com.emabuia.pokevault.data.trade.TradeBadge
 import com.emabuia.pokevault.data.trade.TradePush
 import com.emabuia.pokevault.ui.album.AlbumCollectionListScreen
@@ -66,6 +71,7 @@ import com.emabuia.pokevault.ui.album.GoalAlbumDetailScreen
 import com.emabuia.pokevault.ui.auth.AuthScreen
 import com.emabuia.pokevault.ui.collection.AddCardScreen
 import com.emabuia.pokevault.ui.collection.CardDetailScreen
+import com.emabuia.pokevault.ui.collection.CollectionBrowse
 import com.emabuia.pokevault.ui.collection.CollectionScreen
 import com.emabuia.pokevault.ui.competitive.AddMatchScreen
 import com.emabuia.pokevault.ui.competitive.AddTournamentScreen
@@ -73,6 +79,7 @@ import com.emabuia.pokevault.ui.competitive.CompetitiveHubScreen
 import com.emabuia.pokevault.ui.competitive.HandSimulatorScreen
 import com.emabuia.pokevault.ui.competitive.MatchLogScreen
 import com.emabuia.pokevault.ui.competitive.TournamentDetailScreen
+import com.emabuia.pokevault.ui.components.OfflineBanner
 import com.emabuia.pokevault.ui.components.ReviewPromptBanner
 import com.emabuia.pokevault.ui.deck.DeckLabScreen
 import com.emabuia.pokevault.ui.graded.GradedCardsScreen
@@ -120,7 +127,7 @@ object Routes {
     const val COLLECTION = "collection"
     const val ADD_CARD = "add_card"
     const val EDIT_CARD = "edit_card/{cardId}"
-    const val CARD_DETAIL = "card_detail/{cardId}"
+    const val CARD_DETAIL = "card_detail/{cardId}?browse={browse}"
     const val POKEDEX = "pokedex"
 
     // Il Pokedex accetta un flag opzionale: arrivando dalla barra di ricerca
@@ -173,6 +180,8 @@ object Routes {
     fun pokedexSearch() = "pokedex?search=true"
 
     fun cardDetail(cardId: String) = "card_detail/$cardId"
+    /** Dalla collezione: il dettaglio scorre fra le carte con lo swipe. */
+    fun cardDetailBrowsing(cardId: String) = "card_detail/$cardId?browse=true"
     fun editCard(cardId: String) = "edit_card/$cardId"
     fun createAlbum(albumId: String? = null) = if (albumId != null) "create_album?albumId=$albumId" else "create_album"
     fun albumDetail(albumId: String) = "album_detail/$albumId"
@@ -427,7 +436,7 @@ fun AppNavigation(
                             CollectionScreen(
                                 onBack = { navController.popBackStack() },
                                 onAddCard = { navController.navigate(Routes.ADD_CARD) },
-                                onCardClick = { cardId -> navController.navigate(Routes.cardDetail(cardId)) }
+                                onCardClick = { cardId -> navController.navigate(Routes.cardDetailBrowsing(cardId)) }
                             )
                         }
                     }
@@ -453,12 +462,25 @@ fun AppNavigation(
                 // ── Dettaglio Carta ──
                 composable(
                     route = Routes.CARD_DETAIL,
-                    arguments = listOf(navArgument("cardId") { type = NavType.StringType })
+                    arguments = listOf(
+                        navArgument("cardId") { type = NavType.StringType },
+                        navArgument("browse") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        }
+                    )
                 ) { backStackEntry ->
                     val cardId = backStackEntry.arguments?.getString("cardId") ?: ""
+                    val browse = backStackEntry.arguments?.getBoolean("browse") == true
+                    // Letto una volta: la collezione puo' riscriverlo, il
+                    // dettaglio gia' aperto deve tenere il suo.
+                    val browseKeys = remember(backStackEntry) {
+                        if (browse) CollectionBrowse.order else emptyList()
+                    }
                     CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
                         CardDetailScreen(
                             cardId = cardId,
+                            browseKeys = browseKeys,
                             onBack = { navController.popBackStack() },
                             onEdit = { navController.navigate(Routes.editCard(cardId)) },
                             onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) }
@@ -484,7 +506,8 @@ fun AppNavigation(
                                 // Naviga al dettaglio set
                                 navController.navigate(Routes.setDetail(setId, setId, macro))
                             },
-                            onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) }
+                            onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) },
+                            onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
                         )
                     }
                 }
@@ -867,6 +890,37 @@ fun AppNavigation(
                     // Sopra la bottom bar quando c'e': coprirla nasconderebbe
                     // la navigazione proprio mentre chiediamo un favore.
                     bottom = if (showBottomBar) PokeVaultBottomBarHeight + 12.dp else 16.dp
+                )
+        )
+
+        // Una modifica salvata sul telefono e rifiutata dal server (vedi
+        // SyncErrors): Firestore l'ha gia' annullata, qui si dice perche' e'
+        // sparita. Stesso posto del banner offline.
+        val syncSnackbar = remember { SnackbarHostState() }
+        LaunchedEffect(Unit) {
+            SyncErrors.rejections.collect {
+                syncSnackbar.showSnackbar(AppLocale.syncWriteRejected)
+            }
+        }
+        SnackbarHost(
+            hostState = syncSnackbar,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(bottom = if (showBottomBar) PokeVaultBottomBarHeight + 8.dp else 12.dp)
+        )
+
+        // Come il banner della recensione: sopra la bottom bar, non modale.
+        // Con la recensione aperta sale sopra di lei invece di coprirla.
+        val isOnline by NetworkMonitor.isOnline.collectAsState()
+        OfflineBanner(
+            visible = !isOnline,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(
+                    bottom = (if (showBottomBar) PokeVaultBottomBarHeight + 12.dp else 16.dp) +
+                        (if (showReviewPrompt) 120.dp else 0.dp)
                 )
         )
     }

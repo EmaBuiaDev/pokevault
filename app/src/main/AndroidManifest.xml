@@ -4,6 +4,8 @@
 
     <!-- Permessi -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Per il banner "sei offline" (NetworkMonitor). Permesso normale, non chiede nulla. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <!--
         TradeRadar (dalla 3.1.6): posizione APPROSSIMATIVA, mai quella precisa

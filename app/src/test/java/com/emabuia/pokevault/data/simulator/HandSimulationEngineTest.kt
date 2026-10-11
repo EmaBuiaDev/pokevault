@@ -155,8 +155,10 @@ class HandSimulationEngineTest {
             summary.starterRate,
             summary.mulliganRate,
             summary.energyByT1Rate,
-            summary.outByT1Rate,
-            summary.setupByT2Rate
+            summary.goingFirst.outByT1Rate,
+            summary.goingSecond.outByT1Rate,
+            summary.goingFirst.setupByT2Rate,
+            summary.goingSecond.setupByT2Rate
         ).forEach { rate ->
             assertTrue(rate in 0.0..100.0)
         }

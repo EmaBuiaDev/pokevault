@@ -26,6 +26,7 @@ import com.emabuia.pokevault.data.remote.TcgPlayer
 import com.emabuia.pokevault.data.remote.TcgPriceInfo
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
+import com.emabuia.pokevault.util.OwnedCardsIndex
 import com.emabuia.pokevault.util.hasPositiveEurPrice
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.Job
@@ -34,6 +35,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collectLatest
+import timber.log.Timber
 import retrofit2.HttpException
 import java.text.Normalizer
 import java.time.LocalDate
@@ -81,7 +85,9 @@ data class SetsUiState(
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
     val isAddingCard: String? = null,
-    val successMessage: String? = null
+    val successMessage: String? = null,
+    /** Le carte possedute, per il bordo verde nei risultati della ricerca. */
+    val owned: OwnedCardsIndex = OwnedCardsIndex()
 ) {
     /** Quante voci di filtro sono accese, su tutte le dimensioni. */
     val activeCardFilterCount: Int
@@ -569,8 +575,35 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                 variant = variant, quantity = quantity, condition = condition, language = language
             )
             firestoreRepository.addCard(card)
-                .onSuccess { uiState = uiState.copy(isAddingCard = null, successMessage = "${tcgCard.name} aggiunta!") }
+                .onSuccess {
+                    uiState = uiState.copy(
+                        isAddingCard = null,
+                        successMessage = "${tcgCard.name} aggiunta!",
+                        // Il bordo verde subito: Firestore arriva un attimo dopo
+                        // e riscrive lo stesso valore.
+                        owned = uiState.owned.plus(tcgCard.id, variant)
+                    )
+                }
                 .onFailure { uiState = uiState.copy(isAddingCard = null, errorMessage = "Errore") }
+        }
+    }
+
+    private var ownedCardsJob: Job? = null
+
+    /**
+     * Le carte possedute, per i risultati della ricerca. Parte alla prima
+     * ricerca e non all'apertura del Pokedex: chi guarda solo le espansioni
+     * non paga la lettura della collezione. Una volta sola per ViewModel.
+     */
+    fun observeOwnedCards() {
+        if (ownedCardsJob != null) return
+        ownedCardsJob = viewModelScope.launch {
+            firestoreRepository.getCards()
+                .catch { e -> Timber.w(e, "Pokedex: carte possedute non lette") }
+                .collectLatest { cards ->
+                    val index = withContext(Dispatchers.Default) { OwnedCardsIndex.from(cards) }
+                    uiState = uiState.copy(owned = index)
+                }
         }
     }
 

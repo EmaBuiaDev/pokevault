@@ -82,6 +82,8 @@ import com.emabuia.pokevault.data.simulator.PracticeDealer
 import com.emabuia.pokevault.data.simulator.PracticeHand
 import com.emabuia.pokevault.data.simulator.PracticeTally
 import com.emabuia.pokevault.data.simulator.SavedProblemHand
+import com.emabuia.pokevault.data.simulator.TurnOrder
+import kotlin.random.Random
 import com.emabuia.pokevault.data.simulator.SimulatorCard
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.AppColors
@@ -126,6 +128,9 @@ fun HandSimulatorScreen(
     var practiceHand by remember { mutableStateOf<PracticeHand?>(null) }
     var tally by remember { mutableStateOf(PracticeTally()) }
     var dealKey by remember { mutableIntStateOf(0) }
+    // Chi inizia: cambia cosa si puo' giocare al primo turno (niente Aiuti
+    // iniziando per primi). Resta scelto fra una mano e l'altra.
+    var turnOrder by remember { mutableStateOf(TurnOrder.FIRST) }
 
     var summary by remember { mutableStateOf<HandSimulationSummary?>(null) }
     var accuracyWarnings by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -183,7 +188,7 @@ fun HandSimulatorScreen(
     }
 
     fun dealFresh() {
-        practiceHand = PracticeDealer.deal(cardPool, selectedKeyCards)
+        practiceHand = PracticeDealer.deal(cardPool, selectedKeyCards, turnOrder = turnOrder)
         dealKey += 1
     }
 
@@ -315,6 +320,17 @@ fun HandSimulatorScreen(
                         tally = tally,
                         dealKey = dealKey,
                         savedHands = savedHands,
+                        turnOrder = turnOrder,
+                        onTurnOrderChange = { order ->
+                            turnOrder = order
+                            practiceHand = practiceHand?.let { PracticeDealer.withTurnOrder(it, order, selectedKeyCards) }
+                        },
+                        onCoinFlip = {
+                            val order = if (Random.nextBoolean()) TurnOrder.FIRST else TurnOrder.SECOND
+                            turnOrder = order
+                            practiceHand = practiceHand?.let { PracticeDealer.withTurnOrder(it, order, selectedKeyCards) }
+                            feedback = if (order == TurnOrder.FIRST) AppLocale.handSimulatorGoingFirst else AppLocale.handSimulatorGoingSecond
+                        },
                         onDeal = { dealFresh() },
                         onKeep = {
                             tally = tally.copy(dealt = tally.dealt + 1, kept = tally.kept + 1)
@@ -327,7 +343,7 @@ fun HandSimulatorScreen(
                                 mulliganed = tally.mulliganed + 1
                             )
                             practiceHand = if (current == null) {
-                                PracticeDealer.deal(cardPool, selectedKeyCards)
+                                PracticeDealer.deal(cardPool, selectedKeyCards, turnOrder = turnOrder)
                             } else {
                                 PracticeDealer.mulligan(current, cardPool, selectedKeyCards)
                             }
@@ -805,6 +821,8 @@ private fun HandEvaluation.storeTags(): List<String> {
     val tags = mutableListOf<String>()
     if (energies == 0) tags += "NO_ENERGY_T1"
     if (outs == 0) tags += "NO_OUT_T1"
+    if (weaknesses.contains(HandTrait.SUPPORTER_LOCKED_T1)) tags += "SUPPORTER_ONLY_T1"
+    if (weaknesses.contains(HandTrait.KEY_CARD_PRIZED)) tags += "KEY_CARD_PRIZED"
     if (weaknesses.contains(HandTrait.MISS_KEY_CARD)) tags += "MISS_KEYCARD_T2"
     if (verdict == HandVerdict.RISKY || verdict == HandVerdict.MULLIGAN) tags += "SETUP_RISK_T2"
     return tags
