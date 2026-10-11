@@ -1172,79 +1172,84 @@ fun CardSearchResults(
 }
 
 // ── Card di ricerca, vista griglia: immagine + badge rarita' + prezzo ──
+//
+// Numero, nome ed espansione stanno SOTTO l'immagine e non sopra. Prima erano
+// in una barra scura sul fondo della carta: copriva un terzo dell'immagine
+// (con l'espansione, nella vista "Tutte") e nel tema chiaro il testo, scuro,
+// su quella barra scura non si leggeva.
 @Composable
 private fun SearchResultGridCard(card: TcgCard, showSet: Boolean = false, onClick: () -> Unit) {
     val price = card.cardmarket?.prices.minimumEurPriceOrZero()
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(0.72f)
             .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
     ) {
-        if (card.images.small.isNotBlank()) {
-            AsyncImage(
-                model = card.images.small,
-                contentDescription = card.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            if (!card.rarity.isNullOrBlank()) {
-                RarityOverlayBadge(
-                    info = RarityUtils.getRarityInfo(card.rarity),
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.72f)
+                .clip(RoundedCornerShape(10.dp))
+        ) {
+            if (card.images.small.isNotBlank()) {
+                AsyncImage(
+                    model = card.images.small,
+                    contentDescription = card.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
                 )
-            }
-            if (price > 0) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                ) {
-                    Text("${"%.2f".format(price)} €", color = Color(0xFF4ADE80), fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .padding(horizontal = 6.dp, vertical = 4.dp)
-            ) {
-                Column {
-                    Text(
-                        text = "#${extractCardNumberForUi(card.number)} ${card.name}",
-                        color = AppColors.textPrimary,
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                if (!card.rarity.isNullOrBlank()) {
+                    RarityOverlayBadge(
+                        info = RarityUtils.getRarityInfo(card.rarity),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
                     )
-                    if (showSet) {
-                        card.set?.name?.takeIf { it.isNotBlank() }?.let { setName ->
-                            Text(
-                                text = setName,
-                                color = AppColors.textPrimary.copy(alpha = 0.75f),
-                                fontSize = 9.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                }
+                if (price > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text("${"%.2f".format(price)} €", color = Color(0xFF4ADE80), fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(AppColors.surface),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(AppLocale.noImage, color = AppColors.textMuted, fontSize = 10.sp)
+                }
             }
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(AppColors.surface),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(AppLocale.noImage, color = AppColors.textMuted, fontSize = 10.sp)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "#${extractCardNumberForUi(card.number)} ${card.name}",
+            color = AppColors.textPrimary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 2.dp)
+        )
+        if (showSet) {
+            card.set?.name?.takeIf { it.isNotBlank() }?.let { setName ->
+                Text(
+                    text = setName,
+                    color = AppColors.textMuted,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 2.dp)
+                )
             }
         }
     }
