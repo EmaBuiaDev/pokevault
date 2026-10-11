@@ -362,13 +362,21 @@ fun CardDetailScreen(
     val browseIndex = remember(browseKeys, currentKey) { browseKeys.indexOf(currentKey) }
     val canBrowse = browseIndex >= 0 && browseKeys.size > 1
 
+    // Il gesto vive in un pointerInput creato una volta sola, che si tiene la
+    // funzione qui sotto della prima composizione: se leggesse
+    // browseIndex e pendingCount direttamente, vedrebbe per sempre i valori
+    // della prima carta. Prima infatti si scorreva di una carta sola, e poi lo
+    // swipe ricalcolava sempre la stessa destinazione.
+    val latestBrowseIndex by rememberUpdatedState(browseIndex)
+    val hasPendingChanges by rememberUpdatedState(pendingCount > 0)
+
     /**
      * Swipe alla carta accanto. Con modifiche non salvate si resta qui: uno
      * swipe distratto non deve buttare via quantita' e grading appena scritti.
      */
     fun browseBy(offset: Int) {
-        val target = browseKeys.getOrNull(browseIndex + offset) ?: return
-        if (pendingCount > 0) {
+        val target = browseKeys.getOrNull(latestBrowseIndex + offset) ?: return
+        if (hasPendingChanges) {
             scope.launch { snackbarHostState.showSnackbar(AppLocale.saveBeforeChangingCard) }
             return
         }
@@ -376,7 +384,6 @@ fun CardDetailScreen(
         isFlipped = false
         currentKey = target
     }
-    val browse by rememberUpdatedState(::browseBy)
 
     fun discardPendingChanges() {
         editedQuantities = variants.associate { it.id to it.quantity }
@@ -526,8 +533,8 @@ fun CardDetailScreen(
                                     onDragEnd = {
                                         // Stessa soglia dello swipe nelle espansioni.
                                         when {
-                                            totalDragX <= -80f -> browse(1)
-                                            totalDragX >= 80f -> browse(-1)
+                                            totalDragX <= -80f -> browseBy(1)
+                                            totalDragX >= 80f -> browseBy(-1)
                                         }
                                         totalDragX = 0f
                                     },

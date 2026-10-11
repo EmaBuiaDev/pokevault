@@ -231,11 +231,14 @@ fun CollectionScreen(
         } else {
             // Calcolato al tocco e non a ogni ricomposizione. Per espansione
             // solo le sezioni aperte: si scorre fra le carte che si vedono.
-            CollectionBrowse.order = if (state.layout == CollectionLayout.ALL) {
-                state.visibleGroups.map { it.key }
+            // Letto dal ViewModel e dallo stato, non da `state`: chi tiene
+            // questa funzione puo' averla presa a una composizione vecchia.
+            val current = viewModel.uiState
+            CollectionBrowse.order = if (current.layout == CollectionLayout.ALL) {
+                current.visibleGroups.map { it.key }
             } else {
-                state.sections
-                    .filter { it.expansion in expandedExpansions }
+                current.sections
+                    .filter { it.expansion !in collapsedExpansions }
                     .flatMap { section -> section.groups.map { it.key } }
             }
             onCardClick(key)
