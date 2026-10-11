@@ -62,6 +62,23 @@ private const val ILLUSTRATOR_CARD_LIMIT = 5000
 internal fun italianSetTotal(cardCount: Int, fallback: Int): Int =
     cardCount.takeIf { it > 0 } ?: fallback
 
+/**
+ * Un set di cui si sono appena caricate tutte le carte.
+ *
+ * Si aggiorna il totale ([TcgSet.total]); il totale stampato no, a meno che
+ * non fosse sconosciuto. Prima si sovrascrivevano tutti e due col numero di
+ * carte caricate, segrete comprese: aperta Destino di Paldea, il suo "/91"
+ * diventava 245, e la ricerca "67/91" (performPreciseNumberSearch, usata dai
+ * ripieghi di scanner e aggiunta carta) non la proponeva piu'.
+ */
+internal fun TcgSet.withKnownCardCount(cardsCount: Int): TcgSet {
+    if (cardsCount <= 0) return this
+    return copy(
+        total = cardsCount,
+        printedTotal = printedTotal.takeIf { it > 0 } ?: cardsCount
+    )
+}
+
 class CatalogRepository {
 
     private val api = PokeVaultApiClient.create(com.emabuia.pokevault.BuildConfig.POKEWALLET_API_KEY)
@@ -3340,12 +3357,10 @@ class CatalogRepository {
         val baseSets = memorySets ?: loadSetsFromRoom(ignoreExpiry = true) ?: return
         var hasChanged = false
         val updatedSets = baseSets.map { set ->
-            if (set.id == setId && (set.total != cardsCount || set.printedTotal != cardsCount)) {
-                hasChanged = true
-                set.copy(printedTotal = cardsCount, total = cardsCount)
-            } else {
-                set
-            }
+            if (set.id != setId) return@map set
+            val updated = set.withKnownCardCount(cardsCount)
+            if (updated != set) hasChanged = true
+            updated
         }
 
         if (hasChanged) {

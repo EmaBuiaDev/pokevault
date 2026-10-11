@@ -1,7 +1,9 @@
 package com.emabuia.pokevault.integration
 
 import android.app.Application
+import android.os.Looper
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
+import com.emabuia.pokevault.data.firebase.SyncErrors
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.MatchLog
 import com.emabuia.pokevault.data.model.Tournament
@@ -21,6 +23,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
 
@@ -107,6 +110,31 @@ class SalvataggiLocaliEmulatorTest {
         val doc = emu { sulServer(uid, "decks") }.single()
         assertEquals(id, doc.id)
         assertEquals("Dopo", doc.getString("name"))
+    }
+
+    @Test
+    fun `una modifica rifiutata dal server viene segnalata`() {
+        emu { nuovoUtente() }
+        val prima = SyncErrors.rejectedCount
+        // Una lista che sul server non c'e': l'update locale passa, il server
+        // risponde NOT_FOUND.
+        emu { repo.addCardToWishlist("lista-inesistente", "x").getOrThrow() }
+        emu { attendiServer() }
+        // L'avviso parte da un listener sul thread principale.
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(prima + 1, SyncErrors.rejectedCount)
+    }
+
+    @Test
+    fun `una modifica accettata non segnala niente`() {
+        emu { nuovoUtente() }
+        val prima = SyncErrors.rejectedCount
+        emu { repo.saveWishlist(Wishlist(name = "Valida")).getOrThrow() }
+        emu { attendiServer() }
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(prima, SyncErrors.rejectedCount)
     }
 
     @Test

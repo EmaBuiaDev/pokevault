@@ -357,6 +357,8 @@ object AppLocale {
     val expandAll: String get() = if (isItalian) "Espandi tutte" else "Expand all"
     val collapseAll: String get() = if (isItalian) "Chiudi tutte" else "Collapse all"
     val openAll: String get() = if (isItalian) "Apri tutte" else "Open all"
+    val syncWriteRejected: String get() =
+        if (isItalian) "Una modifica non è stata salvata sul server ed è stata annullata" else "A change wasn't saved on the server and was undone"
     val offlineBanner: String get() =
         if (isItalian) "Sei offline · le modifiche partono al ritorno della rete" else "You're offline · changes sync when you're back online"
     fun cardsPerRow(count: Int): String = if (isItalian) "$count per riga" else "$count per row"

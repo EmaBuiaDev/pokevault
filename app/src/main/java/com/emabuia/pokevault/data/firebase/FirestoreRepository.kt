@@ -366,18 +366,18 @@ class FirestoreRepository {
 
                     // Fire-and-forget: la scrittura colpisce la cache locale
                     // all'istante; lo snapshot listener emette subito l'update.
-                    docRef.update(updates)
+                    docRef.update(updates).localFirst("addCard")
                     doc.id
                 } else {
                     // Usiamo un DocumentReference generato localmente così
                     // otteniamo subito l'ID senza aspettare la rete.
                     val newDocRef = cardsCollection.document()
-                    newDocRef.set(data)
+                    newDocRef.set(data).localFirst("addCard")
                     newDocRef.id
                 }
             } else {
                 val newDocRef = cardsCollection.document()
-                newDocRef.set(data)
+                newDocRef.set(data).localFirst("addCard")
                 newDocRef.id
             }
 
@@ -421,7 +421,7 @@ class FirestoreRepository {
 
             // Write diretto: finisce immediatamente nella cache locale, lo
             // snapshot listener emette l'aggiornamento all'istante.
-            cardsCollection.document(cardId).update(data)
+            cardsCollection.document(cardId).update(data).localFirst("updateCard")
 
             // Una carta solo-deck non ha mai contribuito ai totali: se si
             // arriva qui dal dettaglio di una carta aperta da un deck di prova,
@@ -586,7 +586,7 @@ class FirestoreRepository {
 
             // Delete diretto: la carta sparisce subito dalla cache locale e
             // lo snapshot listener aggiorna la UI all'istante.
-            cardsCollection.document(cardId).delete()
+            cardsCollection.document(cardId).delete().localFirst("deleteCard")
 
             // Totali fire-and-forget: una carta solo-deck non li ha mai toccati
             // entrando, quindi non li tocca nemmeno uscendo.
@@ -628,7 +628,7 @@ class FirestoreRepository {
             val isDeckOnly = doc.getBoolean("deckOnly") ?: false
             val value = doc.getDouble("estimatedValue") ?: 0.0
 
-            cardsCollection.document(cardId).update("quantity", FieldValue.increment(-1L))
+            cardsCollection.document(cardId).update("quantity", FieldValue.increment(-1L)).localFirst("removeOneCopy")
             if (!isDeckOnly) {
                 userDoc.update("totalCards", FieldValue.increment(-1L))
                 if (value != 0.0) userDoc.update("totalValue", FieldValue.increment(-value))
@@ -848,7 +848,10 @@ class FirestoreRepository {
      * solo da scriverlo nel log.
      */
     private fun Task<Void>.localFirst(what: String) {
-        addOnFailureListener { e -> Timber.w(e, "Scrittura rifiutata dal server: %s", what) }
+        addOnFailureListener { e ->
+            Timber.w(e, "Scrittura rifiutata dal server: %s", what)
+            SyncErrors.reportRejected()
+        }
     }
 
     /**
@@ -1224,7 +1227,7 @@ class FirestoreRepository {
                 for (doc in snapshot.documents) {
                     batch.update(doc.reference, "cardIds", FieldValue.arrayRemove(cardId))
                 }
-                commitLocalFirst(batch) { e -> Timber.w(e, "Wishlist: carta non tolta sul server") }
+                commitLocalFirst(batch) { e -> Timber.w(e, "Wishlist: carta non tolta sul server"); SyncErrors.reportRejected() }
             }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
@@ -1341,7 +1344,7 @@ class FirestoreRepository {
                 batch.delete(doc.reference)
             }
             batch.delete(tournamentsCollection.document(tournamentId))
-            commitLocalFirst(batch) { e -> Timber.w(e, "Torneo non cancellato sul server") }
+            commitLocalFirst(batch) { e -> Timber.w(e, "Torneo non cancellato sul server"); SyncErrors.reportRejected() }
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
     }

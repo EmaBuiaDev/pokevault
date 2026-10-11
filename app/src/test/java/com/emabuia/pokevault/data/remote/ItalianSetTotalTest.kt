@@ -23,3 +23,32 @@ class ItalianSetTotalTest {
         assertEquals(30, italianSetTotal(cardCount = 0, fallback = 30))
     }
 }
+
+/** Il set dopo aver caricato tutte le sue carte. */
+class SetKnownCardCountTest {
+
+    private val paldea = TcgSet(id = "ita-sv4pt5", printedTotal = 91, total = 245)
+
+    @Test
+    fun `il totale stampato non diventa il numero di carte caricate`() {
+        val updated = paldea.withKnownCardCount(245)
+        assertEquals(91, updated.printedTotal)
+        assertEquals(245, updated.total)
+    }
+
+    @Test
+    fun `il totale delle carte si aggiorna`() {
+        assertEquals(250, paldea.withKnownCardCount(250).total)
+    }
+
+    @Test
+    fun `un totale stampato sconosciuto si riempie`() {
+        val unknown = TcgSet(id = "x", printedTotal = 0, total = 0)
+        assertEquals(30, unknown.withKnownCardCount(30).printedTotal)
+    }
+
+    @Test
+    fun `zero carte caricate non cambia niente`() {
+        assertEquals(paldea, paldea.withKnownCardCount(0))
+    }
+}

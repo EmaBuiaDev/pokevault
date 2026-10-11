@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
@@ -55,6 +57,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
+import com.emabuia.pokevault.data.firebase.SyncErrors
 import com.emabuia.pokevault.data.network.NetworkMonitor
 import com.emabuia.pokevault.data.trade.TradeBadge
 import com.emabuia.pokevault.data.trade.TradePush
@@ -888,6 +891,23 @@ fun AppNavigation(
                     // la navigazione proprio mentre chiediamo un favore.
                     bottom = if (showBottomBar) PokeVaultBottomBarHeight + 12.dp else 16.dp
                 )
+        )
+
+        // Una modifica salvata sul telefono e rifiutata dal server (vedi
+        // SyncErrors): Firestore l'ha gia' annullata, qui si dice perche' e'
+        // sparita. Stesso posto del banner offline.
+        val syncSnackbar = remember { SnackbarHostState() }
+        LaunchedEffect(Unit) {
+            SyncErrors.rejections.collect {
+                syncSnackbar.showSnackbar(AppLocale.syncWriteRejected)
+            }
+        }
+        SnackbarHost(
+            hostState = syncSnackbar,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(bottom = if (showBottomBar) PokeVaultBottomBarHeight + 8.dp else 12.dp)
         )
 
         // Come il banner della recensione: sopra la bottom bar, non modale.
