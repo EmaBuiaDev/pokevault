@@ -181,27 +181,20 @@ fun CollectionScreen(
     val shouldExpandAll = hasActiveFilters || state.sort != CollectionSort.NUMBER
     val visibleExpansionNames = remember(state.sections) { state.sections.map { it.expansion }.toSet() }
 
-    // Espansioni aperte. Chiuse all'ingresso: con collezioni grandi aprirle
-    // tutte subito costava.
+    // Espansioni aperte all'ingresso: si ricordano quelle chiuse a mano, non
+    // quelle aperte, cosi' anche un set nuovo arriva gia' aperto. Le righe
+    // della griglia sono lazy, aprirle tutte non costa.
     // Salvate come lista, e non affidate al salvataggio automatico: tornando
-    // dal dettaglio di una carta prima si richiudevano tutte, perche' stavano
+    // dal dettaglio di una carta prima si riaprivano tutte, perche' stavano
     // in un remember che la navigazione butta via.
-    var expandedExpansions by rememberSaveable(
+    var collapsedExpansions by rememberSaveable(
         stateSaver = listSaver<Set<String>, String>(save = { it.toList() }, restore = { it.toSet() })
     ) { mutableStateOf(setOf<String>()) }
-    var wasExpandingAll by remember { mutableStateOf(shouldExpandAll) }
-    LaunchedEffect(shouldExpandAll, visibleExpansionNames) {
-        expandedExpansions = when {
-            shouldExpandAll -> expandedExpansions + visibleExpansionNames
-            // Si esce da un filtro: si torna tutto chiuso, come prima.
-            wasExpandingAll -> emptySet()
-            // Senza filtri si tolgono solo le espansioni sparite. Prima ogni
-            // cambio dell'elenco (una carta aggiunta in un set nuovo, l'ultima
-            // di un set cancellata) richiudeva tutte quelle aperte a mano.
-            else -> expandedExpansions intersect visibleExpansionNames
-        }
-        wasExpandingAll = shouldExpandAll
+    // Un filtro o un ordinamento diverso riaprono tutto.
+    LaunchedEffect(shouldExpandAll) {
+        if (shouldExpandAll) collapsedExpansions = emptySet()
     }
+    val expandedExpansions = visibleExpansionNames - collapsedExpansions
 
     // Le immagini delle prime tessere visibili si chiedono in anticipo, cosi'
     // aprire una sezione non mostra una griglia di scheletri.
@@ -361,10 +354,10 @@ fun CollectionScreen(
                             visibleExpansionNames.isNotEmpty() &&
                             !expandedExpansions.containsAll(visibleExpansionNames),
                         onToggleExpandAll = {
-                            expandedExpansions = if (expandedExpansions.containsAll(visibleExpansionNames)) {
-                                emptySet()
-                            } else {
+                            collapsedExpansions = if (expandedExpansions.containsAll(visibleExpansionNames)) {
                                 visibleExpansionNames
+                            } else {
+                                emptySet()
                             }
                         }
                     )
@@ -398,8 +391,8 @@ fun CollectionScreen(
                             sections = state.sections,
                             expanded = expandedExpansions,
                             onToggle = { name ->
-                                expandedExpansions = if (name in expandedExpansions) expandedExpansions - name
-                                else expandedExpansions + name
+                                collapsedExpansions = if (name in collapsedExpansions) collapsedExpansions - name
+                                else collapsedExpansions + name
                             },
                             isGridView = state.isGridView,
                             gridColumns = state.gridColumns,
