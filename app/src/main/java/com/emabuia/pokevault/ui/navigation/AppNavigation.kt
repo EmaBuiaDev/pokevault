@@ -500,7 +500,8 @@ fun AppNavigation(
                                 // Naviga al dettaglio set
                                 navController.navigate(Routes.setDetail(setId, setId, macro))
                             },
-                            onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) }
+                            onIllustratorClick = { key -> navController.navigate(Routes.illustratorDetail(key)) },
+                            onPremiumRequired = { navController.navigate(Routes.PREMIUM) }
                         )
                     }
                 }

@@ -109,7 +109,9 @@ data class ItalianExpansionSummary(
     val logoKey: String? = null,
     val baseSetCode: String? = null,
     val releaseDate: String? = null,
-    val series: String? = null
+    val series: String? = null,
+    /** La sigla ufficiale ("PAF"), schema/016 del Worker. Null dove manca. */
+    val abbreviation: String? = null
 )
 
 data class ItalianExpansionsResponse(

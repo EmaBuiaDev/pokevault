@@ -14,7 +14,12 @@ data class TcgSet(
     val printedTotal: Int = 0,
     val total: Int = 0,
     val releaseDate: String = "",
-    val images: SetImages = SetImages()
+    val images: SetImages = SetImages(),
+    /**
+     * La sigla ufficiale ("PAF", "SSH"), da /v1/expansions (schema/016 del
+     * Worker). Vuota dove non la sappiamo: in quel caso non si mostra niente.
+     */
+    val abbreviation: String = ""
 )
 
 @Immutable

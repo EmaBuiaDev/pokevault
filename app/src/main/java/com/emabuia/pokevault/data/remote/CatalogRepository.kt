@@ -2785,7 +2785,8 @@ class CatalogRepository {
                     setsByCanonicalRef = setsByCanonicalRef,
                     ourReleaseDate = summary.releaseDate,
                     ourSeries = summary.series,
-                    ourName = summary.name
+                    ourName = summary.name,
+                    ourAbbreviation = summary.abbreviation
                 )
             }
             return (nonItalianSets + italianSets).distinctBy { it.id }
@@ -2838,7 +2839,8 @@ class CatalogRepository {
         setsByCanonicalRef: Map<String, TcgSet>,
         ourReleaseDate: String? = null,
         ourSeries: String? = null,
-        ourName: String? = null
+        ourName: String? = null,
+        ourAbbreviation: String? = null
     ): TcgSet {
         val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
         val baseRawSetCode = preferredBaseSetCode ?: computedBaseSetCode ?: expansionId.uppercase(Locale.ROOT)
@@ -2897,7 +2899,8 @@ class CatalogRepository {
             // priority; falls back to the borrowed English base set's date only for
             // expansions not yet covered (there are none as of the 2026-09-08 backfill).
             releaseDate = ourReleaseDate?.takeIf { it.isNotBlank() } ?: linkedBase?.releaseDate.orEmpty(),
-            images = setImages
+            images = setImages,
+            abbreviation = ourAbbreviation?.trim().orEmpty()
         )
     }
 
