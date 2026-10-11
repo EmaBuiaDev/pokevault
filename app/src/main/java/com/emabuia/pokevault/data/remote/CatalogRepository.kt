@@ -48,6 +48,20 @@ enum class ItalianCardAttribute { RARITY, SUPERTYPE, TYPE, ILLUSTRATOR }
  */
 private const val ILLUSTRATOR_CARD_LIMIT = 5000
 
+/**
+ * Quante carte ha un'espansione italiana, per l'elenco del Pokedex: quelle del
+ * nostro catalogo (expansions.card_count, verificato l'11/10/2026 uguale alle
+ * carte servite per tutte le 142), cioe' le stesse che l'espansione mostra
+ * aperta. Prima era il totale del set inglese collegato: il 30 Anniversario
+ * diceva 30 e dentro ne aveva 161, e il numero si correggeva solo dopo aver
+ * aperto l'espansione (updateSetTotalsFromKnownCards).
+ *
+ * Il totale stampato (printedTotal, il "/128") resta un'altra cosa: serve alla
+ * ricerca per numero e non passa di qui.
+ */
+internal fun italianSetTotal(cardCount: Int, fallback: Int): Int =
+    cardCount.takeIf { it > 0 } ?: fallback
+
 class CatalogRepository {
 
     private val api = PokeVaultApiClient.create(com.emabuia.pokevault.BuildConfig.POKEWALLET_API_KEY)
@@ -2893,7 +2907,7 @@ class CatalogRepository {
             series = setSeries,
             language = "ITA",
             printedTotal = resolvedCardCount,
-            total = resolvedCardCount,
+            total = italianSetTotal(cardCount = cardCount, fallback = resolvedCardCount),
             // Our own D1-backfilled release date (schema/002 + backfill-release-date-
             // tcgdex.mjs, sourced once from TCGdex -- see MIGRATION_PLAN.md M4.6) takes
             // priority; falls back to the borrowed English base set's date only for
