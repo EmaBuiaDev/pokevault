@@ -3,23 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PokeVault</title>
+    <title>PokeVault – App per collezionare carte Pokémon in italiano</title>
+    <meta name="description" content="Gestisci la tua collezione di carte Pokémon in italiano: valore delle carte con i prezzi Cardmarket, scanner, scambi con i collezionisti della tua provincia, mazzi e album. Gratis su Android.">
+    <link rel="canonical" href="https://emabuiadev.github.io/pokevault/">
     <link rel="icon" type="image/svg+xml" href="/pokevault/icon.svg">
+
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="it_IT">
+    <meta property="og:site_name" content="PokeVault">
+    <meta property="og:title" content="PokeVault – La tua collezione di carte Pokémon in italiano">
+    <meta property="og:description" content="Prezzi Cardmarket, scanner, scambi vicino a te, mazzi e album. Gratis su Android.">
+    <meta property="og:url" content="https://emabuiadev.github.io/pokevault/">
+    <meta name="twitter:card" content="summary">
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "MobileApplication",
+        "name": "PokeVault",
+        "operatingSystem": "Android",
+        "applicationCategory": "LifestyleApplication",
+        "inLanguage": ["it", "en"],
+        "description": "App per collezionare carte Pokémon in italiano: collezione, valore delle carte con i prezzi Cardmarket, scanner, scambi con i collezionisti vicini, mazzi e album.",
+        "url": "https://emabuiadev.github.io/pokevault/",
+        "installUrl": "https://play.google.com/store/apps/details?id=com.emabuia.pokevault",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+    }
+    </script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #1A1A2E;
             color: #B0B0C0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 24px;
+            line-height: 1.55;
+            padding: 48px 16px;
         }
         .container {
-            max-width: 480px;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        header {
             text-align: center;
+            margin-bottom: 48px;
         }
         .logo {
             display: block;
@@ -32,16 +59,60 @@
         h1 {
             color: #FFFFFF;
             font-size: 32px;
-            margin-bottom: 8px;
+            line-height: 1.2;
+            margin-bottom: 12px;
         }
         .tagline {
-            color: #6B6B8D;
+            color: #B0B0C0;
+            font-size: 17px;
+            max-width: 520px;
+            margin: 0 auto 28px;
+        }
+        .cta {
+            display: inline-block;
+            background: #4A6CF7;
+            color: #FFFFFF;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 14px;
             font-size: 16px;
-            margin-bottom: 40px;
+            font-weight: 700;
+            transition: background 0.2s;
+        }
+        .cta:hover { background: #3B5BE0; }
+        .cta-note {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #6B6B8D;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+        .feature {
+            background: #232342;
+            border-radius: 16px;
+            padding: 20px;
+        }
+        h2 {
+            color: #FFFFFF;
+            font-size: 17px;
+            margin-bottom: 6px;
+        }
+        .feature p { font-size: 14px; }
+        .closing {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        .closing h2 {
+            font-size: 22px;
+            margin-bottom: 16px;
         }
         .links {
             display: flex;
-            gap: 16px;
+            gap: 12px;
             justify-content: center;
             flex-wrap: wrap;
         }
@@ -50,38 +121,86 @@
             background: #232342;
             color: #4A6CF7;
             text-decoration: none;
-            padding: 12px 24px;
+            padding: 10px 20px;
             border-radius: 12px;
             font-size: 14px;
             font-weight: 600;
             transition: background 0.2s;
         }
-        .links a:hover {
-            background: #2A2A4A;
-        }
+        .links a:hover { background: #2A2A4A; }
         .footer {
-            margin-top: 48px;
+            margin-top: 32px;
             font-size: 11px;
             color: #6B6B8D;
+            text-align: center;
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <img class="logo" src="/pokevault/icon.svg" alt="PokeVault">
+    <header>
+        <img class="logo" src="/pokevault/icon.svg" alt="Icona di PokeVault" width="96" height="96">
+        <h1>PokeVault, l'app per collezionare carte Pokémon in italiano</h1>
+        <p class="tagline">
+            Gestisci la tua collezione, scopri quanto valgono le tue carte con i prezzi
+            Cardmarket e scambia carte con i collezionisti della tua provincia.
+        </p>
+        <a class="cta" href="https://play.google.com/store/apps/details?id=com.emabuia.pokevault&amp;referrer=utm_source%3Dsito%26utm_medium%3Dweb">Scarica gratis su Google Play</a>
+        <p class="cta-note">Android · Italiano e inglese · Senza pubblicità</p>
+    </header>
 
-    <h1>PokeVault</h1>
-    <p class="tagline">La tua collezione di carte, al sicuro.</p>
+    <main>
+        <section class="features">
+            <div class="feature">
+                <h2>La tua collezione di carte</h2>
+                <p>Il catalogo delle carte italiane, espansione per espansione, con ogni stampa
+                    vera: Holo, Reverse, timbri e promo. Vedi subito quali carte ti mancano.</p>
+            </div>
+            <div class="feature">
+                <h2>Valore delle carte e prezzi Cardmarket</h2>
+                <p>Prezzi in euro dal mercato europeo, stampa per stampa. Valore totale della
+                    collezione, le carte più preziose e le carte gradate PSA, BGS e CGC.</p>
+            </div>
+            <div class="feature">
+                <h2>Scanner carte</h2>
+                <p>Inquadra la carta: nome, numero ed espansione vengono riconosciuti in
+                    automatico. Le foto restano sul telefono.</p>
+            </div>
+            <div class="feature">
+                <h2>Scambio carte vicino a te</h2>
+                <p>Con TradeRadar trovi i collezionisti della tua provincia, proponi lo scambio
+                    e scegli un luogo a metà strada.</p>
+            </div>
+            <div class="feature">
+                <h2>Mazzi e gioco competitivo</h2>
+                <p>Deck Lab con le carte che possiedi, meta deck dei tornei, Hand Simulator,
+                    registro di partite e tornei, export della decklist.</p>
+            </div>
+            <div class="feature">
+                <h2>Album, wishlist e offline</h2>
+                <p>Raccoglitori digitali da 9 a 120 carte, album per illustratore, wishlist.
+                    E funziona anche senza rete.</p>
+            </div>
+        </section>
 
-    <div class="links">
-        <a href="/pokevault/privacy-policy">Privacy Policy</a>
-        <a href="/pokevault/terms">Termini di Servizio</a>
-        <a href="/pokevault/copyright">Copyright &amp; Takedown</a>
-    </div>
+        <section class="closing">
+            <h2>Porta la tua collezione sempre con te</h2>
+            <a class="cta" href="https://play.google.com/store/apps/details?id=com.emabuia.pokevault&amp;referrer=utm_source%3Dsito%26utm_medium%3Dweb">Scarica PokeVault</a>
+        </section>
+    </main>
 
-    <p class="footer">
-        PokeVault non e affiliata a Nintendo, The Pokemon Company o The Pokemon Company International.
-    </p>
+    <footer>
+        <nav class="links">
+            <a href="/pokevault/privacy-policy">Privacy Policy</a>
+            <a href="/pokevault/terms">Termini di Servizio</a>
+            <a href="/pokevault/copyright">Copyright &amp; Takedown</a>
+        </nav>
+        <p class="footer">
+            PokeVault è un'app non ufficiale creata da fan e non è affiliata a Nintendo,
+            The Pokémon Company o The Pokémon Company International. Pokémon è un marchio
+            registrato dei rispettivi proprietari.
+        </p>
+    </footer>
 </div>
 </body>
 </html>
