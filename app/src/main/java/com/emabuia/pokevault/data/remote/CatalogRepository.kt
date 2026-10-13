@@ -476,63 +476,6 @@ class CatalogRepository {
         memorySets?.firstOrNull { it.id == setId }?.let { return Result.success(it) }
         networkResult
     }
-                    suspend fun getEnglishBaseCardForItalianOverlay(
-                        italianCardId: String,
-                        italianSetId: String,
-                        context: Context? = null,
-                        forceRefresh: Boolean = false
-                    ): Result<TcgCard?> = cardsMutex.withLock {
-                        if (!isItalianOverlayCardId(italianCardId)) return@withLock Result.success(null)
-
-                        val expansionId = parseItalianExpansionId(italianSetId) ?: return@withLock Result.success(null)
-                        val imageRef = italianCardId.removePrefix("ita:").split(':')
-                        val overlayNumber = imageRef.getOrNull(2)?.takeIf { it.isNotBlank() }
-                            ?: return@withLock Result.success(null)
-
-                        val setInfo = memorySets?.firstOrNull { it.id == italianSetId }
-                            ?: loadSetsFromRoom(ignoreExpiry = true)?.firstOrNull { it.id == italianSetId }
-                            ?: TcgSet(
-                                id = italianSetId,
-                                name = italianExpansionDisplayName(expansionId),
-                                series = deriveSeriesName(setCode = expansionId, language = "ENG", setName = expansionId),
-                                language = "ITA"
-                            )
-
-                        val expansionCards = italianCatalogRepository
-                            .getExpansionCards(baseUrl = PokeVaultApiClient.imageBaseUrl, expansionId = expansionId, forceRefresh = forceRefresh)
-                            .getOrNull()
-                            ?.takeIf { it.isNotEmpty() }
-                            ?: context?.let { safeContext ->
-                                italianCatalogRepository.getCatalog(safeContext, forceRefresh = forceRefresh)
-                                    .getOrNull()
-                                    ?.cardsByExpansion()
-                                    ?.get(expansionId)
-                            }.orEmpty()
-                        val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
-                        val dominantRawSetCode = expansionCards
-                            .asSequence()
-                            .mapNotNull { record -> record.imageReference()?.setCode }
-                            .map { code -> code.trim().uppercase(Locale.ROOT) }
-                            .groupingBy { it }
-                            .eachCount()
-                            .maxByOrNull { it.value }
-                            ?.key
-
-                        val baseSetId = resolveEnglishBaseSetIdForItalianSet(
-                            italianSet = setInfo,
-                            dominantRawSetCode = preferredBaseSetCode ?: dominantRawSetCode
-                        ) ?: return@withLock Result.success(null)
-
-                        val baseCards = loadStandardCardsForSet(
-                            setId = baseSetId,
-                            context = context,
-                            forceRefresh = forceRefresh
-                        ).getOrDefault(emptyList())
-
-                        Result.success(
-                            baseCards.firstOrNull { extractCardNumber(it.number) == extractCardNumber(overlayNumber) }
-                        )
-                    }
 
     suspend fun searchCards(query: String, page: Int = 1): Result<List<TcgCard>> = searchMutex.withLock {
         if (query.isBlank()) return Result.success(emptyList())

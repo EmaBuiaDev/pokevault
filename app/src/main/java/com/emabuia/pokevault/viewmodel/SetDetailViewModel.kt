@@ -9,7 +9,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.catalog.CardRef
 import com.emabuia.pokevault.data.catalog.CatalogLang
-import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -116,7 +115,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     private var italianSetPriceMapSetId: String? = null
     private var italianSetPriceMapAttemptedSetId: String? = null
     private var italianSetPriceMapAttemptedAtMs: Long = 0L
-    private val italianMirrorCounterpartCache = mutableMapOf<String, TcgCard?>()
 
     companion object {
         private const val ITALIAN_SET_MAP_RETRY_COOLDOWN_MS = 20_000L
@@ -269,65 +267,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         return resolved
     }
 
-    private suspend fun resolveItalianMirrorPrices(
-        card: TcgCard,
-        forceRefreshRemote: Boolean = false
-    ): PokeWalletPriceData? {
-        if (!isItalianSection()) return null
-
-        val italianSetId = currentSetId
-            ?.takeIf { CatalogSetId.isCatalogSet(it, CatalogLang.IT) }
-            ?: CardRef.setCodeOf(card.id, CatalogLang.IT)
-                ?.let { CatalogSetId.of(CatalogLang.IT, it) }
-            ?: return null
-
-        val counterpartCacheKey = "$italianSetId:${card.number}"
-        val counterpart = if (counterpartCacheKey in italianMirrorCounterpartCache) {
-            italianMirrorCounterpartCache[counterpartCacheKey]
-        } else {
-            tcgRepository.getEnglishBaseCardForItalianOverlay(
-                italianCardId = card.id,
-                italianSetId = italianSetId,
-                context = getApplication<Application>().applicationContext,
-                forceRefresh = false
-            ).getOrNull().also { resolved ->
-                italianMirrorCounterpartCache[counterpartCacheKey] = resolved
-            }
-        } ?: return null
-
-        val counterpartLookup = resolvePriceLookup(counterpart)
-        val mirroredFromPokeWallet = pokeWalletRepository.getCardPrices(
-            cardName = counterpartLookup.cardName,
-            setCode = counterpartLookup.setCode,
-            cardNumber = counterpartLookup.cardNumber,
-            forceRefresh = forceRefreshRemote
-        ).getOrNull()
-        if (mirroredFromPokeWallet?.hasEurPrices == true) {
-            return mirroredFromPokeWallet
-        }
-
-        val firstUsdPrice = counterpart.tcgplayer?.prices?.values?.firstOrNull {
-            it.market != null || it.low != null
-        }
-
-        val counterpartCardMarket = counterpart.cardmarket?.prices
-        val hasMirrorPrice = counterpartCardMarket?.hasPositiveEurPrice() == true
-        if (!hasMirrorPrice) return null
-
-        return PokeWalletPriceData(
-            eurAvg = counterpartCardMarket?.averageSellPrice,
-            eurLow = counterpartCardMarket?.lowPrice,
-            eurTrend = counterpartCardMarket?.trendPrice,
-            eurAvg1 = counterpartCardMarket?.avg1,
-            eurAvg7 = counterpartCardMarket?.avg7,
-            eurAvg30 = counterpartCardMarket?.avg30,
-            cardMarketUrl = counterpart.cardmarket?.url,
-            usdMarket = firstUsdPrice?.market,
-            usdLow = firstUsdPrice?.low,
-            tcgPlayerUrl = counterpart.tcgplayer?.url
-        )
-    }
-
     init {
         TranslationService.loadCache(application.applicationContext)
     }
@@ -345,7 +284,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         italianSetPriceMapSetId = null
         italianSetPriceMapAttemptedSetId = null
         italianSetPriceMapAttemptedAtMs = 0L
-        italianMirrorCounterpartCache.clear()
 
         val context = getApplication<Application>().applicationContext
         uiState = uiState.copy(
@@ -631,12 +569,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch
             }
 
-            val mirroredPrices = resolveItalianMirrorPrices(card)
-            if (mirroredPrices != null) {
-                uiState = uiState.copy(selectedCardPokeWalletPrices = mirroredPrices, isLoadingPokeWalletPrices = false)
-                return@launch
-            }
-
             pokeWalletRepository.getCardPrices(
                 cardName = lookup.cardName,
                 setCode = lookup.setCode,
@@ -707,15 +639,6 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
 
             if (setPrice?.hasEurPrices == true) {
                 pricedCards[current.id] = withPriceData(current, setPrice)
-                return@launch
-            }
-
-            val mirroredPrices = resolveItalianMirrorPrices(
-                card = current,
-                forceRefreshRemote = false
-            )
-            if (mirroredPrices != null) {
-                pricedCards[current.id] = withPriceData(current, mirroredPrices)
                 return@launch
             }
 
