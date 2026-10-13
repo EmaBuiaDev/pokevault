@@ -186,7 +186,11 @@ async function main() {
   const unique = new Map();
   for (const c of set.cards || []) if (!unique.has(normNumber(c.localId))) unique.set(normNumber(c.localId), c);
   const refs = [...unique.values()];
-  if (refs.length === 0) throw new Error(`set vuoto su TCGdex (${set.id}): niente da importare`);
+  // Codice d'uscita 3: chi chiama (discover-new-sets-en.mjs) lo salta senza segnarlo come errore.
+  if (refs.length === 0) {
+    console.error(`Errore: set vuoto su TCGdex (${set.id}): niente da importare`);
+    process.exit(3);
+  }
   console.log(`TCGdex EN: ${set.id} "${set.name}" (${set.releaseDate}), ${refs.length} carte`);
 
   // Gemello italiano e codici

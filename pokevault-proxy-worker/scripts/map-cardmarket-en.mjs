@@ -17,6 +17,7 @@
 //   node scripts/map-cardmarket-en.mjs                 (prova: solo i conteggi)
 //   node scripts/map-cardmarket-en.mjs --apply
 //   node scripts/map-cardmarket-en.mjs --apply --only sv08,pl3
+//   node scripts/map-cardmarket-en.mjs --apply --only-missing   (TCGdex solo per le carte non ancora collegate)
 import { writeFile, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { d1Select, priceKey, runWrangler, sqlString, workerRoot } from './lib/cardmarket.mjs';
@@ -26,6 +27,7 @@ const TCGDEX = 'https://api.tcgdex.net/v2/en';
 const CONCURRENCY = 6;
 const args = process.argv.slice(2);
 const APPLY = args.includes('--apply');
+const ONLY_MISSING = args.includes('--only-missing');
 const onlyIdx = args.indexOf('--only');
 const ONLY = onlyIdx >= 0 ? new Set(args[onlyIdx + 1].split(',').map(s => s.trim().toLowerCase())) : null;
 const tmpDir = path.join(workerRoot, 'scripts', '.map-cardmarket-en-tmp');
@@ -109,6 +111,9 @@ async function main() {
     if (twin) {
       links.set(card.card_id, { id_product: twin.id_product, source: 'it-twin' });
       for (const v of itVariants.get(twin.card_id) ?? []) variants.push({ ...v, card_id: card.card_id, source: `it-twin:${v.source}` });
+    } else if (ONLY_MISSING && enExisting.has(card.card_id)) {
+      // Gia' collegata da un giro precedente: niente chiamata a TCGdex.
+      continue;
     } else {
       if (!needTcgdex.has(exp.tcgdex_id)) needTcgdex.set(exp.tcgdex_id, []);
       needTcgdex.get(exp.tcgdex_id).push(card);
@@ -156,16 +161,34 @@ async function main() {
       '\nON CONFLICT(card_id) DO UPDATE SET id_product = excluded.id_product, source = excluded.source, updated_at = unixepoch();'
     );
   }
-  // Le stampe dei gemelli si riscrivono intere, carta per carta: quelle che
-  // l'italiano non ha piu' spariscono anche qui.
-  const variantCards = [...new Set(variants.map(v => v.card_id))];
+  // Le stampe dei gemelli si riscrivono intere, carta per carta (quelle che
+  // l'italiano non ha piu' spariscono anche qui), ma SOLO le carte cambiate:
+  // riscriverle tutte ogni giorno sarebbero decine di migliaia di scritture D1.
+  const signature = rows => rows
+    .map(v => [v.variant, v.kind, v.type, v.stamp ?? '', v.foil ?? '', v.id_product ?? '', v.source].join('|'))
+    .sort()
+    .join('\n');
+  const existingVariants = new Map();
+  for (const v of await enSelect('SELECT card_id, variant, kind, type, stamp, foil, id_product, source FROM card_variants')) {
+    if (!existingVariants.has(v.card_id)) existingVariants.set(v.card_id, []);
+    existingVariants.get(v.card_id).push(v);
+  }
+  const wantedVariants = new Map();
+  for (const v of variants) {
+    if (!wantedVariants.has(v.card_id)) wantedVariants.set(v.card_id, []);
+    wantedVariants.get(v.card_id).push(v);
+  }
+  const variantCards = [...wantedVariants.keys()]
+    .filter(id => signature(wantedVariants.get(id)) !== signature(existingVariants.get(id) ?? []));
+  const changedVariants = variantCards.flatMap(id => wantedVariants.get(id));
+  console.log(`Carte con stampe da riscrivere: ${variantCards.length}`);
   for (let i = 0; i < variantCards.length; i += 200) {
     lines.push(`DELETE FROM card_variants WHERE card_id IN (${variantCards.slice(i, i + 200).map(sqlString).join(', ')});`);
   }
-  for (let i = 0; i < variants.length; i += 100) {
+  for (let i = 0; i < changedVariants.length; i += 100) {
     lines.push(
       'INSERT INTO card_variants (card_id, variant, kind, type, stamp, foil, id_product, source) VALUES\n' +
-      variants.slice(i, i + 100).map(v => `(${[sqlString(v.card_id), sqlString(v.variant), sqlString(v.kind), sqlString(v.type), sqlOrNull(v.stamp), sqlOrNull(v.foil), v.id_product ?? 'NULL', sqlString(v.source)].join(', ')})`).join(',\n') +
+      changedVariants.slice(i, i + 100).map(v => `(${[sqlString(v.card_id), sqlString(v.variant), sqlString(v.kind), sqlString(v.type), sqlOrNull(v.stamp), sqlOrNull(v.foil), v.id_product ?? 'NULL', sqlString(v.source)].join(', ')})`).join(',\n') +
       '\nON CONFLICT(card_id, variant) DO UPDATE SET kind = excluded.kind, type = excluded.type, stamp = excluded.stamp, foil = excluded.foil, id_product = excluded.id_product, source = excluded.source;'
     );
   }
