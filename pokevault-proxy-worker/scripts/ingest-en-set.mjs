@@ -55,14 +55,19 @@ function parseArgs(argv) {
 
 async function fetchJson(url, attempts = 5) {
   for (let i = 1; ; i += 1) {
+    // Senza un tempo massimo una connessione appesa ferma il set per sempre.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: controller.signal });
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`${url} -> HTTP ${res.status}`);
       return await res.json();
     } catch (err) {
       if (i >= attempts) throw err;
       await new Promise(r => setTimeout(r, 1500 * i));
+    } finally {
+      clearTimeout(timer);
     }
   }
 }
@@ -177,6 +182,7 @@ async function main() {
   const unique = new Map();
   for (const c of set.cards || []) if (!unique.has(normNumber(c.localId))) unique.set(normNumber(c.localId), c);
   const refs = [...unique.values()];
+  if (refs.length === 0) throw new Error(`set vuoto su TCGdex (${set.id}): niente da importare`);
   console.log(`TCGdex EN: ${set.id} "${set.name}" (${set.releaseDate}), ${refs.length} carte`);
 
   // Gemello italiano e codici
