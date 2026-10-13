@@ -163,7 +163,9 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Catalogo IT | EN ────────────────────────────────────────────────────
 
-    private val englishCatalog = RepositoryProvider.englishCatalogRepository
+    // Un getter e non una val: restoreCatalogLang() parte dall'init, che sta
+    // sopra, e una val dichiarata qui sotto sarebbe ancora null (crash).
+    private val englishCatalog get() = RepositoryProvider.englishCatalogRepository
 
     private fun pokedexPrefs() = getApplication<Application>()
         .getSharedPreferences("pokedex_prefs", Context.MODE_PRIVATE)
@@ -178,7 +180,10 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectCatalogLang(lang: CatalogLang) {
         if (lang == CatalogLang.EN && !englishCatalog.isEnabled) return
-        uiState = uiState.copy(catalogLang = lang)
+        // Un errore del catalogo EN non deve restare sulla lista italiana (e viceversa).
+        val clearError = (lang == CatalogLang.IT && uiState.allSets.isNotEmpty()) ||
+            (lang == CatalogLang.EN && uiState.englishSets.isNotEmpty())
+        uiState = uiState.copy(catalogLang = lang, errorMessage = if (clearError) null else uiState.errorMessage)
         runCatching { pokedexPrefs().edit().putString("catalog_lang", lang.name).apply() }
         viewModelScope.launch {
             if (lang == CatalogLang.EN && uiState.englishSets.isEmpty()) loadEnglishSets()
@@ -293,6 +298,19 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         // Pull-to-refresh esplicito: sempre forzato, e vale come rivalidazione
         // appena avvenuta per la finestra di revalidateSetsFromNetwork.
         lastRevalidationAtMs = System.currentTimeMillis()
+        // Con il catalogo inglese scelto si ricarica quello (anche dal "Riprova").
+        if (uiState.catalogLang == CatalogLang.EN) {
+            viewModelScope.launch {
+                uiState = uiState.copy(errorMessage = null)
+                val context = getApplication<Application>().applicationContext
+                uiState = uiState.copy(isLoadingEnglish = true)
+                withContext(Dispatchers.IO) { englishCatalog.getSets(context, forceRefresh = true) }
+                    .onSuccess { sets -> uiState = uiState.copy(englishSets = sets, isLoadingEnglish = false) }
+                    .onFailure { error -> uiState = uiState.copy(isLoadingEnglish = false, errorMessage = buildSetsErrorMessage(error)) }
+                applyFilters()
+            }
+            return
+        }
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
