@@ -45,6 +45,8 @@ async function loadEnglishPrices(bucket: R2Bucket | undefined): Promise<{ snapsh
 export interface EnglishCatalogEnv {
   catalog_en?: D1Database;
   IMAGES_BUCKET?: R2Bucket;
+  /** Il catalogo italiano, in sola lettura: il nome italiano dei set gemelli. */
+  pokevault_catalog?: D1Database;
 }
 
 const CATALOG_CACHE_CONTROL = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400';
@@ -115,6 +117,20 @@ export async function handleEnglishCatalogRequest(request: Request, url: URL, en
           logo_key: string | null; base_set_code: string | null; release_date: string | null; series: string | null;
           abbreviation: string | null; it_expansion_id: string | null;
         }>();
+      // Il nome italiano del gemello: l'app salva la carta inglese con quello, e
+      // la Collezione la mette nella stessa tessera della carta italiana. Se il
+      // catalogo italiano non risponde, il set esce senza (l'app ripiega).
+      const itNames = new Map<string, string>();
+      if (env.pokevault_catalog && results.some((r) => r.it_expansion_id)) {
+        try {
+          const { results: itRows } = await env.pokevault_catalog
+            .prepare('SELECT id, name FROM expansions WHERE name IS NOT NULL')
+            .all<{ id: string; name: string }>();
+          for (const row of itRows) itNames.set(row.id, row.name);
+        } catch (error) {
+          console.error('catalogo EN: nomi italiani dei gemelli illeggibili:', error);
+        }
+      }
       // Stessi campi di /v1/expansions (ItalianExpansionSummary), piu' il gemello italiano.
       const expansions = results.map((r) => ({
         id: r.id,
@@ -128,6 +144,7 @@ export async function handleEnglishCatalogRequest(request: Request, url: URL, en
         baseSetCode: r.base_set_code,
         releaseDate: r.release_date,
         itExpansionId: r.it_expansion_id,
+        itName: r.it_expansion_id ? itNames.get(r.it_expansion_id) ?? null : null,
       }));
       return json({ expansions }, 200, CATALOG_CACHE_CONTROL);
     }

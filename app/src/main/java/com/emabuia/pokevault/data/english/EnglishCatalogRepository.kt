@@ -148,11 +148,12 @@ class EnglishCatalogRepository(
             if (!forceRefresh) {
                 memoryCards[expansionId]?.takeIf { now - it.second <= CACHE_TTL_MS }?.let { return@withLock Result.success(it.first) }
             }
-            val set = getSet(context, setId) ?: TcgSet(id = setId, name = expansionId.uppercase(Locale.ROOT), language = LANGUAGE)
+            val summary = getExpansions(context).getOrNull()?.firstOrNull { it.id.equals(expansionId, ignoreCase = true) }
+            val set = summary?.let(::toTcgSet) ?: TcgSet(id = setId, name = expansionId.uppercase(Locale.ROOT), language = LANGUAGE)
             runCatching {
                 val raw = fetch("${baseUrl().trim().trimEnd('/')}/v1/en/expansions/$expansionId/cards")
                 val records = withContext(Dispatchers.Default) { ItalianCatalogNormalizer.parseExpansionCardsResponse(raw) }
-                records.mapNotNull { toTcgCard(it, set) }
+                records.mapNotNull { toTcgCard(it, set, collectionSetName = summary?.itName) }
                     .sortedBy { it.number.toIntOrNull() ?: Int.MAX_VALUE }
             }.onSuccess { memoryCards[expansionId] = it to now }
         }
@@ -183,7 +184,13 @@ class EnglishCatalogRepository(
         )
     }
 
-    fun toTcgCard(record: ItalianCardRecord, set: TcgSet): TcgCard? {
+    /**
+     * @param collectionSetName il nome del set italiano gemello: la carta lo
+     *   porta come nome di set, cosi' in Collezione finisce nella tessera della
+     *   carta italiana (collectionCardKey usa il nome del set). Null per i set
+     *   solo inglesi, che tengono il loro.
+     */
+    fun toTcgCard(record: ItalianCardRecord, set: TcgSet, collectionSetName: String? = null): TcgCard? {
         val reference = EnglishCatalogIds.reference(record.cardId) ?: return null
         val base = baseUrl()
         return TcgCard(
@@ -195,7 +202,7 @@ class EnglishCatalogRepository(
             types = record.tipo?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.takeIf { it.isNotEmpty() },
             set = TcgCardSet(
                 id = set.id,
-                name = set.name,
+                name = collectionSetName?.takeIf { it.isNotBlank() } ?: set.name,
                 series = set.series,
                 printedTotal = set.printedTotal,
                 releaseDate = set.releaseDate

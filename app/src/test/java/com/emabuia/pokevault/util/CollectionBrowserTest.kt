@@ -263,4 +263,23 @@ class CollectionBrowserTest {
         assertEquals(2, sections.last().totalQuantity)
         assertEquals(6.0, sections.last().totalValue, 0.001)
     }
+
+    @Test
+    fun `bandiere delle lingue, niente se la tessera e' solo italiana`() {
+        assertEquals("", CollectionBrowser.languageFlags(emptySet()))
+        assertEquals("", CollectionBrowser.languageFlags(setOf("Italiano")))
+        assertEquals("🇮🇹🇬🇧", CollectionBrowser.languageFlags(setOf("English", "Italiano")))
+        assertEquals("🇬🇧", CollectionBrowser.languageFlags(setOf("English")))
+        assertEquals("🇮🇹🇯🇵", CollectionBrowser.languageFlags(setOf("Giapponese", "Italiano")))
+    }
+
+    @Test
+    fun `la carta inglese salvata col nome del set italiano finisce nella stessa tessera`() {
+        val it = PokemonCard(id = "a", name = "Volcarona", set = "Scintille Folgoranti", cardNumber = "25", apiCardId = "ita:sv08:25", language = "🇮🇹 Italiano", quantity = 1)
+        val en = PokemonCard(id = "b", name = "Volcarona", set = "Scintille Folgoranti", cardNumber = "025", apiCardId = "eng:sv08:25", language = "🇬🇧 English", quantity = 2)
+        val groups = CollectionBrowser.group(listOf(it, en), "?")
+        assertEquals(1, groups.size)
+        assertEquals(3, groups.single().totalQuantity)
+        assertEquals(setOf("Italiano", "English"), groups.single().languages)
+    }
 }
