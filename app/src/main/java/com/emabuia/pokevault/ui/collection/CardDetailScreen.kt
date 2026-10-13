@@ -284,6 +284,18 @@ fun CardDetailScreen(
 
         isLoadingLivePrices = true
 
+        // Carta del catalogo inglese: il listino EN e basta. PokeWallet, cercato
+        // col nome del set, costerebbe una chiamata e darebbe un prezzo a caso.
+        if (CardRef.isCatalogCard(selected.apiCardId, CatalogLang.EN)) {
+            val english = runCatching {
+                RepositoryProvider.englishPriceSnapshotRepository.priceForItalianCard(context, selected.apiCardId)
+            }.getOrNull()
+            livePriceCacheByApiId[selected.apiCardId] = english
+            livePrices = english
+            isLoadingLivePrices = false
+            return@LaunchedEffect
+        }
+
         val remoteCard = tcgRepository.getCard(selected.apiCardId).getOrNull()
         val localPriceData = remoteCard?.let { remote ->
             val firstUsdPrice = remote.tcgplayer?.prices?.values?.firstOrNull { it.market != null || it.low != null }
