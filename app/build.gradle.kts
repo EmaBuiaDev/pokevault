@@ -61,6 +61,12 @@ android {
             // TradeRadarFlagTest controlla che resti cosi'.
             buildConfigField("Boolean", "TRADE_ENABLED", "true")
             buildConfigField("String", "TRADE_API_URL", "\"https://pokevault-proxy.pokevault-emanu.workers.dev\"")
+
+            // Catalogo inglese (piano carte EN): SPENTO in produzione finche' il
+            // Worker di produzione non ha le rotte /v1/en e l'utente non da' il via.
+            // CatalogoEnFlagTest controlla che resti cosi'.
+            buildConfigField("Boolean", "EN_CATALOG_ENABLED", "false")
+            buildConfigField("String", "EN_CATALOG_URL", "\"https://pokevault-proxy.pokevault-emanu.workers.dev\"")
         }
         create("staging") {
             dimension = "environment"
@@ -72,6 +78,11 @@ android {
             // passano solo gli account di test.
             buildConfigField("Boolean", "TRADE_ENABLED", "true")
             buildConfigField("String", "TRADE_API_URL", "\"https://pokevault-trade-staging.pokevault-emanu.workers.dev\"")
+
+            // Catalogo inglese acceso solo qui, sul Worker di staging del catalogo
+            // (pokevault-catalog-staging, wrangler.toml): catalogo EN, immagini e prezzi.
+            buildConfigField("Boolean", "EN_CATALOG_ENABLED", "true")
+            buildConfigField("String", "EN_CATALOG_URL", "\"https://pokevault-catalog-staging.pokevault-emanu.workers.dev\"")
         }
     }
 

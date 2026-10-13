@@ -50,6 +50,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.components.RarityMarkWithLabel
@@ -456,6 +458,19 @@ fun SetsListScreen(
             }
         }
 
+        // Catalogo italiano o inglese (piano carte EN): solo dove l'inglese e'
+        // acceso, e solo nella lista delle espansioni.
+        if (!isSearchingCards && state.englishAvailable) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Box(modifier = Modifier.padding(horizontal = 20.dp)) {
+                SlidingTabs(
+                    labels = listOf("🇮🇹 Italiano", "🇬🇧 English"),
+                    selectedIndex = if (state.catalogLang == CatalogLang.EN) 1 else 0,
+                    onSelect = { index -> viewModel.selectCatalogLang(if (index == 1) CatalogLang.EN else CatalogLang.IT) }
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isSearchingCards) {
@@ -515,7 +530,7 @@ fun SetsListScreen(
             // ── Contenuto: lista unica con intestazioni di sezione per serie,
             // ordinate dalla piu' recente (vedi buildSeriesGroups/setDisplayComparator
             // in SetsViewModel.kt) -- niente piu' tab lingua/chip serie da selezionare.
-            if (state.isLoading) {
+            if (state.isLoading || (state.catalogLang == CatalogLang.EN && state.isLoadingEnglish)) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     PokeballLoadingAnimation(message = AppLocale.loadingSets)
                 }
@@ -565,7 +580,7 @@ fun SetsListScreen(
                             items(items = group.sets, key = { "${group.seriesKey}::${it.id}" }) { set ->
                                 SetCard(
                                     set = set,
-                                    onClick = { onSetClick(set.id, "ITA") }
+                                    onClick = { onSetClick(set.id, CatalogSetId.langOf(set.id)?.macro ?: "ITA") }
                                 )
                             }
                         }

@@ -1,0 +1,103 @@
+package com.emabuia.pokevault.data.english
+
+import com.emabuia.pokevault.BuildConfig
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.italian.ItalianCardRecord
+import com.emabuia.pokevault.data.italian.ItalianExpansionSummary
+import com.emabuia.pokevault.data.trade.TradeCardKey
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
+import org.junit.Test
+
+/** Il catalogo inglese in app (piano carte EN, Fase 3). */
+class EnglishCatalogTest {
+
+    private val base = "https://worker.example/"
+    private val repo = EnglishCatalogRepository(baseUrl = { base }, enabled = { true })
+
+    @Test
+    fun `il cardId EN da cartella e numero, come l'italiano`() {
+        val ref = EnglishCatalogIds.reference("SV08_EN_012.webp")!!
+        assertEquals("SV08", ref.folderName)
+        assertEquals("12", ref.cardNumber)
+        assertEquals("SWSH026", EnglishCatalogIds.reference("SWSHP_EN_SWSH026.webp")!!.cardNumber)
+        assertEquals("30TH-C", EnglishCatalogIds.reference("30TH-C_EN_7.webp")!!.folderName)
+        assertNull(EnglishCatalogIds.reference("SV08_IT_12.png"))
+    }
+
+    @Test
+    fun `la carta EN di un set gemello ha la chiave degli scambi della carta italiana`() {
+        val api = EnglishCatalogIds.apiCardId(EnglishCatalogIds.reference("SV08_EN_25.webp")!!)
+        assertEquals("eng:sv08:25", api)
+        assertEquals(TradeCardKey.fromApiCardId("ita:sv08:25"), TradeCardKey.fromApiCardId(api))
+        assertEquals(CatalogLang.EN, CardRef.langOf(api))
+    }
+
+    @Test
+    fun `immagini e loghi dalla cartella en`() {
+        val ref = EnglishCatalogIds.reference("PL3_EN_1.webp")!!
+        assertEquals("https://worker.example/images/en/PL3/1?size=low", EnglishCatalogIds.cardImageUrl(base, ref, "low"))
+        assertEquals("https://worker.example/sets/PL3/image?source=en", EnglishCatalogIds.setImageUrl(base, "pl3", symbol = false))
+        assertEquals("https://worker.example/sets/PL3/symbol?source=en", EnglishCatalogIds.setImageUrl(base, "pl3", symbol = true))
+    }
+
+    @Test
+    fun `supertipo dai PS e dal nome`() {
+        assertEquals("Pokémon", EnglishCatalogIds.supertypeOf(ItalianCardRecord(nome = "Pikachu", ps = "60")))
+        assertEquals("Energy", EnglishCatalogIds.supertypeOf(ItalianCardRecord(nome = "Basic Fire Energy")))
+        assertEquals("Energy", EnglishCatalogIds.supertypeOf(ItalianCardRecord(nome = "Double Turbo Energy")))
+        assertEquals("Trainer", EnglishCatalogIds.supertypeOf(ItalianCardRecord(nome = "Energy Retrieval")))
+        assertEquals("Trainer", EnglishCatalogIds.supertypeOf(ItalianCardRecord(nome = "Energy Switch")))
+        assertEquals("Trainer", EnglishCatalogIds.supertypeOf(ItalianCardRecord(nome = "Professor's Research")))
+    }
+
+    @Test
+    fun `set EN in app`() {
+        val set = repo.toTcgSet(
+            ItalianExpansionSummary(id = "sv08", name = "Surging Sparks", cardCount = 252, officialCount = 191, baseSetCode = "SV08", releaseDate = "2024-11-08", series = "Scarlet & Violet", abbreviation = "SSP")
+        )
+        assertEquals("sv08__eng", set.id)
+        assertEquals("ENG", set.language)
+        assertEquals("Surging Sparks", set.name)
+        assertEquals(191, set.printedTotal)
+        assertEquals(252, set.total)
+        assertEquals("SSP", set.abbreviation)
+        assertTrue(set.images.logo.endsWith("/sets/SV08/image?source=en"))
+    }
+
+    @Test
+    fun `carta EN in app`() {
+        val set = repo.toTcgSet(ItalianExpansionSummary(id = "sv08", name = "Surging Sparks", cardCount = 252, baseSetCode = "SV08"))
+        val card = repo.toTcgCard(
+            ItalianCardRecord(cardId = "SV08_EN_25.webp", espansioneId = "sv08", nome = "Volcarona", tipo = "Fire", ps = "140", rarity = "Common", stage = "Stage1", illustratore = "Saki Hayashiro", stampe = listOf("Normal", "Reverse")),
+            set
+        )!!
+        assertEquals("eng:sv08:25", card.id)
+        assertEquals("25", card.number)
+        assertEquals("Pokémon", card.supertype)
+        assertEquals(listOf("Fire"), card.types)
+        assertEquals(listOf("Stage1"), card.subtypes)
+        assertEquals("sv08__eng", card.set?.id)
+        assertEquals(listOf("Normal", "Reverse"), card.variants)
+        assertTrue(card.images.large.endsWith("/images/en/SV08/25?size=high"))
+        assertNull(repo.toTcgCard(ItalianCardRecord(cardId = "SV08_IT_25.png", espansioneId = "sv08", nome = "X"), set))
+    }
+
+    @Test
+    fun `in prod il catalogo inglese e' spento`() {
+        assumeTrue(BuildConfig.FLAVOR == "prod")
+        assertFalse(BuildConfig.EN_CATALOG_ENABLED)
+        assertFalse(EnglishCatalogRepository().isEnabled)
+    }
+
+    @Test
+    fun `nello staging il catalogo inglese parla col Worker di staging del catalogo`() {
+        assumeTrue(BuildConfig.FLAVOR == "staging")
+        assertTrue(BuildConfig.EN_CATALOG_ENABLED)
+        assertEquals("https://pokevault-catalog-staging.pokevault-emanu.workers.dev", BuildConfig.EN_CATALOG_URL)
+    }
+}

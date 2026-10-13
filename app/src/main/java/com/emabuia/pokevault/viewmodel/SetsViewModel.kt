@@ -90,7 +90,16 @@ data class SetsUiState(
     val isAddingCard: String? = null,
     val successMessage: String? = null,
     /** Le carte possedute, per il bordo verde nei risultati della ricerca. */
-    val owned: OwnedCardsIndex = OwnedCardsIndex()
+    val owned: OwnedCardsIndex = OwnedCardsIndex(),
+    /**
+     * Catalogo mostrato nel Pokedex (piano carte EN). Il selettore compare solo
+     * se [englishAvailable]: in prod l'inglese e' spento e tutto resta com'era.
+     */
+    val catalogLang: CatalogLang = CatalogLang.IT,
+    val englishAvailable: Boolean = false,
+    /** I set del catalogo inglese, caricati solo alla prima scelta di EN. */
+    val englishSets: List<TcgSet> = emptyList(),
+    val isLoadingEnglish: Boolean = false
 ) {
     /** Quante voci di filtro sono accese, su tutte le dimensioni. */
     val activeCardFilterCount: Int
@@ -149,6 +158,46 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     init {
         TranslationService.loadCache(application.applicationContext)
         loadSets()
+        restoreCatalogLang()
+    }
+
+    // ── Catalogo IT | EN ────────────────────────────────────────────────────
+
+    private val englishCatalog = RepositoryProvider.englishCatalogRepository
+
+    private fun pokedexPrefs() = getApplication<Application>()
+        .getSharedPreferences("pokedex_prefs", Context.MODE_PRIVATE)
+
+    /** La lingua scelta l'ultima volta; l'italiano se l'inglese non c'e' o la preferenza non si legge. */
+    private fun restoreCatalogLang() {
+        if (!englishCatalog.isEnabled) return
+        uiState = uiState.copy(englishAvailable = true)
+        val saved = runCatching { pokedexPrefs().getString("catalog_lang", null) }.getOrNull()
+        if (saved == CatalogLang.EN.name) selectCatalogLang(CatalogLang.EN)
+    }
+
+    fun selectCatalogLang(lang: CatalogLang) {
+        if (lang == CatalogLang.EN && !englishCatalog.isEnabled) return
+        uiState = uiState.copy(catalogLang = lang)
+        runCatching { pokedexPrefs().edit().putString("catalog_lang", lang.name).apply() }
+        viewModelScope.launch {
+            if (lang == CatalogLang.EN && uiState.englishSets.isEmpty()) loadEnglishSets()
+            applyFilters()
+        }
+    }
+
+    private suspend fun loadEnglishSets() {
+        uiState = uiState.copy(isLoadingEnglish = true)
+        val context = getApplication<Application>().applicationContext
+        withContext(Dispatchers.IO) { englishCatalog.getSets(context) }
+            .onSuccess { sets -> uiState = uiState.copy(englishSets = sets, isLoadingEnglish = false) }
+            .onFailure { error ->
+                Timber.w(error, "Pokedex: catalogo EN non caricato")
+                uiState = uiState.copy(
+                    isLoadingEnglish = false,
+                    errorMessage = if (uiState.catalogLang == CatalogLang.EN) buildSetsErrorMessage(error) else uiState.errorMessage
+                )
+            }
     }
 
     private fun loadSets() {
@@ -625,10 +674,17 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun applyFilters() {
         val query = uiState.searchQuery
         val allSets = uiState.allSets
+        val english = uiState.catalogLang == CatalogLang.EN
+        val englishSets = uiState.englishSets
 
         val groups = withContext(Dispatchers.Default) {
-            val displayableSets = allSets.filter(::isDisplayableExpansion)
-            val italianSets = displayableSets.filter { it.language.equals("ITA", ignoreCase = true) }
+            // Il nome resta "italianSets" per non toccare il resto: con EN scelto
+            // sono i set del catalogo inglese, che non passano dalla lista fusa.
+            val italianSets = if (english) {
+                englishSets.filter(::isDisplayableExpansion)
+            } else {
+                allSets.filter(::isDisplayableExpansion).filter { it.language.equals("ITA", ignoreCase = true) }
+            }
 
             val searched = if (query.isBlank()) {
                 italianSets

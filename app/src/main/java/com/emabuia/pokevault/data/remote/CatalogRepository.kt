@@ -374,6 +374,11 @@ class CatalogRepository {
             }
             val effectiveForceRefresh = forceRefresh || mustBypassCache
 
+            // Catalogo inglese (piano carte EN): repository e cache suoi.
+            if (CatalogSetId.isCatalogSet(setId, CatalogLang.EN)) {
+                return RepositoryProvider.englishCatalogRepository.getCardsBySet(context, setId, forceRefresh)
+            }
+
             if (isItalianSetId(setId)) {
                 return getCardsByItalianSet(
                     setId = setId,
@@ -448,6 +453,13 @@ class CatalogRepository {
         }
 
     suspend fun getSetInfo(setId: String): Result<TcgSet> = setInfoMutex.withLock {
+        // Set del catalogo inglese: non passano da Room ne' da PokeWallet.
+        if (CatalogSetId.isCatalogSet(setId, CatalogLang.EN)) {
+            return RepositoryProvider.englishCatalogRepository.getSet(context = null, setId = setId)
+                ?.let { Result.success(it) }
+                ?: Result.failure(NoSuchElementException("Set EN non trovato: $setId"))
+        }
+
         memorySets?.firstOrNull { it.id == setId }?.let { return Result.success(it) }
 
         // Prefer Room cache to avoid unnecessary credit consumption when opening set details.
@@ -1641,6 +1653,14 @@ class CatalogRepository {
     }
 
     suspend fun getCard(cardId: String, preferNetwork: Boolean = false): Result<TcgCard> = cardByIdMutex.withLock {
+        // Carta del catalogo inglese: solo le carte EN gia' caricate. Mai la
+        // rete verso PokeWallet, dove "eng:sv08:1" costerebbe una chiamata a vuoto.
+        if (CardRef.isCatalogCard(cardId, CatalogLang.EN)) {
+            return RepositoryProvider.englishCatalogRepository.findCachedCard(cardId)
+                ?.let { Result.success(it) }
+                ?: Result.failure(NoSuchElementException("Carta EN non caricata: $cardId"))
+        }
+
         fun findMemoryCard(): TcgCard? {
             return memoryCards.values
                 .asSequence()
