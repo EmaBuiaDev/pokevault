@@ -13,6 +13,8 @@
 // Uso:
 //   node scripts/ingest-en-tutti.mjs              (tutti quelli non ancora fatti)
 //   node scripts/ingest-en-tutti.mjs --ritenta    (anche quelli falliti)
+//   node scripts/ingest-en-tutti.mjs --incompleti (rifa' i set fatti con qualche immagine in meno:
+//                                                  ricarica solo quelle mancanti)
 //   node scripts/ingest-en-tutti.mjs --solo sv08,pl3
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -28,6 +30,13 @@ const SET_TIMEOUT_MS = 75 * 60 * 1000; // il set piu' grande e' ~450 carte: ~30 
 
 const args = process.argv.slice(2);
 const retryFailed = args.includes('--ritenta');
+const redoIncomplete = args.includes('--incompleti');
+
+/** "... 132 carte, con immagine 128 ...": un set fatto a cui manca qualche immagine. */
+function isIncomplete(entry) {
+  const m = /: (\d+) carte, con immagine (\d+)/.exec(entry?.summary || '');
+  return !!m && Number(m[2]) < Number(m[1]);
+}
 const onlyIdx = args.indexOf('--solo');
 const only = onlyIdx >= 0 ? new Set(args[onlyIdx + 1].split(',').map(s => s.trim())) : null;
 
@@ -107,7 +116,7 @@ async function main() {
 
   const todo = candidates.filter((id) => {
     const st = state[id]?.status;
-    if (st === 'fatto') return false;
+    if (st === 'fatto') return redoIncomplete && isIncomplete(state[id]);
     if (st === 'fallito' && !retryFailed) return false;
     return true;
   });

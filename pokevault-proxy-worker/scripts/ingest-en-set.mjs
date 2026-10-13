@@ -40,7 +40,10 @@ const PTCG = 'https://api.pokemontcg.io/v2';
 const COVERAGE_THRESHOLD = 0.8;
 const WEBP_QUALITY = 82;
 const CONCURRENCY = 6;
-const tmpDir = path.join(workerRoot, 'scripts', '.ingest-en-tmp');
+// Una cartella per set: ingest-en-tutti.mjs ne fa girare due insieme, e con una
+// cartella sola il primo che finiva cancellava i file dell'altro.
+const tmpRoot = path.join(workerRoot, 'scripts', '.ingest-en-tmp');
+let tmpDir = tmpRoot;
 
 function parseArgs(argv) {
   const out = { tcgdexId: argv[0], apply: false, ptcg: undefined, forceImages: false };
@@ -175,6 +178,7 @@ async function putR2(key, buf) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.tcgdexId) throw new Error('Uso: node scripts/ingest-en-set.mjs <tcgdexId> [--apply] [--ptcg <id> | --no-ptcg] [--force-images]');
+  tmpDir = path.join(tmpRoot, args.tcgdexId.replace(/[^A-Za-z0-9._-]/g, '_'));
 
   const set = await fetchJson(`${TCGDEX}/sets/${encodeURIComponent(args.tcgdexId)}`);
   if (!set) throw new Error(`TCGdex non conosce il set "${args.tcgdexId}"`);
