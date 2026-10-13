@@ -13,6 +13,8 @@ export type EnglishRequest =
   | { kind: 'cardImage'; setCode: string; cardNumber: string }
   | { kind: 'setLogo'; setCode: string }
   | { kind: 'setSymbol'; setCode: string }
+  | { kind: 'illustrators' }
+  | { kind: 'illustratorCards'; name: string }
   | { kind: 'prices' }
   | { kind: 'expansionPrices'; code: string };
 
@@ -51,6 +53,13 @@ export function parseEnglishRequest(url: URL): EnglishRequest | null {
 
   if (pathname === '/v1/en/health') return { kind: 'health' };
   if (pathname === '/v1/en/expansions') return { kind: 'expansions' };
+  if (pathname === '/v1/en/illustrators') return { kind: 'illustrators' };
+  const illustrator = pathname.match(/^\/v1\/en\/illustrators\/(.+)\/cards$/);
+  if (illustrator) {
+    const name = decode(illustrator[1]);
+    if (!name || name.length > 200) return null;
+    return { kind: 'illustratorCards', name };
+  }
 
   // Prezzi: stesso schema di /ita/prices.json e /ita/prices/{code}.json.
   if (pathname === '/en/prices.json') return { kind: 'prices' };

@@ -60,3 +60,10 @@ test('chiave TradeRadar di una carta EN: uguale a quella della gemella italiana'
   assert.equal(cardKeyOfEnCardId('30TH-C_EN_7.webp'), '30th-c:7');
   assert.equal(cardKeyOfEnCardId('SV08_IT_25.png'), null);
 });
+
+test('illustratori EN: stesso schema delle rotte italiane', () => {
+  assert.deepEqual(req('/v1/en/illustrators'), { kind: 'illustrators' });
+  assert.deepEqual(req('/v1/en/illustrators/Mitsuhiro%20Arita/cards'), { kind: 'illustratorCards', name: 'Mitsuhiro Arita' });
+  assert.equal(req('/v1/illustrators'), null);
+  assert.equal(req('/v1/en/illustrators/%E0%A4%A/cards'), null);
+});

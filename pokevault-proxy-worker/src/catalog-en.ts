@@ -170,6 +170,56 @@ export async function handleEnglishCatalogRequest(request: Request, url: URL, en
       return json({ expansionId: route.expansionId, cards: results.map((r) => mapCardRow(r, variants)) }, 200, CATALOG_CACHE_CONTROL);
     }
 
+    // Stessa forma di /v1/illustrators e /v1/illustrators/{nome}/cards.
+    case 'illustrators': {
+      const takedownSql = `NOT EXISTS (SELECT 1 FROM takedowns t WHERE (t.target_type = 'card' AND t.target_id = c.card_id) OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id))`;
+      const { results } = await db
+        .prepare(
+          `SELECT c.illustratore AS name, c.card_id, c.expansion_id
+           FROM cards c JOIN expansions e ON e.id = c.expansion_id
+           WHERE e.published = 1 AND c.illustratore IS NOT NULL AND TRIM(c.illustratore) <> '' AND ${takedownSql}
+           ORDER BY c.illustratore`
+        )
+        .all<{ name: string; card_id: string; expansion_id: string }>();
+      const byName = new Map<string, { cardIds: string[]; expansions: Set<string> }>();
+      for (const row of results) {
+        const name = row.name.trim();
+        if (!name) continue;
+        let entry = byName.get(name);
+        if (!entry) {
+          entry = { cardIds: [], expansions: new Set() };
+          byName.set(name, entry);
+        }
+        entry.cardIds.push(row.card_id);
+        entry.expansions.add(row.expansion_id);
+      }
+      const illustrators = Array.from(byName.entries())
+        .map(([name, entry]) => ({ name, cardCount: entry.cardIds.length, expansionCount: entry.expansions.size, cardIds: entry.cardIds }))
+        .sort((a, b) => b.cardCount - a.cardCount || a.name.localeCompare(b.name));
+      const missing = await db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM cards c JOIN expansions e ON e.id = c.expansion_id
+           WHERE e.published = 1 AND (c.illustratore IS NULL OR TRIM(c.illustratore) = '') AND ${takedownSql}`
+        )
+        .first<{ n: number }>();
+      return json({ illustrators, cardsWithoutIllustrator: missing?.n ?? 0 }, 200, CATALOG_CACHE_CONTROL);
+    }
+
+    case 'illustratorCards': {
+      const { results } = await db
+        .prepare(
+          `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage, c.illustratore
+           FROM cards c JOIN expansions e ON e.id = c.expansion_id
+           WHERE c.illustratore = ?1 AND e.published = 1
+             AND NOT EXISTS (SELECT 1 FROM takedowns t WHERE (t.target_type = 'card' AND t.target_id = c.card_id) OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id))
+           ORDER BY c.expansion_id, CAST(c.card_number AS INTEGER), c.card_number`
+        )
+        .bind(route.name)
+        .all<D1CardRow>();
+      if (results.length === 0) return json({ error: 'illustrator not found or has no cards' }, 404);
+      return json({ illustrator: route.name, cards: results.map((r) => mapCardRow(r)) }, 200, CATALOG_CACHE_CONTROL);
+    }
+
     case 'cardImage':
       return serveR2(env.IMAGES_BUCKET, [enCardImageKey(route.setCode, route.cardNumber)]);
 
