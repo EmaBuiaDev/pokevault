@@ -9,10 +9,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.catalog.CardRef
 import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.remote.RepositoryProvider
+import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.trade.CoarseLocation
 import com.emabuia.pokevault.data.trade.dto.TradeAddSpotRequest
 import com.emabuia.pokevault.data.trade.dto.TradeBlockedUser
@@ -45,6 +47,7 @@ import com.emabuia.pokevault.data.trade.TradeBadge
 import com.emabuia.pokevault.data.trade.TradeCardKey
 import com.emabuia.pokevault.data.trade.TradeLists
 import com.emabuia.pokevault.data.trade.TradePush
+import com.emabuia.pokevault.util.minimumEurOrZero
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -942,6 +945,32 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
      * i dati del catalogo (come un'aggiunta a mano) e le toglie dalla
      * wishlist. Poi lo segna fatto, una volta per tutte, e riallinea le offerte.
      */
+    /**
+     * Le carte del catalogo EN per le chiavi che in italiano non esistono (set
+     * solo inglesi: la cartella e' anche l'id dell'espansione EN). Vuoto se
+     * l'inglese e' spento o il catalogo EN non risponde: la carta entra come
+     * prima, coi dati che manda il server.
+     */
+    private suspend fun englishCardsForMissingKeys(context: Application, keys: List<String>): Map<String, TcgCard> {
+        val english = RepositoryProvider.englishCatalogRepository
+        if (!english.isEnabled || keys.isEmpty()) return emptyMap()
+        val out = HashMap<String, TcgCard>()
+        for ((setCode, setKeys) in keys.groupBy { TradeCardKey.setCodeOf(it) }) {
+            val cards = english.getCardsBySet(context, CatalogSetId.of(CatalogLang.EN, setCode)).getOrNull().orEmpty()
+            for (key in setKeys) {
+                cards.firstOrNull { TradeCardKey.fromApiCardId(it.id) == key }?.let { out[key] = it }
+            }
+        }
+        return out
+    }
+
+    /** Il prezzo di una carta "eng:" dal listino EN; null per le altre o se non c'e'. */
+    private suspend fun englishPrice(context: Application, apiCardId: String): Double? {
+        if (!CardRef.isCatalogCard(apiCardId, CatalogLang.EN)) return null
+        return RepositoryProvider.englishPriceSnapshotRepository.priceForItalianCard(context, apiCardId)
+            ?.minimumEurOrZero()?.takeIf { it > 0.0 }
+    }
+
     fun applyClosing() {
         val current = closing ?: return
         if (current.applying) return
@@ -958,16 +987,22 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             }
             val received = chosen.filter { !it.giving }
             val catalog = RepositoryProvider.tcgRepository.italianCardsByApiIds(context, received.map { it.apiCardId }.toSet())
+            // Set che esistono solo in inglese (piano carte EN): la chiave non ha una
+            // carta italiana, la carta sta nel catalogo EN con id "eng:<chiave>".
+            val englishByKey = englishCardsForMissingKeys(context, received.filter { catalog[it.apiCardId] == null }.mapNotNull { it.item.key })
             // Le carte italiane del catalogo quasi mai hanno un prezzo Cardmarket
             // (lo prendono dalla carta inglese di appoggio): il prezzo vero e'
             // nello snapshot italiano, lo stesso del bilancio. Atteso qui, non
             // in coda: senza, la carta entrava a 0 e il totale non si muoveva.
             val snapshot = loadPrices(received.mapNotNull { it.item.key }.map { TradeCardKey.setCodeOf(it) }.toSet())
             for (line in received) {
-                val card = catalog[line.apiCardId]
                 val key = line.item.key.orEmpty()
+                val card = catalog[line.apiCardId] ?: englishByKey[key]
+                val apiCardId = card?.id ?: line.apiCardId
                 val price = card?.cardmarket?.prices.minimumEurPriceOrZero().takeIf { it > 0.0 }
-                    ?: snapshot[key] ?: prices[key] ?: 0.0
+                    ?: snapshot[key] ?: prices[key]
+                    ?: englishPrice(context, apiCardId)
+                    ?: 0.0
                 repository.addCard(
                     PokemonCard(
                         name = card?.name ?: line.item.name.orEmpty(),
@@ -979,13 +1014,13 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                         supertype = card?.supertype?.ifBlank { null } ?: "Pokémon",
                         subtypes = card?.subtypes.orEmpty(),
                         estimatedValue = price,
-                        apiCardId = line.apiCardId,
+                        apiCardId = apiCardId,
                         cardNumber = card?.number ?: line.item.key.orEmpty().substringAfter(':'),
                         variant = line.item.variant?.ifBlank { null } ?: "Normal",
                         quantity = line.item.qty ?: 1,
                         condition = line.item.condition?.ifBlank { null } ?: "Near Mint",
                         language = line.item.language?.ifBlank { null }
-                            ?: (CardRef.langOf(line.apiCardId) ?: CatalogLang.IT).copyLanguageLabel
+                            ?: (CardRef.langOf(apiCardId) ?: CatalogLang.IT).copyLanguageLabel
                     )
                 )
                 if (line.inWishlist) repository.removeCardFromAllWishlists(line.apiCardId)
