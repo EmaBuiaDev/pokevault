@@ -6,7 +6,12 @@
 #
 # Uscita del processo in scripts/.ingest-en-uscita.txt, avanzamento in
 # scripts/.ingest-en-log.txt, stato per set in scripts/.ingest-en-stato.json.
+#
+# Gli argomenti passano a ingest-en-tutti.mjs (es. --incompleti --ritenta);
+# -AspettaPid <pid> fa partire il giro solo dopo che quel processo e' finito.
+param([int]$AspettaPid = 0, [Parameter(ValueFromRemainingArguments = $true)][string[]]$Resto = @())
 $ErrorActionPreference = 'Continue'
+if ($AspettaPid -gt 0) { Wait-Process -Id $AspettaPid -ErrorAction SilentlyContinue }
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
@@ -18,7 +23,7 @@ Add-Type -Namespace Win32 -Name Power -MemberDefinition @'
 
 $out = Join-Path $root 'scripts\.ingest-en-uscita.txt'
 "[$(Get-Date -Format s)] avvio" | Out-File -FilePath $out -Encoding utf8 -Append
-& node scripts/ingest-en-tutti.mjs *>> $out
+& node scripts/ingest-en-tutti.mjs @Resto *>> $out
 "[$(Get-Date -Format s)] uscito con codice $LASTEXITCODE" | Out-File -FilePath $out -Encoding utf8 -Append
 
 [void][Win32.Power]::SetThreadExecutionState([uint32]'0x80000000')
