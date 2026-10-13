@@ -1,5 +1,7 @@
 package com.emabuia.pokevault.data.trade
 
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import java.util.Locale
 
 /**
@@ -24,18 +26,18 @@ object TradeCardKey {
     private val NUMBER = Regex("^[A-Za-z0-9_]{1,20}$")
 
     fun fromApiCardId(apiCardId: String?): String? {
-        val raw = apiCardId?.trim().orEmpty()
-        if (!raw.startsWith("ita:", ignoreCase = true)) return null
-        val parts = raw.substring(4).split(':')
-        if (parts.size != 2) return null
-        val setCode = parts[0].trim().lowercase(Locale.ROOT)
+        // Per ora solo il catalogo italiano: l'inglese entra negli scambi con la
+        // stessa chiave della gemella IT nella Fase 3 del piano carte EN.
+        val ref = CardRef.parse(apiCardId)?.takeIf { it.lang == CatalogLang.IT } ?: return null
         // Come ItalianCatalogNormalizer.toImageReference: i numeri perdono gli
         // zeri davanti, i promo a lettere (BW01, SWSH026) restano come sono.
-        val rawNumber = parts[1].trim()
-        val number = rawNumber.toIntOrNull()?.toString() ?: rawNumber
-        if (!SET_CODE.matches(setCode) || !NUMBER.matches(number)) return null
-        return "$setCode:$number"
+        val number = ref.number.toIntOrNull()?.toString() ?: ref.number
+        if (!SET_CODE.matches(ref.setCode) || !NUMBER.matches(number)) return null
+        return "${ref.setCode}:$number"
     }
+
+    /** L'apiCardId della carta del catalogo con questa chiave (me02:1 -> "ita:me02:1"). */
+    fun toApiCardId(key: String): String = "${CatalogLang.IT.idPrefix}:$key"
 
     /** Il codice set di una chiave valida (me02:1 -> me02). */
     fun setCodeOf(key: String): String = key.substringBefore(':')

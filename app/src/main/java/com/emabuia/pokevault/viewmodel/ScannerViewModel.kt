@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -503,7 +505,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun loadSnapshotPrices(cards: List<TcgCard>) {
         val missing = cards.map { it.id }
-            .filter { it.startsWith("ita:", ignoreCase = true) && it !in uiState.snapshotPrices }
+            .filter { CardRef.isCatalogCard(it, CatalogLang.IT) && it !in uiState.snapshotPrices }
             .distinct()
         if (missing.isEmpty()) return
         viewModelScope.launch {

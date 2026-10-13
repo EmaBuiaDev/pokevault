@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -90,10 +92,7 @@ import kotlin.math.sin
 private fun resolveSetCodeForPrices(card: PokemonCard): String {
     val apiId = card.apiCardId.trim()
 
-    if (apiId.startsWith("ita:", ignoreCase = true)) {
-        val overlayCode = apiId.split(':').getOrNull(1).orEmpty()
-        if (overlayCode.isNotBlank()) return overlayCode
-    }
+    CardRef.setCodeOf(apiId, CatalogLang.IT)?.let { return it }
 
     val setCode = apiId.substringBeforeLast('-', missingDelimiterValue = "")
         .substringBefore("__")

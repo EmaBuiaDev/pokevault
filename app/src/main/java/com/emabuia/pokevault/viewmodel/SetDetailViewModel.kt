@@ -7,6 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -131,11 +134,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun resolvePriceLookup(card: TcgCard): PriceLookupRequest {
-        val overlaySetCode = card.id
-            .takeIf { it.startsWith("ita:", ignoreCase = true) }
-            ?.split(':')
-            ?.getOrNull(1)
-            .orEmpty()
+        val overlaySetCode = CardRef.setCodeOf(card.id, CatalogLang.IT).orEmpty()
 
         val fallbackSetCode = card.set?.id
             ?.substringBefore("__")
@@ -225,12 +224,7 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         val setCode = cards.asSequence()
-            .mapNotNull { card ->
-                card.id.takeIf { it.startsWith("ita:", ignoreCase = true) }
-                    ?.split(':')
-                    ?.getOrNull(1)
-                    ?.takeIf { it.isNotBlank() }
-            }
+            .mapNotNull { card -> CardRef.setCodeOf(card.id, CatalogLang.IT) }
             .firstOrNull()
             ?: currentSetId
                 ?.substringBefore("__")
@@ -282,13 +276,9 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         if (!isItalianSection()) return null
 
         val italianSetId = currentSetId
-            ?.takeIf { it.endsWith("__ita", ignoreCase = true) }
-            ?: card.id
-                .takeIf { it.startsWith("ita:", ignoreCase = true) }
-                ?.split(':')
-                ?.getOrNull(1)
-                ?.takeIf { it.isNotBlank() }
-                ?.let { "${it}__ita" }
+            ?.takeIf { CatalogSetId.isCatalogSet(it, CatalogLang.IT) }
+            ?: CardRef.setCodeOf(card.id, CatalogLang.IT)
+                ?.let { CatalogSetId.of(CatalogLang.IT, it) }
             ?: return null
 
         val counterpartCacheKey = "$italianSetId:${card.number}"

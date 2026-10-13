@@ -7,6 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -799,8 +802,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun isItalianCard(card: TcgCard): Boolean {
-        val setId = card.set?.id.orEmpty().lowercase(Locale.ROOT)
-        return setId.endsWith("__ita")
+        return CatalogSetId.isCatalogSet(card.set?.id, CatalogLang.IT)
     }
 
     /** Applies pre-merged ITA snapshot prices to Italian search results (no API calls). */
@@ -818,11 +820,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             if (!isItalianCard(card) || card.cardmarket?.prices.hasPositiveEurPrice()) {
                 return@map card
             }
-            val lookupCode = card.id
-                .takeIf { it.startsWith("ita:", ignoreCase = true) }
-                ?.split(':')
-                ?.getOrNull(1)
-                ?.takeIf { it.isNotBlank() }
+            val lookupCode = CardRef.setCodeOf(card.id, CatalogLang.IT)
                 ?: card.set?.id?.substringBefore("__").orEmpty()
             val numberKey = normalizeSnapshotNumberKey(card.number) ?: return@map card
             val entry = snapshot.priceMapFor(lookupCode)[numberKey] ?: return@map card

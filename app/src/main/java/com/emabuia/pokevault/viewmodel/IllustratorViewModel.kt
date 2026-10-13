@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeWalletPriceData
@@ -156,7 +158,7 @@ class IllustratorViewModel : ViewModel() {
      * costruita anni fa vede zero ovunque senza capire perche'.
      */
     val nonItalianOwnedCount: Int by derivedStateOf {
-        ownedCards.count { it.quantity >= 1 && !it.apiCardId.trim().startsWith("ita:") }
+        ownedCards.count { it.quantity >= 1 && !CardRef.isCatalogCard(it.apiCardId, CatalogLang.IT) }
     }
 
     /** Le righe della lista, con l'avanzamento gia' calcolato. */
@@ -231,12 +233,7 @@ class IllustratorViewModel : ViewModel() {
     }
 
     private fun italianSetCode(cardId: String): String? =
-        cardId.takeIf { it.startsWith("ita:", ignoreCase = true) }
-            ?.split(':')
-            ?.takeIf { it.size == 3 }
-            ?.get(1)
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
+        CardRef.parse(cardId)?.takeIf { it.lang == CatalogLang.IT }?.setCode
 
     /** Carica i prezzi della carta aperta nella scheda; null chiude la scheda. */
     fun loadSheetPrices(card: TcgCard?) {
@@ -320,7 +317,7 @@ class IllustratorViewModel : ViewModel() {
                 variant = variant,
                 quantity = quantity,
                 condition = condition,
-                language = language.ifBlank { "🇮🇹 Italiano" }
+                language = language.ifBlank { (CardRef.langOf(card.id) ?: CatalogLang.IT).copyLanguageLabel }
             )
             repository.addCard(pokemonCard)
             // Il bordo resta visibile un attimo: senza, il riscontro del tocco

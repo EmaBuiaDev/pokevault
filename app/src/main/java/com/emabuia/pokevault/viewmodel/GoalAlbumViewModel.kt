@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
@@ -259,7 +261,7 @@ class GoalAlbumViewModel : ViewModel() {
                 variant = selectedVariant,
                 quantity = 1,
                 condition = "Near Mint",
-                language = "🇮🇹 Italiano"
+                language = (CardRef.langOf(card.id) ?: CatalogLang.IT).copyLanguageLabel
             )
 
             repository.addCard(pokemonCard)

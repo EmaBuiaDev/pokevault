@@ -1,6 +1,9 @@
 package com.emabuia.pokevault.data.remote
 
 import android.content.Context
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.italian.ItalianCardFacets
 import com.emabuia.pokevault.data.italian.ItalianCardRecord
 import com.emabuia.pokevault.data.italian.ItalianExpansionFacet
@@ -146,7 +149,6 @@ class CatalogRepository {
         private const val SEARCH_CACHE_DURATION = 60 * 60 * 1000L           // 1 hour
         private const val SCANNER_MIN_NAME_SCORE = 36
         private val ALLOWED_LANGUAGES = setOf("ITA", "ENG", "JAP", "CHN")
-        private const val ITALIAN_SET_SUFFIX = "__ita"
         private val ITALIAN_PRINTED_TOTAL_BY_EXPANSION = mapOf(
             "me04" to 87
         )
@@ -1428,7 +1430,7 @@ class CatalogRepository {
                     // collezione: e' cio' che rende l'incrocio una sola
                     // intersezione di insiemi.
                     cardApiIds = references.map { reference ->
-                        "ita:" + reference.setCode.lowercase(Locale.ROOT) + ":" + reference.cardNumber
+                        CardRef.of(CatalogLang.IT, reference.setCode, reference.cardNumber).apiCardId
                     },
                     // Il conteggio delle espansioni si ricava dai cardId e non
                     // dall'expansionCount della rotta: quello e' per nome
@@ -1525,7 +1527,8 @@ class CatalogRepository {
      */
     suspend fun italianCardsByApiIds(context: Context, apiCardIds: Set<String>): Map<String, TcgCard> {
         val result = HashMap<String, TcgCard>()
-        apiCardIds.groupBy { it.removePrefix("ita:").substringBefore(':').lowercase(Locale.ROOT) }.forEach { (setCode, ids) ->
+        apiCardIds.groupBy { CardRef.setCodeOf(it, CatalogLang.IT) }.forEach { (setCode, ids) ->
+            if (setCode == null) return@forEach
             val cards = getCardsBySet(buildItalianSetId(setCode), context).getOrNull().orEmpty()
             for (card in cards) if (card.id in ids) result[card.id] = card
         }
@@ -2466,15 +2469,15 @@ class CatalogRepository {
     }
 
     private fun isItalianSetId(setId: String): Boolean {
-        return setId.trim().lowercase(Locale.ROOT).endsWith(ITALIAN_SET_SUFFIX)
+        return CatalogSetId.isCatalogSet(setId, CatalogLang.IT)
     }
 
     private fun isItalianOverlayCardId(cardId: String): Boolean {
-        return cardId.trim().lowercase(Locale.ROOT).startsWith("ita:")
+        return CardRef.isCatalogCard(cardId, CatalogLang.IT)
     }
 
     private fun buildItalianSetId(expansionId: String): String {
-        return "${expansionId.trim().lowercase(Locale.ROOT)}$ITALIAN_SET_SUFFIX"
+        return CatalogSetId.of(CatalogLang.IT, expansionId)
     }
 
     /**
@@ -2534,9 +2537,7 @@ class CatalogRepository {
     }
 
     private fun parseItalianExpansionId(setId: String): String? {
-        val normalized = setId.trim().lowercase(Locale.ROOT)
-        if (!normalized.endsWith(ITALIAN_SET_SUFFIX)) return null
-        return normalized.removeSuffix(ITALIAN_SET_SUFFIX).ifBlank { null }
+        return CatalogSetId.expansionOf(setId, CatalogLang.IT)
     }
 
     private fun normalizeItalianSetCode(raw: String): String {
@@ -2621,7 +2622,7 @@ class CatalogRepository {
         val imageRef = record.imageReference()
         val normalizedSetCode = imageRef?.setCode ?: normalizeItalianSetCode(record.espansioneId)
         val normalizedNumber = imageRef?.cardNumber ?: extractCardNumber(record.cardId)
-        return "ita:${normalizedSetCode.lowercase(Locale.ROOT)}:$normalizedNumber"
+        return CardRef.of(CatalogLang.IT, normalizedSetCode, normalizedNumber).apiCardId
     }
 
     private fun findExactRawSetMatch(sets: List<TcgSet>, rawSetCode: String?): TcgSet? {

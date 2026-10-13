@@ -2,6 +2,8 @@ package com.emabuia.pokevault.data.italian
 
 import android.content.Context
 import com.emabuia.pokevault.BuildConfig
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.remote.PokeWalletPriceData
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -242,14 +244,9 @@ class ItalianPriceSnapshotRepository {
      * Artisti, Scanner, il recupero dei prezzi mancanti in Collezione.
      */
     suspend fun priceForItalianCard(context: Context, apiCardId: String): PokeWalletPriceData? {
-        if (!apiCardId.startsWith("ita:", ignoreCase = true)) return null
-        val parts = apiCardId.substring(4).split(':')
-        if (parts.size != 2) return null
-        val setCode = parts[0].trim()
-        val rawNumber = parts[1].trim()
-        if (setCode.isBlank() || rawNumber.isBlank()) return null
-        val number = rawNumber.toIntOrNull()?.toString() ?: rawNumber.uppercase(Locale.ROOT)
-        return runCatching { getPriceMap(context, setCode) }.getOrNull()?.get(number)
+        val ref = CardRef.parse(apiCardId)?.takeIf { it.lang == CatalogLang.IT } ?: return null
+        val number = ref.number.toIntOrNull()?.toString() ?: ref.number.uppercase(Locale.ROOT)
+        return runCatching { getPriceMap(context, ref.setCode) }.getOrNull()?.get(number)
     }
 
     private fun cacheExpansion(

@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
@@ -886,7 +888,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         /** Ricevuta e in wishlist: esce dalla wishlist. */
         val inWishlist: Boolean = false
     ) {
-        val apiCardId: String get() = "ita:${item.key.orEmpty()}"
+        val apiCardId: String get() = TradeCardKey.toApiCardId(item.key.orEmpty())
         /** Una carta da togliere che in collezione non c'e': non si puo' spuntare. */
         val missing: Boolean get() = giving && docIds.isEmpty()
     }
@@ -918,7 +920,7 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             }.map { it.id }
             val lines = proposal.give.orEmpty().map { ClosingLine(it, giving = true, docIds = docsFor(it)) }
                 .map { if (it.missing) it.copy(checked = false) else it } +
-                proposal.take.orEmpty().map { ClosingLine(it, giving = false, inWishlist = "ita:${it.key}" in wished) }
+                proposal.take.orEmpty().map { ClosingLine(it, giving = false, inWishlist = TradeCardKey.toApiCardId(it.key.orEmpty()) in wished) }
             closing = closing?.takeIf { it.proposalId == id }?.copy(lines = lines, loading = false)
         }
     }
@@ -982,7 +984,8 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                         variant = line.item.variant?.ifBlank { null } ?: "Normal",
                         quantity = line.item.qty ?: 1,
                         condition = line.item.condition?.ifBlank { null } ?: "Near Mint",
-                        language = line.item.language?.ifBlank { null } ?: "🇮🇹 Italiano"
+                        language = line.item.language?.ifBlank { null }
+                            ?: (CardRef.langOf(line.apiCardId) ?: CatalogLang.IT).copyLanguageLabel
                     )
                 )
                 if (line.inWishlist) repository.removeCardFromAllWishlists(line.apiCardId)

@@ -8,6 +8,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.BasicEnergyResolver
 import com.emabuia.pokevault.data.model.CardClassifier
@@ -44,9 +46,6 @@ class DeckLabViewModel : ViewModel() {
 
         /** Un orfano piu' giovane di cosi' potrebbe essere di un deck ancora in costruzione. */
         private const val ORPHAN_MIN_AGE_MS = 24L * 60 * 60 * 1000
-
-        /** Prefisso di apiCardId per le carte che vengono dal catalogo italiano. */
-        private const val ITALIAN_CARD_ID_PREFIX = "ita:"
 
         /** Quanto aspettare la prima emissione del listener carte prima di lasciar perdere. */
         private const val STAGE_BACKFILL_WAIT_MS = 15_000L
@@ -283,7 +282,7 @@ class DeckLabViewModel : ViewModel() {
 
             val targets = cards.filter {
                 it.subtypes.isEmpty() &&
-                    it.apiCardId.startsWith(ITALIAN_CARD_ID_PREFIX) &&
+                    CardRef.isCatalogCard(it.apiCardId, CatalogLang.IT) &&
                     CardClassifier.classify(it) == CardClassifier.POKEMON
             }
             if (targets.isEmpty()) return@launch
@@ -1428,9 +1427,8 @@ class DeckLabViewModel : ViewModel() {
         // una chiamata PokeWallet diretta -- vedi MIGRATION_PLAN.md M4.6. Se lo snapshot
         // non ha ancora un prezzo per questa carta, resta a 0 invece di consumare budget
         // PokeWallet: verra' popolato al prossimo giro dello snapshot lato Worker.
-        if (card.id.startsWith("ita:", ignoreCase = true)) {
-            val setCode = card.id.removePrefix("ita:").substringBefore(':').takeIf { it.isNotBlank() }
-                ?: return 0.0
+        if (CardRef.isCatalogCard(card.id, CatalogLang.IT)) {
+            val setCode = CardRef.setCodeOf(card.id, CatalogLang.IT) ?: return 0.0
             val priceMap = RepositoryProvider.italianPriceSnapshotRepository.getPriceMap(context, setCode)
             val snapshotPrice = italianPriceLookupKey(card.number)?.let(priceMap::get)
             val snapshotBest = sequenceOf(
