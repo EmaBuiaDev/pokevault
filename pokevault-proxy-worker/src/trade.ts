@@ -19,6 +19,7 @@ import { romeNow, slotTime, romeToEpoch, addDays, type Slot } from './trade-time
 import { enqueue, deliver, prefsOf, type Outgoing, type PushEnv } from './trade-push';
 import { activeGiftUntilMs, isEntitled, verifyFirebaseIdToken } from './billing';
 import { GEOHASH5_REGEX, cellAndNeighbors, cellCenter, encode } from './geohash';
+import { cardKeyOfEnCardId } from './catalog-en-paths';
 
 export interface TradeEnv extends PushEnv {
   /** "1" accende il modulo. Assente in produzione. */
@@ -27,6 +28,12 @@ export interface TradeEnv extends PushEnv {
   trade_db?: D1Database;
   /** Catalogo, in sola lettura: dimensione dei set. */
   pokevault_catalog?: D1Database;
+  /**
+   * Catalogo inglese, in sola lettura (src/catalog-en.ts). Completa nomi e
+   * dimensioni dei set che esistono solo in inglese; i gemelli hanno la stessa
+   * chiave dell'italiano e restano all'italiano. Assente = come prima.
+   */
+  catalog_en?: D1Database;
   /** Progetto Firebase contro cui si verifica l'ID token. */
   FIREBASE_PROJECT_ID?: string;
   CACHE?: KVNamespace;
@@ -229,6 +236,23 @@ async function catalogSetSizes(env: TradeEnv): Promise<Map<string, number>> {
     )
     .all<{ code: string; n: number }>();
   for (const row of results) sizes.set(row.code, Number(row.n));
+  // Set solo inglesi: solo i codici che l'italiano non ha. Mai un motivo per
+  // far fallire gli scambi: se il catalogo EN non risponde, si va avanti senza.
+  if (env.catalog_en) {
+    try {
+      const { results: enRows } = await env.catalog_en
+        .prepare(
+          `SELECT LOWER(SUBSTR(c.card_id, 1, INSTR(c.card_id, '_EN_') - 1)) AS code, COUNT(*) AS n
+           FROM cards c JOIN expansions e ON e.id = c.expansion_id
+           WHERE e.published = 1 AND e.it_expansion_id IS NULL AND INSTR(c.card_id, '_EN_') > 0
+           GROUP BY code`
+        )
+        .all<{ code: string; n: number }>();
+      for (const row of enRows) if (!sizes.has(row.code)) sizes.set(row.code, Number(row.n));
+    } catch (error) {
+      console.error('TradeRadar: dimensioni dei set EN illeggibili:', error);
+    }
+  }
   setSizesCache = { at: Date.now(), sizes };
   return sizes;
 }
@@ -271,6 +295,25 @@ async function catalogCardLabels(env: TradeEnv): Promise<Map<string, CardLabel>>
   for (const row of results) {
     const key = cardKeyOfCatalogId(row.card_id);
     if (key) labels.set(key, { name: row.nome, setName: row.set_name });
+  }
+  // Carte che in italiano non ci sono (set solo EN): nome inglese. Le gemelle
+  // tengono il nome italiano, che e' quello che l'app mostra.
+  if (env.catalog_en) {
+    try {
+      const { results: enRows } = await env.catalog_en
+        .prepare(
+          `SELECT c.card_id AS card_id, c.nome AS nome, COALESCE(e.name, e.id) AS set_name
+           FROM cards c JOIN expansions e ON e.id = c.expansion_id
+           WHERE e.published = 1 AND INSTR(c.card_id, '_EN_') > 0`
+        )
+        .all<{ card_id: string; nome: string; set_name: string }>();
+      for (const row of enRows) {
+        const key = cardKeyOfEnCardId(row.card_id);
+        if (key && !labels.has(key)) labels.set(key, { name: row.nome, setName: row.set_name });
+      }
+    } catch (error) {
+      console.error('TradeRadar: nomi delle carte EN illeggibili:', error);
+    }
   }
   cardLabelsCache = { at: Date.now(), labels };
   return labels;

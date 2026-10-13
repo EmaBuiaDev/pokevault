@@ -85,3 +85,16 @@ export function parseEnglishRequest(url: URL): EnglishRequest | null {
 
   return null;
 }
+
+/**
+ * La chiave TradeRadar di una carta del catalogo EN: SV08_EN_25.webp -> sv08:25.
+ * Per i set gemelli e' la stessa chiave della carta italiana (stessa cartella,
+ * stesso numero): negli scambi IT ed EN sono la stessa carta. I set solo EN
+ * hanno codici che non collidono con l'italiano (lo garantisce l'import).
+ */
+export function cardKeyOfEnCardId(cardId: string): string | null {
+  const match = /^([A-Za-z0-9-]+)_EN_([A-Za-z0-9_]+)\.(png|webp|jpe?g)$/i.exec(cardId.trim());
+  if (!match) return null;
+  const number = /^\d+$/.test(match[2]) ? String(parseInt(match[2], 10)) : match[2];
+  return `${match[1].toLowerCase()}:${number}`;
+}

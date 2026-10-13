@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { enCardImageKey, enSetAssetKeys, normalizeEnCardNumber, parseEnglishRequest } from '../src/catalog-en-paths.ts';
+import { cardKeyOfEnCardId, enCardImageKey, enSetAssetKeys, normalizeEnCardNumber, parseEnglishRequest } from '../src/catalog-en-paths.ts';
 
 const req = (path: string) => parseEnglishRequest(new URL(`https://w.example${path}`));
 
@@ -51,4 +51,12 @@ test('prezzi EN: stesso schema delle rotte italiane', () => {
   assert.deepEqual(req('/en/prices/30th-c.json'), { kind: 'expansionPrices', code: '30th-c' });
   assert.equal(req('/en/prices/'), null);
   assert.equal(req('/ita/prices/sv08.json'), null);
+});
+
+test('chiave TradeRadar di una carta EN: uguale a quella della gemella italiana', () => {
+  assert.equal(cardKeyOfEnCardId('SV08_EN_25.webp'), 'sv08:25');
+  assert.equal(cardKeyOfEnCardId('SV08_EN_025.webp'), 'sv08:25');
+  assert.equal(cardKeyOfEnCardId('SWSHP_EN_SWSH026.webp'), 'swshp:SWSH026');
+  assert.equal(cardKeyOfEnCardId('30TH-C_EN_7.webp'), '30th-c:7');
+  assert.equal(cardKeyOfEnCardId('SV08_IT_25.png'), null);
 });

@@ -83,6 +83,13 @@ binding = "pokevault_catalog"
 database_name = "pokevault-catalog"
 database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7"
 
+# Il catalogo inglese, anche questo solo in LETTURA: nomi e dimensioni dei
+# set che esistono solo in inglese (trade.ts). I gemelli usano l'italiano.
+[[env.staging.d1_databases]]
+binding = "catalog_en"
+database_name = "pokevault-catalog-en"
+database_id = "eb25d4e8-838e-416a-9bf4-29f3718c32e4"
+
 [env.staging.triggers]
 crons = ["*/15 * * * *"]
 
