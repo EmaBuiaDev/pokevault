@@ -2,6 +2,8 @@
 // chiave R2. Senza import, cosi' i test le provano con node --test.
 
 export const EN_R2_PREFIX = 'en';
+// Deve restare uguale a CARDMARKET_EN_R2_KEY in scripts/build-cardmarket-prices-en.mjs.
+export const CARDMARKET_EN_R2_KEY = 'prezzi/cardmarket-en-v1.json';
 
 
 export type EnglishRequest =
@@ -10,7 +12,9 @@ export type EnglishRequest =
   | { kind: 'cards'; expansionId: string }
   | { kind: 'cardImage'; setCode: string; cardNumber: string }
   | { kind: 'setLogo'; setCode: string }
-  | { kind: 'setSymbol'; setCode: string };
+  | { kind: 'setSymbol'; setCode: string }
+  | { kind: 'prices' }
+  | { kind: 'expansionPrices'; code: string };
 
 function decode(raw: string): string | null {
   try {
@@ -47,6 +51,15 @@ export function parseEnglishRequest(url: URL): EnglishRequest | null {
 
   if (pathname === '/v1/en/health') return { kind: 'health' };
   if (pathname === '/v1/en/expansions') return { kind: 'expansions' };
+
+  // Prezzi: stesso schema di /ita/prices.json e /ita/prices/{code}.json.
+  if (pathname === '/en/prices.json') return { kind: 'prices' };
+  const prices = pathname.match(/^\/en\/prices\/([^/]+)\.json$/i);
+  if (prices) {
+    const code = decode(prices[1]);
+    if (!code || !SET_CODE_RE.test(code)) return null;
+    return { kind: 'expansionPrices', code: code.toLowerCase() };
+  }
 
   const cards = pathname.match(/^\/v1\/en\/expansions\/([A-Za-z0-9._-]+)\/cards$/);
   if (cards) return { kind: 'cards', expansionId: cards[1].toLowerCase() };

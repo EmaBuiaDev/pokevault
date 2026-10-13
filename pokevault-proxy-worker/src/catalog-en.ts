@@ -14,7 +14,33 @@
 // tenuti 24 ore che ha il catalogo italiano.
 
 import { mapCardRow, type D1CardRow } from './card-row';
-import { enCardImageKey, enSetAssetKeys, parseEnglishRequest } from './catalog-en-paths';
+import { CARDMARKET_EN_R2_KEY, enCardImageKey, enSetAssetKeys, parseEnglishRequest } from './catalog-en-paths';
+import { cardmarketBlobProblem, mergeCardmarketPrices, type CardmarketBlob, type PriceSnapshot } from './cardmarket-prices';
+import { resolveExpansionPrices } from './price-lookup';
+
+// Il listino EN servito, tenuto in memoria dall'isolate per qualche minuto:
+// e' un file R2 che cambia due volte al giorno.
+const PRICES_MEMO_MS = 10 * 60 * 1000;
+let pricesMemo: { at: number; snapshot: PriceSnapshot; problem: string | null } | null = null;
+
+async function loadEnglishPrices(bucket: R2Bucket | undefined): Promise<{ snapshot: PriceSnapshot; problem: string | null } | null> {
+  const now = Date.now();
+  if (pricesMemo && now - pricesMemo.at < PRICES_MEMO_MS) return pricesMemo;
+  if (!bucket) return null;
+  try {
+    const object = await bucket.get(CARDMARKET_EN_R2_KEY);
+    if (!object) return null;
+    const blob = JSON.parse(await object.text()) as CardmarketBlob;
+    // Stesso formato che l'app riceve per l'italiano (link Cardmarket compresi).
+    // Un listino vecchio si serve lo stesso: per l'EN non c'e' un ripiego
+    // PokeWallet, e un prezzo di tre giorni fa e' meglio di nessun prezzo.
+    pricesMemo = { at: now, snapshot: mergeCardmarketPrices(null, blob, now), problem: cardmarketBlobProblem(blob, now) };
+    return pricesMemo;
+  } catch (error) {
+    console.error('catalogo EN: listino prezzi illeggibile:', error);
+    return null;
+  }
+}
 
 export interface EnglishCatalogEnv {
   catalog_en?: D1Database;
@@ -152,5 +178,28 @@ export async function handleEnglishCatalogRequest(request: Request, url: URL, en
 
     case 'setSymbol':
       return serveR2(env.IMAGES_BUCKET, enSetAssetKeys(route.setCode, 'symbol'));
+
+    case 'prices':
+    case 'expansionPrices': {
+      const loaded = await loadEnglishPrices(env.IMAGES_BUCKET);
+      if (!loaded) return json({ error: 'English price list not available' }, 404, MISSING_CACHE_CONTROL);
+      const { snapshot, problem } = loaded;
+      const headers: Record<string, string> = { 'Cache-Control': 'public, max-age=1800' };
+      if (snapshot.cardmarketCreatedAt) headers['X-Listino-Created-At'] = snapshot.cardmarketCreatedAt;
+      if (problem) headers['X-Listino-Problem'] = problem;
+      if (route.kind === 'prices') {
+        return new Response(JSON.stringify(snapshot), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers } });
+      }
+      const resolved = resolveExpansionPrices(snapshot, route.code);
+      if (!resolved) return json({ error: `no prices for "${route.code}"` }, 404, MISSING_CACHE_CONTROL);
+      const body = {
+        expansionId: resolved.expansionId,
+        baseSetCode: resolved.entry.baseSetCode,
+        updatedAt: resolved.entry.updatedAt,
+        builtAt: snapshot.builtAt,
+        prices: resolved.entry.prices,
+      };
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers } });
+    }
   }
 }

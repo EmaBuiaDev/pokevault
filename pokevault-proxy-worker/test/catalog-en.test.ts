@@ -44,3 +44,11 @@ test('logo e simbolo: WebP prima del PNG', () => {
   assert.deepEqual(enSetAssetKeys('pl3', 'logo'), ['en/PL3/logo.webp', 'en/PL3/logo.png']);
   assert.deepEqual(enSetAssetKeys('PL3', 'symbol'), ['en/PL3/symbol.webp', 'en/PL3/symbol.png']);
 });
+
+test('prezzi EN: stesso schema delle rotte italiane', () => {
+  assert.deepEqual(req('/en/prices.json'), { kind: 'prices' });
+  assert.deepEqual(req('/en/prices/SV08.json'), { kind: 'expansionPrices', code: 'sv08' });
+  assert.deepEqual(req('/en/prices/30th-c.json'), { kind: 'expansionPrices', code: '30th-c' });
+  assert.equal(req('/en/prices/'), null);
+  assert.equal(req('/ita/prices/sv08.json'), null);
+});
