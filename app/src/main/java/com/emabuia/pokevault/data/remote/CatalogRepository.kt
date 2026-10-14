@@ -2698,7 +2698,11 @@ class CatalogRepository {
         forceRefresh: Boolean
     ): List<TcgSet> {
         val nonItalianSets = baseSets.filterNot { isItalianSetId(it.id) }
-        if (context == null) return nonItalianSets
+        // Senza Context non si puo' rifare la fusione, ma i set italiani gia'
+        // fusi (memoria o Room) restano: prima si buttavano, e chi chiamava
+        // getSets() senza Context (Statistiche, chase) li perdeva, e con lui
+        // la cache in memoria fino al giro successivo del Pokedex.
+        if (context == null) return baseSets
 
         // Pre-index nonItalianSets once: raw setRef (uppercase) → newest set, and
         // canonical (normalized) setRef → first set. Avoids O(N*M) linear scans per expansion.

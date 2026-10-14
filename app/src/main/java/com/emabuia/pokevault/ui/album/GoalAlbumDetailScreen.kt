@@ -142,7 +142,8 @@ fun GoalAlbumDetailScreen(
         loadFailed = false
         val loaded = when (album.criteriaType) {
             GoalCriteriaType.SET ->
-                tcgRepo.getCardsBySet(album.criteriaValue).getOrElse { emptyList() }
+                // Col Context: senza, i set dei nostri cataloghi tornavano vuoti.
+                tcgRepo.getCardsBySet(album.criteriaValue, context).getOrElse { emptyList() }
             GoalCriteriaType.RARITY ->
                 tcgRepo.searchItalianCardsByAttribute(ItalianCardAttribute.RARITY, album.criteriaValue, context)
                     .getOrElse { emptyList() }
@@ -159,6 +160,7 @@ fun GoalAlbumDetailScreen(
                     .mapNotNull { apiId -> tcgRepo.getCard(apiId).getOrNull() }
         }
         targetCards = loaded
+        viewModel.repairEmptyTargets(album, loaded)
         // Un chase ha per definizione delle carte obiettivo: zero carte non e'
         // un chase vuoto, e' una richiesta andata male. Prima si finiva sullo
         // stesso "Nessuna carta disponibile" di un filtro senza risultati.
