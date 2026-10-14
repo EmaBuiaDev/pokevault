@@ -9,6 +9,8 @@ import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.italian.ItalianCardRecord
 import com.emabuia.pokevault.data.italian.ItalianCatalogNormalizer
 import com.emabuia.pokevault.data.italian.ItalianExpansionSummary
+import com.emabuia.pokevault.data.italian.ItalianIllustratorsNormalizer
+import com.emabuia.pokevault.data.italian.ItalianIllustratorsResponse
 import com.emabuia.pokevault.data.italian.ItalianImageReference
 import com.emabuia.pokevault.data.italian.ItalianPrintedTotals
 import com.emabuia.pokevault.data.local.ItalianTranslations
@@ -17,6 +19,9 @@ import com.emabuia.pokevault.data.remote.SetImages
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgCardSet
 import com.emabuia.pokevault.data.remote.TcgSet
+import com.emabuia.pokevault.util.IllustratorCardRef
+import com.emabuia.pokevault.util.IllustratorEntry
+import com.emabuia.pokevault.util.Illustrators
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -54,6 +59,16 @@ object EnglishCatalogIds {
     /** L'apiCardId della carta: "eng:sv08:12". Per i set gemelli e' quello italiano con eng: davanti. */
     fun apiCardId(reference: ItalianImageReference): String =
         CardRef.of(CatalogLang.EN, reference.setCode, reference.cardNumber).apiCardId
+
+    /** Una carta EN per gli album degli illustratori: id in collezione, espansione e miniatura. */
+    fun illustratorRef(baseUrl: String, cardId: String): IllustratorCardRef? =
+        reference(cardId)?.let { reference ->
+            IllustratorCardRef(
+                apiCardId = apiCardId(reference),
+                expansion = reference.setCode.lowercase(Locale.ROOT),
+                previewUrl = cardImageUrl(baseUrl, reference, "low")
+            )
+        }
 
     fun cardImageUrl(baseUrl: String, reference: ItalianImageReference, size: String): String =
         "${baseUrl.trim().trimEnd('/')}/images/en/${reference.folderName}/${reference.cardNumber}?size=$size"
@@ -148,6 +163,7 @@ class EnglishCatalogRepository(
         private const val CATALOG_FILE = "catalog.json"
         /** Il Worker lo rifa' al massimo ogni 6 ore: tenerlo di piu' non serve, di meno nemmeno. */
         private const val CATALOG_TTL_MS = 6L * 60L * 60L * 1000L
+        private const val ILLUSTRATORS_TTL_MS = 30L * 60L * 1000L
     }
 
     val isEnabled: Boolean get() = enabled() && baseUrl().isNotBlank()
@@ -297,6 +313,58 @@ class EnglishCatalogRepository(
     private fun toSearchCard(record: ItalianCardRecord, summaries: List<ItalianExpansionSummary>): TcgCard? {
         val summary = summaries.firstOrNull { it.id.equals(record.espansioneId.trim(), ignoreCase = true) } ?: return null
         return toTcgCard(record, toTcgSet(summary), collectionSetName = summary.itName)
+    }
+
+    // ── Illustratori ────────────────────────────────────────────────────────
+
+    private val illustratorsMutex = Mutex()
+    @Volatile private var memoryIllustrators: ItalianIllustratorsResponse? = null
+    @Volatile private var memoryIllustratorsAt: Long = 0L
+
+    /** /v1/en/illustrators, stessa forma della rotta italiana. */
+    suspend fun getIllustrators(forceRefresh: Boolean = false): Result<ItalianIllustratorsResponse> = illustratorsMutex.withLock {
+        if (!isEnabled) return@withLock Result.success(ItalianIllustratorsResponse())
+        val now = System.currentTimeMillis()
+        if (!forceRefresh) {
+            memoryIllustrators?.takeIf { now - memoryIllustratorsAt <= ILLUSTRATORS_TTL_MS }?.let { return@withLock Result.success(it) }
+        }
+        runCatching {
+            val raw = fetch("${baseUrl().trim().trimEnd('/')}/v1/en/illustrators")
+            withContext(Dispatchers.Default) { ItalianIllustratorsNormalizer.parseIllustrators(raw) }
+        }.onSuccess {
+            memoryIllustrators = it
+            memoryIllustratorsAt = now
+        }.recoverCatching { error -> memoryIllustrators ?: throw error }
+    }
+
+    /** Le voci della sezione illustratori per il catalogo inglese: stesse regole dell'italiano. */
+    suspend fun illustratorIndex(forceRefresh: Boolean = false): List<IllustratorEntry> {
+        val response = getIllustrators(forceRefresh).getOrNull() ?: return emptyList()
+        val base = baseUrl()
+        return withContext(Dispatchers.Default) {
+            Illustrators.entries(response.illustrators.map { it.name to it.cardIds }) { cardId ->
+                EnglishCatalogIds.illustratorRef(base, cardId)
+            }
+        }
+    }
+
+    suspend fun cardsWithoutIllustrator(): Int = getIllustrators().getOrNull()?.cardsWithoutIllustrator ?: 0
+
+    /** Le carte EN di un illustratore, una chiamata per nome grezzo (quasi sempre uno). */
+    suspend fun cardsByIllustrator(context: Context, entry: IllustratorEntry): List<TcgCard> {
+        if (!isEnabled) return emptyList()
+        val summaries = getExpansions(context).getOrNull().orEmpty()
+        val records = entry.rawNames.flatMap { rawName ->
+            // Spazi, punti e accenti nei nomi: senza encode la rotta risponde 404.
+            val encoded = java.net.URLEncoder.encode(rawName.trim(), "UTF-8").replace("+", "%20")
+            runCatching {
+                val raw = fetch("${baseUrl().trim().trimEnd('/')}/v1/en/illustrators/$encoded/cards")
+                withContext(Dispatchers.Default) { ItalianIllustratorsNormalizer.parseIllustratorCards(raw) }
+            }.getOrDefault(emptyList())
+        }
+        return withContext(Dispatchers.Default) {
+            records.mapNotNull { toSearchCard(it, summaries) }.distinctBy { it.id }
+        }
     }
 
     /** Una carta EN gia' caricata (set aperti in questa sessione), o null. */

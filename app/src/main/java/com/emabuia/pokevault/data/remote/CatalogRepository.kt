@@ -20,8 +20,10 @@ import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.emabuia.pokevault.data.italian.ItalianCatalogNormalizer
 import com.emabuia.pokevault.data.italian.ItalianExpansionSummary
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.IllustratorCardRef
 import com.emabuia.pokevault.util.IllustratorEntry
 import com.emabuia.pokevault.util.IllustratorNames
+import com.emabuia.pokevault.util.Illustrators
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1357,45 +1359,15 @@ class CatalogRepository {
         }
 
         return withContext(Dispatchers.Default) {
-            val buckets = LinkedHashMap<String, IllustratorBucket>()
-            for ((rawName, cardIds) in rawEntries) {
-                // Un credito a quattro mani vale per entrambi gli autori: le
-                // stesse carte finiscono in due bucket, ed e' voluto.
-                for (displayName in IllustratorNames.credits(rawName)) {
-                    val key = IllustratorNames.keyOf(displayName)
-                    if (key.isEmpty()) continue
-                    val bucket = buckets.getOrPut(key) { IllustratorBucket() }
-                    bucket.rawNames += rawName
-                    bucket.displayNames[displayName] =
-                        (bucket.displayNames[displayName] ?: 0) + cardIds.size
-                    bucket.cardIds += cardIds
-                }
-            }
-
-            buckets.map { (key, bucket) ->
-                val references = bucket.cardIds.mapNotNull { cardId ->
-                    ItalianCatalogNormalizer.toImageReference(cardId)
-                }
-                IllustratorEntry(
-                    key = key,
-                    displayName = IllustratorNames.bestDisplayName(bucket.displayNames),
-                    rawNames = bucket.rawNames.toList(),
-                    // La stessa chiave che PokemonCard.apiCardId porta in
-                    // collezione: e' cio' che rende l'incrocio una sola
-                    // intersezione di insiemi.
-                    cardApiIds = references.map { reference ->
-                        CardRef.of(CatalogLang.IT, reference.setCode, reference.cardNumber).apiCardId
-                    },
-                    // Il conteggio delle espansioni si ricava dai cardId e non
-                    // dall'expansionCount della rotta: quello e' per nome
-                    // grezzo, e sommarlo dopo aver unito due grafie conterebbe
-                    // due volte le espansioni che hanno in comune.
-                    expansionCount = references.map { it.setCode.lowercase(Locale.ROOT) }.distinct().size,
-                    previewUrls = references.take(3).map { reference ->
-                        PokeVaultApiClient.imageBaseUrl.trimEnd('/') +
+            Illustrators.entries(rawEntries) { cardId ->
+                ItalianCatalogNormalizer.toImageReference(cardId)?.let { reference ->
+                    IllustratorCardRef(
+                        apiCardId = CardRef.of(CatalogLang.IT, reference.setCode, reference.cardNumber).apiCardId,
+                        expansion = reference.setCode.lowercase(Locale.ROOT),
+                        previewUrl = PokeVaultApiClient.imageBaseUrl.trimEnd('/') +
                             "/images/it/" + reference.folderName + "/" + reference.cardNumber + "?size=low"
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -1415,13 +1387,6 @@ class CatalogRepository {
             .getOrNull()
             ?.cardsWithoutIllustrator
             ?: 0
-
-    /** Accumulatore di [italianIllustratorIndex]: una persona, tutte le sue grafie. */
-    private class IllustratorBucket(
-        val rawNames: MutableSet<String> = linkedSetOf(),
-        val displayNames: MutableMap<String, Int> = linkedMapOf(),
-        val cardIds: MutableSet<String> = linkedSetOf()
-    )
 
     /**
      * Le carte di un illustratore, pronte per la griglia.

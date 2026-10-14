@@ -38,6 +38,7 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.catalog.CardRef
 import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -71,6 +72,7 @@ import com.emabuia.pokevault.ui.graded.onAccentColor
 import com.emabuia.pokevault.ui.graded.tierColor
 import com.emabuia.pokevault.ui.graded.tierLabel
 import com.emabuia.pokevault.util.GradeTier
+import com.emabuia.pokevault.viewmodel.IllustratorCatalogPref
 import com.emabuia.pokevault.util.GradedLab
 import kotlin.math.abs
 import kotlin.math.cos
@@ -263,8 +265,17 @@ fun CardDetailScreen(
             ?: return@LaunchedEffect
         if (illustratorByApiId.containsKey(apiCardId)) return@LaunchedEffect
 
-        illustratorByApiId[apiCardId] = tcgRepository
-            .italianIllustratorsByCardId(context, setOf(apiCardId))[apiCardId]
+        // Copia inglese: l'illustratore sta nella carta del suo set EN.
+        val englishRef = CardRef.parse(apiCardId)?.takeIf { it.lang == CatalogLang.EN }
+        illustratorByApiId[apiCardId] = if (englishRef != null) {
+            RepositoryProvider.englishCatalogRepository
+                .getCardsBySet(context, CatalogSetId.of(CatalogLang.EN, englishRef.setCode))
+                .getOrNull()
+                ?.firstOrNull { it.id == apiCardId }
+                ?.artist
+        } else {
+            tcgRepository.italianIllustratorsByCardId(context, setOf(apiCardId))[apiCardId]
+        }
     }
 
     LaunchedEffect(selectedVariantIndex, variants) {
@@ -758,7 +769,11 @@ fun CardDetailScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onIllustratorClick(key) }
+                                    .clickable {
+                                        // L'album dell'artista nella lingua di questa copia.
+                                        IllustratorCatalogPref.followCard(context, currentCard.apiCardId)
+                                        onIllustratorClick(key)
+                                    }
                                     .padding(vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically

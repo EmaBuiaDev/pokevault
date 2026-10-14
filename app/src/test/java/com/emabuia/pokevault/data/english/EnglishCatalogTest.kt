@@ -130,4 +130,13 @@ class EnglishCatalogTest {
         assertEquals(2, EnglishCatalogSearch.byNumber(records, "25", null, totals, 300).size)
         assertEquals(2, EnglishCatalogSearch.byNumber(records, "25", 999, totals, 300).size)
     }
+
+    @Test
+    fun `album illustratori EN - la carta porta l'id eng e la miniatura inglese`() {
+        val ref = EnglishCatalogIds.illustratorRef(base, "SV08_EN_025.webp")!!
+        assertEquals("eng:sv08:25", ref.apiCardId)
+        assertEquals("sv08", ref.expansion)
+        assertTrue(ref.previewUrl.endsWith("/images/en/SV08/25?size=low"))
+        assertNull(EnglishCatalogIds.illustratorRef(base, "SV08_IT_25.png"))
+    }
 }

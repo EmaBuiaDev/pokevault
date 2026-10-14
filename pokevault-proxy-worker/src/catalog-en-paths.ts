@@ -8,6 +8,8 @@ export const CARDMARKET_EN_R2_KEY = 'prezzi/cardmarket-en-v1.json';
 // CATALOG_EN_MAX_AGE_MS: tenerlo su R2 risparmia la quota D1 (ventimila righe a giro).
 export const CATALOG_EN_R2_KEY = 'en/catalog/catalog.json';
 export const CATALOG_EN_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+// L'indice degli illustratori EN, stessa regola: anche lui legge tutte le carte.
+export const ILLUSTRATORS_EN_R2_KEY = 'en/catalog/illustrators.json';
 
 
 export type EnglishRequest =

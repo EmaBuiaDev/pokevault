@@ -14,7 +14,7 @@
 // tenuti 24 ore che ha il catalogo italiano.
 
 import { mapCardRow, type D1CardRow } from './card-row';
-import { CARDMARKET_EN_R2_KEY, CATALOG_EN_MAX_AGE_MS, CATALOG_EN_R2_KEY, enCardImageKey, enSetAssetKeys, parseEnglishRequest } from './catalog-en-paths';
+import { CARDMARKET_EN_R2_KEY, CATALOG_EN_MAX_AGE_MS, CATALOG_EN_R2_KEY, ILLUSTRATORS_EN_R2_KEY, enCardImageKey, enSetAssetKeys, parseEnglishRequest } from './catalog-en-paths';
 import { cardmarketBlobProblem, mergeCardmarketPrices, type CardmarketBlob, type PriceSnapshot } from './cardmarket-prices';
 import { resolveExpansionPrices } from './price-lookup';
 
@@ -86,59 +86,112 @@ async function serveR2(bucket: R2Bucket | undefined, keys: string[]): Promise<Re
  * senza che ogni apertura dell'app costi la quota.
  */
 async function serveEnglishCatalog(db: D1Database, bucket: R2Bucket | undefined): Promise<Response> {
+  return serveCachedOnR2(bucket, CATALOG_EN_R2_KEY, 'English catalog', () => buildEnglishCatalog(db));
+}
+
+/**
+ * Una risposta costosa da costruire (legge tutto D1) tenuta su R2 alla chiave
+ * [key] e rifatta solo quando ha piu' di CATALOG_EN_MAX_AGE_MS. Se D1 non
+ * risponde si serve la copia vecchia; senza copia, 503.
+ */
+async function serveCachedOnR2(
+  bucket: R2Bucket | undefined,
+  key: string,
+  what: string,
+  build: () => Promise<string>
+): Promise<Response> {
   const headers = {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Cache-Control': CATALOG_CACHE_CONTROL,
   };
-  const stored = bucket ? await bucket.get(CATALOG_EN_R2_KEY).catch(() => null) : null;
+  const stored = bucket ? await bucket.get(key).catch(() => null) : null;
   if (stored && Date.now() - stored.uploaded.getTime() < CATALOG_EN_MAX_AGE_MS) {
     return new Response(stored.body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': stored.uploaded.toISOString() } });
   }
-
   try {
-    const { results } = await db
-      .prepare(
-        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage, c.illustratore
-         FROM cards c JOIN expansions e ON e.id = c.expansion_id
-         WHERE e.published = 1
-           AND NOT EXISTS (SELECT 1 FROM takedowns t WHERE (t.target_type = 'card' AND t.target_id = c.card_id) OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id))
-         ORDER BY c.expansion_id, CAST(c.card_number AS INTEGER), c.card_number`
-      )
-      .all<D1CardRow>();
-    if (results.length === 0) throw new Error('nessuna carta pubblicata');
-
-    const variants = new Map<string, string[]>();
-    try {
-      const { results: rows } = await db
-        .prepare(
-          `SELECT v.card_id, v.variant FROM card_variants v JOIN cards c ON c.card_id = v.card_id
-           JOIN expansions e ON e.id = c.expansion_id
-           WHERE e.published = 1 ORDER BY v.card_id, v.kind, v.variant`
-        )
-        .all<{ card_id: string; variant: string }>();
-      for (const row of rows) {
-        const list = variants.get(row.card_id);
-        if (list) list.push(row.variant); else variants.set(row.card_id, [row.variant]);
-      }
-    } catch (error) {
-      console.error('catalogo EN: stampe illeggibili, il catalogo esce senza:', error);
-    }
-
-    const body = JSON.stringify({ cards: results.map((r) => mapCardRow(r, variants)) });
+    const body = await build();
     if (bucket) {
-      await bucket.put(CATALOG_EN_R2_KEY, body, { httpMetadata: { contentType: 'application/json; charset=utf-8' } })
-        .catch((error) => console.error('catalogo EN: copia su R2 non salvata:', error));
+      await bucket.put(key, body, { httpMetadata: { contentType: 'application/json; charset=utf-8' } })
+        .catch((error) => console.error(`catalogo EN: copia su R2 di ${key} non salvata:`, error));
     }
     return new Response(body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': new Date().toISOString() } });
   } catch (error) {
     // D1 non risponde: meglio la copia vecchia che niente.
-    console.error('catalogo EN: catalogo completo non ricostruito:', error);
+    console.error(`catalogo EN: ${key} non ricostruito:`, error);
     if (stored) {
       return new Response(stored.body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': stored.uploaded.toISOString() } });
     }
-    return json({ error: 'English catalog not available' }, 503, MISSING_CACHE_CONTROL);
+    return json({ error: `${what} not available` }, 503, MISSING_CACHE_CONTROL);
   }
+}
+
+async function buildEnglishCatalog(db: D1Database): Promise<string> {
+  const { results } = await db
+    .prepare(
+      `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage, c.illustratore
+       FROM cards c JOIN expansions e ON e.id = c.expansion_id
+       WHERE e.published = 1
+         AND NOT EXISTS (SELECT 1 FROM takedowns t WHERE (t.target_type = 'card' AND t.target_id = c.card_id) OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id))
+       ORDER BY c.expansion_id, CAST(c.card_number AS INTEGER), c.card_number`
+    )
+    .all<D1CardRow>();
+  if (results.length === 0) throw new Error('nessuna carta pubblicata');
+
+  const variants = new Map<string, string[]>();
+  try {
+    const { results: rows } = await db
+      .prepare(
+        `SELECT v.card_id, v.variant FROM card_variants v JOIN cards c ON c.card_id = v.card_id
+         JOIN expansions e ON e.id = c.expansion_id
+         WHERE e.published = 1 ORDER BY v.card_id, v.kind, v.variant`
+      )
+      .all<{ card_id: string; variant: string }>();
+    for (const row of rows) {
+      const list = variants.get(row.card_id);
+      if (list) list.push(row.variant); else variants.set(row.card_id, [row.variant]);
+    }
+  } catch (error) {
+    console.error('catalogo EN: stampe illeggibili, il catalogo esce senza:', error);
+  }
+
+  return JSON.stringify({ cards: results.map((r) => mapCardRow(r, variants)) });
+}
+
+// Stessa forma di /v1/illustrators: per ogni nome grezzo le sue carte.
+async function buildEnglishIllustrators(db: D1Database): Promise<string> {
+  const takedownSql = `NOT EXISTS (SELECT 1 FROM takedowns t WHERE (t.target_type = 'card' AND t.target_id = c.card_id) OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id))`;
+  const { results } = await db
+    .prepare(
+      `SELECT c.illustratore AS name, c.card_id, c.expansion_id
+       FROM cards c JOIN expansions e ON e.id = c.expansion_id
+       WHERE e.published = 1 AND c.illustratore IS NOT NULL AND TRIM(c.illustratore) <> '' AND ${takedownSql}
+       ORDER BY c.illustratore`
+    )
+    .all<{ name: string; card_id: string; expansion_id: string }>();
+  if (results.length === 0) throw new Error('nessun illustratore');
+  const byName = new Map<string, { cardIds: string[]; expansions: Set<string> }>();
+  for (const row of results) {
+    const name = row.name.trim();
+    if (!name) continue;
+    let entry = byName.get(name);
+    if (!entry) {
+      entry = { cardIds: [], expansions: new Set() };
+      byName.set(name, entry);
+    }
+    entry.cardIds.push(row.card_id);
+    entry.expansions.add(row.expansion_id);
+  }
+  const illustrators = Array.from(byName.entries())
+    .map(([name, entry]) => ({ name, cardCount: entry.cardIds.length, expansionCount: entry.expansions.size, cardIds: entry.cardIds }))
+    .sort((a, b) => b.cardCount - a.cardCount || a.name.localeCompare(b.name));
+  const missing = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM cards c JOIN expansions e ON e.id = c.expansion_id
+       WHERE e.published = 1 AND (c.illustratore IS NULL OR TRIM(c.illustratore) = '') AND ${takedownSql}`
+    )
+    .first<{ n: number }>();
+  return JSON.stringify({ illustrators, cardsWithoutIllustrator: missing?.n ?? 0 });
 }
 
 /**
@@ -254,39 +307,8 @@ export async function handleEnglishCatalogRequest(request: Request, url: URL, en
       return serveEnglishCatalog(db, env.IMAGES_BUCKET);
 
     // Stessa forma di /v1/illustrators e /v1/illustrators/{nome}/cards.
-    case 'illustrators': {
-      const takedownSql = `NOT EXISTS (SELECT 1 FROM takedowns t WHERE (t.target_type = 'card' AND t.target_id = c.card_id) OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id))`;
-      const { results } = await db
-        .prepare(
-          `SELECT c.illustratore AS name, c.card_id, c.expansion_id
-           FROM cards c JOIN expansions e ON e.id = c.expansion_id
-           WHERE e.published = 1 AND c.illustratore IS NOT NULL AND TRIM(c.illustratore) <> '' AND ${takedownSql}
-           ORDER BY c.illustratore`
-        )
-        .all<{ name: string; card_id: string; expansion_id: string }>();
-      const byName = new Map<string, { cardIds: string[]; expansions: Set<string> }>();
-      for (const row of results) {
-        const name = row.name.trim();
-        if (!name) continue;
-        let entry = byName.get(name);
-        if (!entry) {
-          entry = { cardIds: [], expansions: new Set() };
-          byName.set(name, entry);
-        }
-        entry.cardIds.push(row.card_id);
-        entry.expansions.add(row.expansion_id);
-      }
-      const illustrators = Array.from(byName.entries())
-        .map(([name, entry]) => ({ name, cardCount: entry.cardIds.length, expansionCount: entry.expansions.size, cardIds: entry.cardIds }))
-        .sort((a, b) => b.cardCount - a.cardCount || a.name.localeCompare(b.name));
-      const missing = await db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM cards c JOIN expansions e ON e.id = c.expansion_id
-           WHERE e.published = 1 AND (c.illustratore IS NULL OR TRIM(c.illustratore) = '') AND ${takedownSql}`
-        )
-        .first<{ n: number }>();
-      return json({ illustrators, cardsWithoutIllustrator: missing?.n ?? 0 }, 200, CATALOG_CACHE_CONTROL);
-    }
+    case 'illustrators':
+      return serveCachedOnR2(env.IMAGES_BUCKET, ILLUSTRATORS_EN_R2_KEY, 'English illustrators', () => buildEnglishIllustrators(db));
 
     case 'illustratorCards': {
       const { results } = await db

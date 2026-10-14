@@ -2628,9 +2628,9 @@ object AppLocale {
     else
         "$cards catalog cards don't say who drew them and aren't listed here."
     fun illustratorsCollectionGap(cards: Int): String = if (isItalian)
-        "$cards carte della tua collezione non sono collegate al catalogo italiano e non contano nei progressi."
+        "$cards carte della tua collezione non sono collegate al catalogo e non contano nei progressi."
     else
-        "$cards cards in your collection aren't linked to the Italian catalog and don't count towards progress."
+        "$cards cards in your collection aren't linked to the catalog and don't count towards progress."
     val illustratorCompleteTitle: String get() = if (isItalian)
         "Collezione completa!"
     else
