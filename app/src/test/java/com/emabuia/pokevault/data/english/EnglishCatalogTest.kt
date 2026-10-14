@@ -210,4 +210,38 @@ class EnglishCatalogTest {
         assertEquals(listOf(191), repo.printedTotalsOf(ItalianExpansionSummary(id = "sv08", cardCount = 252, officialCount = 191)))
         assertEquals(listOf(30), repo.printedTotalsOf(ItalianExpansionSummary(id = "x", cardCount = 30)))
     }
+
+    private fun tcg(id: String, number: String, name: String) =
+        com.emabuia.pokevault.data.remote.TcgCard(id = id, number = number, name = name)
+
+    @Test
+    fun `decklist EN - le energie base si cercano anche senza Basic`() {
+        assertEquals(listOf("basic fire energy", "fire energy"), EnglishCatalogSearch.decklistNames("Basic Fire Energy"))
+        assertEquals(listOf("dragapult ex"), EnglishCatalogSearch.decklistNames("Dragapult ex"))
+        // "Basic" davanti a qualcosa che non e' un'energia resta com'e'.
+        assertEquals(listOf("basic ball"), EnglishCatalogSearch.decklistNames("Basic Ball"))
+    }
+
+    @Test
+    fun `decklist EN - stesso numero e, per i Pokemon, stesso nome`() {
+        val set = listOf(tcg("eng:sv06:130", "130", "Dragapult ex"), tcg("eng:sv06:131", "131", "Drakloak"))
+        assertEquals("eng:sv06:130", EnglishCatalogSearch.decklistMatch(set, "130", "Dragapult ex", requireNameMatch = true)?.id)
+        // Numero giusto, nome sbagliato: un Pokemon no, un Allenatore si'.
+        assertNull(EnglishCatalogSearch.decklistMatch(set, "130", "Pikachu", requireNameMatch = true))
+        assertEquals("eng:sv06:130", EnglishCatalogSearch.decklistMatch(set, "130", "Pikachu", requireNameMatch = false)?.id)
+        assertEquals("eng:sv06:131", EnglishCatalogSearch.decklistMatch(set, "0131", null, requireNameMatch = true)?.id)
+        assertNull(EnglishCatalogSearch.decklistMatch(set, null, "Drakloak", requireNameMatch = true))
+    }
+
+    @Test
+    fun `decklist EN - per nome il nome coincide e vince lo stesso numero`() {
+        val records = listOf(
+            ItalianCardRecord(cardId = "SV01_EN_5.webp", espansioneId = "sv01", nome = "Toucannon ex"),
+            ItalianCardRecord(cardId = "SV03_EN_9.webp", espansioneId = "sv03", nome = "Toucannon"),
+            ItalianCardRecord(cardId = "SV05_EN_12.webp", espansioneId = "sv05", nome = "Toucannon")
+        )
+        val names = EnglishCatalogSearch.normalizedNames(records)
+        val found = EnglishCatalogSearch.decklistByName(records, listOf("toucannon"), names, "12").map { it.cardId }
+        assertEquals(listOf("SV05_EN_12.webp", "SV03_EN_9.webp"), found)
+    }
 }
