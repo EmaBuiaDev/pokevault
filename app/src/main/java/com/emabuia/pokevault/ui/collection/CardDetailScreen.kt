@@ -280,8 +280,11 @@ fun CardDetailScreen(
             return@LaunchedEffect
         }
 
-        val cached = livePriceCacheByApiId[selected.apiCardId]
-        if (cached != null || livePriceCacheByApiId.containsKey(selected.apiCardId)) {
+        // Per carta E stampa: due copie della stessa carta (Normale e Reverse)
+        // hanno lo stesso apiCardId ma prezzo e link diversi.
+        val cacheKey = "${selected.apiCardId}|${selected.variant}"
+        val cached = livePriceCacheByApiId[cacheKey]
+        if (cached != null || livePriceCacheByApiId.containsKey(cacheKey)) {
             livePrices = cached
             isLoadingLivePrices = false
             return@LaunchedEffect
@@ -289,16 +292,27 @@ fun CardDetailScreen(
 
         isLoadingLivePrices = true
 
-        // Carta del catalogo inglese: il listino EN e basta. PokeWallet, cercato
-        // col nome del set, costerebbe una chiamata e darebbe un prezzo a caso.
-        if (CardRef.isCatalogCard(selected.apiCardId, CatalogLang.EN)) {
-            val english = runCatching {
-                RepositoryProvider.englishPriceSnapshotRepository.priceForItalianCard(context, selected.apiCardId)
+        // Carta del catalogo (italiano o inglese): il nostro listino, con prezzo
+        // e link della stampa della copia, la stessa fonte del Pokedex. Prima
+        // il dettaglio in Collezione mostrava la voce base anche per una
+        // Reverse o una timbrata, e per le italiane passava da PokeWallet.
+        val catalogLang = CardRef.langOf(selected.apiCardId)
+        if (catalogLang != null) {
+            val snapshot = runCatching {
+                RepositoryProvider.priceSnapshotRepositoryFor(selected.apiCardId)
+                    .priceForItalianCard(context, selected.apiCardId)
             }.getOrNull()
-            livePriceCacheByApiId[selected.apiCardId] = english
-            livePrices = english
-            isLoadingLivePrices = false
-            return@LaunchedEffect
+            // L'inglese ha solo il listino: PokeWallet, cercato col nome del
+            // set, costerebbe una chiamata e darebbe un prezzo a caso. Una
+            // italiana che il listino non conosce (o conosce senza prezzi in
+            // euro) prende la strada di prima, per non perdere niente.
+            if (catalogLang == CatalogLang.EN || snapshot?.hasEurPrices == true) {
+                val shown = snapshot?.forCopy(selected.variant)
+                livePriceCacheByApiId[cacheKey] = shown
+                livePrices = shown
+                isLoadingLivePrices = false
+                return@LaunchedEffect
+            }
         }
 
         val remoteCard = tcgRepository.getCard(selected.apiCardId).getOrNull()
@@ -336,7 +350,7 @@ fun CardDetailScreen(
         }
 
         val resolved = mergePriceData(primary = localPriceData, fallback = enriched)
-        livePriceCacheByApiId[selected.apiCardId] = resolved
+        livePriceCacheByApiId[cacheKey] = resolved
         livePrices = resolved
         isLoadingLivePrices = false
     }
