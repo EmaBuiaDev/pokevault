@@ -144,6 +144,60 @@ internal object EnglishCatalogSearch {
             .take(limit.coerceIn(1, 300))
     }
 
+    /** Sotto questo punteggio il nome letto non e' quello della carta (come per l'italiano). */
+    const val SCANNER_MIN_NAME_SCORE = 36
+
+    /**
+     * I candidati dello scanner nel catalogo EN, con le regole della ricerca
+     * italiana: il numero filtra, il set letto (se c'e') filtra, il nome
+     * conferma e il totale stampato decide fra espansioni. Se il nome sporco
+     * scarta tutto ma il numero c'e', si riprova senza il nome.
+     */
+    fun scannerCandidates(
+        records: List<ItalianCardRecord>,
+        names: List<String>,
+        name: String?,
+        number: String?,
+        setTotal: String?,
+        targetExpansions: Set<String>?,
+        totalsByExpansion: Map<String, List<Int>>,
+        limit: Int
+    ): List<ItalianCardRecord> {
+        val wantedNumber = number?.trim()?.trimStart('0')?.ifBlank { "0" }
+        val wantedName = CardNameMatch.normalize(name)
+        if (wantedNumber.isNullOrBlank() && wantedName.isBlank()) return emptyList()
+        val wantedTotal = setTotal?.toIntOrNull()
+
+        val base = records.indices.filter { index ->
+            val record = records[index]
+            val numberOk = wantedNumber.isNullOrBlank() ||
+                numberOf(record).trimStart('0').ifBlank { "0" }.equals(wantedNumber, ignoreCase = true)
+            numberOk && (targetExpansions == null || record.espansioneId.trim().lowercase(Locale.ROOT) in targetExpansions)
+        }
+
+        fun rank(nameGate: Boolean): List<ItalianCardRecord> = base.mapNotNull { index ->
+            val record = records[index]
+            val nameScore = CardNameMatch.scannerScore(names[index], wantedName)
+            if (nameGate && wantedName.isNotBlank() && nameScore < SCANNER_MIN_NAME_SCORE) return@mapNotNull null
+            var score = nameScore
+            val totals = totalsByExpansion[record.espansioneId.trim().lowercase(Locale.ROOT)].orEmpty().filter { it > 0 }
+            if (wantedTotal != null && totals.isNotEmpty()) {
+                score += when {
+                    totals.any { it == wantedTotal } -> 90
+                    totals.any { kotlin.math.abs(it - wantedTotal) <= 2 } -> 25
+                    else -> -45
+                }
+            }
+            record to score
+        }.sortedWith(
+            compareByDescending<Pair<ItalianCardRecord, Int>> { it.second }
+                .thenBy { it.first.espansioneId }
+        ).take(limit.coerceIn(1, 20)).map { it.first }
+
+        val gated = rank(nameGate = true)
+        return if (gated.isEmpty() && wantedName.isNotBlank() && !wantedNumber.isNullOrBlank()) rank(nameGate = false) else gated
+    }
+
     private fun numberOf(record: ItalianCardRecord): String =
         EnglishCatalogIds.reference(record.cardId)?.cardNumber.orEmpty()
 }
@@ -322,6 +376,36 @@ class EnglishCatalogRepository(
         return runCatching {
             withContext(Dispatchers.Default) {
                 EnglishCatalogSearch.byNumber(records, number, printedTotal, totals, limit).mapNotNull { toSearchCard(it, summaries) }
+            }
+        }
+    }
+
+    /**
+     * I candidati dello scanner fra le carte inglesi (Fase 4). [setHint] e' il
+     * codice del set letto sulla carta ("SSP"), se c'e': vale come filtro
+     * sull'abbreviazione o sull'id dell'espansione.
+     */
+    suspend fun scannerCandidates(
+        context: Context,
+        name: String?,
+        number: String?,
+        setTotal: String?,
+        setHint: String?,
+        limit: Int = 10
+    ): Result<List<TcgCard>> {
+        if (!isEnabled) return Result.success(emptyList())
+        val records = getAllCards(context).getOrElse { return Result.failure(it) }
+        val summaries = getExpansions(context).getOrNull().orEmpty()
+        val totals = summaries.associate { it.id.lowercase(Locale.ROOT) to listOfNotNull(it.officialCount, it.cardCount) }
+        val hint = setHint?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotBlank() }
+        val targets = hint?.let { h ->
+            summaries.filter { it.id.equals(h, ignoreCase = true) || it.abbreviation?.equals(h, ignoreCase = true) == true }
+                .map { it.id.lowercase(Locale.ROOT) }.toSet().takeIf { it.isNotEmpty() }
+        }
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                EnglishCatalogSearch.scannerCandidates(records, namesFor(records), name, number, setTotal, targets, totals, limit)
+                    .mapNotNull { toSearchCard(it, summaries) }
             }
         }
     }

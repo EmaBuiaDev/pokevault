@@ -455,8 +455,9 @@ object AppLocale {
         "Hanno lo stesso numero: cambia l'espansione."
     else
         "Same number, different set."
-    val scannerModeContinuous: String get() = if (isItalian) "Continuo" else "Continuous"
-    val scannerModeConfirm: String get() = if (isItalian) "A conferma" else "Confirm each"
+    val scannerModeContinuous: String get() = if (isItalian) "Automatico" else "Automatic"
+    val scannerLanguageAuto: String get() = if (isItalian) "🌐 Lingua: auto" else "🌐 Language: auto"
+    val scannerModeConfirm: String get() = if (isItalian) "Conferma" else "Confirm"
     val scannerManualSearch: String get() = if (isItalian) "Cercala a mano" else "Search by hand"
     val scannerCantFind: String get() = if (isItalian) "Non è tra queste?" else "Not listed?"
     val scannerRetryRejected: String get() = if (isItalian) "Riproponi tutte" else "Show them again"

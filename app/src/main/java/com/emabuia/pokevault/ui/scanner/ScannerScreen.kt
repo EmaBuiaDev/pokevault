@@ -104,7 +104,11 @@ import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.ui.pip.LocalInPictureInPicture
 import com.emabuia.pokevault.ui.pip.PictureInPictureWhenLeaving
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.viewmodel.ScanLanguage
 import com.emabuia.pokevault.viewmodel.ScanState
+import com.emabuia.pokevault.data.catalog.CatalogLang
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import com.emabuia.pokevault.viewmodel.ScannerViewModel
 import kotlinx.coroutines.delay
 import java.util.concurrent.Executor
@@ -364,7 +368,10 @@ fun ScannerScreen(
                     condition = state.condition,
                     onConditionSelected = { viewModel.setCondition(it) },
                     continuousMode = state.continuousMode,
-                    onToggleContinuous = { viewModel.toggleContinuousMode() }
+                    onContinuousChange = { viewModel.setContinuousMode(it) },
+                    englishAvailable = state.englishAvailable,
+                    scanLanguage = state.scanLanguage,
+                    onScanLanguageSelected = { viewModel.setScanLanguage(it) }
                 )
             }
 
@@ -400,7 +407,11 @@ fun ScannerScreen(
                 // Lettura in corso: mostrare ID e nome appena letti dice all utente
                 // se deve solo aspettare o se deve avvicinare la carta.
                 if (idle && (state.detectedNumber.isNotBlank() || state.detectedName.isNotBlank())) {
-                    LiveReadout(id = state.detectedNumber, name = state.detectedName)
+                    LiveReadout(
+                        id = state.detectedNumber,
+                        name = state.detectedName,
+                        languageFlag = if (state.englishAvailable) state.detectedLanguage?.let(::scanFlag) else null
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
@@ -545,7 +556,7 @@ private fun PipAddedCounter(
  * che la ricerca finisca. Il nome lo accompagna, senza rubargli il posto.
  */
 @Composable
-private fun LiveReadout(id: String, name: String) {
+private fun LiveReadout(id: String, name: String, languageFlag: String? = null) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
@@ -576,8 +587,15 @@ private fun LiveReadout(id: String, name: String) {
                 overflow = TextOverflow.Ellipsis
             )
         }
+        // La lingua letta sul testo: dice in che catalogo si cerchera'.
+        if (languageFlag != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = languageFlag, fontSize = 13.sp)
+        }
     }
 }
+
+private fun scanFlag(lang: CatalogLang): String = if (lang == CatalogLang.EN) "🇬🇧" else "🇮🇹"
 
 /** Dato secondario di una carta: numero, rarita', HP, prezzo. */
 @Composable
@@ -611,23 +629,88 @@ private fun ScannerControls(
     condition: String,
     onConditionSelected: (String) -> Unit,
     continuousMode: Boolean,
-    onToggleContinuous: () -> Unit
+    onContinuousChange: (Boolean) -> Unit,
+    englishAvailable: Boolean,
+    scanLanguage: ScanLanguage,
+    onScanLanguageSelected: (ScanLanguage) -> Unit
 ) {
+    // Scorre se non ci sta: su un telefono stretto tre controlli in riga
+    // non devono finire tagliati.
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         ConditionSelector(condition = condition, onSelected = onConditionSelected)
+        if (englishAvailable) {
+            ScanLanguageSelector(selected = scanLanguage, onSelected = onScanLanguageSelected)
+        }
+        ScanModeSwitch(continuousMode = continuousMode, onChange = onContinuousChange)
+    }
+}
 
-        ScannerChip(
-            text = if (continuousMode) AppLocale.scannerModeContinuous else AppLocale.scannerModeConfirm,
-            highlighted = continuousMode,
-            icon = if (continuousMode) Icons.Default.Check else null,
-            onClick = onToggleContinuous
-        )
+/**
+ * Le due modalita', tutte e due a vista: prima era una pillola sola che
+ * mostrava la modalita' attiva ("Continuo"), e non si capiva se dicesse lo
+ * stato o cosa sarebbe successo toccandola.
+ */
+@Composable
+private fun ScanModeSwitch(continuousMode: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.Black.copy(alpha = 0.55f))
+            .padding(2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        listOf(false to AppLocale.scannerModeConfirm, true to AppLocale.scannerModeContinuous).forEach { (auto, label) ->
+            val selected = auto == continuousMode
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (selected) AppColors.blue.copy(alpha = 0.85f) else Color.Transparent)
+                    .clickable { onChange(auto) }
+                    .padding(horizontal = 11.dp, vertical = 5.dp)
+            )
+        }
+    }
+}
+
+/** In che catalogo cercare: dalla lingua letta sulla carta, o solo uno dei due. */
+@Composable
+private fun ScanLanguageSelector(selected: ScanLanguage, onSelected: (ScanLanguage) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    fun label(language: ScanLanguage) = when (language) {
+        ScanLanguage.AUTO -> AppLocale.scannerLanguageAuto
+        ScanLanguage.IT -> "🇮🇹 Italiano"
+        ScanLanguage.EN -> "🇬🇧 English"
+    }
+    Box {
+        ScannerChip(text = label(selected) + "  ▾", highlighted = false, onClick = { expanded = true })
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ScanLanguage.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(label(option), fontSize = 14.sp) },
+                    onClick = {
+                        onSelected(option)
+                        expanded = false
+                    },
+                    leadingIcon = if (option == selected) {
+                        { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                    } else {
+                        null
+                    }
+                )
+            }
+        }
     }
 }
 

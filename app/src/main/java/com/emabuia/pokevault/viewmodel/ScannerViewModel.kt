@@ -18,6 +18,8 @@ import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.remote.SetCodeMapper
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.ocr.CardFieldParser
+import com.emabuia.pokevault.ocr.CardLanguageDetector
+import com.emabuia.pokevault.ocr.LanguageVotes
 import com.emabuia.pokevault.ocr.CardOCRResult
 import com.emabuia.pokevault.ocr.CardReading
 import com.emabuia.pokevault.ocr.ScanAggregator
@@ -113,8 +115,14 @@ data class ScannerUiState(
     val notFound: Boolean = false,
     /** Si sono scartate tutte le carte proponibili: si possono riproporre. */
     val canRetryRejected: Boolean = false,
-    /** Prezzo dallo snapshot italiano per id carta, per chi non ne porta uno suo. */
-    val snapshotPrices: Map<String, Double> = emptyMap()
+    /** Prezzo dallo snapshot (italiano o inglese) per id carta, per chi non ne porta uno suo. */
+    val snapshotPrices: Map<String, Double> = emptyMap(),
+    /** Dove l'inglese e' acceso: si puo' scegliere in che catalogo cercare. */
+    val englishAvailable: Boolean = false,
+    /** In che catalogo cercare: dalla lingua letta sulla carta, o fissato. */
+    val scanLanguage: ScanLanguage = ScanLanguage.AUTO,
+    /** La lingua che il testo della carta inquadrata fa pensare, se si capisce. */
+    val detectedLanguage: CatalogLang? = null
 ) {
     /** Il prezzo da mostrare per una carta proposta: il suo, se no lo snapshot. */
     fun priceOf(card: TcgCard): Double =
@@ -135,6 +143,32 @@ data class ScannerUiState(
         }
 }
 
+/** In che catalogo cerca lo scanner: dalla lingua letta sulla carta, o solo in uno. */
+enum class ScanLanguage { AUTO, IT, EN }
+
+/**
+ * I cataloghi in cui cercare, in ordine. Con AUTO prima la lingua letta sulla
+ * carta (o, se non si capisce, quella dell'app), poi l'altra: un set che
+ * esiste in una lingua sola si trova lo stesso. Con IT o EN solo quello.
+ * Dove l'inglese e' spento, solo l'italiano: lo scanner di sempre.
+ */
+internal fun scannerCatalogOrder(
+    mode: ScanLanguage,
+    detected: CatalogLang?,
+    appDefault: CatalogLang,
+    englishEnabled: Boolean
+): List<CatalogLang> {
+    if (!englishEnabled) return listOf(CatalogLang.IT)
+    return when (mode) {
+        ScanLanguage.IT -> listOf(CatalogLang.IT)
+        ScanLanguage.EN -> listOf(CatalogLang.EN)
+        ScanLanguage.AUTO -> {
+            val first = detected ?: appDefault
+            listOf(first, if (first == CatalogLang.IT) CatalogLang.EN else CatalogLang.IT)
+        }
+    }
+}
+
 /**
  * Orchestratore dello scanner: riceve i frame, decide quando i dati sono
  * abbastanza solidi per cercare, e porta in collezione la carta scelta.
@@ -147,6 +181,10 @@ data class ScannerUiState(
 class ScannerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = RepositoryProvider.tcgRepository
+    private val englishCatalog = RepositoryProvider.englishCatalogRepository
+
+    /** I voti dei fotogrammi recenti sulla lingua della carta. */
+    private val languageVotes = LanguageVotes()
     private val firestoreRepository = FirestoreRepository()
     private val appContext: Application get() = getApplication()
     private var searchJob: Job? = null
@@ -189,7 +227,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private var stickyHint: String? = null
     private var stickyHintUntil = 0L
 
-    var uiState by mutableStateOf(ScannerUiState())
+    var uiState by mutableStateOf(ScannerUiState(englishAvailable = RepositoryProvider.englishCatalogRepository.isEnabled))
         private set
 
     // ═══════════════════════════════════════════
@@ -215,7 +253,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         // ms), ma lo stato si tocca solo dal main: viewModelScope usa
         // Dispatchers.Main, cosi' le scritture di uiState restano serializzate.
         val ocrResult = CardFieldParser.parseFrame(frame)
-        viewModelScope.launch { onCardRead(ocrResult) }
+        val language = if (uiState.englishAvailable) CardLanguageDetector.detect(frame.fullText) else null
+        viewModelScope.launch { onCardRead(ocrResult, language) }
     }
 
     /**
@@ -250,10 +289,13 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    private fun onCardRead(ocrResult: CardOCRResult) {
+    private fun onCardRead(ocrResult: CardOCRResult, language: CatalogLang? = null) {
         if (uiState.pendingCard != null || uiState.candidateCards.isNotEmpty() || uiState.lastAddedCard != null) return
 
         emptyFrames = 0
+        languageVotes.record(language)
+        val detected = languageVotes.winner()
+        if (detected != uiState.detectedLanguage) uiState = uiState.copy(detectedLanguage = detected)
 
         val now = System.currentTimeMillis()
         aggregator.record(
@@ -341,16 +383,21 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 "Ricerca scanner ITA: name=${consensus.name} number=${consensus.number} " +
                     "total=${consensus.setTotal} set=$normalizedSetHint"
             )
-            val candidates = repository.searchItalianScannerCandidates(
-                name = consensus.name,
-                number = consensus.number,
-                setTotal = consensus.setTotal,
-                targetSetId = normalizedSetHint,
-                context = appContext,
-                limit = CANDIDATE_POOL_SIZE
-            ).getOrDefault(emptyList())
-
-            val viable = rejections.viable(candidates) { it.id }
+            // Il catalogo della lingua letta per primo; se li' non c'e' niente,
+            // l'altro (set che esistono in una lingua sola).
+            val order = scannerCatalogOrder(
+                mode = uiState.scanLanguage,
+                detected = uiState.detectedLanguage,
+                appDefault = if (AppLocale.current == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT,
+                englishEnabled = uiState.englishAvailable
+            )
+            var candidates: List<TcgCard> = emptyList()
+            var viable: List<TcgCard> = emptyList()
+            for (lang in order) {
+                candidates = candidatesIn(lang, consensus, normalizedSetHint)
+                viable = rejections.viable(candidates) { it.id }
+                if (viable.isNotEmpty()) break
+            }
             if (viable.isEmpty()) {
                 val allRejected = candidates.isNotEmpty()
                 uiState = uiState.copy(
@@ -455,6 +502,27 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    private suspend fun candidatesIn(lang: CatalogLang, consensus: ScanConsensus, setHint: String?): List<TcgCard> =
+        if (lang == CatalogLang.EN) {
+            englishCatalog.scannerCandidates(
+                context = appContext,
+                name = consensus.name,
+                number = consensus.number,
+                setTotal = consensus.setTotal,
+                setHint = setHint,
+                limit = CANDIDATE_POOL_SIZE
+            ).onFailure { Timber.w(it, "Scanner: catalogo EN non disponibile") }.getOrDefault(emptyList())
+        } else {
+            repository.searchItalianScannerCandidates(
+                name = consensus.name,
+                number = consensus.number,
+                setTotal = consensus.setTotal,
+                targetSetId = setHint,
+                context = appContext,
+                limit = CANDIDATE_POOL_SIZE
+            ).getOrDefault(emptyList())
+        }
+
     /** Messaggio che dice cosa manca, non solo che non ha trovato niente. */
     private fun emptyResultMessage(consensus: ScanConsensus, hadCandidates: Boolean): String {
         return when {
@@ -505,13 +573,13 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun loadSnapshotPrices(cards: List<TcgCard>) {
         val missing = cards.map { it.id }
-            .filter { CardRef.isCatalogCard(it, CatalogLang.IT) && it !in uiState.snapshotPrices }
+            .filter { CardRef.langOf(it) != null && it !in uiState.snapshotPrices }
             .distinct()
         if (missing.isEmpty()) return
         viewModelScope.launch {
             val found = missing
                 .associateWith { id ->
-                    RepositoryProvider.italianPriceSnapshotRepository
+                    RepositoryProvider.priceSnapshotRepositoryFor(id)
                         .priceForItalianCard(appContext, id)
                         .minimumEurOrZero()
                 }
@@ -638,7 +706,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         // Dove lo snapshot conosce la carta vale il prezzo della STAMPA scelta
         // (una Reverse non costa quanto la Normale); altrimenti quello della
         // carta, come prima.
-        val italianPrices = RepositoryProvider.italianPriceSnapshotRepository
+        // Il listino della lingua della carta: EN per "eng:", italiano per le altre.
+        val italianPrices = RepositoryProvider.priceSnapshotRepositoryFor(resolvedCard.id)
             .priceForItalianCard(appContext, resolvedCard.id)
         val price = if (italianPrices != null) {
             italianPrices.forVariant(variant).minimumEurOrZero()
@@ -665,7 +734,12 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             apiCardId = resolvedCard.id,
             cardNumber = resolvedCard.number,
             variant = variant
-        )
+        ).let { card ->
+            // Una carta inglese entra come inglese. Le italiane restano con la
+            // lingua di sempre: cambiarla farebbe nascere una riga nuova invece
+            // di sommare le copie gia' scansionate.
+            if (CardRef.langOf(resolvedCard.id) == CatalogLang.EN) card.copy(language = CatalogLang.EN.copyLanguageLabel) else card
+        }
 
         // La quantita' non si somma qui: addCard riconosce la carta gia' in
         // collezione (stesso apiCardId, variante e lingua) e incrementa la riga.
@@ -711,6 +785,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     private fun resetStability() {
         activeSearchKey = ""
         aggregator.reset()
+        languageVotes.reset()
         firstFrameWithoutIdAt = 0L
         recentSearchAttempts.clear()
     }
@@ -743,6 +818,17 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         uiState = uiState.copy(continuousMode = !uiState.continuousMode)
     }
 
+    fun setContinuousMode(enabled: Boolean) {
+        if (enabled != uiState.continuousMode) uiState = uiState.copy(continuousMode = enabled)
+    }
+
+    /** Il catalogo in cui cercare; si rilegge la carta inquadrata da capo. */
+    fun setScanLanguage(language: ScanLanguage) {
+        if (language == uiState.scanLanguage) return
+        uiState = uiState.copy(scanLanguage = language)
+        resetStability()
+    }
+
     fun resetScanner() {
         rejections.clear()
         searchJob?.cancel()
@@ -755,7 +841,9 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             flashEnabled = uiState.flashEnabled,
             condition = uiState.condition,
             continuousMode = uiState.continuousMode,
-            addedCount = uiState.addedCount
+            addedCount = uiState.addedCount,
+            englishAvailable = uiState.englishAvailable,
+            scanLanguage = uiState.scanLanguage
         )
     }
 

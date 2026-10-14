@@ -1988,52 +1988,8 @@ class CatalogRepository {
         queryTokens: List<String>
     ): Int = CardNameMatch.score(normalizedName, normalizedQuery, queryTokens)
 
-    private fun scannerNameScore(normalizedName: String, normalizedQuery: String): Int {
-        if (normalizedQuery.isBlank()) return 0
-        if (normalizedName == normalizedQuery) return 120
-        if (normalizedName.startsWith(normalizedQuery) || normalizedQuery.startsWith(normalizedName)) return 105
-        if (normalizedName.contains(normalizedQuery) || normalizedQuery.contains(normalizedName)) return 88
-
-        val queryTokens = normalizedQuery.split(" ").filter { it.length >= 2 }
-        val nameTokens = normalizedName.split(" ").filter { it.length >= 2 }
-        if (queryTokens.isNotEmpty() && queryTokens.all { token -> nameTokens.any { it.contains(token) || token.contains(it) } }) {
-            return 72
-        }
-
-        val distance = levenshteinDistance(normalizedName, normalizedQuery)
-        val maxLength = maxOf(normalizedName.length, normalizedQuery.length).coerceAtLeast(1)
-        val similarity = 1.0 - distance.toDouble() / maxLength.toDouble()
-        return when {
-            similarity >= 0.82 -> 68
-            similarity >= 0.72 -> 52
-            similarity >= 0.62 -> 36
-            else -> 0
-        }
-    }
-
-    private fun levenshteinDistance(left: String, right: String): Int {
-        if (left == right) return 0
-        if (left.isEmpty()) return right.length
-        if (right.isEmpty()) return left.length
-
-        val previous = IntArray(right.length + 1) { it }
-        val current = IntArray(right.length + 1)
-
-        for (leftIndex in left.indices) {
-            current[0] = leftIndex + 1
-            for (rightIndex in right.indices) {
-                val substitutionCost = if (left[leftIndex] == right[rightIndex]) 0 else 1
-                current[rightIndex + 1] = minOf(
-                    current[rightIndex] + 1,
-                    previous[rightIndex + 1] + 1,
-                    previous[rightIndex] + substitutionCost
-                )
-            }
-            previous.indices.forEach { index -> previous[index] = current[index] }
-        }
-
-        return previous[right.length]
-    }
+    private fun scannerNameScore(normalizedName: String, normalizedQuery: String): Int =
+        CardNameMatch.scannerScore(normalizedName, normalizedQuery)
 
     private suspend fun searchCardsFromLocalCache(query: String): List<TcgCard> {
         if (query.isBlank()) return emptyList()

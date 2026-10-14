@@ -160,4 +160,35 @@ class EnglishCatalogTest {
         val names = EnglishCatalogSearch.normalizedNames(records)
         assertEquals(EnglishCatalogSearch.byName(records, "pika", 300), EnglishCatalogSearch.byName(records, "pika", 300, names))
     }
+
+    private val scanRecords = listOf(
+        ItalianCardRecord(cardId = "SV08_EN_25.webp", espansioneId = "sv08", nome = "Pikachu"),
+        ItalianCardRecord(cardId = "SV01_EN_25.webp", espansioneId = "sv01", nome = "Sprigatito"),
+        ItalianCardRecord(cardId = "SV03_EN_25.webp", espansioneId = "sv03", nome = "Pikachu"),
+        ItalianCardRecord(cardId = "SV08_EN_26.webp", espansioneId = "sv08", nome = "Raichu")
+    )
+    private val scanNames = EnglishCatalogSearch.normalizedNames(scanRecords)
+    private val scanTotals = mapOf("sv08" to listOf(191), "sv01" to listOf(198), "sv03" to listOf(197))
+
+    private fun scan(name: String?, number: String?, total: String?, targets: Set<String>? = null) =
+        EnglishCatalogSearch.scannerCandidates(scanRecords, scanNames, name, number, total, targets, scanTotals, 10).map { it.cardId }
+
+    @Test
+    fun `scanner EN - numero e totale scelgono l'espansione`() {
+        assertEquals("SV08_EN_25.webp", scan("Pikachu", "025", "191").first())
+        assertEquals("SV03_EN_25.webp", scan("Pikachu", "25", "197").first())
+    }
+
+    @Test
+    fun `scanner EN - il nome scarta le carte sbagliate, ma se scarta tutto vale il numero`() {
+        assertEquals(listOf("SV08_EN_25.webp", "SV03_EN_25.webp").toSet(), scan("Pikachu", "25", null).toSet())
+        // Nome illeggibile: restano le carte col numero giusto.
+        assertEquals(3, scan("Xqzzv", "25", null).size)
+    }
+
+    @Test
+    fun `scanner EN - il set letto sulla carta filtra`() {
+        assertEquals(listOf("SV01_EN_25.webp"), scan(null, "25", null, targets = setOf("sv01")))
+        assertTrue(scan(null, null, null).isEmpty())
+    }
 }
