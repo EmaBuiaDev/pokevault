@@ -2697,6 +2697,8 @@ object AppLocale {
         "Every card by one artist"
     val collectorNewAlbum: String get() = if (isItalian) "Nuovo album" else "New album"
     val collectorNewChase: String get() = if (isItalian) "Nuovo chase" else "New chase"
+    val collectorContinue: String get() = if (isItalian) "Continua" else "Keep going"
+    val collectorArtistsShort: String get() = if (isItalian) "Artisti" else "Artists"
     val collectorAlbumEmptyHint: String get() = if (isItalian)
         "Metti in pagina le carte che hai, come in un raccoglitore vero."
     else
