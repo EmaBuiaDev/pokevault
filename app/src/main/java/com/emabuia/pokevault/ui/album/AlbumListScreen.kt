@@ -277,8 +277,7 @@ internal data class NextStep(
     val name: String,
     val owned: Int,
     val total: Int,
-    val percent: Float,
-    val previewUrls: List<String>
+    val percent: Float
 ) {
     val missing: Int get() = (total - owned).coerceAtLeast(0)
 }
@@ -300,23 +299,17 @@ internal fun pickContinueSteps(
 ): List<NextStep> {
     val fromAlbums = albums
         .filter { it.size > 0 && it.used > 0 && !it.isFull }
-        .map { NextStep(NextStepKind.ALBUM, it.id, it.name, it.used, it.size, it.fillPercent, it.previewUrls) }
+        .map { NextStep(NextStepKind.ALBUM, it.id, it.name, it.used, it.size, it.fillPercent) }
     val fromChases = chases
         .filter { it.total > 0 && it.owned > 0 && !it.isComplete }
-        .map { NextStep(NextStepKind.CHASE, it.id, it.name, it.owned, it.total, it.percent, emptyList()) }
+        .map { NextStep(NextStepKind.CHASE, it.id, it.name, it.owned, it.total, it.percent) }
     val fromIllustrators = illustrators
         .filter { it.owned > 0 && !it.isComplete }
-        .map {
-            NextStep(NextStepKind.ILLUSTRATOR, it.key, it.displayName, it.owned, it.total, it.percent, it.previewUrls)
-        }
+        .map { NextStep(NextStepKind.ILLUSTRATOR, it.key, it.displayName, it.owned, it.total, it.percent) }
     return (fromAlbums + fromChases + fromIllustrators)
         .sortedWith(compareBy<NextStep> { it.missing }.thenByDescending { it.percent })
         .take(limit)
 }
-
-/** Il primo passo fra chase e illustratori (la regola di [pickContinueSteps]). */
-internal fun pickNextStep(chases: List<ChaseRow>, illustrators: List<IllustratorRow>): NextStep? =
-    pickContinueSteps(emptyList(), chases, illustrators, limit = 1).firstOrNull()
 
 @Composable
 private fun NextStepKind.accent(): Color = when (this) {

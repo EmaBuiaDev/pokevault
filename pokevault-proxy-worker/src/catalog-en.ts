@@ -86,7 +86,24 @@ async function serveR2(bucket: R2Bucket | undefined, keys: string[]): Promise<Re
  * senza che ogni apertura dell'app costi la quota.
  */
 async function serveEnglishCatalog(db: D1Database, bucket: R2Bucket | undefined): Promise<Response> {
-  return serveCachedOnR2(bucket, CATALOG_EN_R2_KEY, 'English catalog', () => buildEnglishCatalog(db));
+  return serveCachedOnR2(bucket, CATALOG_EN_R2_KEY, 'English catalog', () => buildEnglishCatalog(db), () => takedownsSignature(db));
+}
+
+/**
+ * Quanti takedown ci sono e quando e' arrivato l'ultimo: se cambia, le copie
+ * su R2 si rifanno subito invece di aspettare le 6 ore. Legge solo la tabella
+ * dei takedown (poche righe). Null se non si legge: la copia resta valida.
+ */
+async function takedownsSignature(db: D1Database): Promise<string | null> {
+  try {
+    const row = await db
+      .prepare('SELECT COUNT(*) AS n, COALESCE(MAX(created_at), 0) AS last FROM takedowns')
+      .first<{ n: number; last: number }>();
+    return row ? `${row.n}:${row.last}` : null;
+  } catch (error) {
+    console.error('catalogo EN: takedown illeggibili:', error);
+    return null;
+  }
 }
 
 /**
@@ -98,7 +115,8 @@ async function serveCachedOnR2(
   bucket: R2Bucket | undefined,
   key: string,
   what: string,
-  build: () => Promise<string>
+  build: () => Promise<string>,
+  signature: () => Promise<string | null> = async () => null
 ): Promise<Response> {
   const headers = {
     'Content-Type': 'application/json; charset=utf-8',
@@ -106,13 +124,19 @@ async function serveCachedOnR2(
     'Cache-Control': CATALOG_CACHE_CONTROL,
   };
   const stored = bucket ? await bucket.get(key).catch(() => null) : null;
-  if (stored && Date.now() - stored.uploaded.getTime() < CATALOG_EN_MAX_AGE_MS) {
+  const currentSignature = await signature();
+  const storedSignature = stored?.customMetadata?.signature ?? null;
+  const signatureChanged = currentSignature !== null && storedSignature !== currentSignature;
+  if (stored && !signatureChanged && Date.now() - stored.uploaded.getTime() < CATALOG_EN_MAX_AGE_MS) {
     return new Response(stored.body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': stored.uploaded.toISOString() } });
   }
   try {
     const body = await build();
     if (bucket) {
-      await bucket.put(key, body, { httpMetadata: { contentType: 'application/json; charset=utf-8' } })
+      await bucket.put(key, body, {
+        httpMetadata: { contentType: 'application/json; charset=utf-8' },
+        customMetadata: currentSignature ? { signature: currentSignature } : undefined,
+      })
         .catch((error) => console.error(`catalogo EN: copia su R2 di ${key} non salvata:`, error));
     }
     return new Response(body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': new Date().toISOString() } });
@@ -308,7 +332,7 @@ export async function handleEnglishCatalogRequest(request: Request, url: URL, en
 
     // Stessa forma di /v1/illustrators e /v1/illustrators/{nome}/cards.
     case 'illustrators':
-      return serveCachedOnR2(env.IMAGES_BUCKET, ILLUSTRATORS_EN_R2_KEY, 'English illustrators', () => buildEnglishIllustrators(db));
+      return serveCachedOnR2(env.IMAGES_BUCKET, ILLUSTRATORS_EN_R2_KEY, 'English illustrators', () => buildEnglishIllustrators(db), () => takedownsSignature(db));
 
     case 'illustratorCards': {
       const { results } = await db

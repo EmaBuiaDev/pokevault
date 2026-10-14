@@ -1617,12 +1617,13 @@ class CatalogRepository {
     }
 
     suspend fun getCard(cardId: String, preferNetwork: Boolean = false): Result<TcgCard> = cardByIdMutex.withLock {
-        // Carta del catalogo inglese: solo le carte EN gia' caricate. Mai la
-        // rete verso PokeWallet, dove "eng:sv08:1" costerebbe una chiamata a vuoto.
+        // Carta del catalogo inglese: dal catalogo EN, caricando il suo set se
+        // serve. Mai la rete verso PokeWallet, dove "eng:sv08:1" costerebbe una
+        // chiamata a vuoto.
         if (CardRef.isCatalogCard(cardId, CatalogLang.EN)) {
-            return RepositoryProvider.englishCatalogRepository.findCachedCard(cardId)
+            return RepositoryProvider.englishCatalogRepository.findCard(null, cardId)
                 ?.let { Result.success(it) }
-                ?: Result.failure(NoSuchElementException("Carta EN non caricata: $cardId"))
+                ?: Result.failure(NoSuchElementException("Carta EN non trovata: $cardId"))
         }
 
         fun findMemoryCard(): TcgCard? {

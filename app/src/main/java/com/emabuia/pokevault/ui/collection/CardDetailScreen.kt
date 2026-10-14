@@ -38,7 +38,6 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import com.emabuia.pokevault.data.catalog.CardRef
 import com.emabuia.pokevault.data.catalog.CatalogLang
-import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -266,13 +265,8 @@ fun CardDetailScreen(
         if (illustratorByApiId.containsKey(apiCardId)) return@LaunchedEffect
 
         // Copia inglese: l'illustratore sta nella carta del suo set EN.
-        val englishRef = CardRef.parse(apiCardId)?.takeIf { it.lang == CatalogLang.EN }
-        illustratorByApiId[apiCardId] = if (englishRef != null) {
-            RepositoryProvider.englishCatalogRepository
-                .getCardsBySet(context, CatalogSetId.of(CatalogLang.EN, englishRef.setCode))
-                .getOrNull()
-                ?.firstOrNull { it.id == apiCardId }
-                ?.artist
+        illustratorByApiId[apiCardId] = if (CardRef.isCatalogCard(apiCardId, CatalogLang.EN)) {
+            RepositoryProvider.englishCatalogRepository.findCard(context, apiCardId)?.artist
         } else {
             tcgRepository.italianIllustratorsByCardId(context, setOf(apiCardId))[apiCardId]
         }

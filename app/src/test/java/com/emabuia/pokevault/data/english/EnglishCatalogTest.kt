@@ -139,4 +139,25 @@ class EnglishCatalogTest {
         assertTrue(ref.previewUrl.endsWith("/images/en/SV08/25?size=low"))
         assertNull(EnglishCatalogIds.illustratorRef(base, "SV08_IT_25.png"))
     }
+
+    @Test
+    fun `la cartella R2 porta all'espansione EN, anche quando sono diverse`() {
+        val summaries = listOf(
+            ItalianExpansionSummary(id = "sv08", baseSetCode = "SV08"),
+            ItalianExpansionSummary(id = "sv8pt5", baseSetCode = "SV08.5")
+        )
+        assertEquals("sv08", repo.expansionIdForFolder(summaries, "sv08"))
+        assertEquals("sv8pt5", repo.expansionIdForFolder(summaries, "sv08.5"))
+        assertNull(repo.expansionIdForFolder(summaries, "xy1"))
+    }
+
+    @Test
+    fun `ricerca EN coi nomi gia' normalizzati, stesso risultato`() {
+        val records = listOf(
+            ItalianCardRecord(cardId = "SV01_EN_63.webp", espansioneId = "sv01", nome = "Pikachu"),
+            ItalianCardRecord(cardId = "SV08_EN_57.webp", espansioneId = "sv08", nome = "Pikachu ex")
+        )
+        val names = EnglishCatalogSearch.normalizedNames(records)
+        assertEquals(EnglishCatalogSearch.byName(records, "pika", 300), EnglishCatalogSearch.byName(records, "pika", 300, names))
+    }
 }

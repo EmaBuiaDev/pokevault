@@ -43,19 +43,42 @@ export function msUntilNextUtcDay() {
   return next - now.getTime();
 }
 
+/** Quante letture fallite di fila si lasciano passare prima di fermarsi. */
+export const UNREADABLE_TOLERATED = 2;
+/** La pausa quando la quota non si legge da troppe volte di fila. */
+const UNREADABLE_PAUSE_MS = 15 * 60 * 1000;
+let unreadableStreak = 0;
+
 /**
- * Aspetta finche' l'account e' sotto la soglia. Se le righe di oggi non si
- * riescono a leggere, va avanti (e lo dice): meglio un avviso nel log che un
- * import fermo per sempre per un problema di rete.
+ * Cosa fare con una lettura della quota: 'go' sotto la soglia o con un errore
+ * isolato (la rete che singhiozza), 'pause' sopra la soglia o quando la quota
+ * non si legge da piu' di [tolerated] volte di fila. Prima si proseguiva
+ * sempre a quota illeggibile: con il login scaduto l'import correva alla cieca
+ * e poteva finire la quota che serve alla produzione.
+ */
+export function quotaDecision(written, streak, limit = BATCH_WRITE_LIMIT, tolerated = UNREADABLE_TOLERATED) {
+  if (written === null) return streak <= tolerated ? 'go' : 'pause';
+  return written < limit ? 'go' : 'pause';
+}
+
+/**
+ * Aspetta finche' l'account e' sotto la soglia. Un errore di lettura isolato
+ * passa (e lo dice); di fila, l'import si ferma e riprova ogni 15 minuti.
  */
 export async function waitForD1Quota(log, limit = BATCH_WRITE_LIMIT) {
   for (;;) {
     const written = await d1RowsWrittenToday();
+    unreadableStreak = written === null ? unreadableStreak + 1 : 0;
     if (written === null) {
-      log?.('quota D1: non leggibile, si prosegue');
-      return null;
+      if (quotaDecision(null, unreadableStreak, limit) === 'go') {
+        log?.(`quota D1: non leggibile (${unreadableStreak} di fila), si prosegue`);
+        return null;
+      }
+      log?.(`quota D1: non leggibile ${unreadableStreak} volte di fila (login scaduto?), pausa di 15 minuti`);
+      await new Promise(r => setTimeout(r, UNREADABLE_PAUSE_MS));
+      continue;
     }
-    if (written < limit) return written;
+    if (quotaDecision(written, 0, limit) === 'go') return written;
     const wait = msUntilNextUtcDay();
     log?.(`quota D1: ${written} righe scritte oggi (soglia ${limit}), pausa di ${Math.round(wait / 60000)} minuti fino al nuovo giorno UTC`);
     await new Promise(r => setTimeout(r, wait));

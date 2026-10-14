@@ -91,13 +91,21 @@ object EnglishCatalogIds {
 /** La ricerca sul catalogo EN completo: parti pure, senza rete. */
 internal object EnglishCatalogSearch {
 
-    fun byName(records: List<ItalianCardRecord>, query: String, limit: Int): List<ItalianCardRecord> {
+    /** I nomi gia' normalizzati, nello stesso ordine dei record: si fanno una volta per catalogo. */
+    fun normalizedNames(records: List<ItalianCardRecord>): List<String> = records.map { CardNameMatch.normalize(it.nome) }
+
+    fun byName(
+        records: List<ItalianCardRecord>,
+        query: String,
+        limit: Int,
+        names: List<String> = normalizedNames(records)
+    ): List<ItalianCardRecord> {
         val normalizedQuery = CardNameMatch.normalize(CardNameMatch.sanitize(query))
         if (normalizedQuery.isBlank()) return emptyList()
         val tokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
         return records.asSequence()
-            .mapNotNull { record ->
-                val score = CardNameMatch.score(CardNameMatch.normalize(record.nome), normalizedQuery, tokens)
+            .mapIndexedNotNull { index, record ->
+                val score = CardNameMatch.score(names[index], normalizedQuery, tokens)
                 if (score <= 0) null else record to score
             }
             .sortedWith(
@@ -292,9 +300,17 @@ class EnglishCatalogRepository(
         val summaries = getExpansions(context).getOrNull().orEmpty()
         return runCatching {
             withContext(Dispatchers.Default) {
-                EnglishCatalogSearch.byName(records, query, limit).mapNotNull { toSearchCard(it, summaries) }
+                EnglishCatalogSearch.byName(records, query, limit, namesFor(records)).mapNotNull { toSearchCard(it, summaries) }
             }
         }
+    }
+
+    // I nomi normalizzati del catalogo in memoria, rifatti solo quando cambia.
+    @Volatile private var namesMemo: Pair<List<ItalianCardRecord>, List<String>>? = null
+
+    private fun namesFor(records: List<ItalianCardRecord>): List<String> {
+        namesMemo?.takeIf { it.first === records }?.let { return it.second }
+        return EnglishCatalogSearch.normalizedNames(records).also { namesMemo = records to it }
     }
 
     /** Le carte EN con quel numero; col totale ("25/191") tiene le espansioni che lo stampano. */
@@ -365,6 +381,31 @@ class EnglishCatalogRepository(
         return withContext(Dispatchers.Default) {
             records.mapNotNull { toSearchCard(it, summaries) }.distinctBy { it.id }
         }
+    }
+
+    /**
+     * L'espansione EN di una cartella R2: "SV08" -> "sv08". Quasi sempre sono
+     * uguali, ma la cartella dei set gemelli viene dalle carte italiane e puo'
+     * essere un'altra (e' il baseSetCode dell'espansione).
+     */
+    internal fun expansionIdForFolder(summaries: List<ItalianExpansionSummary>, folder: String): String? =
+        summaries.firstOrNull { (it.baseSetCode ?: it.id).equals(folder, ignoreCase = true) }?.id
+            ?: summaries.firstOrNull { it.id.equals(folder, ignoreCase = true) }?.id
+
+    /**
+     * Una carta EN dal suo apiCardId ("eng:sv08:25"): dalla memoria se il set e'
+     * gia' aperto, altrimenti caricando il suo set (una richiesta piccola).
+     * Senza, dopo un riavvio una carta EN in wishlist o in un chase non si
+     * risolveva piu'.
+     */
+    suspend fun findCard(context: Context?, apiCardId: String): TcgCard? {
+        findCachedCard(apiCardId)?.let { return it }
+        if (!isEnabled) return null
+        val ref = CardRef.parse(apiCardId)?.takeIf { it.lang == CatalogLang.EN } ?: return null
+        val summaries = getExpansions(context).getOrNull().orEmpty()
+        val expansionId = expansionIdForFolder(summaries, ref.setCode) ?: ref.setCode
+        return getCardsBySet(context, CatalogSetId.of(CatalogLang.EN, expansionId)).getOrNull()
+            ?.firstOrNull { it.id == apiCardId }
     }
 
     /** Una carta EN gia' caricata (set aperti in questa sessione), o null. */

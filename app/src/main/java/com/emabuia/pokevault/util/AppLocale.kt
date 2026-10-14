@@ -2699,23 +2699,6 @@ object AppLocale {
     val collectorNewChase: String get() = if (isItalian) "Nuovo chase" else "New chase"
     val collectorContinue: String get() = if (isItalian) "Continua" else "Keep going"
     val collectorArtistsShort: String get() = if (isItalian) "Artisti" else "Artists"
-    val collectorAlbumEmptyHint: String get() = if (isItalian)
-        "Metti in pagina le carte che hai, come in un raccoglitore vero."
-    else
-        "Lay out the cards you own, like a real binder."
-    val collectorChaseEmptyHint: String get() = if (isItalian)
-        "Scegli un set e guarda quali carte ti mancano per chiuderlo."
-    else
-        "Pick a set and see which cards you still need."
-    val collectorIllustratorsEmptyHint: String get() = if (isItalian)
-        "Scegli un artista e colleziona tutte le carte che ha disegnato."
-    else
-        "Pick an artist and collect every card they drew."
-    fun collectorDiscoverIllustrators(count: Int): String = if (isItalian)
-        "Tutti i $count artisti"
-    else
-        "All $count artists"
-    val collectorNextStep: String get() = if (isItalian) "Il prossimo passo" else "Next up"
     fun collectorMissingToFinish(count: Int): String = if (isItalian) {
         if (count == 1) "Manca 1 carta per chiudere" else "Mancano $count carte per chiudere"
     } else {
