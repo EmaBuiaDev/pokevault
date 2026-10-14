@@ -192,7 +192,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.ImageLoader
 import com.emabuia.pokevault.data.remote.RepositoryProvider
-import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.trade.CoarseLocation
@@ -5198,6 +5197,10 @@ private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
     TradeRadarViewModel.Info.REPORTED -> AppLocale.tradeRadarInfoReported
 }
 
+/** Un errore che vuol dire "questa immagine non esiste" (404 e simili), non "la rete non va". */
+internal fun isMissingImage(error: Throwable): Boolean =
+    (error as? coil.network.HttpException)?.response?.code in 400..499
+
 /**
  * L'immagine di una carta negli scambi: prima quella della lingua della copia,
  * e se manca l'altra (i set che esistono in una lingua sola). Con l'inglese
@@ -5215,7 +5218,7 @@ private fun TradeCardImage(
         TradeCardKey.imageUrls(
             key = key,
             italianBaseUrl = PokeVaultApiClient.imageBaseUrl,
-            englishBaseUrl = RepositoryProvider.englishCatalogRepository.takeIf { it.isEnabled }?.let { BuildConfig.EN_CATALOG_URL },
+            englishBaseUrl = RepositoryProvider.englishImageBaseUrl(),
             language = language,
             size = size
         )
@@ -5226,6 +5229,8 @@ private fun TradeCardImage(
         contentDescription = contentDescription,
         contentScale = contentScale,
         modifier = Modifier.fillMaxSize(),
-        onError = { if (attempt < urls.lastIndex) attempt++ }
+        // All'altra lingua solo se l'immagine non c'e' (4xx): con la rete lenta
+        // o assente resterebbe per sempre la carta nella lingua sbagliata.
+        onError = { state -> if (isMissingImage(state.result.throwable) && attempt < urls.lastIndex) attempt++ }
     )
 }

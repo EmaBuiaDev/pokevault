@@ -32,3 +32,21 @@ class ScannerCatalogOrderTest {
         assertEquals(listOf(CatalogLang.EN), scannerCatalogOrder(ScanLanguage.EN, CatalogLang.IT, CatalogLang.IT, true))
     }
 }
+
+/** Quanto lo scanner aspetta di capire la lingua prima di cercare. */
+class ShouldWaitForLanguageTest {
+
+    @Test
+    fun `aspetta solo in automatico, con l'inglese acceso e senza lingua`() {
+        assertEquals(true, shouldWaitForLanguage(true, ScanLanguage.AUTO, null, 0L, 1_000L))
+        assertEquals(false, shouldWaitForLanguage(false, ScanLanguage.AUTO, null, 0L, 1_000L))
+        assertEquals(false, shouldWaitForLanguage(true, ScanLanguage.IT, null, 0L, 1_000L))
+        assertEquals(false, shouldWaitForLanguage(true, ScanLanguage.AUTO, CatalogLang.EN, 0L, 1_000L))
+    }
+
+    @Test
+    fun `non aspetta all'infinito - passato il tempo si cerca lo stesso`() {
+        assertEquals(true, shouldWaitForLanguage(true, ScanLanguage.AUTO, null, 1_000L, 1_000L + LANGUAGE_WAIT_MS - 1))
+        assertEquals(false, shouldWaitForLanguage(true, ScanLanguage.AUTO, null, 1_000L, 1_000L + LANGUAGE_WAIT_MS))
+    }
+}

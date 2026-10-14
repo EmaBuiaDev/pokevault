@@ -191,4 +191,23 @@ class EnglishCatalogTest {
         assertEquals(listOf("SV01_EN_25.webp"), scan(null, "25", null, targets = setOf("sv01")))
         assertTrue(scan(null, null, null).isEmpty())
     }
+
+    @Test
+    fun `scanner EN - il set letto si riconosce da id, sigla o forma normalizzata`() {
+        val summaries = listOf(
+            ItalianExpansionSummary(id = "sv08", abbreviation = "SSP", baseSetCode = "SV08"),
+            ItalianExpansionSummary(id = "sv01", abbreviation = "SVI")
+        )
+        assertEquals(setOf("sv08"), repo.scannerTargetExpansions(summaries, listOf("ssp")))
+        assertEquals(setOf("sv08"), repo.scannerTargetExpansions(summaries, listOf("sv8", "SSP")))
+        assertEquals(setOf("sv08"), repo.scannerTargetExpansions(summaries, listOf("SV08")))
+        assertNull(repo.scannerTargetExpansions(summaries, listOf("zzz")))
+        assertNull(repo.scannerTargetExpansions(summaries, emptyList()))
+    }
+
+    @Test
+    fun `scanner EN - il totale stampato e' l'ufficiale, non il conteggio con le segrete`() {
+        assertEquals(listOf(191), repo.printedTotalsOf(ItalianExpansionSummary(id = "sv08", cardCount = 252, officialCount = 191)))
+        assertEquals(listOf(30), repo.printedTotalsOf(ItalianExpansionSummary(id = "x", cardCount = 30)))
+    }
 }

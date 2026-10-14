@@ -36,6 +36,21 @@ class CardLanguageDetectorTest {
     }
 
     @Test
+    fun `l'apostrofo separa le parole - dell'avversario conta come italiano`() {
+        val (english, italian) = CardLanguageDetector.counts("dell'avversario all'attacco")
+        assertEquals(0, english)
+        assertEquals(4, italian)
+        // "opponent's" e' "opponent".
+        assertEquals(1, CardLanguageDetector.counts("opponent's").first)
+    }
+
+    @Test
+    fun `Illus non conta per nessuna lingua - e' stampato su tutte e due`() {
+        assertEquals(0 to 0, CardLanguageDetector.counts("Illus. Atsuko Nishida"))
+        assertEquals(CatalogLang.IT, CardLanguageDetector.detect("Debolezza Ritirata Illus. Atsuko Nishida"))
+    }
+
+    @Test
     fun `con troppo poco testo non si decide`() {
         assertNull(CardLanguageDetector.detect("Pikachu 025/191"))
         assertNull(CardLanguageDetector.detect(""))
@@ -45,17 +60,27 @@ class CardLanguageDetectorTest {
 
     @Test
     fun `i voti dei fotogrammi - serve una lingua ripetuta e in vantaggio`() {
-        val votes = LanguageVotes(minVotes = 2)
-        votes.record(CatalogLang.EN)
-        assertNull(votes.winner())
-        votes.record(null)
-        votes.record(CatalogLang.EN)
-        assertEquals(CatalogLang.EN, votes.winner())
-        votes.record(CatalogLang.IT)
-        votes.record(CatalogLang.IT)
+        val votes = LanguageVotes(minVotes = 2, windowMs = 3_500)
+        votes.record(CatalogLang.EN, 0)
+        assertNull(votes.winner(0))
+        votes.record(null, 100)
+        votes.record(CatalogLang.EN, 200)
+        assertEquals(CatalogLang.EN, votes.winner(200))
+        votes.record(CatalogLang.IT, 300)
+        votes.record(CatalogLang.IT, 400)
         // Pari: un fotogramma letto male non fa cambiare catalogo.
-        assertNull(votes.winner())
+        assertNull(votes.winner(400))
         votes.reset()
-        assertNull(votes.winner())
+        assertNull(votes.winner(400))
+    }
+
+    @Test
+    fun `i voti vecchi scadono - la carta di prima non pesa su quella dopo`() {
+        val votes = LanguageVotes(minVotes = 2, windowMs = 3_500)
+        repeat(10) { votes.record(CatalogLang.EN, it * 100L) }
+        // Quattro secondi dopo, due fotogrammi italiani bastano.
+        votes.record(CatalogLang.IT, 5_000)
+        votes.record(CatalogLang.IT, 5_100)
+        assertEquals(CatalogLang.IT, votes.winner(5_100))
     }
 }

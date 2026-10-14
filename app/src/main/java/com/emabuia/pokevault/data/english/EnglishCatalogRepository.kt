@@ -381,33 +381,47 @@ class EnglishCatalogRepository(
     }
 
     /**
-     * I candidati dello scanner fra le carte inglesi (Fase 4). [setHint] e' il
-     * codice del set letto sulla carta ("SSP"), se c'e': vale come filtro
-     * sull'abbreviazione o sull'id dell'espansione.
+     * I candidati dello scanner fra le carte inglesi (Fase 4). [setHints] sono
+     * il codice del set letto sulla carta ("SSP") e la sua forma normalizzata
+     * ("sv8"): vale come filtro se uno dei due e' l'id, l'abbreviazione o la
+     * cartella di un'espansione EN. Se nessuno riconosce niente, niente filtro.
      */
     suspend fun scannerCandidates(
         context: Context,
         name: String?,
         number: String?,
         setTotal: String?,
-        setHint: String?,
+        setHints: List<String> = emptyList(),
         limit: Int = 10
     ): Result<List<TcgCard>> {
         if (!isEnabled) return Result.success(emptyList())
         val records = getAllCards(context).getOrElse { return Result.failure(it) }
         val summaries = getExpansions(context).getOrNull().orEmpty()
-        val totals = summaries.associate { it.id.lowercase(Locale.ROOT) to listOfNotNull(it.officialCount, it.cardCount) }
-        val hint = setHint?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotBlank() }
-        val targets = hint?.let { h ->
-            summaries.filter { it.id.equals(h, ignoreCase = true) || it.abbreviation?.equals(h, ignoreCase = true) == true }
-                .map { it.id.lowercase(Locale.ROOT) }.toSet().takeIf { it.isNotEmpty() }
-        }
+        // Il totale stampato e' il conteggio ufficiale; il cardCount conta anche
+        // le segrete, e dare +90 a tutti e due farebbe pari fra set diversi.
+        val totals = summaries.associate { it.id.lowercase(Locale.ROOT) to printedTotalsOf(it) }
+        val targets = scannerTargetExpansions(summaries, setHints)
         return runCatching {
             withContext(Dispatchers.Default) {
                 EnglishCatalogSearch.scannerCandidates(records, namesFor(records), name, number, setTotal, targets, totals, limit)
                     .mapNotNull { toSearchCard(it, summaries) }
             }
         }
+    }
+
+    /** Il totale stampato sulle carte: l'ufficiale se c'e', se no il conteggio. */
+    internal fun printedTotalsOf(summary: ItalianExpansionSummary): List<Int> =
+        listOfNotNull(summary.officialCount?.takeIf { it > 0 } ?: summary.cardCount.takeIf { it > 0 })
+
+    /** Le espansioni EN che il set letto indica (id, abbreviazione o cartella), o null. */
+    internal fun scannerTargetExpansions(summaries: List<ItalianExpansionSummary>, setHints: List<String>): Set<String>? {
+        val hints = setHints.map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotBlank() }.toSet()
+        if (hints.isEmpty()) return null
+        return summaries.filter { summary ->
+            summary.id.lowercase(Locale.ROOT) in hints ||
+                summary.abbreviation?.lowercase(Locale.ROOT) in hints ||
+                summary.baseSetCode?.lowercase(Locale.ROOT) in hints
+        }.map { it.id.lowercase(Locale.ROOT) }.toSet().takeIf { it.isNotEmpty() }
     }
 
     private fun toSearchCard(record: ItalianCardRecord, summaries: List<ItalianExpansionSummary>): TcgCard? {

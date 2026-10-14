@@ -45,3 +45,23 @@ class TradeImageUrlsTest {
         assertNull(CatalogLang.ofCopyLanguage(""))
     }
 }
+
+/** All'altra lingua solo se l'immagine manca, non se la rete non va. */
+class MissingImageTest {
+
+    private fun httpError(code: Int): Throwable = coil.network.HttpException(
+        okhttp3.Response.Builder()
+            .request(okhttp3.Request.Builder().url("https://x.example/img").build())
+            .protocol(okhttp3.Protocol.HTTP_1_1)
+            .code(code)
+            .message("")
+            .build()
+    )
+
+    @Test
+    fun `404 vuol dire immagine mancante, timeout e 500 no`() {
+        assertEquals(true, com.emabuia.pokevault.ui.trade.isMissingImage(httpError(404)))
+        assertEquals(false, com.emabuia.pokevault.ui.trade.isMissingImage(httpError(503)))
+        assertEquals(false, com.emabuia.pokevault.ui.trade.isMissingImage(java.net.SocketTimeoutException()))
+    }
+}

@@ -170,6 +170,26 @@ internal fun scannerCatalogOrder(
 }
 
 /**
+ * Se aspettare ancora la lingua prima di cercare: solo in automatico, solo
+ * dove l'inglese c'e', e non piu' di [LANGUAGE_WAIT_MS] dal primo ID stabile.
+ * Passato quel tempo si cerca lo stesso (prima nella lingua dell'app): una
+ * carta con poco testo deve trovarsi comunque.
+ */
+internal fun shouldWaitForLanguage(
+    englishAvailable: Boolean,
+    mode: ScanLanguage,
+    detected: CatalogLang?,
+    waitStartedAt: Long,
+    nowMs: Long
+): Boolean {
+    if (!englishAvailable || mode != ScanLanguage.AUTO || detected != null) return false
+    return waitStartedAt == 0L || nowMs - waitStartedAt < LANGUAGE_WAIT_MS
+}
+
+/** Quanto si aspetta al massimo la lingua, con l'ID gia' letto. */
+internal const val LANGUAGE_WAIT_MS = 1_500L
+
+/**
  * Orchestratore dello scanner: riceve i frame, decide quando i dati sono
  * abbastanza solidi per cercare, e porta in collezione la carta scelta.
  *
@@ -185,6 +205,9 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     /** I voti dei fotogrammi recenti sulla lingua della carta. */
     private val languageVotes = LanguageVotes()
+
+    /** Da quando si aspetta di capire la lingua, con l'ID gia' letto. */
+    private var languageWaitStartedAt = 0L
     private val firestoreRepository = FirestoreRepository()
     private val appContext: Application get() = getApplication()
     private var searchJob: Job? = null
@@ -293,11 +316,11 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         if (uiState.pendingCard != null || uiState.candidateCards.isNotEmpty() || uiState.lastAddedCard != null) return
 
         emptyFrames = 0
-        languageVotes.record(language)
-        val detected = languageVotes.winner()
+        val now = System.currentTimeMillis()
+        languageVotes.record(language, now)
+        val detected = languageVotes.winner(now)
         if (detected != uiState.detectedLanguage) uiState = uiState.copy(detectedLanguage = detected)
 
-        val now = System.currentTimeMillis()
         aggregator.record(
             CardReading(
                 number = ocrResult.cardNumber?.takeIf { it.isNotBlank() },
@@ -315,7 +338,16 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         rejections.onNumberRead(consensus.number)
         if (!consensus.isReady) return
 
-        val searchKey = consensus.searchKey
+        // Con la lingua in automatico si aspetta un attimo che si capisca: il
+        // numero si legge prima del testo di regole, e cercare subito vorrebbe
+        // dire proporre la gemella italiana di una carta inglese.
+        if (shouldWaitForLanguage(uiState.englishAvailable, uiState.scanLanguage, detected, languageWaitStartedAt, now)) {
+            if (languageWaitStartedAt == 0L) languageWaitStartedAt = now
+            return
+        }
+
+        // La lingua fa parte della ricerca: se cambia, si cerca di nuovo.
+        val searchKey = consensus.searchKey + "|" + (detected?.name ?: "")
         if (searchKey == activeSearchKey) return
         if (now - lastSearchTimestamp < SEARCH_MIN_INTERVAL_MS) return
         if (now - (recentSearchAttempts[searchKey] ?: 0L) < SEARCH_KEY_COOLDOWN_MS) return
@@ -391,15 +423,17 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 appDefault = if (AppLocale.current == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT,
                 englishEnabled = uiState.englishAvailable
             )
-            var candidates: List<TcgCard> = emptyList()
+            var anyCandidates = false
             var viable: List<TcgCard> = emptyList()
             for (lang in order) {
-                candidates = candidatesIn(lang, consensus, normalizedSetHint)
+                val candidates = candidatesIn(lang, consensus, normalizedSetHint)
+                anyCandidates = anyCandidates || candidates.isNotEmpty()
                 viable = rejections.viable(candidates) { it.id }
                 if (viable.isNotEmpty()) break
             }
             if (viable.isEmpty()) {
-                val allRejected = candidates.isNotEmpty()
+                // In tutti i cataloghi provati: se uno aveva carte, erano tutte scartate.
+                val allRejected = anyCandidates
                 uiState = uiState.copy(
                     isSearching = false,
                     pendingCard = null,
@@ -509,7 +543,9 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 name = consensus.name,
                 number = consensus.number,
                 setTotal = consensus.setTotal,
-                setHint = setHint,
+                // Il codice normalizzato ("sv8") e quello letto sulla carta ("SSP"):
+                // il catalogo EN riconosce l'espansione dall'uno o dall'altro.
+                setHints = listOfNotNull(setHint, consensus.setHint),
                 limit = CANDIDATE_POOL_SIZE
             ).onFailure { Timber.w(it, "Scanner: catalogo EN non disponibile") }.getOrDefault(emptyList())
         } else {
@@ -786,6 +822,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         activeSearchKey = ""
         aggregator.reset()
         languageVotes.reset()
+        languageWaitStartedAt = 0L
         firstFrameWithoutIdAt = 0L
         recentSearchAttempts.clear()
     }
@@ -814,19 +851,29 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         uiState = uiState.copy(condition = condition)
     }
 
-    fun toggleContinuousMode() {
-        uiState = uiState.copy(continuousMode = !uiState.continuousMode)
-    }
-
     fun setContinuousMode(enabled: Boolean) {
         if (enabled != uiState.continuousMode) uiState = uiState.copy(continuousMode = enabled)
     }
 
-    /** Il catalogo in cui cercare; si rilegge la carta inquadrata da capo. */
+    /**
+     * Il catalogo in cui cercare. Si rilegge la carta inquadrata da capo: una
+     * ricerca partita prima del cambio non deve proporre (o in automatico
+     * aggiungere) la carta dell'altro catalogo.
+     */
     fun setScanLanguage(language: ScanLanguage) {
         if (language == uiState.scanLanguage) return
-        uiState = uiState.copy(scanLanguage = language)
+        searchJob?.cancel()
         resetStability()
+        uiState = uiState.copy(
+            scanLanguage = language,
+            detectedLanguage = null,
+            isSearching = false,
+            pendingCard = null,
+            candidateCards = emptyList(),
+            errorMessage = null,
+            notFound = false,
+            canRetryRejected = false
+        )
     }
 
     fun resetScanner() {

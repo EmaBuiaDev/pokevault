@@ -21,15 +21,16 @@ object CardLanguageDetector {
     const val MIN_MARGIN = 2
 
     // Parole intere, gia' senza accenti e in minuscolo. Niente parole che
-    // esistono in tutte e due le lingue ("pokemon", "energy" no: "energia" si').
+    // esistono in tutte e due le lingue: ne' "pokemon" ne' "illus", che e'
+    // stampato anche sulle carte italiane ("Illus. Atsuko Nishida").
     private val ENGLISH = setOf(
         "weakness", "resistance", "retreat", "basic", "stage", "evolves", "from",
         "ability", "trainer", "supporter", "item", "stadium", "tool", "energy",
         "your", "opponent", "opponents", "damage", "this", "attack", "attacks",
         "flip", "coin", "heads", "tails", "discard", "draw", "cards", "card",
         "bench", "active", "turn", "each", "the", "of", "and", "to", "may",
-        "illus", "rule", "when", "knocked", "out", "prize", "search", "deck",
-        "shuffle", "hand", "put", "into", "onto", "attach", "pokemon's"
+        "rule", "when", "knocked", "out", "prize", "search", "deck",
+        "shuffle", "hand", "put", "into", "onto", "attach"
     )
 
     private val ITALIAN = setOf(
@@ -39,12 +40,12 @@ object CardLanguageDetector {
         "questo", "questa", "attacco", "attacchi", "lancia", "moneta", "testa",
         "croce", "scarta", "pesca", "carte", "carta", "panchina", "attivo",
         "turno", "ogni", "il", "lo", "la", "gli", "le", "di", "del", "della",
-        "e", "puoi", "regola", "quando", "messo", "ko", "premio", "cerca",
+        "dell", "all", "nel", "puoi", "regola", "quando", "messo", "ko", "premio", "cerca",
         "mazzo", "mischia", "mano", "metti", "assegna"
     )
 
     private val DIACRITICS = Regex("\\p{Mn}+")
-    private val NON_WORD = Regex("[^a-z']+")
+    private val NON_WORD = Regex("[^a-z]+")
 
     /** Quante parole di ciascuna lingua ci sono nel testo. */
     fun counts(text: String): Pair<Int, Int> {
@@ -76,20 +77,28 @@ object CardLanguageDetector {
 /**
  * I voti dei fotogrammi recenti sulla lingua: un fotogramma letto male non
  * deve far cambiare catalogo. Vince la lingua con piu' voti, se ne ha almeno
- * [minVotes] e piu' dell'altra.
+ * [minVotes] e piu' dell'altra. Contano solo gli ultimi [windowMs]: i voti di
+ * una carta tolta poco fa non devono pesare su quella che si inquadra adesso.
  */
-class LanguageVotes(private val minVotes: Int = 2) {
-    private val votes = mutableMapOf<CatalogLang, Int>()
+class LanguageVotes(private val minVotes: Int = 2, private val windowMs: Long = 3_500L) {
+    private val votes = ArrayDeque<Pair<Long, CatalogLang>>()
 
-    fun record(lang: CatalogLang?) {
-        if (lang != null) votes[lang] = (votes[lang] ?: 0) + 1
+    fun record(lang: CatalogLang?, nowMs: Long) {
+        prune(nowMs)
+        if (lang != null) votes.addLast(nowMs to lang)
     }
 
-    fun winner(): CatalogLang? {
-        val best = votes.maxByOrNull { it.value } ?: return null
-        val others = votes.filterKeys { it != best.key }.values.maxOrNull() ?: 0
+    fun winner(nowMs: Long): CatalogLang? {
+        prune(nowMs)
+        val counts = votes.groupingBy { it.second }.eachCount()
+        val best = counts.maxByOrNull { it.value } ?: return null
+        val others = counts.filterKeys { it != best.key }.values.maxOrNull() ?: 0
         return best.key.takeIf { best.value >= minVotes && best.value > others }
     }
 
     fun reset() = votes.clear()
+
+    private fun prune(nowMs: Long) {
+        while (votes.isNotEmpty() && nowMs - votes.first().first > windowMs) votes.removeFirst()
+    }
 }

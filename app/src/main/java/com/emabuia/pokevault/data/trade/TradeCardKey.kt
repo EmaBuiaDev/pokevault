@@ -2,6 +2,8 @@ package com.emabuia.pokevault.data.trade
 
 import com.emabuia.pokevault.data.catalog.CardRef
 import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.english.EnglishCatalogIds
+import com.emabuia.pokevault.data.italian.ItalianImageReference
 import java.util.Locale
 
 /**
@@ -52,8 +54,13 @@ object TradeCardKey {
      * (images/it/<CODICE>/<numero>): serve per le carte degli altri, che non
      * sono in collezione e di cui il server manda solo la chiave.
      */
-    fun imageUrl(key: String, baseUrl: String): String =
-        "${baseUrl.trimEnd('/')}/images/it/${setCodeOf(key).uppercase(Locale.ROOT)}/${key.substringAfter(':')}?size=low"
+    fun imageUrl(key: String, baseUrl: String): String = italianImageUrl(referenceOf(key), baseUrl, "low")
+
+    /** Cartella e numero della chiave ("sv08:25" -> SV08, 25), come le immagini su R2. */
+    private fun referenceOf(key: String) = ItalianImageReference(setCodeOf(key), key.substringAfter(':'))
+
+    private fun italianImageUrl(reference: ItalianImageReference, baseUrl: String, size: String): String =
+        "${baseUrl.trimEnd('/')}/images/it/${reference.folderName}/${reference.cardNumber}?size=$size"
 
     /**
      * Le immagini da provare per una copia, in ordine: prima quella della sua
@@ -63,11 +70,11 @@ object TradeCardKey {
      * null (inglese spento) c'e' solo l'italiana, come prima.
      */
     fun imageUrls(key: String, italianBaseUrl: String, englishBaseUrl: String?, language: String?, size: String = "low"): List<String> {
-        val folder = setCodeOf(key).uppercase(Locale.ROOT)
-        val number = key.substringAfter(':')
-        val italian = "${italianBaseUrl.trimEnd('/')}/images/it/$folder/$number?size=$size"
+        val reference = referenceOf(key)
+        val italian = italianImageUrl(reference, italianBaseUrl, size)
+        // Lo stesso indirizzo delle carte del catalogo EN, da un posto solo.
         val english = englishBaseUrl?.takeIf { it.isNotBlank() }
-            ?.let { "${it.trimEnd('/')}/images/en/$folder/$number?size=$size" }
+            ?.let { EnglishCatalogIds.cardImageUrl(it, reference, size) }
             ?: return listOf(italian)
         return if (CatalogLang.ofCopyLanguage(language) == CatalogLang.EN) listOf(english, italian) else listOf(italian, english)
     }
