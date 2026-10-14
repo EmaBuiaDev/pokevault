@@ -28,7 +28,7 @@ object OverpassClient {
 
     private const val URL = "https://overpass-api.de/api/interpreter"
     /** Overpass rifiuta (406) le richieste senza un'identificazione. */
-    private const val USER_AGENT = "PokeVault-TradeRadar/1.0"
+    private const val USER_AGENT = "PoketCards-TradeRadar/1.0"
     private const val ATTEMPTS = 3
 
     // La query concede a Overpass fino a 60 secondi.

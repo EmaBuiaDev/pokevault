@@ -50,6 +50,7 @@ import com.emabuia.pokevault.util.IllustratorNames
 import com.emabuia.pokevault.ui.components.CardVariants
 import com.emabuia.pokevault.ui.components.OwnedVariantBadges
 import com.emabuia.pokevault.ui.components.RaritySymbolIcon
+import com.emabuia.pokevault.viewmodel.IllustratorCatalogPref
 import com.emabuia.pokevault.util.RarityUtils.getRarityInfo
 
 /**
@@ -417,6 +418,8 @@ fun CardDetailBottomSheet(
                             val openIllustrator = if (onIllustratorClick != null && illustratorKey != null) {
                                 {
                                     onDismiss()
+                                    // L'album dell'artista nella lingua di questa carta.
+                                    IllustratorCatalogPref.followCard(context, card.id)
                                     onIllustratorClick(illustratorKey)
                                 }
                             } else null

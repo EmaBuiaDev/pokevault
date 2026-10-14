@@ -191,6 +191,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.ImageLoader
+import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.trade.CoarseLocation
@@ -1051,11 +1052,11 @@ private fun MiniCard(item: TradeMatchItem, width: Dp) {
     val style = levelStyle(item.level)
     Box(Modifier.width(width).aspectRatio(0.716f).clip(RoundedCornerShape(4.dp))) {
         CardImageSkeleton()
-        AsyncImage(
-            model = TradeCardKey.imageUrl(key, PokeVaultApiClient.imageBaseUrl),
+        TradeCardImage(
+            key = key,
+            language = item.language,
             contentDescription = item.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
+            contentScale = ContentScale.Crop
         )
         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp).background(style.color))
     }
@@ -1079,11 +1080,11 @@ private fun CardOfferRow(card: TradeCardOffer, matches: List<TradeMatch>, onClic
     ) {
         Box(Modifier.width(48.dp).height(67.dp).clip(RoundedCornerShape(5.dp))) {
             CardImageSkeleton()
-            AsyncImage(
-                model = TradeCardKey.imageUrl(key, PokeVaultApiClient.imageBaseUrl),
+            TradeCardImage(
+                key = key,
+                language = null,
                 contentDescription = card.name,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize()
+                contentScale = ContentScale.Fit
             )
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp).background(style.color))
         }
@@ -1263,11 +1264,11 @@ private fun HoldersPage(card: TradeCardOffer, matches: List<TradeMatch>, onOpen:
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
                 Box(Modifier.width(72.dp).height(100.dp).clip(RoundedCornerShape(8.dp))) {
                     CardImageSkeleton()
-                    AsyncImage(
-                        model = TradeCardKey.imageUrl(key, PokeVaultApiClient.imageBaseUrl),
+                    TradeCardImage(
+                        key = key,
+                        language = null,
                         contentDescription = card.name,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize()
+                        contentScale = ContentScale.Fit
                     )
                 }
                 Spacer(Modifier.width(14.dp))
@@ -1659,11 +1660,11 @@ private fun TradeCardTile(item: TradeMatchItem, theirs: Boolean, onClick: () -> 
     Column(Modifier.width(98.dp).pressScale(onClick = onClick)) {
         Box(Modifier.width(98.dp).height(137.dp).clip(RoundedCornerShape(8.dp))) {
             CardImageSkeleton(number = key.substringAfter(':'))
-            AsyncImage(
-                model = TradeCardKey.imageUrl(key, PokeVaultApiClient.imageBaseUrl),
+            TradeCardImage(
+                key = key,
+                language = item.language,
                 contentDescription = item.name ?: TradeCardKey.label(key),
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize()
+                contentScale = ContentScale.Fit
             )
             if ((item.qty ?: 1) > 1) {
                 Text(
@@ -1736,11 +1737,12 @@ private fun CardDetailDialog(item: TradeMatchItem, theirs: Boolean, onDismiss: (
         ) {
             Box(Modifier.fillMaxWidth(0.72f).aspectRatio(0.716f).clip(RoundedCornerShape(12.dp))) {
                 CardImageSkeleton(number = key.substringAfter(':'))
-                AsyncImage(
-                    model = TradeCardKey.imageUrl(key, PokeVaultApiClient.imageBaseUrl).replace("size=low", "size=high"),
+                TradeCardImage(
+                    key = key,
+                    language = item.language,
                     contentDescription = item.name,
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
+                    size = "high"
                 )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -2146,11 +2148,11 @@ private fun MiniStack(items: List<TradeOfferItem>) {
             items.take(3).forEach { item ->
                 Box(Modifier.width(26.dp).aspectRatio(0.716f).clip(RoundedCornerShape(3.dp)).background(AppColors.card)) {
                     CardImageSkeleton()
-                    AsyncImage(
-                        model = TradeCardKey.imageUrl(item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+                    TradeCardImage(
+                        key = item.key.orEmpty(),
+                        language = item.language,
                         contentDescription = item.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        contentScale = ContentScale.Crop
                     )
                 }
             }
@@ -2332,11 +2334,11 @@ private fun ProposalSide(title: String, items: List<TradeOfferItem>) {
                 Box {
                     Box(Modifier.width(42.dp).aspectRatio(0.716f).clip(RoundedCornerShape(4.dp))) {
                         CardImageSkeleton()
-                        AsyncImage(
-                            model = TradeCardKey.imageUrl(item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+                        TradeCardImage(
+                            key = item.key.orEmpty(),
+                            language = item.language,
                             contentDescription = item.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
+                            contentScale = ContentScale.Crop
                         )
                     }
                     if ((item.qty ?: 1) > 1) {
@@ -2604,11 +2606,11 @@ private fun ComposerItemRow(item: TradeOfferItem, max: Int, price: Double?, onQu
     ) {
         Box(Modifier.width(40.dp).height(56.dp).clip(RoundedCornerShape(4.dp))) {
             CardImageSkeleton()
-            AsyncImage(
-                model = TradeCardKey.imageUrl(item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+            TradeCardImage(
+                key = item.key.orEmpty(),
+                language = item.language,
                 contentDescription = item.name,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize()
+                contentScale = ContentScale.Fit
             )
         }
         Spacer(Modifier.width(10.dp))
@@ -2657,11 +2659,11 @@ private fun PickRow(item: TradeOfferItem, price: Double?, modifier: Modifier = M
     ) {
         Box(Modifier.width(32.dp).height(45.dp).clip(RoundedCornerShape(3.dp))) {
             CardImageSkeleton()
-            AsyncImage(
-                model = TradeCardKey.imageUrl(item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+            TradeCardImage(
+                key = item.key.orEmpty(),
+                language = item.language,
                 contentDescription = item.name,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize()
+                contentScale = ContentScale.Fit
             )
         }
         Spacer(Modifier.width(10.dp))
@@ -3667,11 +3669,11 @@ private fun ClosingDialog(viewModel: TradeRadarViewModel, closing: TradeRadarVie
                         Checkbox(checked = line.checked, onCheckedChange = { viewModel.toggleClosingLine(index) }, enabled = !line.missing)
                         Box(Modifier.width(30.dp).height(42.dp).clip(RoundedCornerShape(3.dp))) {
                             CardImageSkeleton()
-                            AsyncImage(
-                                model = TradeCardKey.imageUrl(line.item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+                            TradeCardImage(
+                                key = line.item.key.orEmpty(),
+                                language = line.item.language,
                                 contentDescription = line.item.name,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize()
+                                contentScale = ContentScale.Fit
                             )
                         }
                         Spacer(Modifier.width(8.dp))
@@ -5193,4 +5195,42 @@ private fun infoText(info: TradeRadarViewModel.Info): String = when (info) {
     TradeRadarViewModel.Info.BLOCKED -> AppLocale.tradeRadarInfoBlocked
     TradeRadarViewModel.Info.UNBLOCKED -> AppLocale.tradeRadarInfoUnblocked
     TradeRadarViewModel.Info.REPORTED -> AppLocale.tradeRadarInfoReported
+}
+
+/** Un errore che vuol dire "questa immagine non esiste" (404 e simili), non "la rete non va". */
+internal fun isMissingImage(error: Throwable): Boolean =
+    (error as? coil.network.HttpException)?.response?.code in 400..499
+
+/**
+ * L'immagine di una carta negli scambi: prima quella della lingua della copia,
+ * e se manca l'altra (i set che esistono in una lingua sola). Con l'inglese
+ * spento e' l'immagine italiana di sempre.
+ */
+@Composable
+private fun TradeCardImage(
+    key: String,
+    language: String?,
+    contentDescription: String?,
+    contentScale: ContentScale,
+    size: String = "low"
+) {
+    val urls = remember(key, language, size) {
+        TradeCardKey.imageUrls(
+            key = key,
+            italianBaseUrl = PokeVaultApiClient.imageBaseUrl,
+            englishBaseUrl = RepositoryProvider.englishImageBaseUrl(),
+            language = language,
+            size = size
+        )
+    }
+    var attempt by remember(urls) { mutableIntStateOf(0) }
+    AsyncImage(
+        model = urls[attempt.coerceAtMost(urls.lastIndex)],
+        contentDescription = contentDescription,
+        contentScale = contentScale,
+        modifier = Modifier.fillMaxSize(),
+        // All'altra lingua solo se l'immagine non c'e' (4xx): con la rete lenta
+        // o assente resterebbe per sempre la carta nella lingua sbagliata.
+        onError = { state -> if (isMissingImage(state.result.throwable) && attempt < urls.lastIndex) attempt++ }
+    )
 }

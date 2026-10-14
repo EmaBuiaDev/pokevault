@@ -1240,7 +1240,9 @@ fun TcgCardCompactItem(
     /** Scurire le carte che non si hanno: nell'espansione si', nella ricerca no (sarebbero quasi tutte). */
     dimWhenNotOwned: Boolean = true,
     /** Solo cuore e +, senza nome ne' prezzo: per le griglie fitte, dove non ci starebbero. */
-    compactFooter: Boolean = false
+    compactFooter: Boolean = false,
+    /** Le bandiere delle lingue in cui c'e' la carta ("🇮🇹🇬🇧"), accanto al simbolo: ricerca in tutte le lingue. */
+    languageFlags: String? = null
 ) {
     val variantOptions = remember(card.tcgplayer?.prices?.keys, card.rarity, card.set?.releaseDate) {
         CardOptions.getBaseVariantsForCard(card)
@@ -1356,13 +1358,27 @@ fun TcgCardCompactItem(
                 }
             }
 
-            if (setBadge != null && !isSelectionMode) {
-                SetBadgeChip(
-                    badge = setBadge,
+            if ((setBadge != null || !languageFlags.isNullOrEmpty()) && !isSelectionMode) {
+                Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(4.dp)
-                )
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!languageFlags.isNullOrEmpty()) {
+                        Text(
+                            text = languageFlags,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color.Black.copy(alpha = 0.45f))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                    if (setBadge != null) SetBadgeChip(badge = setBadge)
+                }
             }
 
             // In alto a destra: quali stampe si hanno, non solo che si ha la

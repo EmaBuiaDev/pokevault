@@ -136,3 +136,35 @@ jobs:
           Vedi il log completo nella run di Actions per i dettagli (copertura immagini, published/unpublished, carte rimaste senza rarita')." \
               --repo "${{ github.repository }}" || true
           fi
+
+  # Catalogo inglese (piano carte EN): set nuovi su TCGdex /v2/en ->
+  # database pokevault-catalog-en e R2 en/. Job a parte: se fallisce, il
+  # catalogo italiano qui sopra non se ne accorge.
+  ingest-en:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: pokevault-proxy-worker
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Discover and ingest new English sets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -o pipefail
+          node scripts/discover-new-sets-en.mjs --ingest --ingested-list ingested-sets-en.txt | tee ingest-en-output.log
+
+      - name: Link new English cards to Cardmarket products
+        if: ${{ !cancelled() }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/map-cardmarket-en.mjs --only-missing --apply

@@ -4,13 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,19 +24,15 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.model.GoalAlbum
 import com.emabuia.pokevault.ui.components.CascadeIn
-import com.emabuia.pokevault.ui.components.CoverCollage
 import com.emabuia.pokevault.ui.components.FillBar
 import com.emabuia.pokevault.ui.components.ProgressRing
 import com.emabuia.pokevault.ui.components.SkeletonBlock
 import com.emabuia.pokevault.ui.components.pressScale
-import com.emabuia.pokevault.ui.illustrator.IllustratorAvatar
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AlbumRow
-import com.emabuia.pokevault.util.AlbumSort
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.ChaseRow
-import com.emabuia.pokevault.util.ChaseSort
 import com.emabuia.pokevault.util.CollectorLab
 import com.emabuia.pokevault.util.IllustratorRow
 import com.emabuia.pokevault.viewmodel.AlbumViewModel
@@ -92,23 +84,16 @@ fun AlbumListScreen(
     }
     val illustratorRows = illustratorViewModel.rows
 
-    val recentAlbums = remember(albumRows) { CollectorLab.sortAlbums(albumRows, AlbumSort.RECENT).take(8) }
-    val topChases = remember(chaseRows) { CollectorLab.sortChases(chaseRows, ChaseSort.CLOSEST).take(3) }
-    // Gli artisti che contano per te: i seguiti prima, poi quelli di cui hai
-    // gia' qualche carta, dal piu' avanti. Gli altri trecento e passa non
-    // stanno in vetrina -- sono a un tocco, in "Vedi tutti".
-    val myIllustrators = remember(illustratorRows) {
-        illustratorRows
-            .filter { it.isFollowed || it.owned > 0 }
-            .sortedWith(
-                compareByDescending<IllustratorRow> { it.isFollowed }
-                    .thenByDescending { it.percent }
-                    .thenByDescending { it.owned }
-            )
-            .take(10)
-    }
+    // Le tre porte: quanti ne hai e quanto sei avanti, tutto insieme.
+    val albumFill = remember(albumRows) { CollectorLab.fillPercent(albumRows.sumOf { it.used }, albumRows.sumOf { it.size }) }
+    val chaseFill = remember(chaseRows) { CollectorLab.fillPercent(chaseRows.sumOf { it.owned }, chaseRows.sumOf { it.total }) }
     val startedIllustrators = remember(illustratorRows) { illustratorRows.count { it.owned > 0 } }
-    val nextStep = remember(chaseRows, illustratorRows) { pickNextStep(chaseRows, illustratorRows) }
+    val illustratorFill = remember(illustratorRows, startedIllustrators) {
+        CollectorLab.fillPercent(startedIllustrators, illustratorRows.size)
+    }
+    val continueSteps = remember(albumRows, chaseRows, illustratorRows) {
+        pickContinueSteps(albumRows, chaseRows, illustratorRows)
+    }
 
     val isLoading = viewModel.isLoading || goalViewModel.isLoading
 
@@ -161,132 +146,96 @@ fun AlbumListScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp)
         ) {
-            // ── In cima: una cosa sola da fare ───────────────────────────
-            item(key = "hero") {
+            // ── Le tre porte: Album, Chase, Illustratori ──────────────────
+            item(key = "doors") {
                 CascadeIn(index = 0, visible = revealed, modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        LabDoor(
+                            icon = Icons.Default.PhotoLibrary,
+                            accent = AppColors.orange,
+                            title = AppLocale.collectorAlbumTitle,
+                            value = albumRows.size.toString(),
+                            percent = albumFill,
+                            onClick = onOpenAlbumList,
+                            modifier = Modifier.weight(1f).fillMaxHeight()
+                        )
+                        LabDoor(
+                            icon = Icons.Default.TrackChanges,
+                            accent = AppColors.red,
+                            title = AppLocale.collectorChaseTitle,
+                            value = chaseRows.size.toString(),
+                            percent = chaseFill,
+                            onClick = onOpenChaseList,
+                            modifier = Modifier.weight(1f).fillMaxHeight()
+                        )
+                        LabDoor(
+                            icon = Icons.Default.Brush,
+                            accent = AppColors.purple,
+                            title = AppLocale.collectorArtistsShort,
+                            value = if (illustratorViewModel.isLoading) "…" else "$startedIllustrators/${illustratorRows.size}",
+                            percent = illustratorFill,
+                            onClick = onOpenIllustrators,
+                            modifier = Modifier.weight(1f).fillMaxHeight()
+                        )
+                    }
+                }
+            }
+
+            // ── Continua: le tre cose piu' vicine al traguardo ────────────
+            item(key = "continue") {
+                CascadeIn(index = 1, visible = revealed, modifier = Modifier.padding(horizontal = 16.dp)) {
                     // Si aspetta l'indice degli illustratori prima di scegliere:
-                    // decidere coi soli chase mostrava un riquadro e poi lo
-                    // cambiava sotto il dito appena arrivavano gli artisti.
+                    // decidere senza gli artisti cambierebbe la lista sotto il dito.
                     if (illustratorViewModel.isLoading) {
                         SkeletonBlock(
-                            modifier = Modifier.fillMaxWidth().height(130.dp),
-                            shape = RoundedCornerShape(22.dp),
+                            modifier = Modifier.fillMaxWidth().height(150.dp),
+                            shape = RoundedCornerShape(18.dp),
                             index = 0
                         )
-                    } else if (nextStep != null) {
-                        NextStepCard(
-                            step = nextStep,
-                            onClick = {
-                                when (nextStep.kind) {
-                                    NextStepKind.CHASE -> onChaseClick(nextStep.id)
-                                    NextStepKind.ILLUSTRATOR -> onIllustratorClick(nextStep.id)
-                                }
-                            }
-                        )
-                    } else {
+                    } else if (continueSteps.isEmpty()) {
                         IntroCard()
-                    }
-                }
-            }
-
-            // ── Album ─────────────────────────────────────────────────────
-            item(key = "album-header") {
-                CascadeIn(index = 1, visible = revealed) {
-                    LabSectionHeader(
-                        icon = Icons.Default.PhotoLibrary,
-                        accent = AppColors.orange,
-                        title = AppLocale.collectorAlbumTitle,
-                        count = albumRows.size,
-                        hint = AppLocale.collectorAlbumHint,
-                        onSeeAll = if (albumRows.isNotEmpty()) onOpenAlbumList else null
-                    )
-                }
-            }
-            item(key = "album-row") {
-                CascadeIn(index = 2, visible = revealed) {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp)
-                    ) {
-                        items(recentAlbums, key = { it.id }) { row ->
-                            RecentAlbumCard(row = row, onClick = { onAlbumClick(row.id) })
-                        }
-                        item(key = "new-album") {
-                            NewTile(
-                                label = AppLocale.collectorNewAlbum,
-                                hint = if (albumRows.isEmpty()) AppLocale.collectorAlbumEmptyHint else null,
-                                accent = AppColors.orange,
-                                wide = albumRows.isEmpty(),
-                                onClick = { createAlbum() }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                AppLocale.collectorContinue,
+                                color = AppColors.textSecondary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
                             )
+                            continueSteps.forEach { step ->
+                                ContinueRow(step = step, onClick = {
+                                    when (step.kind) {
+                                        NextStepKind.ALBUM -> onAlbumClick(step.id)
+                                        NextStepKind.CHASE -> onChaseClick(step.id)
+                                        NextStepKind.ILLUSTRATOR -> onIllustratorClick(step.id)
+                                    }
+                                })
+                            }
                         }
                     }
                 }
             }
 
-            // ── Chase ─────────────────────────────────────────────────────
-            item(key = "chase-header") {
-                CascadeIn(index = 3, visible = revealed) {
-                    LabSectionHeader(
-                        icon = Icons.Default.TrackChanges,
-                        accent = AppColors.red,
-                        title = AppLocale.collectorChaseTitle,
-                        count = chaseRows.size,
-                        hint = AppLocale.collectorChaseHint,
-                        onSeeAll = if (chaseRows.isNotEmpty()) onOpenChaseList else null
-                    )
-                }
-            }
-            item(key = "chase-list") {
-                CascadeIn(index = 4, visible = revealed, modifier = Modifier.padding(horizontal = 16.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        topChases.forEach { row ->
-                            ChaseMiniRow(row = row, onClick = { onChaseClick(row.id) })
-                        }
-                        NewTile(
-                            label = AppLocale.collectorNewChase,
-                            hint = if (chaseRows.isEmpty()) AppLocale.collectorChaseEmptyHint else null,
-                            accent = AppColors.red,
-                            wide = true,
-                            onClick = { createChase() }
+            // ── Nuovo ─────────────────────────────────────────────────────
+            item(key = "new") {
+                CascadeIn(index = 2, visible = revealed, modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        NewButton(
+                            label = AppLocale.collectorNewAlbum,
+                            accent = AppColors.orange,
+                            onClick = { createAlbum() },
+                            modifier = Modifier.weight(1f)
                         )
-                    }
-                }
-            }
-
-            // ── Illustratori ──────────────────────────────────────────────
-            item(key = "illustrators-header") {
-                CascadeIn(index = 5, visible = revealed) {
-                    LabSectionHeader(
-                        icon = Icons.Default.Brush,
-                        accent = AppColors.purple,
-                        title = AppLocale.illustratorsTitle,
-                        count = startedIllustrators,
-                        hint = AppLocale.collectorIllustratorsHint,
-                        onSeeAll = onOpenIllustrators
-                    )
-                }
-            }
-            item(key = "illustrators-row") {
-                CascadeIn(index = 6, visible = revealed) {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp)
-                    ) {
-                        items(myIllustrators, key = { it.key }) { row ->
-                            IllustratorTile(row = row, onClick = { onIllustratorClick(row.key) })
-                        }
-                        item(key = "discover") {
-                            NewTile(
-                                label = if (illustratorRows.isEmpty()) AppLocale.illustratorsTitle
-                                else AppLocale.collectorDiscoverIllustrators(illustratorRows.size),
-                                hint = if (myIllustrators.isEmpty()) AppLocale.collectorIllustratorsEmptyHint else null,
-                                accent = AppColors.purple,
-                                wide = myIllustrators.isEmpty(),
-                                icon = Icons.AutoMirrored.Filled.ArrowForward,
-                                onClick = onOpenIllustrators
-                            )
-                        }
+                        NewButton(
+                            label = AppLocale.collectorNewChase,
+                            accent = AppColors.red,
+                            onClick = { createChase() },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -318,9 +267,9 @@ fun AlbumListScreen(
     }
 }
 
-// ── Il prossimo passo ─────────────────────────────────────────────────────────
+// ── Continua ──────────────────────────────────────────────────────────────────
 
-internal enum class NextStepKind { CHASE, ILLUSTRATOR }
+internal enum class NextStepKind { ALBUM, CHASE, ILLUSTRATOR }
 
 internal data class NextStep(
     val kind: NextStepKind,
@@ -328,88 +277,130 @@ internal data class NextStep(
     val name: String,
     val owned: Int,
     val total: Int,
-    val percent: Float,
-    val previewUrls: List<String>
+    val percent: Float
 ) {
     val missing: Int get() = (total - owned).coerceAtLeast(0)
 }
 
 /**
- * Il traguardo piu' vicino fra chase e illustratori iniziati: quello a cui
- * mancano meno carte. Non la percentuale piu' alta -- un artista da 579 carte
- * non sara' mai "al 90%", ma se gliene mancano due e' comunque la cosa piu'
- * facile da chiudere oggi.
+ * I traguardi piu' vicini fra album, chase e illustratori iniziati: quelli a
+ * cui mancano meno carte. Non la percentuale piu' alta -- un artista da 579
+ * carte non sara' mai "al 90%", ma se gliene mancano due e' comunque la cosa
+ * piu' facile da chiudere oggi.
  *
  * Solo cose avviate e non finite: un chase completato non e' piu' un passo, e
  * un artista di cui non hai nessuna carta non e' un traguardo vicino.
  */
-internal fun pickNextStep(chases: List<ChaseRow>, illustrators: List<IllustratorRow>): NextStep? {
+internal fun pickContinueSteps(
+    albums: List<AlbumRow>,
+    chases: List<ChaseRow>,
+    illustrators: List<IllustratorRow>,
+    limit: Int = 3
+): List<NextStep> {
+    val fromAlbums = albums
+        .filter { it.size > 0 && it.used > 0 && !it.isFull }
+        .map { NextStep(NextStepKind.ALBUM, it.id, it.name, it.used, it.size, it.fillPercent) }
     val fromChases = chases
         .filter { it.total > 0 && it.owned > 0 && !it.isComplete }
-        .map { NextStep(NextStepKind.CHASE, it.id, it.name, it.owned, it.total, it.percent, emptyList()) }
+        .map { NextStep(NextStepKind.CHASE, it.id, it.name, it.owned, it.total, it.percent) }
     val fromIllustrators = illustrators
         .filter { it.owned > 0 && !it.isComplete }
-        .map {
-            NextStep(NextStepKind.ILLUSTRATOR, it.key, it.displayName, it.owned, it.total, it.percent, it.previewUrls)
-        }
-    return (fromChases + fromIllustrators)
-        .minWithOrNull(compareBy<NextStep> { it.missing }.thenByDescending { it.percent })
+        .map { NextStep(NextStepKind.ILLUSTRATOR, it.key, it.displayName, it.owned, it.total, it.percent) }
+    return (fromAlbums + fromChases + fromIllustrators)
+        .sortedWith(compareBy<NextStep> { it.missing }.thenByDescending { it.percent })
+        .take(limit)
 }
 
 @Composable
-private fun NextStepCard(step: NextStep, onClick: () -> Unit) {
-    val accent = if (step.kind == NextStepKind.CHASE) AppColors.red else AppColors.purple
-    Column(
+private fun NextStepKind.accent(): Color = when (this) {
+    NextStepKind.ALBUM -> AppColors.orange
+    NextStepKind.CHASE -> AppColors.red
+    NextStepKind.ILLUSTRATOR -> AppColors.purple
+}
+
+private fun NextStepKind.icon(): ImageVector = when (this) {
+    NextStepKind.ALBUM -> Icons.Default.PhotoLibrary
+    NextStepKind.CHASE -> Icons.Default.TrackChanges
+    NextStepKind.ILLUSTRATOR -> Icons.Default.Brush
+}
+
+@Composable
+private fun ContinueRow(step: NextStep, onClick: () -> Unit) {
+    val accent = step.kind.accent()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.22f), AppColors.surface)))
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.surface)
             .pressScale(onClick = onClick)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Pill(text = AppLocale.collectorNextStep, accent = accent)
-            Spacer(modifier = Modifier.width(6.dp))
-            Pill(
-                text = if (step.kind == NextStepKind.CHASE) AppLocale.collectorChaseTitle else AppLocale.illustrator,
-                accent = AppColors.textMuted
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = null,
-                tint = AppColors.textMuted,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ProgressRing(percent = step.percent, size = 58.dp, stroke = 5.dp, accent = accent, labelSize = 12)
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
+        ProgressRing(percent = step.percent, size = 42.dp, stroke = 3.dp, accent = accent, labelSize = 10)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(step.kind.icon(), contentDescription = null, tint = accent, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     step.name,
                     color = AppColors.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    AppLocale.collectorMissingToFinish(step.missing),
-                    color = AppColors.textSecondary,
-                    fontSize = 13.sp
-                )
-                Text("${step.owned}/${step.total}", color = AppColors.textMuted, fontSize = 11.sp)
             }
-            if (step.previewUrls.isNotEmpty()) {
-                CoverCollage(
-                    urls = step.previewUrls,
-                    gradient = listOf(accent.copy(alpha = 0.35f), accent.copy(alpha = 0.12f)),
-                    slotSize = 34.dp
-                )
-            }
+            Text(AppLocale.collectorMissingToFinish(step.missing), color = AppColors.textMuted, fontSize = 11.sp)
         }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("${step.owned}/${step.total}", color = AppColors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+/** Una delle tre porte: icona, nome, quanti, e una barra di avanzamento. */
+@Composable
+private fun LabDoor(
+    icon: ImageVector,
+    accent: Color,
+    title: String,
+    value: String,
+    percent: Float,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.18f), AppColors.surface)))
+            .border(1.dp, accent.copy(alpha = 0.30f), RoundedCornerShape(18.dp))
+            .pressScale(onClick = onClick)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        IconBadge(icon = icon, accent = accent, size = 30.dp)
+        Text(title, color = AppColors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, color = accent, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Spacer(modifier = Modifier.weight(1f))
+        FillBar(percent = percent, modifier = Modifier.fillMaxWidth(), accent = accent)
+    }
+}
+
+@Composable
+private fun NewButton(label: String, accent: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(accent.copy(alpha = 0.08f))
+            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+            .pressScale(onClick = onClick)
+            .padding(vertical = 12.dp)
+    ) {
+        Icon(Icons.Default.Add, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(label, color = accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 
@@ -448,47 +439,7 @@ private fun IntroLine(icon: ImageVector, accent: Color, title: String, text: Str
     }
 }
 
-// ── Mattoni comuni alle tre sezioni ───────────────────────────────────────────
-
-/**
- * L'intestazione di una sezione: icona, nome, quanti ne hai, cosa fa, e "Vedi
- * tutti". La riga di spiegazione e' li' per chi apre la prima volta: senza,
- * "Chase" non dice niente a nessuno.
- */
-@Composable
-private fun LabSectionHeader(
-    icon: ImageVector,
-    accent: Color,
-    title: String,
-    count: Int,
-    hint: String,
-    onSeeAll: (() -> Unit)?
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 8.dp, top = 12.dp)
-    ) {
-        IconBadge(icon = icon, accent = accent, size = 34.dp)
-        Spacer(modifier = Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, color = AppColors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                if (count > 0) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Pill(text = count.toString(), accent = accent)
-                }
-            }
-            Text(hint, color = AppColors.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        if (onSeeAll != null) {
-            TextButton(onClick = onSeeAll) {
-                Text(AppLocale.collectorSeeAll, color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
-    }
-}
+// ── Mattoni ──────────────────────────────────────────────────────────────────
 
 @Composable
 private fun IconBadge(icon: ImageVector, accent: Color, size: androidx.compose.ui.unit.Dp) {
@@ -503,190 +454,6 @@ private fun IconBadge(icon: ImageVector, accent: Color, size: androidx.compose.u
     }
 }
 
-@Composable
-private fun Pill(text: String, accent: Color) {
-    Box(
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(accent.copy(alpha = 0.16f))
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-    ) {
-        Text(text, color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-/**
- * Il tasto "+ Nuovo" in fondo alla fila della sua sezione. Quando la sezione e'
- * vuota si allarga e porta una riga di spiegazione: e' l'unica cosa sullo
- * schermo per quello strumento, deve dire lui cosa succede toccandolo.
- */
-@Composable
-private fun NewTile(
-    label: String,
-    hint: String?,
-    accent: Color,
-    wide: Boolean,
-    onClick: () -> Unit,
-    icon: ImageVector = Icons.Default.Add
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .then(if (wide) Modifier.fillParentOrWidth() else Modifier.width(132.dp).height(172.dp))
-            .clip(RoundedCornerShape(16.dp))
-            .background(accent.copy(alpha = 0.08f))
-            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-            .pressScale(onClick = onClick)
-            .padding(14.dp),
-        horizontalArrangement = if (wide) Arrangement.Start else Arrangement.Center
-    ) {
-        if (wide) {
-            IconBadge(icon = icon, accent = accent, size = 34.dp)
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(label, color = accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                if (hint != null) {
-                    Text(hint, color = AppColors.textMuted, fontSize = 12.sp)
-                }
-            }
-        } else {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconBadge(icon = icon, accent = accent, size = 38.dp)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    label,
-                    color = accent,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-            }
-        }
-    }
-}
-
-/**
- * Dentro una LazyRow `fillMaxWidth` non ha un genitore da riempire e il riquadro
- * si stringe al contenuto: la larghezza dello schermo, meno i margini, e' la
- * misura che serve perche' la tessera vuota abbia l'aria di una card e non di
- * un bottone.
- */
-@Composable
-private fun Modifier.fillParentOrWidth(): Modifier {
-    val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
-    return this.width(screenWidth - 32.dp)
-}
-
-// ── Contenuti delle sezioni ───────────────────────────────────────────────────
-
-@Composable
-private fun RecentAlbumCard(row: AlbumRow, onClick: () -> Unit) {
-    val gradient = getThemeColors(row.theme)
-    Column(
-        modifier = Modifier
-            .width(132.dp)
-            .height(172.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppColors.surface)
-            .pressScale(onClick = onClick)
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        CoverCollage(urls = row.previewUrls, gradient = gradient, slotSize = 56.dp)
-        Text(
-            row.name,
-            color = AppColors.textPrimary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(AppLocale.albumSlots(row.used, row.size), color = AppColors.textMuted, fontSize = 11.sp)
-        FillBar(percent = row.fillPercent, modifier = Modifier.fillMaxWidth(), accent = gradient.first())
-    }
-}
-
-@Composable
-private fun ChaseMiniRow(row: ChaseRow, onClick: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppColors.surface)
-            .pressScale(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-    ) {
-        ProgressRing(percent = row.percent, size = 42.dp, stroke = 3.dp, accent = AppColors.red, labelSize = 10)
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                row.name,
-                color = AppColors.textPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                row.criteriaLabel,
-                color = AppColors.textMuted,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                "${row.owned}/${row.total}",
-                color = if (row.isComplete) AppColors.gold else AppColors.textPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                if (row.isComplete) AppLocale.chaseCompleteBadge else AppLocale.chaseMissingCount(row.missing),
-                color = AppColors.textMuted,
-                fontSize = 10.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun IllustratorTile(row: IllustratorRow, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .width(132.dp)
-            .height(172.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppColors.surface)
-            .pressScale(onClick = onClick)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(verticalAlignment = Alignment.Top) {
-            IllustratorAvatar(key = row.key, displayName = row.displayName, size = 42.dp)
-            Spacer(modifier = Modifier.weight(1f))
-            if (row.isFollowed) {
-                Icon(Icons.Default.Star, contentDescription = null, tint = AppColors.gold, modifier = Modifier.size(16.dp))
-            }
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                row.displayName,
-                color = AppColors.textPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text("${row.owned}/${row.total}", color = AppColors.textMuted, fontSize = 11.sp)
-            FillBar(percent = row.percent, modifier = Modifier.fillMaxWidth(), accent = AppColors.purple)
-        }
-    }
-}
 
 // ── Caricamento ───────────────────────────────────────────────────────────────
 

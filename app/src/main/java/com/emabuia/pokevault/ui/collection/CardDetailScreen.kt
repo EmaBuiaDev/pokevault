@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -69,6 +71,7 @@ import com.emabuia.pokevault.ui.graded.onAccentColor
 import com.emabuia.pokevault.ui.graded.tierColor
 import com.emabuia.pokevault.ui.graded.tierLabel
 import com.emabuia.pokevault.util.GradeTier
+import com.emabuia.pokevault.viewmodel.IllustratorCatalogPref
 import com.emabuia.pokevault.util.GradedLab
 import kotlin.math.abs
 import kotlin.math.cos
@@ -90,10 +93,7 @@ import kotlin.math.sin
 private fun resolveSetCodeForPrices(card: PokemonCard): String {
     val apiId = card.apiCardId.trim()
 
-    if (apiId.startsWith("ita:", ignoreCase = true)) {
-        val overlayCode = apiId.split(':').getOrNull(1).orEmpty()
-        if (overlayCode.isNotBlank()) return overlayCode
-    }
+    CardRef.setCodeOf(apiId, CatalogLang.IT)?.let { return it }
 
     val setCode = apiId.substringBeforeLast('-', missingDelimiterValue = "")
         .substringBefore("__")
@@ -264,8 +264,12 @@ fun CardDetailScreen(
             ?: return@LaunchedEffect
         if (illustratorByApiId.containsKey(apiCardId)) return@LaunchedEffect
 
-        illustratorByApiId[apiCardId] = tcgRepository
-            .italianIllustratorsByCardId(context, setOf(apiCardId))[apiCardId]
+        // Copia inglese: l'illustratore sta nella carta del suo set EN.
+        illustratorByApiId[apiCardId] = if (CardRef.isCatalogCard(apiCardId, CatalogLang.EN)) {
+            RepositoryProvider.englishCatalogRepository.findCard(context, apiCardId)?.artist
+        } else {
+            tcgRepository.italianIllustratorsByCardId(context, setOf(apiCardId))[apiCardId]
+        }
     }
 
     LaunchedEffect(selectedVariantIndex, variants) {
@@ -276,14 +280,40 @@ fun CardDetailScreen(
             return@LaunchedEffect
         }
 
-        val cached = livePriceCacheByApiId[selected.apiCardId]
-        if (cached != null || livePriceCacheByApiId.containsKey(selected.apiCardId)) {
+        // Per carta E stampa: due copie della stessa carta (Normale e Reverse)
+        // hanno lo stesso apiCardId ma prezzo e link diversi.
+        val cacheKey = "${selected.apiCardId}|${selected.variant}"
+        val cached = livePriceCacheByApiId[cacheKey]
+        if (cached != null || livePriceCacheByApiId.containsKey(cacheKey)) {
             livePrices = cached
             isLoadingLivePrices = false
             return@LaunchedEffect
         }
 
         isLoadingLivePrices = true
+
+        // Carta del catalogo (italiano o inglese): il nostro listino, con prezzo
+        // e link della stampa della copia, la stessa fonte del Pokedex. Prima
+        // il dettaglio in Collezione mostrava la voce base anche per una
+        // Reverse o una timbrata, e per le italiane passava da PokeWallet.
+        val catalogLang = CardRef.langOf(selected.apiCardId)
+        if (catalogLang != null) {
+            val snapshot = runCatching {
+                RepositoryProvider.priceSnapshotRepositoryFor(selected.apiCardId)
+                    .priceForItalianCard(context, selected.apiCardId)
+            }.getOrNull()
+            // L'inglese ha solo il listino: PokeWallet, cercato col nome del
+            // set, costerebbe una chiamata e darebbe un prezzo a caso. Una
+            // italiana che il listino non conosce (o conosce senza prezzi in
+            // euro) prende la strada di prima, per non perdere niente.
+            if (catalogLang == CatalogLang.EN || snapshot?.hasEurPrices == true) {
+                val shown = snapshot?.forCopy(selected.variant)
+                livePriceCacheByApiId[cacheKey] = shown
+                livePrices = shown
+                isLoadingLivePrices = false
+                return@LaunchedEffect
+            }
+        }
 
         val remoteCard = tcgRepository.getCard(selected.apiCardId).getOrNull()
         val localPriceData = remoteCard?.let { remote ->
@@ -320,7 +350,7 @@ fun CardDetailScreen(
         }
 
         val resolved = mergePriceData(primary = localPriceData, fallback = enriched)
-        livePriceCacheByApiId[selected.apiCardId] = resolved
+        livePriceCacheByApiId[cacheKey] = resolved
         livePrices = resolved
         isLoadingLivePrices = false
     }
@@ -747,7 +777,11 @@ fun CardDetailScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onIllustratorClick(key) }
+                                    .clickable {
+                                        // L'album dell'artista nella lingua di questa copia.
+                                        IllustratorCatalogPref.followCard(context, currentCard.apiCardId)
+                                        onIllustratorClick(key)
+                                    }
                                     .padding(vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically

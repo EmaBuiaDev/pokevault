@@ -39,6 +39,8 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.emabuia.pokevault.data.remote.TcgCard
+import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.premium.PremiumRequiredDialog
 import com.emabuia.pokevault.ui.theme.*
@@ -105,7 +107,7 @@ fun CreateGoalAlbumScreen(
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
-        viewModel.loadAvailableSets()
+        viewModel.loadAvailableSets(context)
         viewModel.formCriteriaType = com.emabuia.pokevault.data.model.GoalCriteriaType.SET
         if (!viewModel.canCreate()) {
             showPremiumDialog = true
@@ -239,6 +241,8 @@ private fun SetPicker(
     val selectedSet = remember(selectedValue, sets) {
         sets.firstOrNull { it.id == selectedValue }
     }
+    // Con i set inglesi in lista, la bandiera dice di che lingua e' il set.
+    val showFlags = remember(sets) { sets.any { CatalogSetId.isCatalogSet(it.id, CatalogLang.EN) } }
     val filtered = remember(searchQuery, sets) {
         val trimmedQuery = searchQuery.trim()
         val matches = if (trimmedQuery.isBlank()) {
@@ -306,7 +310,7 @@ private fun SetPicker(
                             fontSize = 12.sp
                         )
                         Text(
-                            text = selectedSet.name,
+                            text = goalSetLabel(selectedSet, showFlags),
                             color = AppColors.textPrimary,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
@@ -421,7 +425,7 @@ private fun SetPicker(
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
-                                        text = set.name,
+                                        text = goalSetLabel(set, showFlags),
                                         color = if (isSelected) AppColors.orange else AppColors.textPrimary,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -656,4 +660,11 @@ private fun PreviewSection(cards: List<TcgCard>) {
             Text(AppLocale.otherCardsCount(cards.size - 12), color = AppColors.textMuted, fontSize = 12.sp)
         }
     }
+}
+
+/** Il nome del set nel selettore, con la bandiera quando ci sono due lingue. */
+internal fun goalSetLabel(set: TcgSet, showFlags: Boolean): String {
+    if (!showFlags) return set.name
+    val flag = if (CatalogSetId.isCatalogSet(set.id, CatalogLang.EN)) "🇬🇧" else "🇮🇹"
+    return "$flag ${set.name}"
 }

@@ -139,6 +139,23 @@ data class PokeWalletPriceData(
         return if (com.emabuia.pokevault.data.model.VariantKeys.isSpecial(variant)) null else this
     }
 
+    /**
+     * Quello che il dettaglio di una copia mostra: i prezzi della sua stampa
+     * ([forVariant]) e i link. Il link e' quello della stampa quando ne ha uno
+     * suo (una timbrata ha il suo prodotto Cardmarket), se no quello della
+     * carta: una stampa speciale senza prezzo resta senza prezzo, ma il
+     * bottone Cardmarket porta comunque alla carta, come nel Pokedex.
+     */
+    fun forCopy(variant: String?): PokeWalletPriceData {
+        val own = forVariant(variant)
+        val base = own ?: PokeWalletPriceData()
+        return base.copy(
+            cardMarketUrl = base.cardMarketUrl?.takeIf { it.isNotBlank() } ?: cardMarketUrl,
+            tcgPlayerUrl = base.tcgPlayerUrl?.takeIf { it.isNotBlank() } ?: tcgPlayerUrl,
+            variantPrices = emptyMap()
+        )
+    }
+
     /** True if at least one EUR price is available. */
     val hasEurPrices: Boolean
         get() = eurAvg != null || eurLow != null || eurTrend != null

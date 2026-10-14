@@ -50,3 +50,33 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/build-cardmarket-prices.mjs --upload
+
+  # Catalogo inglese (piano carte EN): job a parte, cosi' un errore qui non
+  # tocca mai il listino italiano. Collega le carte EN nuove ai prodotti
+  # Cardmarket (i gemelli copiano il collegamento italiano) e carica
+  # prezzi/cardmarket-en-v1.json, letto solo dalle rotte /en/prices del Worker.
+  listino-en:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: pokevault-proxy-worker
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Collega le carte EN ai prodotti Cardmarket
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/map-cardmarket-en.mjs --only-missing --apply
+
+      - name: Listino EN del giorno su R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/build-cardmarket-prices-en.mjs --upload

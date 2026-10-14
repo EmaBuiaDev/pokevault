@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.DeckLabViewModel
@@ -259,6 +260,9 @@ fun ImportResultDialog(
 fun DeckCardSourceDialog(
     prompt: String,
     isWorking: Boolean = false,
+    /** La lingua delle carte nuove; null dove l'inglese e' spento (niente scelta). */
+    cardLanguage: CatalogLang? = null,
+    onCardLanguageChange: (CatalogLang) -> Unit = {},
     onChoose: (DeckLabViewModel.DeckCardSource) -> Unit,
     onSkip: (() -> Unit)? = null,
     onDismiss: () -> Unit
@@ -285,6 +289,11 @@ fun DeckCardSourceDialog(
                     color = AppColors.textSecondary,
                     fontSize = 13.sp
                 )
+
+                if (cardLanguage != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    CardLanguageRow(selected = cardLanguage, enabled = !isWorking, onSelect = onCardLanguageChange)
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -384,3 +393,21 @@ private fun DeckImportSourceOption(
     }
 }
 
+/** "Lingua delle carte: Italiano | English", per le carte che il deck aggiunge. */
+@Composable
+private fun CardLanguageRow(selected: CatalogLang, enabled: Boolean, onSelect: (CatalogLang) -> Unit) {
+    Column {
+        Text(AppLocale.deckCardLanguage, color = AppColors.textMuted, fontSize = 12.sp)
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(CatalogLang.IT to "🇮🇹 Italiano", CatalogLang.EN to "🇬🇧 English").forEach { (lang, label) ->
+                FilterChip(
+                    selected = lang == selected,
+                    enabled = enabled,
+                    onClick = { onSelect(lang) },
+                    label = { Text(label, fontSize = 13.sp) }
+                )
+            }
+        }
+    }
+}

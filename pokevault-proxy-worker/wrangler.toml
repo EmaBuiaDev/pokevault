@@ -19,7 +19,10 @@ r2_buckets = [
 d1_databases = [
   { binding = "pokevault_catalog", database_name = "pokevault-catalog", database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7" },
   # TradeRadar (04/10/2026), migrazioni schema-trade/ applicate una alla volta.
-  { binding = "trade_db", database_name = "pokevault-trade", database_id = "ff58d55d-08f4-43de-9333-d07ddab75aa8" }
+  { binding = "trade_db", database_name = "pokevault-trade", database_id = "ff58d55d-08f4-43de-9333-d07ddab75aa8" },
+  # Catalogo inglese (piano carte EN, 14/10/2026): rotte /v1/en/*, /images/en/*,
+  # /en/*. L'app lo usa solo con l'interruttore acceso (/v1/app-config).
+  { binding = "catalog_en", database_name = "pokevault-catalog-en", database_id = "eb25d4e8-838e-416a-9bf4-29f3718c32e4" }
 ]
 
 # Environment variables
@@ -83,5 +86,57 @@ binding = "pokevault_catalog"
 database_name = "pokevault-catalog"
 database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7"
 
+# Il catalogo inglese, anche questo solo in LETTURA: nomi e dimensioni dei
+# set che esistono solo in inglese (trade.ts). I gemelli usano l'italiano.
+[[env.staging.d1_databases]]
+binding = "catalog_en"
+database_name = "pokevault-catalog-en"
+database_id = "eb25d4e8-838e-416a-9bf4-29f3718c32e4"
+
 [env.staging.triggers]
 crons = ["*/15 * * * *"]
+
+# ── Catalogo in staging (carte EN, Fase 2, 13/10/2026) ──────────────────────
+# Un Worker a parte (pokevault-catalog-staging), deployato con
+#   npx wrangler deploy --env catalog-staging
+# Stesso codice della produzione, per provare il catalogo inglese prima che
+# arrivi agli utenti e per confrontare le rotte italiane con quelle vere
+# (scripts/confronta-rotte.mjs). Regole:
+# - CATALOG_ONLY: niente billing, regali, scambi, cron;
+# - niente chiave PokeWallet (nessun secret): il proxy non chiama nessuno;
+# - una cache KV sua, per non scrivere nella cache della produzione;
+# - il catalogo italiano e le immagini veri, che il Worker solo LEGGE
+#   (nessuna rotta GET scrive su D1 o R2);
+# - catalog_en: il database inglese (schema-en/), a parte da quello italiano.
+[env.catalog-staging]
+name = "pokevault-catalog-staging"
+
+[env.catalog-staging.vars]
+ORIGIN_API = "https://api.pokewallet.io"
+CACHE_TTL_SECONDS = "259200"
+IT_IMAGE_PREFIX = "it"
+IT_CATALOG_KEY = "it/catalog/cards.cleaned.json"
+CARDMARKET_PRICES = "1"
+CATALOG_ONLY = "1"
+
+[[env.catalog-staging.kv_namespaces]]
+binding = "CACHE"
+id = "679b94621d644a81a0142cfab515321f"
+
+[[env.catalog-staging.r2_buckets]]
+binding = "IMAGES_BUCKET"
+bucket_name = "pokevault-images"
+
+[[env.catalog-staging.d1_databases]]
+binding = "pokevault_catalog"
+database_name = "pokevault-catalog"
+database_id = "2a219637-d11d-42fe-b888-8b95f2d7e6f7"
+
+[[env.catalog-staging.d1_databases]]
+binding = "catalog_en"
+database_name = "pokevault-catalog-en"
+database_id = "eb25d4e8-838e-416a-9bf4-29f3718c32e4"
+
+# I cron si erediterebbero dalla produzione: qui nessuno.
+[env.catalog-staging.triggers]
+crons = []

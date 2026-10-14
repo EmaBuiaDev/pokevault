@@ -42,3 +42,14 @@ report-catalogo/
 # File di lavoro degli script del listino Cardmarket
 .cardmarket-tmp/
 .cardmarket-prices.json
+
+# Import del catalogo EN (scripts/ingest-en-tutti.mjs): stato, log e temporanei
+scripts/.ingest-en-stato.json
+scripts/.ingest-en-log.txt
+scripts/.ingest-en-tmp/
+scripts/.ingest-en-uscita.txt
+scripts/.ingest-en-guardiano.txt
+scripts/.cardmarket-prices-en.json
+scripts/.map-cardmarket-en-tmp/
+scripts/.pkmncards-tmp/
+scripts/.bulbagarden-tmp/

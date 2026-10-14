@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -14,12 +15,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.ui.components.CascadeIn
 import com.emabuia.pokevault.ui.components.EmptyStateView
 import com.emabuia.pokevault.ui.components.FillBar
@@ -101,6 +104,17 @@ fun IllustratorListScreen(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = AppLocale.back,
                             tint = AppColors.textPrimary
+                        )
+                    }
+                },
+                actions = {
+                    // Album di una lingua alla volta (piano carte EN): sta qui in
+                    // alto per restare raggiungibile anche a lista vuota.
+                    if (viewModel.englishAvailable) {
+                        CatalogLangChips(
+                            selected = viewModel.catalogLang,
+                            onSelect = { viewModel.selectCatalogLang(context, it) },
+                            modifier = Modifier.padding(end = 8.dp)
                         )
                     }
                 },
@@ -289,6 +303,31 @@ private fun IllustratorListSkeleton(modifier: Modifier = Modifier) {
                 shape = RoundedCornerShape(16.dp),
                 index = i + 1
             )
+        }
+    }
+}
+
+/** IT | EN in due chip piccole, per la barra in alto: SortChipRow occupa tutta la riga. */
+@Composable
+private fun CatalogLangChips(selected: CatalogLang, onSelect: (CatalogLang) -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(CatalogLang.IT to "🇮🇹 IT", CatalogLang.EN to "🇬🇧 EN").forEach { (lang, label) ->
+            val isSelected = lang == selected
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(if (isSelected) AppColors.purple.copy(alpha = 0.22f) else AppColors.card)
+                    .border(1.dp, if (isSelected) AppColors.purple else AppColors.textMuted.copy(alpha = 0.22f), CircleShape)
+                    .pressScale { onSelect(lang) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = label,
+                    color = if (isSelected) AppColors.purple else AppColors.textSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                )
+            }
         }
     }
 }

@@ -17,6 +17,9 @@ import {
 } from './cardmarket-prices';
 import { resolveExpansionPrices } from './price-lookup';
 import { buildItalianSetSymbolCandidates, isSetImagePath, parseSetSymbolCode } from './set-images';
+import { mapCardRow, type D1CardRow } from './card-row';
+import { handleEnglishCatalogRequest } from './catalog-en';
+import { handleAppConfigRequest } from './app-config';
 
 interface Env {
   CACHE: KVNamespace;
@@ -56,6 +59,16 @@ interface Env {
   // PokeWallet (src/cardmarket-prices.ts). Toglierla riporta subito l'app ai
   // soli prezzi PokeWallet: quello snapshot si costruisce sempre, acceso o no.
   CARDMARKET_PRICES?: string;
+
+  // Catalogo inglese (src/catalog-en.ts, schema-en/). In produzione non c'e':
+  // le rotte /v1/en/* e /images/en/* proseguono come prima.
+  catalog_en?: D1Database;
+  /**
+   * "1" sul Worker di staging del catalogo: niente billing, regali, scambi e
+   * cron. Serve solo le rotte GET del catalogo, cosi' una prova non puo'
+   * scrivere entitlement veri ne' chiamare PokeWallet.
+   */
+  CATALOG_ONLY?: string;
 }
 
 interface CachedResponse {
@@ -881,48 +894,7 @@ async function handleItalianR2AssetRequest(
 // app release. Returns null on any failure so the caller falls back to the
 // pre-existing R2 blob behavior untouched -- this must never make the
 // catalog endpoint LESS reliable than it is today.
-type D1CardRow = {
-  card_id: string;
-  expansion_id: string;
-  nome: string;
-  tipo: string | null;
-  ps: string | null;
-  regola_speciale: string | null;
-  attacchi_json: string;
-  rarity: string | null;
-  stage: string | null;
-  illustratore: string | null;
-};
-
-// Shared row -> payload mapping, used by both /ita/catalog.json (buildCatalogJsonFromD1)
-// and /v1/expansions/{id}/cards, so the two endpoints can never drift apart on field
-// names -- both must match ItalianCardRecord on the Android side (cardId, espansioneId,
-// nome, tipo, ps, attacchi, regolaSpeciale, rarity, stage).
-function mapCardRow(r: D1CardRow, variants?: Map<string, string[]>) {
-  const stampe = variants?.get(r.card_id);
-  return {
-    cardId: r.card_id,
-    espansioneId: r.expansion_id,
-    nome: r.nome,
-    tipo: r.tipo,
-    ps: r.ps,
-    attacchi: JSON.parse(r.attacchi_json || '[]'),
-    regolaSpeciale: r.regola_speciale,
-    rarity: r.rarity,
-    // Lo stadio evolutivo (schema/009): e' il campo con cui l'app distingue un
-    // Pokemon che si puo' calare in campo dalla mano da uno che va evoluto.
-    stage: r.stage,
-    // Omesso quando manca invece di serializzare null: lo ha solo il catalogo
-    // storico preso dal wiki, e /ita/catalog.json porta sedicimila carte --
-    // una chiave nulla per ognuna sarebbe peso puro per ogni client.
-    ...(r.illustratore ? { illustratore: r.illustratore } : {}),
-    // Le stampe vere della carta (schema/015, scripts/build-card-variants.mjs):
-    // "Normal", "Reverse", "Holo", "1st Edition"... e le speciali
-    // ("Reverse|foil=pokeball"). Omesse quando non ci sono: l'app ripiega
-    // sulla rarita', come prima che la tabella esistesse.
-    ...(stampe && stampe.length ? { stampe } : {}),
-  };
-}
+// D1CardRow e mapCardRow stanno in src/card-row.ts: li usa anche il catalogo EN.
 
 /**
  * Le stampe delle carte che `scopeSql` seleziona (una condizione su `c`, la
@@ -2402,23 +2374,34 @@ export default {
       return tradeOnly ?? new Response('Not found', { status: 404 });
     }
 
-    // Le rotte di billing e regalo usano POST: vanno risolte PRIMA del filtro
-    // sui GET, e non passano mai dalla cache.
-    const billingResponse = await handleBillingRequest(request, requestUrl.pathname, env);
-    if (billingResponse) return billingResponse;
+    // Lo staging del catalogo salta billing, regali e scambi: vede il D1 vero.
+    if (env.CATALOG_ONLY !== '1') {
+      // Le rotte di billing e regalo usano POST: vanno risolte PRIMA del filtro
+      // sui GET, e non passano mai dalla cache.
+      const billingResponse = await handleBillingRequest(request, requestUrl.pathname, env);
+      if (billingResponse) return billingResponse;
 
-    const giftResponse = await handleGiftRequest(request, requestUrl.pathname, env);
-    if (giftResponse) return giftResponse;
+      const giftResponse = await handleGiftRequest(request, requestUrl.pathname, env);
+      if (giftResponse) return giftResponse;
 
-    // In produzione TRADE_ENABLED non c'e': questa restituisce null e /v1/trade/*
-    // prosegue fino al 404 di sempre.
-    const tradeResponse = await handleTradeRequest(request, requestUrl.pathname, env, ctx);
-    if (tradeResponse) return tradeResponse;
+      // In produzione TRADE_ENABLED non c'e': questa restituisce null e /v1/trade/*
+      // prosegue fino al 404 di sempre.
+      const tradeResponse = await handleTradeRequest(request, requestUrl.pathname, env, ctx);
+      if (tradeResponse) return tradeResponse;
+    }
 
     // Only cache GET requests
     if (request.method !== 'GET') {
       return new Response('Method not allowed', { status: 405 });
     }
+
+    // Interruttori dell'app (catalogo inglese): in tutti gli ambienti.
+    const appConfigResponse = await handleAppConfigRequest(request, requestUrl.pathname, env.IMAGES_BUCKET);
+    if (appConfigResponse) return appConfigResponse;
+
+    // Catalogo inglese: null se non e' una sua rotta o se catalog_en manca.
+    const englishResponse = await handleEnglishCatalogRequest(request, requestUrl, env);
+    if (englishResponse) return englishResponse;
 
     // New D1-backed catalog API: independent of the CACHE/KV binding
     // required below, and does not affect any existing route.
@@ -2636,6 +2619,10 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // Lo staging del catalogo non ha cron; se uno arrivasse lo stesso, niente
+    // prezzi (sarebbero chiamate PokeWallet) e niente TradeRadar.
+    if (env.CATALOG_ONLY === '1') return;
+
     // TradeRadar (solo dove e' acceso): promemoria, carte cercate, coda delle notifiche.
     if (env.TRADE_ENABLED === '1') ctx.waitUntil(tradeScheduled(env, controller.scheduledTime));
 

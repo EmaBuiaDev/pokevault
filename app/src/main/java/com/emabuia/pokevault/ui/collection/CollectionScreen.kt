@@ -70,6 +70,7 @@ import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.CardCategory
 import com.emabuia.pokevault.util.CardGroup
+import com.emabuia.pokevault.util.CollectionBrowser
 import com.emabuia.pokevault.util.CollectionFilter
 import com.emabuia.pokevault.util.CollectionLayout
 import com.emabuia.pokevault.util.CollectionSort
@@ -803,6 +804,7 @@ private fun AllCardsContent(
                     gridColumns = gridColumns,
                     ownedVariants = group.variants,
                     sharedKey = group.key,
+                    languageFlags = CollectionBrowser.languageFlags(group.languages),
                     onClick = { onClick(group.key) },
                     onLongClick = { onLongClick(group.key) },
                     modifier = Modifier.animateItem()
@@ -1528,6 +1530,8 @@ fun CollectionCardGridItem(
      * variante. Null quando l'elemento non porta al dettaglio.
      */
     sharedKey: String? = null,
+    /** Bandiere delle lingue possedute (CollectionBrowser.languageFlags): vuoto = solo italiano. */
+    languageFlags: String = "",
     modifier: Modifier = Modifier
 ) {
     val compact = gridColumns > 4
@@ -1594,6 +1598,23 @@ fun CollectionCardGridItem(
                 size = if (gridColumns > 3) 13 else 16,
                 fontSize = if (gridColumns > 3) 7 else 9,
                 modifier = Modifier.align(Alignment.TopStart).padding(4.dp)
+            )
+        }
+
+        // Le lingue della tessera (piano carte EN: IT ed EN della stessa carta
+        // stanno insieme), in basso a sinistra. Solo se c'e' qualcosa oltre
+        // all'italiano: chi colleziona solo in italiano non vede niente di nuovo.
+        if (languageFlags.isNotEmpty() && gridColumns <= 4 && !isSelectionMode) {
+            Text(
+                text = languageFlags,
+                fontSize = if (gridColumns > 3) 9.sp else 11.sp,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(4.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
             )
         }
 
@@ -1718,6 +1739,7 @@ private fun CollectionCardListItem(
                     if (showExpansion) append(group.expansionLabel).append(" · ")
                     if (card.cardNumber.isNotBlank()) append("#").append(card.cardNumber).append(" · ")
                     append("x").append(group.totalQuantity)
+                    CollectionBrowser.languageFlags(group.languages).takeIf { it.isNotEmpty() }?.let { append(" · ").append(it) }
                 },
                 color = AppColors.textMuted,
                 fontSize = 12.sp,

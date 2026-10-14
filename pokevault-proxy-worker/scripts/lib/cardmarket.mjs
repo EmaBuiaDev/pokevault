@@ -49,17 +49,17 @@ export async function runWrangler(args, options = {}, attempts = 3) {
  * wrangler restituisce solo le statistiche, non le righe. Su Windows lo spawn
  * con shell ri-spezza sugli spazi, da cui le virgolette attorno all'SQL.
  */
-export async function d1Select(sql) {
+export async function d1Select(sql, database = 'pokevault-catalog') {
   // Su una riga: con la shell gli a capo spezzano il comando.
   const oneLine = sql.replace(/\s+/g, ' ').trim();
-  const out = await runWrangler(['d1', 'execute', 'pokevault-catalog', '--remote', '--json', '--command', `"${oneLine.replace(/"/g, '\\"')}"`]);
+  const out = await runWrangler(['d1', 'execute', database, '--remote', '--json', '--command', `"${oneLine.replace(/"/g, '\\"')}"`]);
   const jsonStart = out.indexOf('[');
   const parsed = JSON.parse(jsonStart >= 0 ? out.slice(jsonStart) : out);
   return parsed[0]?.results ?? [];
 }
 
-export async function d1ExecuteFile(file) {
-  return runWrangler(['d1', 'execute', 'pokevault-catalog', '--remote', '--yes', `--file="${file}"`], {}, 1);
+export async function d1ExecuteFile(file, database = 'pokevault-catalog') {
+  return runWrangler(['d1', 'execute', database, '--remote', '--yes', `--file="${file}"`], {}, 1);
 }
 
 export function sqlString(value) {

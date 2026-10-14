@@ -1,6 +1,10 @@
 package com.emabuia.pokevault.data.remote
 
 import android.content.Context
+import com.emabuia.pokevault.data.catalog.CardNameMatch
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.italian.ItalianCardFacets
 import com.emabuia.pokevault.data.italian.ItalianCardRecord
 import com.emabuia.pokevault.data.italian.ItalianExpansionFacet
@@ -16,8 +20,10 @@ import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.emabuia.pokevault.data.italian.ItalianCatalogNormalizer
 import com.emabuia.pokevault.data.italian.ItalianExpansionSummary
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.IllustratorCardRef
 import com.emabuia.pokevault.util.IllustratorEntry
 import com.emabuia.pokevault.util.IllustratorNames
+import com.emabuia.pokevault.util.Illustrators
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,7 +35,6 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
-import java.text.Normalizer
 import java.util.Locale
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -146,14 +151,12 @@ class CatalogRepository {
         private const val SEARCH_CACHE_DURATION = 60 * 60 * 1000L           // 1 hour
         private const val SCANNER_MIN_NAME_SCORE = 36
         private val ALLOWED_LANGUAGES = setOf("ITA", "ENG", "JAP", "CHN")
-        private const val ITALIAN_SET_SUFFIX = "__ita"
         private val ITALIAN_PRINTED_TOTAL_BY_EXPANSION = mapOf(
             "me04" to 87
         )
 
         private const val RATE_LIMIT_COOLDOWN_MS = 60 * 1000L
 
-        private val SANITIZE_MULTI_SPACE = Regex("\\s+")
         private val LEGACY_ID_REGEX = Regex("^([A-Za-z0-9]+)-(.+)$")
         private val HASH_ID_REGEX = Regex("^[a-f0-9]{32,}$", RegexOption.IGNORE_CASE)
         private val FULL_NUMBER_REGEX = Regex("""^(\d+)/(\d+)$""")
@@ -372,6 +375,11 @@ class CatalogRepository {
             }
             val effectiveForceRefresh = forceRefresh || mustBypassCache
 
+            // Catalogo inglese (piano carte EN): repository e cache suoi.
+            if (CatalogSetId.isCatalogSet(setId, CatalogLang.EN)) {
+                return RepositoryProvider.englishCatalogRepository.getCardsBySet(context, setId, forceRefresh)
+            }
+
             if (isItalianSetId(setId)) {
                 return getCardsByItalianSet(
                     setId = setId,
@@ -446,6 +454,13 @@ class CatalogRepository {
         }
 
     suspend fun getSetInfo(setId: String): Result<TcgSet> = setInfoMutex.withLock {
+        // Set del catalogo inglese: non passano da Room ne' da PokeWallet.
+        if (CatalogSetId.isCatalogSet(setId, CatalogLang.EN)) {
+            return RepositoryProvider.englishCatalogRepository.getSet(context = null, setId = setId)
+                ?.let { Result.success(it) }
+                ?: Result.failure(NoSuchElementException("Set EN non trovato: $setId"))
+        }
+
         memorySets?.firstOrNull { it.id == setId }?.let { return Result.success(it) }
 
         // Prefer Room cache to avoid unnecessary credit consumption when opening set details.
@@ -474,63 +489,6 @@ class CatalogRepository {
         memorySets?.firstOrNull { it.id == setId }?.let { return Result.success(it) }
         networkResult
     }
-                    suspend fun getEnglishBaseCardForItalianOverlay(
-                        italianCardId: String,
-                        italianSetId: String,
-                        context: Context? = null,
-                        forceRefresh: Boolean = false
-                    ): Result<TcgCard?> = cardsMutex.withLock {
-                        if (!isItalianOverlayCardId(italianCardId)) return@withLock Result.success(null)
-
-                        val expansionId = parseItalianExpansionId(italianSetId) ?: return@withLock Result.success(null)
-                        val imageRef = italianCardId.removePrefix("ita:").split(':')
-                        val overlayNumber = imageRef.getOrNull(2)?.takeIf { it.isNotBlank() }
-                            ?: return@withLock Result.success(null)
-
-                        val setInfo = memorySets?.firstOrNull { it.id == italianSetId }
-                            ?: loadSetsFromRoom(ignoreExpiry = true)?.firstOrNull { it.id == italianSetId }
-                            ?: TcgSet(
-                                id = italianSetId,
-                                name = italianExpansionDisplayName(expansionId),
-                                series = deriveSeriesName(setCode = expansionId, language = "ENG", setName = expansionId),
-                                language = "ITA"
-                            )
-
-                        val expansionCards = italianCatalogRepository
-                            .getExpansionCards(baseUrl = PokeVaultApiClient.imageBaseUrl, expansionId = expansionId, forceRefresh = forceRefresh)
-                            .getOrNull()
-                            ?.takeIf { it.isNotEmpty() }
-                            ?: context?.let { safeContext ->
-                                italianCatalogRepository.getCatalog(safeContext, forceRefresh = forceRefresh)
-                                    .getOrNull()
-                                    ?.cardsByExpansion()
-                                    ?.get(expansionId)
-                            }.orEmpty()
-                        val preferredBaseSetCode = preferredBaseSetCodeForItalianExpansion(expansionId)
-                        val dominantRawSetCode = expansionCards
-                            .asSequence()
-                            .mapNotNull { record -> record.imageReference()?.setCode }
-                            .map { code -> code.trim().uppercase(Locale.ROOT) }
-                            .groupingBy { it }
-                            .eachCount()
-                            .maxByOrNull { it.value }
-                            ?.key
-
-                        val baseSetId = resolveEnglishBaseSetIdForItalianSet(
-                            italianSet = setInfo,
-                            dominantRawSetCode = preferredBaseSetCode ?: dominantRawSetCode
-                        ) ?: return@withLock Result.success(null)
-
-                        val baseCards = loadStandardCardsForSet(
-                            setId = baseSetId,
-                            context = context,
-                            forceRefresh = forceRefresh
-                        ).getOrDefault(emptyList())
-
-                        Result.success(
-                            baseCards.firstOrNull { extractCardNumber(it.number) == extractCardNumber(overlayNumber) }
-                        )
-                    }
 
     suspend fun searchCards(query: String, page: Int = 1): Result<List<TcgCard>> = searchMutex.withLock {
         if (query.isBlank()) return Result.success(emptyList())
@@ -1401,45 +1359,15 @@ class CatalogRepository {
         }
 
         return withContext(Dispatchers.Default) {
-            val buckets = LinkedHashMap<String, IllustratorBucket>()
-            for ((rawName, cardIds) in rawEntries) {
-                // Un credito a quattro mani vale per entrambi gli autori: le
-                // stesse carte finiscono in due bucket, ed e' voluto.
-                for (displayName in IllustratorNames.credits(rawName)) {
-                    val key = IllustratorNames.keyOf(displayName)
-                    if (key.isEmpty()) continue
-                    val bucket = buckets.getOrPut(key) { IllustratorBucket() }
-                    bucket.rawNames += rawName
-                    bucket.displayNames[displayName] =
-                        (bucket.displayNames[displayName] ?: 0) + cardIds.size
-                    bucket.cardIds += cardIds
-                }
-            }
-
-            buckets.map { (key, bucket) ->
-                val references = bucket.cardIds.mapNotNull { cardId ->
-                    ItalianCatalogNormalizer.toImageReference(cardId)
-                }
-                IllustratorEntry(
-                    key = key,
-                    displayName = IllustratorNames.bestDisplayName(bucket.displayNames),
-                    rawNames = bucket.rawNames.toList(),
-                    // La stessa chiave che PokemonCard.apiCardId porta in
-                    // collezione: e' cio' che rende l'incrocio una sola
-                    // intersezione di insiemi.
-                    cardApiIds = references.map { reference ->
-                        "ita:" + reference.setCode.lowercase(Locale.ROOT) + ":" + reference.cardNumber
-                    },
-                    // Il conteggio delle espansioni si ricava dai cardId e non
-                    // dall'expansionCount della rotta: quello e' per nome
-                    // grezzo, e sommarlo dopo aver unito due grafie conterebbe
-                    // due volte le espansioni che hanno in comune.
-                    expansionCount = references.map { it.setCode.lowercase(Locale.ROOT) }.distinct().size,
-                    previewUrls = references.take(3).map { reference ->
-                        PokeVaultApiClient.imageBaseUrl.trimEnd('/') +
+            Illustrators.entries(rawEntries) { cardId ->
+                ItalianCatalogNormalizer.toImageReference(cardId)?.let { reference ->
+                    IllustratorCardRef(
+                        apiCardId = CardRef.of(CatalogLang.IT, reference.setCode, reference.cardNumber).apiCardId,
+                        expansion = reference.setCode.lowercase(Locale.ROOT),
+                        previewUrl = PokeVaultApiClient.imageBaseUrl.trimEnd('/') +
                             "/images/it/" + reference.folderName + "/" + reference.cardNumber + "?size=low"
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -1459,13 +1387,6 @@ class CatalogRepository {
             .getOrNull()
             ?.cardsWithoutIllustrator
             ?: 0
-
-    /** Accumulatore di [italianIllustratorIndex]: una persona, tutte le sue grafie. */
-    private class IllustratorBucket(
-        val rawNames: MutableSet<String> = linkedSetOf(),
-        val displayNames: MutableMap<String, Int> = linkedMapOf(),
-        val cardIds: MutableSet<String> = linkedSetOf()
-    )
 
     /**
      * Le carte di un illustratore, pronte per la griglia.
@@ -1525,7 +1446,8 @@ class CatalogRepository {
      */
     suspend fun italianCardsByApiIds(context: Context, apiCardIds: Set<String>): Map<String, TcgCard> {
         val result = HashMap<String, TcgCard>()
-        apiCardIds.groupBy { it.removePrefix("ita:").substringBefore(':').lowercase(Locale.ROOT) }.forEach { (setCode, ids) ->
+        apiCardIds.groupBy { CardRef.setCodeOf(it, CatalogLang.IT) }.forEach { (setCode, ids) ->
+            if (setCode == null) return@forEach
             val cards = getCardsBySet(buildItalianSetId(setCode), context).getOrNull().orEmpty()
             for (card in cards) if (card.id in ids) result[card.id] = card
         }
@@ -1695,6 +1617,15 @@ class CatalogRepository {
     }
 
     suspend fun getCard(cardId: String, preferNetwork: Boolean = false): Result<TcgCard> = cardByIdMutex.withLock {
+        // Carta del catalogo inglese: dal catalogo EN, caricando il suo set se
+        // serve. Mai la rete verso PokeWallet, dove "eng:sv08:1" costerebbe una
+        // chiamata a vuoto.
+        if (CardRef.isCatalogCard(cardId, CatalogLang.EN)) {
+            return RepositoryProvider.englishCatalogRepository.findCard(null, cardId)
+                ?.let { Result.success(it) }
+                ?: Result.failure(NoSuchElementException("Carta EN non trovata: $cardId"))
+        }
+
         fun findMemoryCard(): TcgCard? {
             return memoryCards.values
                 .asSequence()
@@ -2055,73 +1986,10 @@ class CatalogRepository {
         normalizedName: String,
         normalizedQuery: String,
         queryTokens: List<String>
-    ): Int {
-        if (normalizedName == normalizedQuery) return 1000
+    ): Int = CardNameMatch.score(normalizedName, normalizedQuery, queryTokens)
 
-        val startsWith = normalizedName.startsWith(normalizedQuery)
-        val wordContains = " $normalizedName ".contains(" $normalizedQuery ")
-
-        if (startsWith) return 850
-        if (wordContains) return 700
-        if (normalizedName.contains(normalizedQuery)) return 560
-
-        val longTokens = queryTokens.filter { it.length >= 2 }
-        if (longTokens.isNotEmpty() && longTokens.all { token -> normalizedName.contains(token) }) {
-            return 420
-        }
-        if (longTokens.any { token -> token.length >= 3 && " $normalizedName ".contains(" $token ") }) {
-            return 260
-        }
-
-        return 0
-    }
-
-    private fun scannerNameScore(normalizedName: String, normalizedQuery: String): Int {
-        if (normalizedQuery.isBlank()) return 0
-        if (normalizedName == normalizedQuery) return 120
-        if (normalizedName.startsWith(normalizedQuery) || normalizedQuery.startsWith(normalizedName)) return 105
-        if (normalizedName.contains(normalizedQuery) || normalizedQuery.contains(normalizedName)) return 88
-
-        val queryTokens = normalizedQuery.split(" ").filter { it.length >= 2 }
-        val nameTokens = normalizedName.split(" ").filter { it.length >= 2 }
-        if (queryTokens.isNotEmpty() && queryTokens.all { token -> nameTokens.any { it.contains(token) || token.contains(it) } }) {
-            return 72
-        }
-
-        val distance = levenshteinDistance(normalizedName, normalizedQuery)
-        val maxLength = maxOf(normalizedName.length, normalizedQuery.length).coerceAtLeast(1)
-        val similarity = 1.0 - distance.toDouble() / maxLength.toDouble()
-        return when {
-            similarity >= 0.82 -> 68
-            similarity >= 0.72 -> 52
-            similarity >= 0.62 -> 36
-            else -> 0
-        }
-    }
-
-    private fun levenshteinDistance(left: String, right: String): Int {
-        if (left == right) return 0
-        if (left.isEmpty()) return right.length
-        if (right.isEmpty()) return left.length
-
-        val previous = IntArray(right.length + 1) { it }
-        val current = IntArray(right.length + 1)
-
-        for (leftIndex in left.indices) {
-            current[0] = leftIndex + 1
-            for (rightIndex in right.indices) {
-                val substitutionCost = if (left[leftIndex] == right[rightIndex]) 0 else 1
-                current[rightIndex + 1] = minOf(
-                    current[rightIndex] + 1,
-                    previous[rightIndex + 1] + 1,
-                    previous[rightIndex] + substitutionCost
-                )
-            }
-            previous.indices.forEach { index -> previous[index] = current[index] }
-        }
-
-        return previous[right.length]
-    }
+    private fun scannerNameScore(normalizedName: String, normalizedQuery: String): Int =
+        CardNameMatch.scannerScore(normalizedName, normalizedQuery)
 
     private suspend fun searchCardsFromLocalCache(query: String): List<TcgCard> {
         if (query.isBlank()) return emptyList()
@@ -2466,15 +2334,15 @@ class CatalogRepository {
     }
 
     private fun isItalianSetId(setId: String): Boolean {
-        return setId.trim().lowercase(Locale.ROOT).endsWith(ITALIAN_SET_SUFFIX)
+        return CatalogSetId.isCatalogSet(setId, CatalogLang.IT)
     }
 
     private fun isItalianOverlayCardId(cardId: String): Boolean {
-        return cardId.trim().lowercase(Locale.ROOT).startsWith("ita:")
+        return CardRef.isCatalogCard(cardId, CatalogLang.IT)
     }
 
     private fun buildItalianSetId(expansionId: String): String {
-        return "${expansionId.trim().lowercase(Locale.ROOT)}$ITALIAN_SET_SUFFIX"
+        return CatalogSetId.of(CatalogLang.IT, expansionId)
     }
 
     /**
@@ -2534,9 +2402,7 @@ class CatalogRepository {
     }
 
     private fun parseItalianExpansionId(setId: String): String? {
-        val normalized = setId.trim().lowercase(Locale.ROOT)
-        if (!normalized.endsWith(ITALIAN_SET_SUFFIX)) return null
-        return normalized.removeSuffix(ITALIAN_SET_SUFFIX).ifBlank { null }
+        return CatalogSetId.expansionOf(setId, CatalogLang.IT)
     }
 
     private fun normalizeItalianSetCode(raw: String): String {
@@ -2621,7 +2487,7 @@ class CatalogRepository {
         val imageRef = record.imageReference()
         val normalizedSetCode = imageRef?.setCode ?: normalizeItalianSetCode(record.espansioneId)
         val normalizedNumber = imageRef?.cardNumber ?: extractCardNumber(record.cardId)
-        return "ita:${normalizedSetCode.lowercase(Locale.ROOT)}:$normalizedNumber"
+        return CardRef.of(CatalogLang.IT, normalizedSetCode, normalizedNumber).apiCardId
     }
 
     private fun findExactRawSetMatch(sets: List<TcgSet>, rawSetCode: String?): TcgSet? {
@@ -2754,7 +2620,11 @@ class CatalogRepository {
         forceRefresh: Boolean
     ): List<TcgSet> {
         val nonItalianSets = baseSets.filterNot { isItalianSetId(it.id) }
-        if (context == null) return nonItalianSets
+        // Senza Context non si puo' rifare la fusione, ma i set italiani gia'
+        // fusi (memoria o Room) restano: prima si buttavano, e chi chiamava
+        // getSets() senza Context (Statistiche, chase) li perdeva, e con lui
+        // la cache in memoria fino al giro successivo del Pokedex.
+        if (context == null) return baseSets
 
         // Pre-index nonItalianSets once: raw setRef (uppercase) → newest set, and
         // canonical (normalized) setRef → first set. Avoids O(N*M) linear scans per expansion.
@@ -3370,20 +3240,9 @@ class CatalogRepository {
         }
     }
 
-    private fun sanitizeQuery(raw: String): String {
-        return raw.replace(SANITIZE_MULTI_SPACE, " ").trim()
-    }
+    private fun sanitizeQuery(raw: String): String = CardNameMatch.sanitize(raw)
 
-    private fun normalizeNameForLookup(raw: String?): String {
-        if (raw.isNullOrBlank()) return ""
-        val deCamel = raw.replace(Regex("([a-z])([A-Z])"), "$1 $2")
-        val normalized = Normalizer.normalize(deCamel, Normalizer.Form.NFD)
-            .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
-            .lowercase()
-            .replace(Regex("[^a-z0-9]+"), " ")
-            .trim()
-        return sanitizeQuery(normalized)
-    }
+    private fun normalizeNameForLookup(raw: String?): String = CardNameMatch.normalize(raw)
 
     private fun extractCardNumber(number: String): String {
         return number.substringBefore("/").trim().trimStart('0').ifEmpty { "0" }

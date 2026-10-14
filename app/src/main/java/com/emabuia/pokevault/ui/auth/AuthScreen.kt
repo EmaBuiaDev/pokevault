@@ -156,7 +156,7 @@ fun AuthScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "PokeVault",
+                        text = AppLocale.APP_NAME,
                         fontSize = 30.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = AppColors.textPrimary,

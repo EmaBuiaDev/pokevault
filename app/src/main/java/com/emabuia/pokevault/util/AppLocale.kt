@@ -22,11 +22,29 @@ object AppLocale {
     private const val PREFS_NAME = "pokevault_prefs"
     private const val KEY_LANG = "app_language"
 
+    /**
+     * Nome dell'app mostrato all'utente. Gli identificativi tecnici (package,
+     * prodotti Play, preferenze, database, Worker, URL del sito) restano
+     * "pokevault": cambiarli fa perdere dati e abbonamenti.
+     */
+    const val APP_NAME = "PoketCards"
+
     fun init(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val saved = prefs.getString(KEY_LANG, "it") ?: "it"
-        current = if (saved == "en") Language.EN else Language.IT
+        // Senza una scelta salvata vale la lingua del telefono: chi ha il telefono
+        // in inglese trova l'app (e il catalogo del Pokedex) in inglese. Non si
+        // salva, cosi' segue il telefono finche' l'utente non sceglie a mano.
+        val saved = prefs.getString(KEY_LANG, null)
+        current = when (saved) {
+            "en" -> Language.EN
+            "it" -> Language.IT
+            else -> forDeviceLanguage(java.util.Locale.getDefault().language)
+        }
     }
+
+    /** Italiano solo per i telefoni in italiano; tutti gli altri in inglese. */
+    fun forDeviceLanguage(languageCode: String?): Language =
+        if (languageCode.equals("it", ignoreCase = true)) Language.IT else Language.EN
 
     fun setLanguage(lang: Language, context: Context) {
         current = lang
@@ -444,8 +462,10 @@ object AppLocale {
         "Hanno lo stesso numero: cambia l'espansione."
     else
         "Same number, different set."
-    val scannerModeContinuous: String get() = if (isItalian) "Continuo" else "Continuous"
-    val scannerModeConfirm: String get() = if (isItalian) "A conferma" else "Confirm each"
+    val scannerModeContinuous: String get() = if (isItalian) "Automatico" else "Automatic"
+    val deckCardLanguage: String get() = if (isItalian) "Lingua delle carte" else "Card language"
+    val scannerLanguageAuto: String get() = if (isItalian) "🌐 Lingua: auto" else "🌐 Language: auto"
+    val scannerModeConfirm: String get() = if (isItalian) "Conferma" else "Confirm"
     val scannerManualSearch: String get() = if (isItalian) "Cercala a mano" else "Search by hand"
     val scannerCantFind: String get() = if (isItalian) "Non è tra queste?" else "Not listed?"
     val scannerRetryRejected: String get() = if (isItalian) "Riproponi tutte" else "Show them again"
@@ -621,6 +641,7 @@ object AppLocale {
     val extensions: String get() = if (isItalian) "Espansioni" else "Expansions"
     val searchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
     val searchInSets: String get() = if (isItalian) "Cerca tra tutte le espansioni..." else "Search across all expansions..."
+    val searchAllLanguages: String get() = if (isItalian) "🌐 Tutte" else "🌐 All"
     val searchSetPlaceholder: String get() = if (isItalian) "Cerca un'espansione..." else "Search an expansion..."
     // Filtri della ricerca carte: le voci vengono dal catalogo, le etichette no.
     val searchFiltersHint: String get() = if (isItalian) "Restringono i risultati della ricerca" else "They narrow down the search results"
@@ -1306,10 +1327,10 @@ object AppLocale {
     else
         "Subscription on another account"
     val billingClaimedBody: String get() = if (isItalian)
-        "L'abbonamento attivo su questo telefono è già collegato a un altro account PokeVault. " +
+        "L'abbonamento attivo su questo telefono è già collegato a un altro account $APP_NAME. " +
         "Accedi con quell'account per usarlo, oppure scrivici e lo sblocchiamo."
     else
-        "The subscription on this phone is already linked to another PokeVault account. " +
+        "The subscription on this phone is already linked to another $APP_NAME account. " +
         "Sign in with that account to use it, or contact us and we will unlink it."
     val themeLabel: String get() = if (isItalian) "Tema" else "Theme"
     fun themeSubtitle(mode: String): String = when (mode) {
@@ -1513,9 +1534,9 @@ object AppLocale {
     // Zona vuota: invitare qualcuno.
     val tradeRadarInviteFriend: String get() = if (isItalian) "Invita un amico" else "Invite a friend"
     val tradeRadarInviteMessage: String get() = if (isItalian)
-        "Scambiamo carte Pokémon? Su PokeVault c'è TradeRadar: trovi chi vicino a te ha le carte che ti mancano. https://play.google.com/store/apps/details?id=com.emabuia.pokevault"
+        "Scambiamo carte Pokémon? Su $APP_NAME c'è TradeRadar: trovi chi vicino a te ha le carte che ti mancano. https://play.google.com/store/apps/details?id=com.emabuia.pokevault"
     else
-        "Want to trade Pokémon cards? PokeVault has TradeRadar: find people near you who have the cards you're missing. https://play.google.com/store/apps/details?id=com.emabuia.pokevault"
+        "Want to trade Pokémon cards? $APP_NAME has TradeRadar: find people near you who have the cards you're missing. https://play.google.com/store/apps/details?id=com.emabuia.pokevault"
     val tradeRadarSafetyTitle: String get() = if (isItalian) "Scambi sicuri" else "Trade safely"
     val tradeRadarSafetyText: String get() = if (isItalian) "Incontratevi solo in luoghi pubblici, come un negozio di carte, e di giorno. Non condividere indirizzo o numero di telefono. Controlla le carte prima di scambiarle." else "Meet only in public places, such as a card shop, during the day. Never share your address or phone number. Check the cards before trading."
     val tradeRadarNickname: String get() = if (isItalian) "Nickname" else "Nickname"
@@ -1718,7 +1739,7 @@ object AppLocale {
     val tradeRadarNotifyWants: String get() = if (isItalian) "Carte che cerchi" else "Cards you want"
     val tradeRadarNotifyWantsHint: String get() = if (isItalian) "Quando qualcuno vicino le offre: al massimo una volta al giorno, la sera" else "When someone nearby offers them: at most once a day, in the evening"
     val tradeRadarNotifyQuiet: String get() = if (isItalian) "Di notte (22-8) le notifiche aspettano il mattino, tranne i promemoria." else "At night (10pm-8am) notifications wait for the morning, except reminders."
-    val tradeRadarNotifyBlocked: String get() = if (isItalian) "Le notifiche di PokeVault sono bloccate nelle impostazioni del telefono: finché restano così non arriva niente." else "PokeVault notifications are blocked in the phone settings: nothing will arrive until you allow them."
+    val tradeRadarNotifyBlocked: String get() = if (isItalian) "Le notifiche di $APP_NAME sono bloccate nelle impostazioni del telefono: finché restano così non arriva niente." else "$APP_NAME notifications are blocked in the phone settings: nothing will arrive until you allow them."
     val tradeRadarNotifyOpenSettings: String get() = if (isItalian) "Apri impostazioni" else "Open settings"
     val tradeRadarWantsAskTitle: String get() = if (isItalian) "Ti avvisiamo per le carte che cerchi?" else "Get alerts for the cards you want?"
     val tradeRadarWantsAskBody: String get() = if (isItalian) "Quando qualcuno vicino a te offre una carta della tua lista desideri. Al massimo una notifica al giorno, la sera; puoi cambiare idea da ⋮ → Notifiche." else "When someone near you offers a card from your wishlist. At most one notification a day, in the evening; you can change it from ⋮ → Notifications."
@@ -2143,9 +2164,9 @@ object AppLocale {
 
     val ratingPromptTitle: String get() = if (isItalian) "Un Poké-messaggio per te" else "A Poké message for you"
     val ratingPromptTagline: String get() = if (isItalian)
-        "PokeVault lo porto avanti da solo, nel tempo libero."
+        "$APP_NAME lo porto avanti da solo, nel tempo libero."
     else
-        "I build PokeVault on my own, in my spare time."
+        "I build $APP_NAME on my own, in my spare time."
     val ratingPromptBody: String get() = if (isItalian)
         "Una recensione sul Play Store è il modo più veloce per farlo conoscere — " +
         "e se ci scrivi cosa cambieresti, lo leggo davvero: metà di quello che " +
@@ -2159,7 +2180,7 @@ object AppLocale {
 
     val privacyConsentTitle: String get() = if (isItalian) "Informativa Privacy" else "Privacy Policy"
     val privacyConsentSummary: String get() = if (isItalian)
-        "Per utilizzare PokeVault, raccogliamo e conserviamo i seguenti dati:\n\n" +
+        "Per utilizzare $APP_NAME, raccogliamo e conserviamo i seguenti dati:\n\n" +
         "• Email e nome — per l'autenticazione e il profilo\n" +
         "• Dati della collezione — carte, mazzi, valutazioni\n" +
         "• Dati della fotocamera — solo per la scansione OCR (elaborati sul dispositivo, non inviati a server esterni)\n\n" +
@@ -2167,7 +2188,7 @@ object AppLocale {
         "Non vendiamo né condividiamo i tuoi dati personali con terze parti per scopi pubblicitari. " +
         "Puoi eliminare il tuo account e tutti i dati associati in qualsiasi momento dalle Impostazioni."
     else
-        "To use PokeVault, we collect and store the following data:\n\n" +
+        "To use $APP_NAME, we collect and store the following data:\n\n" +
         "• Email and name — for authentication and profile\n" +
         "• Collection data — cards, decks, valuations\n" +
         "• Camera data — only for OCR scanning (processed on-device, not sent to external servers)\n\n" +
@@ -2240,9 +2261,9 @@ object AppLocale {
 
     val premiumTitle: String get() = if (isItalian) "Sblocca tutto il potenziale" else "Unlock full potential"
     val premiumSubtitle: String get() = if (isItalian)
-        "Accedi a tutte le funzionalità premium di PokeVault"
+        "Accedi a tutte le funzionalità premium di $APP_NAME"
     else
-        "Access all PokeVault premium features"
+        "Access all $APP_NAME premium features"
     val premiumActiveTitle: String get() = if (isItalian) "Sei Premium!" else "You're Premium!"
     val premiumActiveSubtitle: String get() = if (isItalian)
         "Hai accesso a tutte le funzionalità senza limiti."
@@ -2277,7 +2298,7 @@ object AppLocale {
     else
         "Subscription auto-renews. You can cancel anytime from Google Play Store. " +
         "Payment is charged to your Google Play account."
-    val premiumSettingsLabel: String get() = if (isItalian) "PokeVault Premium" else "PokeVault Premium"
+    val premiumSettingsLabel: String get() = "$APP_NAME Premium"
 
     /**
      * Sottotitolo Premium nelle impostazioni.
@@ -2387,10 +2408,10 @@ object AppLocale {
     val giftCopiedToast: String get() = if (isItalian) "Codice copiato" else "Code copied"
     val giftShareCta: String get() = if (isItalian) "Condividi" else "Share"
     fun giftShareMessage(code: String): String = if (isItalian)
-        "Ti regalo un mese di PokeVault Premium 🎁\n\n" +
+        "Ti regalo un mese di $APP_NAME Premium 🎁\n\n" +
         "Scarica l'app, vai in Impostazioni → Codici regalo e inserisci:\n$code"
     else
-        "Here is a free month of PokeVault Premium 🎁\n\n" +
+        "Here is a free month of $APP_NAME Premium 🎁\n\n" +
         "Download the app, open Settings → Gift codes and enter:\n$code"
     val giftShareChooserTitle: String get() = if (isItalian) "Regala un mese Premium" else "Gift a Premium month"
 
@@ -2616,9 +2637,9 @@ object AppLocale {
     else
         "$cards catalog cards don't say who drew them and aren't listed here."
     fun illustratorsCollectionGap(cards: Int): String = if (isItalian)
-        "$cards carte della tua collezione non sono collegate al catalogo italiano e non contano nei progressi."
+        "$cards carte della tua collezione non sono collegate al catalogo e non contano nei progressi."
     else
-        "$cards cards in your collection aren't linked to the Italian catalog and don't count towards progress."
+        "$cards cards in your collection aren't linked to the catalog and don't count towards progress."
     val illustratorCompleteTitle: String get() = if (isItalian)
         "Collezione completa!"
     else
@@ -2685,23 +2706,8 @@ object AppLocale {
         "Every card by one artist"
     val collectorNewAlbum: String get() = if (isItalian) "Nuovo album" else "New album"
     val collectorNewChase: String get() = if (isItalian) "Nuovo chase" else "New chase"
-    val collectorAlbumEmptyHint: String get() = if (isItalian)
-        "Metti in pagina le carte che hai, come in un raccoglitore vero."
-    else
-        "Lay out the cards you own, like a real binder."
-    val collectorChaseEmptyHint: String get() = if (isItalian)
-        "Scegli un set e guarda quali carte ti mancano per chiuderlo."
-    else
-        "Pick a set and see which cards you still need."
-    val collectorIllustratorsEmptyHint: String get() = if (isItalian)
-        "Scegli un artista e colleziona tutte le carte che ha disegnato."
-    else
-        "Pick an artist and collect every card they drew."
-    fun collectorDiscoverIllustrators(count: Int): String = if (isItalian)
-        "Tutti i $count artisti"
-    else
-        "All $count artists"
-    val collectorNextStep: String get() = if (isItalian) "Il prossimo passo" else "Next up"
+    val collectorContinue: String get() = if (isItalian) "Continua" else "Keep going"
+    val collectorArtistsShort: String get() = if (isItalian) "Artisti" else "Artists"
     fun collectorMissingToFinish(count: Int): String = if (isItalian) {
         if (count == 1) "Manca 1 carta per chiudere" else "Mancano $count carte per chiudere"
     } else {

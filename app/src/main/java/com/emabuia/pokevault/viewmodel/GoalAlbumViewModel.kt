@@ -7,6 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
@@ -31,10 +34,16 @@ data class GoalProgress(
     val percentage: Float
 )
 
+/** Solo i set dei nostri cataloghi: prima gli italiani, poi gli inglesi. */
+internal fun goalSetChoices(sets: List<TcgSet>, englishSets: List<TcgSet>): List<TcgSet> =
+    sets.filter { CatalogSetId.isCatalogSet(it.id, CatalogLang.IT) } +
+        englishSets.filter { CatalogSetId.isCatalogSet(it.id, CatalogLang.EN) }
+
 class GoalAlbumViewModel : ViewModel() {
 
     private val repository = FirestoreRepository()
     private val tcgRepository = RepositoryProvider.tcgRepository
+    private val englishCatalog = RepositoryProvider.englishCatalogRepository
     private val premiumManager = PremiumManager.getInstance()
 
     // ── State ──────────────────────────────────────────────────────────────
@@ -100,10 +109,29 @@ class GoalAlbumViewModel : ViewModel() {
         }
     }
 
-    fun loadAvailableSets() {
+    /**
+     * I set fra cui scegliere: i nostri cataloghi, italiano e (dove e' acceso)
+     * inglese. Senza Context getSets() scartava proprio i set italiani, e si
+     * potevano scegliere solo set PokeWallet: chase che non contavano le copie
+     * italiane e costavano chiamate a ogni apertura.
+     */
+    fun loadAvailableSets(context: Context) {
         if (availableSets.isNotEmpty()) return
         viewModelScope.launch {
-            tcgRepository.getSets().onSuccess { availableSets = it }
+            val italian = tcgRepository.getSets(context).getOrNull().orEmpty()
+            val english = if (englishCatalog.isEnabled) englishCatalog.getSets(context).getOrNull().orEmpty() else emptyList()
+            availableSets = goalSetChoices(italian, english)
+        }
+    }
+
+    /**
+     * Un chase su un set nato con zero carte obiettivo (i set italiani senza
+     * Context restavano vuoti): appena le carte si caricano, si salvano.
+     */
+    fun repairEmptyTargets(album: GoalAlbum, loaded: List<TcgCard>) {
+        if (album.criteriaType != GoalCriteriaType.SET || album.targetCardApiIds.isNotEmpty() || loaded.isEmpty()) return
+        viewModelScope.launch {
+            repository.saveGoalAlbum(album.copy(targetCardApiIds = loaded.map { it.id }))
         }
     }
 
@@ -259,7 +287,7 @@ class GoalAlbumViewModel : ViewModel() {
                 variant = selectedVariant,
                 quantity = 1,
                 condition = "Near Mint",
-                language = "🇮🇹 Italiano"
+                language = (CardRef.langOf(card.id) ?: CatalogLang.IT).copyLanguageLabel
             )
 
             repository.addCard(pokemonCard)
@@ -288,7 +316,8 @@ class GoalAlbumViewModel : ViewModel() {
         context: Context
     ): List<TcgCard> = when (type) {
         GoalCriteriaType.SET -> {
-            tcgRepository.getCardsBySet(value).getOrElse { emptyList() }
+            // Il Context serve: senza, i set dei nostri cataloghi tornano vuoti.
+            tcgRepository.getCardsBySet(value, context).getOrElse { emptyList() }
         }
         GoalCriteriaType.RARITY -> {
             tcgRepository.searchItalianCardsByAttribute(ItalianCardAttribute.RARITY, value, context)

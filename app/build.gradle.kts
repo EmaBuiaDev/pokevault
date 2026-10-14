@@ -22,8 +22,8 @@ android {
         applicationId = "com.emabuia.pokevault"
         minSdk = 26
         targetSdk = 36
-        versionCode = 40
-        versionName = "3.1.7"
+        versionCode = 41
+        versionName = "3.1.8"
 
         buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
         buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "${localProperties.getProperty("POKEWALLET_PROXY_ENABLED", "false")}")
@@ -61,6 +61,13 @@ android {
             // TradeRadarFlagTest controlla che resti cosi'.
             buildConfigField("Boolean", "TRADE_ENABLED", "true")
             buildConfigField("String", "TRADE_API_URL", "\"https://pokevault-proxy.pokevault-emanu.workers.dev\"")
+
+            // Catalogo inglese ACCESO in produzione dalla 3.1.8. Acceso qui e non
+            // solo da /v1/app-config: il valore remoto vale dall'avvio dopo, e al
+            // primo avvio l'inglese mancherebbe proprio quando il pop-up delle
+            // novita' lo annuncia. EnglishCatalogTest controlla che resti cosi'.
+            buildConfigField("Boolean", "EN_CATALOG_ENABLED", "true")
+            buildConfigField("String", "EN_CATALOG_URL", "\"https://pokevault-proxy.pokevault-emanu.workers.dev\"")
         }
         create("staging") {
             dimension = "environment"
@@ -72,6 +79,11 @@ android {
             // passano solo gli account di test.
             buildConfigField("Boolean", "TRADE_ENABLED", "true")
             buildConfigField("String", "TRADE_API_URL", "\"https://pokevault-trade-staging.pokevault-emanu.workers.dev\"")
+
+            // Catalogo inglese acceso solo qui, sul Worker di staging del catalogo
+            // (pokevault-catalog-staging, wrangler.toml): catalogo EN, immagini e prezzi.
+            buildConfigField("Boolean", "EN_CATALOG_ENABLED", "true")
+            buildConfigField("String", "EN_CATALOG_URL", "\"https://pokevault-catalog-staging.pokevault-emanu.workers.dev\"")
         }
     }
 
