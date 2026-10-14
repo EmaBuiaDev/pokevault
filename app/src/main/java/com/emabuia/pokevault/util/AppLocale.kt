@@ -24,9 +24,20 @@ object AppLocale {
 
     fun init(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val saved = prefs.getString(KEY_LANG, "it") ?: "it"
-        current = if (saved == "en") Language.EN else Language.IT
+        // Senza una scelta salvata vale la lingua del telefono: chi ha il telefono
+        // in inglese trova l'app (e il catalogo del Pokedex) in inglese. Non si
+        // salva, cosi' segue il telefono finche' l'utente non sceglie a mano.
+        val saved = prefs.getString(KEY_LANG, null)
+        current = when (saved) {
+            "en" -> Language.EN
+            "it" -> Language.IT
+            else -> forDeviceLanguage(java.util.Locale.getDefault().language)
+        }
     }
+
+    /** Italiano solo per i telefoni in italiano; tutti gli altri in inglese. */
+    fun forDeviceLanguage(languageCode: String?): Language =
+        if (languageCode.equals("it", ignoreCase = true)) Language.IT else Language.EN
 
     fun setLanguage(lang: Language, context: Context) {
         current = lang

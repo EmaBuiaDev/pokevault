@@ -29,6 +29,7 @@ import com.emabuia.pokevault.data.remote.TcgPlayer
 import com.emabuia.pokevault.data.remote.TcgPriceInfo
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
+import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.OwnedCardsIndex
 import com.emabuia.pokevault.util.hasPositiveEurPrice
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
@@ -108,6 +109,14 @@ data class SetsUiState(
     val hasActiveCardFilters: Boolean get() = activeCardFilterCount > 0
 }
 
+/**
+ * Il catalogo con cui si apre il Pokedex: la scelta fatta col selettore
+ * ([saved], il nome di un [CatalogLang]) se c'e', altrimenti la lingua dell'app.
+ */
+internal fun defaultCatalogLang(saved: String?, appLanguage: AppLocale.Language): CatalogLang =
+    CatalogLang.entries.firstOrNull { it.name == saved }
+        ?: if (appLanguage == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT
+
 // Usa AndroidViewModel per accedere al Context
 class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -170,21 +179,28 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     private fun pokedexPrefs() = getApplication<Application>()
         .getSharedPreferences("pokedex_prefs", Context.MODE_PRIVATE)
 
-    /** La lingua scelta l'ultima volta; l'italiano se l'inglese non c'e' o la preferenza non si legge. */
+    /**
+     * La lingua scelta l'ultima volta nel selettore; se non c'e' una scelta,
+     * quella dell'app (che a sua volta segue il telefono, vedi AppLocale.init).
+     */
     private fun restoreCatalogLang() {
         if (!englishCatalog.isEnabled) return
         uiState = uiState.copy(englishAvailable = true)
         val saved = runCatching { pokedexPrefs().getString("catalog_lang", null) }.getOrNull()
-        if (saved == CatalogLang.EN.name) selectCatalogLang(CatalogLang.EN)
+        val lang = defaultCatalogLang(saved, AppLocale.current)
+        // Il predefinito non si salva: solo un tocco sul selettore e' una scelta.
+        if (lang == CatalogLang.EN) selectCatalogLang(CatalogLang.EN, remember = saved != null)
     }
 
-    fun selectCatalogLang(lang: CatalogLang) {
+    fun selectCatalogLang(lang: CatalogLang) = selectCatalogLang(lang, remember = true)
+
+    private fun selectCatalogLang(lang: CatalogLang, remember: Boolean) {
         if (lang == CatalogLang.EN && !englishCatalog.isEnabled) return
         // Un errore del catalogo EN non deve restare sulla lista italiana (e viceversa).
         val clearError = (lang == CatalogLang.IT && uiState.allSets.isNotEmpty()) ||
             (lang == CatalogLang.EN && uiState.englishSets.isNotEmpty())
         uiState = uiState.copy(catalogLang = lang, errorMessage = if (clearError) null else uiState.errorMessage)
-        runCatching { pokedexPrefs().edit().putString("catalog_lang", lang.name).apply() }
+        if (remember) runCatching { pokedexPrefs().edit().putString("catalog_lang", lang.name).apply() }
         viewModelScope.launch {
             if (lang == CatalogLang.EN && uiState.englishSets.isEmpty()) loadEnglishSets()
             applyFilters()
