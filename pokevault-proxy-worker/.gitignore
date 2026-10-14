@@ -51,3 +51,5 @@ scripts/.ingest-en-uscita.txt
 scripts/.ingest-en-guardiano.txt
 scripts/.cardmarket-prices-en.json
 scripts/.map-cardmarket-en-tmp/
+scripts/.pkmncards-tmp/
+scripts/.bulbagarden-tmp/
