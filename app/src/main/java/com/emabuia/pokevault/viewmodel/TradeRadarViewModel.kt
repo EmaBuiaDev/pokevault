@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.emabuia.pokevault.BuildConfig
 import com.emabuia.pokevault.data.catalog.CardRef
 import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
@@ -64,12 +65,7 @@ import kotlinx.coroutines.launch
  * Il catalogo della lingua di una copia scambiata ("🇬🇧 English" -> EN), o
  * null se la lingua non e' di un nostro catalogo o manca.
  */
-internal fun receivedCardLanguage(language: String?): CatalogLang? {
-    val clean = language?.trim()?.dropWhile { !it.isLetter() }?.trim().orEmpty()
-    return CatalogLang.entries.firstOrNull { lang ->
-        lang.copyLanguageLabel.trim().dropWhile { !it.isLetter() }.trim().equals(clean, ignoreCase = true)
-    }
-}
+internal fun receivedCardLanguage(language: String?): CatalogLang? = CatalogLang.ofCopyLanguage(language)
 
 /**
  * La carta con cui entra in collezione una copia ricevuta: quella della sua
@@ -1033,7 +1029,13 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                 repository.addCard(
                     PokemonCard(
                         name = card?.name ?: line.item.name.orEmpty(),
-                        imageUrl = card?.images?.small ?: TradeCardKey.imageUrl(line.item.key.orEmpty(), PokeVaultApiClient.imageBaseUrl),
+                        // Senza la carta del catalogo, l'immagine della lingua della copia.
+                        imageUrl = card?.images?.small ?: TradeCardKey.imageUrls(
+                            key = line.item.key.orEmpty(),
+                            italianBaseUrl = PokeVaultApiClient.imageBaseUrl,
+                            englishBaseUrl = RepositoryProvider.englishCatalogRepository.takeIf { it.isEnabled }?.let { BuildConfig.EN_CATALOG_URL },
+                            language = line.item.language
+                        ).first(),
                         set = card?.set?.name ?: line.item.setName.orEmpty(),
                         rarity = card?.rarity.orEmpty(),
                         type = card?.types?.firstOrNull().orEmpty(),

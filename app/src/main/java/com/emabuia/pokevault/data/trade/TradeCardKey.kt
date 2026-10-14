@@ -54,4 +54,21 @@ object TradeCardKey {
      */
     fun imageUrl(key: String, baseUrl: String): String =
         "${baseUrl.trimEnd('/')}/images/it/${setCodeOf(key).uppercase(Locale.ROOT)}/${key.substringAfter(':')}?size=low"
+
+    /**
+     * Le immagini da provare per una copia, in ordine: prima quella della sua
+     * lingua (inglese per una copia "English", italiana per le altre), poi
+     * l'altra. La seconda serve ai set che esistono in una lingua sola: una
+     * carta di un set solo inglese non ha l'immagine italiana. Con [englishBaseUrl]
+     * null (inglese spento) c'e' solo l'italiana, come prima.
+     */
+    fun imageUrls(key: String, italianBaseUrl: String, englishBaseUrl: String?, language: String?, size: String = "low"): List<String> {
+        val folder = setCodeOf(key).uppercase(Locale.ROOT)
+        val number = key.substringAfter(':')
+        val italian = "${italianBaseUrl.trimEnd('/')}/images/it/$folder/$number?size=$size"
+        val english = englishBaseUrl?.takeIf { it.isNotBlank() }
+            ?.let { "${it.trimEnd('/')}/images/en/$folder/$number?size=$size" }
+            ?: return listOf(italian)
+        return if (CatalogLang.ofCopyLanguage(language) == CatalogLang.EN) listOf(english, italian) else listOf(italian, english)
+    }
 }
