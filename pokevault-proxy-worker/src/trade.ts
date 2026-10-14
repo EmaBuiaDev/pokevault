@@ -1370,7 +1370,7 @@ const PHOTON_URL = 'https://photon.komoot.io/api/';
 const SEARCH_MAX_KM = 30;
 const SEARCH_OSM_KEYS = ['shop', 'amenity', 'leisure', 'tourism', 'craft', 'office', 'building'];
 /** I servizi di OpenStreetMap chiedono un'identificazione. */
-const OSM_USER_AGENT = 'PokeVault-TradeRadar/1.0';
+const OSM_USER_AGENT = 'PoketCards-TradeRadar/1.0';
 const SPOT_KINDS = ['card_shop', 'comics', 'games', 'video_games', 'toys', 'mall', 'library', 'other'] as const;
 type SpotKind = (typeof SPOT_KINDS)[number];
 /** Quanto conviene un tipo di luogo: prima i negozi di carte, poi i luoghi pubblici. */

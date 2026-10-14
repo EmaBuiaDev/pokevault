@@ -515,7 +515,7 @@ private fun formatDate(epochMs: Long): String =
 
 private fun copyToClipboard(context: Context, code: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("PokeVault", code))
+    clipboard?.setPrimaryClip(ClipData.newPlainText(AppLocale.APP_NAME, code))
 }
 
 private fun shareCode(context: Context, code: String) {

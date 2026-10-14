@@ -304,7 +304,7 @@ if (args.includes('--prova-appuntamento')) {
     for (let attempt = 1; attempt <= 4; attempt++) {
       const res = await fetch('https://overpass-api.de/api/interpreter', {
         method: 'POST',
-        headers: { 'user-agent': 'PokeVault-TradeRadar/1.0', accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+        headers: { 'user-agent': 'PoketCards-TradeRadar/1.0', accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
         body: `data=${encodeURIComponent(query)}`,
       });
       // Un timeout arriva come 200 con un remark e zero elementi: e' un fallimento.
