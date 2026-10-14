@@ -160,4 +160,88 @@ class EnglishCatalogTest {
         val names = EnglishCatalogSearch.normalizedNames(records)
         assertEquals(EnglishCatalogSearch.byName(records, "pika", 300), EnglishCatalogSearch.byName(records, "pika", 300, names))
     }
+
+    private val scanRecords = listOf(
+        ItalianCardRecord(cardId = "SV08_EN_25.webp", espansioneId = "sv08", nome = "Pikachu"),
+        ItalianCardRecord(cardId = "SV01_EN_25.webp", espansioneId = "sv01", nome = "Sprigatito"),
+        ItalianCardRecord(cardId = "SV03_EN_25.webp", espansioneId = "sv03", nome = "Pikachu"),
+        ItalianCardRecord(cardId = "SV08_EN_26.webp", espansioneId = "sv08", nome = "Raichu")
+    )
+    private val scanNames = EnglishCatalogSearch.normalizedNames(scanRecords)
+    private val scanTotals = mapOf("sv08" to listOf(191), "sv01" to listOf(198), "sv03" to listOf(197))
+
+    private fun scan(name: String?, number: String?, total: String?, targets: Set<String>? = null) =
+        EnglishCatalogSearch.scannerCandidates(scanRecords, scanNames, name, number, total, targets, scanTotals, 10).map { it.cardId }
+
+    @Test
+    fun `scanner EN - numero e totale scelgono l'espansione`() {
+        assertEquals("SV08_EN_25.webp", scan("Pikachu", "025", "191").first())
+        assertEquals("SV03_EN_25.webp", scan("Pikachu", "25", "197").first())
+    }
+
+    @Test
+    fun `scanner EN - il nome scarta le carte sbagliate, ma se scarta tutto vale il numero`() {
+        assertEquals(listOf("SV08_EN_25.webp", "SV03_EN_25.webp").toSet(), scan("Pikachu", "25", null).toSet())
+        // Nome illeggibile: restano le carte col numero giusto.
+        assertEquals(3, scan("Xqzzv", "25", null).size)
+    }
+
+    @Test
+    fun `scanner EN - il set letto sulla carta filtra`() {
+        assertEquals(listOf("SV01_EN_25.webp"), scan(null, "25", null, targets = setOf("sv01")))
+        assertTrue(scan(null, null, null).isEmpty())
+    }
+
+    @Test
+    fun `scanner EN - il set letto si riconosce da id, sigla o forma normalizzata`() {
+        val summaries = listOf(
+            ItalianExpansionSummary(id = "sv08", abbreviation = "SSP", baseSetCode = "SV08"),
+            ItalianExpansionSummary(id = "sv01", abbreviation = "SVI")
+        )
+        assertEquals(setOf("sv08"), repo.scannerTargetExpansions(summaries, listOf("ssp")))
+        assertEquals(setOf("sv08"), repo.scannerTargetExpansions(summaries, listOf("sv8", "SSP")))
+        assertEquals(setOf("sv08"), repo.scannerTargetExpansions(summaries, listOf("SV08")))
+        assertNull(repo.scannerTargetExpansions(summaries, listOf("zzz")))
+        assertNull(repo.scannerTargetExpansions(summaries, emptyList()))
+    }
+
+    @Test
+    fun `scanner EN - il totale stampato e' l'ufficiale, non il conteggio con le segrete`() {
+        assertEquals(listOf(191), repo.printedTotalsOf(ItalianExpansionSummary(id = "sv08", cardCount = 252, officialCount = 191)))
+        assertEquals(listOf(30), repo.printedTotalsOf(ItalianExpansionSummary(id = "x", cardCount = 30)))
+    }
+
+    private fun tcg(id: String, number: String, name: String) =
+        com.emabuia.pokevault.data.remote.TcgCard(id = id, number = number, name = name)
+
+    @Test
+    fun `decklist EN - le energie base si cercano anche senza Basic`() {
+        assertEquals(listOf("basic fire energy", "fire energy"), EnglishCatalogSearch.decklistNames("Basic Fire Energy"))
+        assertEquals(listOf("dragapult ex"), EnglishCatalogSearch.decklistNames("Dragapult ex"))
+        // "Basic" davanti a qualcosa che non e' un'energia resta com'e'.
+        assertEquals(listOf("basic ball"), EnglishCatalogSearch.decklistNames("Basic Ball"))
+    }
+
+    @Test
+    fun `decklist EN - stesso numero e, per i Pokemon, stesso nome`() {
+        val set = listOf(tcg("eng:sv06:130", "130", "Dragapult ex"), tcg("eng:sv06:131", "131", "Drakloak"))
+        assertEquals("eng:sv06:130", EnglishCatalogSearch.decklistMatch(set, "130", "Dragapult ex", requireNameMatch = true)?.id)
+        // Numero giusto, nome sbagliato: un Pokemon no, un Allenatore si'.
+        assertNull(EnglishCatalogSearch.decklistMatch(set, "130", "Pikachu", requireNameMatch = true))
+        assertEquals("eng:sv06:130", EnglishCatalogSearch.decklistMatch(set, "130", "Pikachu", requireNameMatch = false)?.id)
+        assertEquals("eng:sv06:131", EnglishCatalogSearch.decklistMatch(set, "0131", null, requireNameMatch = true)?.id)
+        assertNull(EnglishCatalogSearch.decklistMatch(set, null, "Drakloak", requireNameMatch = true))
+    }
+
+    @Test
+    fun `decklist EN - per nome il nome coincide e vince lo stesso numero`() {
+        val records = listOf(
+            ItalianCardRecord(cardId = "SV01_EN_5.webp", espansioneId = "sv01", nome = "Toucannon ex"),
+            ItalianCardRecord(cardId = "SV03_EN_9.webp", espansioneId = "sv03", nome = "Toucannon"),
+            ItalianCardRecord(cardId = "SV05_EN_12.webp", espansioneId = "sv05", nome = "Toucannon")
+        )
+        val names = EnglishCatalogSearch.normalizedNames(records)
+        val found = EnglishCatalogSearch.decklistByName(records, listOf("toucannon"), names, "12").map { it.cardId }
+        assertEquals(listOf("SV05_EN_12.webp", "SV03_EN_9.webp"), found)
+    }
 }

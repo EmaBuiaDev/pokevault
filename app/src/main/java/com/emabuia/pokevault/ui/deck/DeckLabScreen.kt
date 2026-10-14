@@ -578,6 +578,8 @@ fun DeckLabScreen(
         if (showNewDeckSourceDialog) {
             DeckCardSourceDialog(
                 prompt = AppLocale.deckSourceNewDeckQuestion,
+                cardLanguage = viewModel.cardLanguage.takeIf { viewModel.englishAvailable },
+                onCardLanguageChange = viewModel::chooseCardLanguage,
                 onChoose = { source ->
                     showNewDeckSourceDialog = false
                     viewModel.chooseDeckCardSource(source)
@@ -595,6 +597,8 @@ fun DeckLabScreen(
         if (importResult != null) {
             if (viewModel.isImportSourceChoicePending) {
                 DeckCardSourceDialog(
+                    cardLanguage = viewModel.cardLanguage.takeIf { viewModel.englishAvailable },
+                    onCardLanguageChange = viewModel::chooseCardLanguage,
                     prompt = AppLocale.deckSourceQuestion(
                         importResult.missingMetaDeckCards.sumOf { it.qty }
                     ),

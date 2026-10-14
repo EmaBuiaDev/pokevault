@@ -37,6 +37,22 @@ class DeckLabViewModel : ViewModel() {
     private val repository = FirestoreRepository()
     private val pokeTcgRepository = RepositoryProvider.tcgRepository
     private val pokeWalletRepository = RepositoryProvider.pokeWalletRepository
+    private val englishCatalog = RepositoryProvider.englishCatalogRepository
+
+    /** Dove l'inglese e' acceso: le carte nuove del deck possono essere inglesi. */
+    val englishAvailable: Boolean get() = englishCatalog.isEnabled
+
+    /**
+     * In che lingua entrano le carte che il deck aggiunge (import e "Cerca nei
+     * set"). Parte dalla lingua dell'app; dove l'inglese e' spento e' sempre
+     * l'italiano, come prima.
+     */
+    var cardLanguage by mutableStateOf(if (englishCatalog.isEnabled) preferredCatalogLang() else CatalogLang.IT)
+        private set
+
+    fun chooseCardLanguage(lang: CatalogLang) {
+        cardLanguage = if (lang == CatalogLang.EN && !englishCatalog.isEnabled) CatalogLang.IT else lang
+    }
 
     companion object {
         private val legacyClassificationBackfillStarted = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -282,15 +298,21 @@ class DeckLabViewModel : ViewModel() {
 
             val targets = cards.filter {
                 it.subtypes.isEmpty() &&
-                    CardRef.isCatalogCard(it.apiCardId, CatalogLang.IT) &&
+                    CardRef.langOf(it.apiCardId) != null &&
                     CardClassifier.classify(it) == CardClassifier.POKEMON
             }
             if (targets.isEmpty()) return@launch
 
-            val stages = pokeTcgRepository.italianStagesByCardId(
+            val (englishTargets, italianTargets) = targets.partition { CardRef.isCatalogCard(it.apiCardId, CatalogLang.EN) }
+            val italianStages = if (italianTargets.isEmpty()) emptyMap() else pokeTcgRepository.italianStagesByCardId(
                 context = appContext,
-                cardIds = targets.mapTo(mutableSetOf()) { it.apiCardId }
+                cardIds = italianTargets.mapTo(mutableSetOf()) { it.apiCardId }
             )
+            // Le carte EN lo stadio lo portano gia' (subtypes dal catalogo EN).
+            val englishStages = englishTargets.mapNotNull { card ->
+                englishCatalog.findCard(appContext, card.apiCardId)?.subtypes?.firstOrNull()?.let { card.apiCardId to it }
+            }.toMap()
+            val stages = italianStages + englishStages
             if (stages.isEmpty()) {
                 // Il catalogo non ha (ancora) lo stadio di queste carte, o non era
                 // raggiungibile: non e' un tentativo consumato, si riprova alla
@@ -1110,7 +1132,15 @@ class DeckLabViewModel : ViewModel() {
         condition = "Near Mint",
         variant = "Normal",
         deckOnly = deckOnly
-    )
+    ).withCatalogLanguage()
+
+    /**
+     * Una carta inglese entra come "English". Le italiane restano con la
+     * lingua di sempre: cambiarla farebbe nascere righe nuove invece di sommare
+     * le copie gia' in collezione.
+     */
+    private fun PokemonCard.withCatalogLanguage(): PokemonCard =
+        if (CardRef.langOf(apiCardId) == CatalogLang.EN) copy(language = CatalogLang.EN.copyLanguageLabel) else this
 
     private fun MetaDeckCard.supertypeLabel(): String? = when (type.lowercase()) {
         "pokemon" -> "Pokémon"
@@ -1204,6 +1234,19 @@ class DeckLabViewModel : ViewModel() {
         // col nome intero quelle carte finivano segnaposto senza immagine. Su
         // Allenatori ed Energie niente veto, li' i nomi sono tradotti del tutto.
         val isPokemon = card.type.equals("pokemon", ignoreCase = true)
+        // Carte inglesi: la decklist e' gia' in inglese (sigle e nomi), e il
+        // catalogo EN la riconosce direttamente. Se non la trova, si prova
+        // l'italiano: meglio la carta italiana che un segnaposto senza immagine.
+        if (cardLanguage == CatalogLang.EN) {
+            englishCatalog.findDecklistCard(
+                context = context,
+                setCode = card.set,
+                number = card.number,
+                name = card.name,
+                normalizedSetCode = card.set?.let(SetCodeMapper::normalizeDecklistSetCode),
+                requireNameMatch = isPokemon
+            )?.let { return it }
+        }
         val tcgCard = pokeTcgRepository.findExactItalianCard(
             setCode = card.set,
             number = card.number,
@@ -1293,7 +1336,12 @@ class DeckLabViewModel : ViewModel() {
         isSearchingCards = true
         tcgSearchError = null
         viewModelScope.launch {
-            pokeTcgRepository.searchItalianCardsByName(query, context, targetSetId = targetSetId)
+            val search = if (cardLanguage == CatalogLang.EN) {
+                englishCatalog.searchByName(context, query, limit = 40)
+            } else {
+                pokeTcgRepository.searchItalianCardsByName(query, context, targetSetId = targetSetId)
+            }
+            search
                 .onSuccess { cards ->
                     tcgSearchResults = cards.take(20)
                     if (cards.isEmpty()) tcgSearchError = if (query.length >= 2)
@@ -1359,7 +1407,7 @@ class DeckLabViewModel : ViewModel() {
                 condition = "Near Mint",
                 variant = "Normal",
                 deckOnly = deckOnly
-            )
+            ).withCatalogLanguage()
             val result = repository.addCard(pokemonCard)
             result.onSuccess { docId ->
                 if (deckOnly) sessionDeckOnlyCardIds = sessionDeckOnlyCardIds + docId
@@ -1427,9 +1475,11 @@ class DeckLabViewModel : ViewModel() {
         // una chiamata PokeWallet diretta -- vedi MIGRATION_PLAN.md M4.6. Se lo snapshot
         // non ha ancora un prezzo per questa carta, resta a 0 invece di consumare budget
         // PokeWallet: verra' popolato al prossimo giro dello snapshot lato Worker.
-        if (CardRef.isCatalogCard(card.id, CatalogLang.IT)) {
-            val setCode = CardRef.setCodeOf(card.id, CatalogLang.IT) ?: return 0.0
-            val priceMap = RepositoryProvider.italianPriceSnapshotRepository.getPriceMap(context, setCode)
+        // Carte EN: lo stesso, dal listino EN (/en/prices).
+        val catalogLang = CardRef.langOf(card.id)
+        if (catalogLang != null) {
+            val setCode = CardRef.setCodeOf(card.id, catalogLang) ?: return 0.0
+            val priceMap = RepositoryProvider.priceSnapshotRepositoryFor(card.id).getPriceMap(context, setCode)
             val snapshotPrice = italianPriceLookupKey(card.number)?.let(priceMap::get)
             val snapshotBest = sequenceOf(
                 snapshotPrice?.eurLow,

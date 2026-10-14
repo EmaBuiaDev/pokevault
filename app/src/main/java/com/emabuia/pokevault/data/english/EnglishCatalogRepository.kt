@@ -144,8 +144,100 @@ internal object EnglishCatalogSearch {
             .take(limit.coerceIn(1, 300))
     }
 
+    /** Sotto questo punteggio il nome letto non e' quello della carta (come per l'italiano). */
+    const val SCANNER_MIN_NAME_SCORE = 36
+
+    /**
+     * I candidati dello scanner nel catalogo EN, con le regole della ricerca
+     * italiana: il numero filtra, il set letto (se c'e') filtra, il nome
+     * conferma e il totale stampato decide fra espansioni. Se il nome sporco
+     * scarta tutto ma il numero c'e', si riprova senza il nome.
+     */
+    fun scannerCandidates(
+        records: List<ItalianCardRecord>,
+        names: List<String>,
+        name: String?,
+        number: String?,
+        setTotal: String?,
+        targetExpansions: Set<String>?,
+        totalsByExpansion: Map<String, List<Int>>,
+        limit: Int
+    ): List<ItalianCardRecord> {
+        val wantedNumber = number?.trim()?.trimStart('0')?.ifBlank { "0" }
+        val wantedName = CardNameMatch.normalize(name)
+        if (wantedNumber.isNullOrBlank() && wantedName.isBlank()) return emptyList()
+        val wantedTotal = setTotal?.toIntOrNull()
+
+        val base = records.indices.filter { index ->
+            val record = records[index]
+            val numberOk = wantedNumber.isNullOrBlank() ||
+                numberOf(record).trimStart('0').ifBlank { "0" }.equals(wantedNumber, ignoreCase = true)
+            numberOk && (targetExpansions == null || record.espansioneId.trim().lowercase(Locale.ROOT) in targetExpansions)
+        }
+
+        fun rank(nameGate: Boolean): List<ItalianCardRecord> = base.mapNotNull { index ->
+            val record = records[index]
+            val nameScore = CardNameMatch.scannerScore(names[index], wantedName)
+            if (nameGate && wantedName.isNotBlank() && nameScore < SCANNER_MIN_NAME_SCORE) return@mapNotNull null
+            var score = nameScore
+            val totals = totalsByExpansion[record.espansioneId.trim().lowercase(Locale.ROOT)].orEmpty().filter { it > 0 }
+            if (wantedTotal != null && totals.isNotEmpty()) {
+                score += when {
+                    totals.any { it == wantedTotal } -> 90
+                    totals.any { kotlin.math.abs(it - wantedTotal) <= 2 } -> 25
+                    else -> -45
+                }
+            }
+            record to score
+        }.sortedWith(
+            compareByDescending<Pair<ItalianCardRecord, Int>> { it.second }
+                .thenBy { it.first.espansioneId }
+        ).take(limit.coerceIn(1, 20)).map { it.first }
+
+        val gated = rank(nameGate = true)
+        return if (gated.isEmpty() && wantedName.isNotBlank() && !wantedNumber.isNullOrBlank()) rank(nameGate = false) else gated
+    }
+
     private fun numberOf(record: ItalianCardRecord): String =
         EnglishCatalogIds.reference(record.cardId)?.cardNumber.orEmpty()
+
+    /**
+     * I nomi con cui cercare una riga di decklist: quello scritto e, per le
+     * energie base, senza "Basic" davanti ("Basic Fire Energy" e' "Fire Energy").
+     */
+    fun decklistNames(name: String): List<String> {
+        val clean = CardNameMatch.normalize(name)
+        val withoutBasic = clean.removePrefix("basic ").takeIf { it != clean && it.endsWith("energy") }
+        return listOfNotNull(clean, withoutBasic).filter { it.isNotBlank() }
+    }
+
+    /**
+     * La carta di una riga di decklist fra quelle di un set: stesso numero e,
+     * per i Pokemon, stesso nome (le decklist sono in inglese, come il catalogo
+     * EN, quindi il nome si confronta intero). Su Allenatori ed Energie basta
+     * il numero.
+     */
+    fun decklistMatch(cards: List<TcgCard>, number: String?, name: String?, requireNameMatch: Boolean): TcgCard? {
+        val wantedNumber = number?.trim()?.substringBefore('/')?.trim()?.trimStart('0')?.ifBlank { "0" } ?: return null
+        val names = name?.let(::decklistNames).orEmpty()
+        val sameNumber = cards.filter { it.number.trim().trimStart('0').ifBlank { "0" }.equals(wantedNumber, ignoreCase = true) }
+        if (names.isEmpty()) return sameNumber.firstOrNull()
+        return sameNumber.firstOrNull { CardNameMatch.normalize(it.name) in names }
+            ?: sameNumber.firstOrNull().takeIf { !requireNameMatch }
+    }
+
+    /**
+     * Ripiego per nome, ignorando il set: il nome deve coincidere, non
+     * somigliare ("Toucannon" non e' "Toucannon ex"). A parita' di nome vince
+     * lo stesso numero, poi la prima; solo carte con l'immagine.
+     */
+    fun decklistByName(records: List<ItalianCardRecord>, names: List<String>, recordNames: List<String>, number: String?): List<ItalianCardRecord> {
+        if (names.isEmpty()) return emptyList()
+        val wantedNumber = number?.trim()?.substringBefore('/')?.trim()?.trimStart('0')
+        val matches = records.indices.filter { recordNames[it] in names }.map { records[it] }
+        val sameNumber = matches.filter { wantedNumber != null && numberOf(it).trimStart('0').equals(wantedNumber, ignoreCase = true) }
+        return sameNumber + (matches - sameNumber.toSet())
+    }
 }
 
 /**
@@ -158,7 +250,9 @@ internal object EnglishCatalogSearch {
  */
 class EnglishCatalogRepository(
     private val baseUrl: () -> String = { BuildConfig.EN_CATALOG_URL },
-    private val enabled: () -> Boolean = { BuildConfig.EN_CATALOG_ENABLED }
+    // Acceso nello staging sempre; in prod quando lo dice l'interruttore remoto
+    // (AppConfig, /v1/app-config), letto all'avvio.
+    private val enabled: () -> Boolean = { BuildConfig.EN_CATALOG_ENABLED || com.emabuia.pokevault.data.remote.AppConfig.englishCatalog }
 ) {
 
     companion object {
@@ -326,6 +420,50 @@ class EnglishCatalogRepository(
         }
     }
 
+    /**
+     * I candidati dello scanner fra le carte inglesi (Fase 4). [setHints] sono
+     * il codice del set letto sulla carta ("SSP") e la sua forma normalizzata
+     * ("sv8"): vale come filtro se uno dei due e' l'id, l'abbreviazione o la
+     * cartella di un'espansione EN. Se nessuno riconosce niente, niente filtro.
+     */
+    suspend fun scannerCandidates(
+        context: Context,
+        name: String?,
+        number: String?,
+        setTotal: String?,
+        setHints: List<String> = emptyList(),
+        limit: Int = 10
+    ): Result<List<TcgCard>> {
+        if (!isEnabled) return Result.success(emptyList())
+        val records = getAllCards(context).getOrElse { return Result.failure(it) }
+        val summaries = getExpansions(context).getOrNull().orEmpty()
+        // Il totale stampato e' il conteggio ufficiale; il cardCount conta anche
+        // le segrete, e dare +90 a tutti e due farebbe pari fra set diversi.
+        val totals = summaries.associate { it.id.lowercase(Locale.ROOT) to printedTotalsOf(it) }
+        val targets = scannerTargetExpansions(summaries, setHints)
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                EnglishCatalogSearch.scannerCandidates(records, namesFor(records), name, number, setTotal, targets, totals, limit)
+                    .mapNotNull { toSearchCard(it, summaries) }
+            }
+        }
+    }
+
+    /** Il totale stampato sulle carte: l'ufficiale se c'e', se no il conteggio. */
+    internal fun printedTotalsOf(summary: ItalianExpansionSummary): List<Int> =
+        listOfNotNull(summary.officialCount?.takeIf { it > 0 } ?: summary.cardCount.takeIf { it > 0 })
+
+    /** Le espansioni EN che il set letto indica (id, abbreviazione o cartella), o null. */
+    internal fun scannerTargetExpansions(summaries: List<ItalianExpansionSummary>, setHints: List<String>): Set<String>? {
+        val hints = setHints.map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotBlank() }.toSet()
+        if (hints.isEmpty()) return null
+        return summaries.filter { summary ->
+            summary.id.lowercase(Locale.ROOT) in hints ||
+                summary.abbreviation?.lowercase(Locale.ROOT) in hints ||
+                summary.baseSetCode?.lowercase(Locale.ROOT) in hints
+        }.map { it.id.lowercase(Locale.ROOT) }.toSet().takeIf { it.isNotEmpty() }
+    }
+
     private fun toSearchCard(record: ItalianCardRecord, summaries: List<ItalianExpansionSummary>): TcgCard? {
         val summary = summaries.firstOrNull { it.id.equals(record.espansioneId.trim(), ignoreCase = true) } ?: return null
         return toTcgCard(record, toTcgSet(summary), collectionSetName = summary.itName)
@@ -406,6 +544,39 @@ class EnglishCatalogRepository(
         val expansionId = expansionIdForFolder(summaries, ref.setCode) ?: ref.setCode
         return getCardsBySet(context, CatalogSetId.of(CatalogLang.EN, expansionId)).getOrNull()
             ?.firstOrNull { it.id == apiCardId }
+    }
+
+    /**
+     * La carta EN di una riga di decklist (DeckLab, Fase 4): prima per set e
+     * numero (la sigla PTCGL/Limitless e' quella del catalogo EN), poi per nome
+     * su tutto il catalogo. Null se il catalogo EN non c'e' o non la conosce.
+     */
+    suspend fun findDecklistCard(
+        context: Context,
+        setCode: String?,
+        number: String?,
+        name: String?,
+        normalizedSetCode: String?,
+        requireNameMatch: Boolean
+    ): TcgCard? {
+        if (!isEnabled) return null
+        val summaries = getExpansions(context).getOrNull().orEmpty()
+        val targets = scannerTargetExpansions(summaries, listOfNotNull(setCode, normalizedSetCode)).orEmpty()
+        for (expansionId in targets) {
+            val cards = getCardsBySet(context, CatalogSetId.of(CatalogLang.EN, expansionId)).getOrNull().orEmpty()
+            EnglishCatalogSearch.decklistMatch(cards, number, name, requireNameMatch)
+                ?.takeIf { it.images.small.isNotBlank() }
+                ?.let { return it }
+        }
+        val names = name?.let(EnglishCatalogSearch::decklistNames).orEmpty()
+        if (names.isEmpty()) return null
+        val records = getAllCards(context).getOrNull() ?: return null
+        return withContext(Dispatchers.Default) {
+            EnglishCatalogSearch.decklistByName(records, names, namesFor(records), number)
+                .asSequence()
+                .mapNotNull { toSearchCard(it, summaries) }
+                .firstOrNull { it.images.small.isNotBlank() }
+        }
     }
 
     /** Una carta EN gia' caricata (set aperti in questa sessione), o null. */

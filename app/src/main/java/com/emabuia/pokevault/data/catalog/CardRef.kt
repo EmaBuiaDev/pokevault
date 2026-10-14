@@ -23,6 +23,19 @@ enum class CatalogLang(val idPrefix: String, val setSuffix: String, val macro: S
     /** Lingua predefinita della copia aggiunta in collezione ("🇮🇹 Italiano"). */
     val copyLanguageLabel: String
         get() = CardOptions.languageLabelForMacro(macro) ?: CardOptions.LANGUAGES.first()
+
+    companion object {
+        /**
+         * Il catalogo della lingua di una copia ("🇬🇧 English" o "English" -> EN),
+         * o null se la lingua non e' di un nostro catalogo o manca.
+         */
+        fun ofCopyLanguage(language: String?): CatalogLang? {
+            fun clean(raw: String) = raw.trim().dropWhile { !it.isLetter() }.trim()
+            val wanted = language?.let(::clean).orEmpty()
+            if (wanted.isEmpty()) return null
+            return entries.firstOrNull { clean(it.copyLanguageLabel).equals(wanted, ignoreCase = true) }
+        }
+    }
 }
 
 /**

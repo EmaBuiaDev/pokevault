@@ -28,6 +28,9 @@ object RepositoryProvider {
         ItalianPriceSnapshotRepository.english { BuildConfig.EN_CATALOG_URL }
     }
 
+    /** Il Worker delle immagini EN, o null dove l'inglese e' spento. */
+    fun englishImageBaseUrl(): String? = englishCatalogRepository.takeIf { it.isEnabled }?.let { BuildConfig.EN_CATALOG_URL }
+
     /** I prezzi del catalogo da cui viene la carta: inglese per "eng:", italiano per il resto. */
     fun priceSnapshotRepositoryFor(apiCardId: String?): ItalianPriceSnapshotRepository =
         if (CardRef.langOf(apiCardId) == CatalogLang.EN) englishPriceSnapshotRepository else italianPriceSnapshotRepository
