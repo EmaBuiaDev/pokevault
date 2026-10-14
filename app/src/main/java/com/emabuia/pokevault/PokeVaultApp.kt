@@ -20,6 +20,7 @@ import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.remote.LimitlessLocalCache
+import com.emabuia.pokevault.data.remote.AppConfig
 import com.emabuia.pokevault.data.remote.RepositoryProvider
 import com.emabuia.pokevault.ui.theme.ThemePreference
 import com.emabuia.pokevault.util.AppLocale
@@ -61,6 +62,8 @@ class PokeVaultApp : Application(), ImageLoaderFactory {
                 .build()
 
         AppLocale.init(this)
+        // Prima di ogni schermata: decide se l'inglese c'e' per tutta la sessione.
+        AppConfig.init(this)
         ThemePreference.init(this)
         PremiumManager.init(this)
 

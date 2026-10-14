@@ -19,6 +19,7 @@ import { resolveExpansionPrices } from './price-lookup';
 import { buildItalianSetSymbolCandidates, isSetImagePath, parseSetSymbolCode } from './set-images';
 import { mapCardRow, type D1CardRow } from './card-row';
 import { handleEnglishCatalogRequest } from './catalog-en';
+import { handleAppConfigRequest } from './app-config';
 
 interface Env {
   CACHE: KVNamespace;
@@ -2393,6 +2394,10 @@ export default {
     if (request.method !== 'GET') {
       return new Response('Method not allowed', { status: 405 });
     }
+
+    // Interruttori dell'app (catalogo inglese): in tutti gli ambienti.
+    const appConfigResponse = await handleAppConfigRequest(request, requestUrl.pathname, env.IMAGES_BUCKET);
+    if (appConfigResponse) return appConfigResponse;
 
     // Catalogo inglese: null se non e' una sua rotta o se catalog_en manca.
     const englishResponse = await handleEnglishCatalogRequest(request, requestUrl, env);

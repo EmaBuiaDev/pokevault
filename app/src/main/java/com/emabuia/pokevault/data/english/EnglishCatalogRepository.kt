@@ -250,7 +250,9 @@ internal object EnglishCatalogSearch {
  */
 class EnglishCatalogRepository(
     private val baseUrl: () -> String = { BuildConfig.EN_CATALOG_URL },
-    private val enabled: () -> Boolean = { BuildConfig.EN_CATALOG_ENABLED }
+    // Acceso nello staging sempre; in prod quando lo dice l'interruttore remoto
+    // (AppConfig, /v1/app-config), letto all'avvio.
+    private val enabled: () -> Boolean = { BuildConfig.EN_CATALOG_ENABLED || com.emabuia.pokevault.data.remote.AppConfig.englishCatalog }
 ) {
 
     companion object {
