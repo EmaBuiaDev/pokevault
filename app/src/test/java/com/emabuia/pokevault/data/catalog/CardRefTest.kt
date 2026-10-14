@@ -88,10 +88,12 @@ class CardRefTest {
     }
 
     @Test
-    fun `negli scambi per ora conta solo l'italiano`() {
+    fun `negli scambi la carta inglese e' la stessa carta della gemella italiana`() {
         assertEquals("sv08:12", TradeCardKey.fromApiCardId("ita:sv08:012"))
         assertEquals("bwp:BW01", TradeCardKey.fromApiCardId("ita:bwp:BW01"))
-        assertNull(TradeCardKey.fromApiCardId("eng:sv08:12"))
+        assertEquals("sv08:12", TradeCardKey.fromApiCardId("eng:sv08:12"))
+        assertEquals("pl3:1", TradeCardKey.fromApiCardId("eng:pl3:001"))
+        assertNull(TradeCardKey.fromApiCardId("sv8-12"))
         assertEquals("ita:sv08:12", TradeCardKey.toApiCardId("sv08:12"))
     }
 }

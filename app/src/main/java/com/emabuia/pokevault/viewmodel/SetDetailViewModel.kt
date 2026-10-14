@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.emabuia.pokevault.data.catalog.CardRef
 import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -204,10 +205,34 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
+    /** Un set del catalogo inglese (piano carte EN): prezzi solo dal listino EN, mai PokeWallet. */
+    private fun isEnglishSection(): Boolean = CatalogSetId.isCatalogSet(currentSetId, CatalogLang.EN)
+
+    /**
+     * La mappa prezzi di un set inglese, da /en/prices/{set}.json. Finisce nella
+     * stessa italianSetPriceMap dell'italiano, cosi' i prezzi per stampa
+     * ([priceForVariant]) valgono uguali.
+     */
+    private suspend fun resolveEnglishSetPriceMap(forceRefresh: Boolean): Map<String, PokeWalletPriceData> {
+        val activeSetId = currentSetId ?: return emptyMap()
+        if (!forceRefresh && italianSetPriceMapSetId == activeSetId && italianSetPriceMap.isNotEmpty()) return italianSetPriceMap
+        val expansionId = CatalogSetId.expansionOf(activeSetId, CatalogLang.EN) ?: return emptyMap()
+        val context = getApplication<Application>().applicationContext
+        val prices = runCatching {
+            RepositoryProvider.englishPriceSnapshotRepository.getPriceMap(context, expansionId, forceRefresh = forceRefresh)
+        }.getOrDefault(emptyMap())
+        if (prices.isNotEmpty()) {
+            italianSetPriceMapSetId = activeSetId
+            italianSetPriceMap = prices
+        }
+        return prices
+    }
+
     private suspend fun resolveItalianSetPriceMap(
         cards: List<TcgCard>,
         forceRefresh: Boolean = false
     ): Map<String, PokeWalletPriceData> {
+        if (isEnglishSection()) return resolveEnglishSetPriceMap(forceRefresh)
         if (!isItalianSection()) return emptyMap()
 
         val activeSetId = currentSetId
@@ -568,6 +593,11 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 uiState = uiState.copy(selectedCardPokeWalletPrices = setPrice, isLoadingPokeWalletPrices = false)
                 return@launch
             }
+            // Carte inglesi: il listino EN e' l'unica fonte, niente PokeWallet.
+            if (isEnglishSection()) {
+                uiState = uiState.copy(isLoadingPokeWalletPrices = false)
+                return@launch
+            }
 
             pokeWalletRepository.getCardPrices(
                 cardName = lookup.cardName,
@@ -641,6 +671,8 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
                 pricedCards[current.id] = withPriceData(current, setPrice)
                 return@launch
             }
+            // Carte inglesi: il listino EN e' l'unica fonte, niente PokeWallet.
+            if (isEnglishSection()) return@launch
 
             val result = pokeWalletRepository.getCardPrices(
                 cardName = lookup.cardName,

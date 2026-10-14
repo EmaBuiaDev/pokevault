@@ -24,9 +24,20 @@ object AppLocale {
 
     fun init(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val saved = prefs.getString(KEY_LANG, "it") ?: "it"
-        current = if (saved == "en") Language.EN else Language.IT
+        // Senza una scelta salvata vale la lingua del telefono: chi ha il telefono
+        // in inglese trova l'app (e il catalogo del Pokedex) in inglese. Non si
+        // salva, cosi' segue il telefono finche' l'utente non sceglie a mano.
+        val saved = prefs.getString(KEY_LANG, null)
+        current = when (saved) {
+            "en" -> Language.EN
+            "it" -> Language.IT
+            else -> forDeviceLanguage(java.util.Locale.getDefault().language)
+        }
     }
+
+    /** Italiano solo per i telefoni in italiano; tutti gli altri in inglese. */
+    fun forDeviceLanguage(languageCode: String?): Language =
+        if (languageCode.equals("it", ignoreCase = true)) Language.IT else Language.EN
 
     fun setLanguage(lang: Language, context: Context) {
         current = lang
@@ -621,6 +632,7 @@ object AppLocale {
     val extensions: String get() = if (isItalian) "Espansioni" else "Expansions"
     val searchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
     val searchInSets: String get() = if (isItalian) "Cerca tra tutte le espansioni..." else "Search across all expansions..."
+    val searchAllLanguages: String get() = if (isItalian) "🌐 Tutte" else "🌐 All"
     val searchSetPlaceholder: String get() = if (isItalian) "Cerca un'espansione..." else "Search an expansion..."
     // Filtri della ricerca carte: le voci vengono dal catalogo, le etichette no.
     val searchFiltersHint: String get() = if (isItalian) "Restringono i risultati della ricerca" else "They narrow down the search results"
@@ -2616,9 +2628,9 @@ object AppLocale {
     else
         "$cards catalog cards don't say who drew them and aren't listed here."
     fun illustratorsCollectionGap(cards: Int): String = if (isItalian)
-        "$cards carte della tua collezione non sono collegate al catalogo italiano e non contano nei progressi."
+        "$cards carte della tua collezione non sono collegate al catalogo e non contano nei progressi."
     else
-        "$cards cards in your collection aren't linked to the Italian catalog and don't count towards progress."
+        "$cards cards in your collection aren't linked to the catalog and don't count towards progress."
     val illustratorCompleteTitle: String get() = if (isItalian)
         "Collezione completa!"
     else
@@ -2685,23 +2697,8 @@ object AppLocale {
         "Every card by one artist"
     val collectorNewAlbum: String get() = if (isItalian) "Nuovo album" else "New album"
     val collectorNewChase: String get() = if (isItalian) "Nuovo chase" else "New chase"
-    val collectorAlbumEmptyHint: String get() = if (isItalian)
-        "Metti in pagina le carte che hai, come in un raccoglitore vero."
-    else
-        "Lay out the cards you own, like a real binder."
-    val collectorChaseEmptyHint: String get() = if (isItalian)
-        "Scegli un set e guarda quali carte ti mancano per chiuderlo."
-    else
-        "Pick a set and see which cards you still need."
-    val collectorIllustratorsEmptyHint: String get() = if (isItalian)
-        "Scegli un artista e colleziona tutte le carte che ha disegnato."
-    else
-        "Pick an artist and collect every card they drew."
-    fun collectorDiscoverIllustrators(count: Int): String = if (isItalian)
-        "Tutti i $count artisti"
-    else
-        "All $count artists"
-    val collectorNextStep: String get() = if (isItalian) "Il prossimo passo" else "Next up"
+    val collectorContinue: String get() = if (isItalian) "Continua" else "Keep going"
+    val collectorArtistsShort: String get() = if (isItalian) "Artisti" else "Artists"
     fun collectorMissingToFinish(count: Int): String = if (isItalian) {
         if (count == 1) "Manca 1 carta per chiudere" else "Mancano $count carte per chiudere"
     } else {

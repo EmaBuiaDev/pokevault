@@ -50,6 +50,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.emabuia.pokevault.data.catalog.CardRef
+import com.emabuia.pokevault.data.catalog.CatalogLang
+import com.emabuia.pokevault.data.catalog.CatalogSetId
 import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.ui.components.RarityMarkWithLabel
@@ -64,6 +67,7 @@ import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.CollectionLayout
 import com.emabuia.pokevault.util.RarityUtils
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
+import com.emabuia.pokevault.viewmodel.CardSearchScope
 import com.emabuia.pokevault.viewmodel.SetsUiState
 import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.SetsViewModel
@@ -210,8 +214,21 @@ fun SetsListScreen(
     var cardViewMode by remember { mutableStateOf(CardViewMode.GRID) }
     // Risultati divisi per espansione (com'era) o tutti in una griglia sola.
     var cardResultsLayout by rememberSaveable { mutableStateOf(CollectionLayout.BY_EXPANSION) }
-    val setReleaseDateById = remember(state.allSets) {
-        state.allSets.associate { it.id to it.releaseDate }
+    val setReleaseDateById = remember(state.allSets, state.englishSets) {
+        (state.allSets + state.englishSets).associate { it.id to it.releaseDate }
+    }
+    // Con "Tutte" ogni gruppo e ogni carta porta la bandiera della sua lingua;
+    // i set inglesi si chiamano col nome inglese (la carta EN di un set gemello
+    // porta il nome italiano, che serve alla Collezione, non qui).
+    val showSearchFlags = state.englishAvailable && state.searchScope == CardSearchScope.ALL
+    val searchSetLabels = remember(state.searchedCards, state.englishSets) {
+        val englishNames = state.englishSets.associate { it.id to it.name }
+        state.searchedCards.mapNotNull { it.set }.distinctBy { it.id }.associate { set ->
+            val lang = CatalogSetId.langOf(set.id)
+            val name = (if (lang == CatalogLang.EN) englishNames[set.id] else null) ?: set.name
+            // Le bandiere stanno sulle tessere: una tessera puo' valere per due lingue.
+            set.id to name
+        }
     }
     val searchGroups = remember(state.searchedCards, state.isCardNumberSearch, setReleaseDateById) {
         groupSearchResults(state.searchedCards, state.isCardNumberSearch, setReleaseDateById)
@@ -232,7 +249,7 @@ fun SetsListScreen(
     var quickAddCard by remember { mutableStateOf<TcgCard?>(null) }
     val wishlistState = rememberCatalogWishlistState()
     var searchGridColumns by rememberSaveable { mutableIntStateOf(SEARCH_DEFAULT_COLUMNS) }
-    val setBadges = remember(state.allSets) { SetBadge.byId(state.allSets) }
+    val setBadges = remember(state.allSets, state.englishSets) { SetBadge.byId(state.allSets + state.englishSets) }
 
     LaunchedEffect(isSearchingCards) {
         if (isSearchingCards) viewModel.observeOwnedCards() else quickAddCard = null
@@ -308,9 +325,12 @@ fun SetsListScreen(
             card = selectedCard!!,
             isOwned = false,
             isLoading = state.isAddingCard == selectedCard!!.id,
+            defaultLanguage = copyLanguageOf(selectedCard!!),
             onAddCard = { v, q, c, l ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                viewModel.addCardWithDetails(selectedCard!!, v, q, c, l)
+                // Scelta l'altra lingua nella scheda, entra la gemella di quella
+                // lingua (con "Tutte"): id, immagine e prezzo giusti.
+                viewModel.addCardWithDetails(cardForLanguage(selectedCard!!, state.searchTwins[selectedCard!!.id], l), v, q, c, l)
             },
             onRemoveCard = {},
             onDismiss = { selectedCard = null },
@@ -456,6 +476,31 @@ fun SetsListScreen(
             }
         }
 
+        // Dove cerca la ricerca carte: italiano, inglese o tutte e due.
+        if (isSearchingCards && state.englishAvailable) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Box(modifier = Modifier.padding(horizontal = 20.dp)) {
+                SlidingTabs(
+                    labels = listOf("🇮🇹 Italiano", "🇬🇧 English", AppLocale.searchAllLanguages),
+                    selectedIndex = state.searchScope.ordinal,
+                    onSelect = { index -> viewModel.selectSearchScope(CardSearchScope.entries[index]) }
+                )
+            }
+        }
+
+        // Catalogo italiano o inglese (piano carte EN): solo dove l'inglese e'
+        // acceso, e solo nella lista delle espansioni.
+        if (!isSearchingCards && state.englishAvailable) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Box(modifier = Modifier.padding(horizontal = 20.dp)) {
+                SlidingTabs(
+                    labels = listOf("🇮🇹 Italiano", "🇬🇧 English"),
+                    selectedIndex = if (state.catalogLang == CatalogLang.EN) 1 else 0,
+                    onSelect = { index -> viewModel.selectCatalogLang(if (index == 1) CatalogLang.EN else CatalogLang.IT) }
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isSearchingCards) {
@@ -474,13 +519,16 @@ fun SetsListScreen(
                     searchGridColumns = (searchGridColumns + delta).coerceIn(SEARCH_MIN_COLUMNS, SEARCH_MAX_COLUMNS)
                 },
                 gridTile = { card ->
+                    // Con "Tutte" la tessera vale anche per la gemella nell'altra
+                    // lingua: posseduta se lo e' una delle due.
+                    val twin = state.searchTwins[card.id]
                     TcgCardCompactItem(
                         card = card,
-                        isOwned = card.id in state.owned.ids,
+                        isOwned = card.id in state.owned.ids || (twin != null && twin.id in state.owned.ids),
                         isWishlisted = wishlistViewModel.isCardWishlisted(card.id),
-                        isAdding = state.isAddingCard == card.id,
+                        isAdding = state.isAddingCard == card.id || (twin != null && state.isAddingCard == twin.id),
                         isPopupOpen = quickAddCard?.id == card.id,
-                        ownedVariants = state.owned.variants[card.id].orEmpty(),
+                        ownedVariants = state.owned.variants[card.id].orEmpty() + twin?.let { state.owned.variants[it.id] }.orEmpty(),
                         onClick = { selectedCard = card },
                         // Come nell'espansione: con una sola stampa possibile
                         // si aggiunge subito, altrimenti si sceglie quale.
@@ -488,7 +536,7 @@ fun SetsListScreen(
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             val variants = CardOptions.getBaseVariantsForCard(card)
                             if (variants.size <= 1) {
-                                viewModel.addCardWithDetails(card, variants.firstOrNull() ?: "Holo", 1, "Near Mint", CardOptions.LANGUAGES.first())
+                                viewModel.addCardWithDetails(card, variants.firstOrNull() ?: "Holo", 1, "Near Mint", copyLanguageOf(card))
                             } else {
                                 quickAddCard = if (quickAddCard?.id == card.id) null else card
                             }
@@ -499,23 +547,26 @@ fun SetsListScreen(
                         },
                         onVariantSelected = { variant ->
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            viewModel.addCardWithDetails(card, variant, 1, "Near Mint", CardOptions.LANGUAGES.first())
+                            viewModel.addCardWithDetails(card, variant, 1, "Near Mint", copyLanguageOf(card))
                             quickAddCard = null
                         },
                         setBadge = card.set?.id?.let { setBadges[it] },
                         dimWhenNotOwned = false,
-                        compactFooter = searchGridColumns >= SEARCH_COMPACT_FROM_COLUMNS
+                        compactFooter = searchGridColumns >= SEARCH_COMPACT_FROM_COLUMNS,
+                        languageFlags = if (showSearchFlags) twinFlags(card, twin) else null
                     )
                 },
+                setLabelById = searchSetLabels,
+                languageFlagsOf = { card -> if (showSearchFlags) twinFlags(card, state.searchTwins[card.id]) else null },
                 setReleaseDateById = setReleaseDateById,
                 onCardClick = { card -> selectedCard = card },
-                onCardSetClick = { setId -> onSetClick(setId, "ITA") }
+                onCardSetClick = { setId -> onSetClick(setId, CatalogSetId.langOf(setId)?.macro ?: "ITA") }
             )
         } else {
             // ── Contenuto: lista unica con intestazioni di sezione per serie,
             // ordinate dalla piu' recente (vedi buildSeriesGroups/setDisplayComparator
             // in SetsViewModel.kt) -- niente piu' tab lingua/chip serie da selezionare.
-            if (state.isLoading) {
+            if (state.isLoading || (state.catalogLang == CatalogLang.EN && state.isLoadingEnglish)) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     PokeballLoadingAnimation(message = AppLocale.loadingSets)
                 }
@@ -565,7 +616,7 @@ fun SetsListScreen(
                             items(items = group.sets, key = { "${group.seriesKey}::${it.id}" }) { set ->
                                 SetCard(
                                     set = set,
-                                    onClick = { onSetClick(set.id, "ITA") }
+                                    onClick = { onSetClick(set.id, CatalogSetId.langOf(set.id)?.macro ?: "ITA") }
                                 )
                             }
                         }
@@ -1134,6 +1185,10 @@ fun CardSearchResults(
     onColumnsChange: (Int) -> Unit = {},
     /** La tessera della vista griglia. */
     gridTile: @Composable (TcgCard) -> Unit,
+    /** Il nome da mostrare per ogni set (con la bandiera, se si cerca in tutte le lingue). */
+    setLabelById: Map<String, String> = emptyMap(),
+    /** Le bandiere di una carta nella vista lista (ricerca in tutte le lingue), null se non servono. */
+    languageFlagsOf: (TcgCard) -> String? = { null },
     onCardClick: (TcgCard) -> Unit = {},
     onCardSetClick: (String) -> Unit
 ) {
@@ -1234,11 +1289,11 @@ fun CardSearchResults(
                     if (isGrid) {
                         gridTile(card)
                     } else {
-                        SearchResultListRow(card = card, onClick = { onCardClick(card) })
+                        SearchResultListRow(card = card, setLabel = card.set?.id?.let(setLabelById::get), languageFlags = languageFlagsOf(card), onClick = { onCardClick(card) })
                     }
                 }
             } else groups.forEach { (setId, setCards) ->
-                val setName = setCards.firstOrNull()?.set?.name ?: AppLocale.unknown
+                val setName = setLabelById[setId] ?: setCards.firstOrNull()?.set?.name ?: AppLocale.unknown
                 val formattedReleaseDate = formatReleaseDateUi(setReleaseDateById[setId].orEmpty())
                 item(span = { GridItemSpan(gridColumns) }) {
                     Row(
@@ -1266,7 +1321,7 @@ fun CardSearchResults(
                     if (isGrid) {
                         gridTile(card)
                     } else {
-                        SearchResultListRow(card = card, onClick = { onCardClick(card) })
+                        SearchResultListRow(card = card, setLabel = card.set?.id?.let(setLabelById::get), languageFlags = languageFlagsOf(card), onClick = { onCardClick(card) })
                     }
                 }
             }
@@ -1274,9 +1329,26 @@ fun CardSearchResults(
     }
 }
 
+/** La lingua con cui entra in collezione una carta del catalogo: inglese per "eng:". */
+internal fun copyLanguageOf(card: TcgCard): String =
+    (CardRef.langOf(card.id) ?: CatalogLang.IT).copyLanguageLabel
+
+/**
+ * Le bandiere di una tessera con "Tutte": la lingua della carta e quella della
+ * gemella, se c'e'. Sempre prima l'italiano, come in Collezione.
+ */
+internal fun twinFlags(card: TcgCard, twin: TcgCard?): String {
+    val langs = listOfNotNull(CardRef.langOf(card.id), twin?.let { CardRef.langOf(it.id) }).toSet()
+    return CatalogLang.entries.filter { it in langs }.joinToString("") { if (it == CatalogLang.EN) "🇬🇧" else "🇮🇹" }
+}
+
+/** La carta da aggiungere per la lingua scelta nella scheda: la gemella, se e' di quella lingua. */
+internal fun cardForLanguage(card: TcgCard, twin: TcgCard?, language: String): TcgCard =
+    twin?.takeIf { copyLanguageOf(it) == language } ?: card
+
 // ── Card di ricerca, vista lista: piu' dettagli leggibili per riga ──
 @Composable
-private fun SearchResultListRow(card: TcgCard, onClick: () -> Unit) {
+private fun SearchResultListRow(card: TcgCard, setLabel: String? = null, languageFlags: String? = null, onClick: () -> Unit) {
     val price = card.cardmarket?.prices.minimumEurPriceOrZero()
     val rarityInfo = card.rarity?.takeIf { it.isNotBlank() }?.let { RarityUtils.getRarityInfo(it) }
     Row(
@@ -1322,7 +1394,9 @@ private fun SearchResultListRow(card: TcgCard, onClick: () -> Unit) {
                 if (rarityInfo != null && card.set?.name?.isNotBlank() == true) {
                     Text("  •  ", color = AppColors.textMuted, fontSize = 11.sp)
                 }
-                card.set?.name?.takeIf { it.isNotBlank() }?.let {
+                (setLabel ?: card.set?.name)?.takeIf { it.isNotBlank() }
+                    ?.let { name -> languageFlags?.takeIf { it.isNotEmpty() }?.let { "$it $name" } ?: name }
+                    ?.let {
                     Text(it, color = AppColors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }

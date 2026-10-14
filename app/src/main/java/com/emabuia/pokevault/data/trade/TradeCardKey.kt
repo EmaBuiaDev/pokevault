@@ -17,8 +17,10 @@ import java.util.Locale
  * CatalogRepository.buildItalianCardId. NON si usa collectionCardKey(), che
  * dipende dal nome del set tradotto.
  *
- * Le carte senza id italiano del catalogo (quelle inglesi di PokeWallet)
- * restituiscono null: per ora restano fuori dagli scambi.
+ * Le carte del catalogo inglese ("eng:sv08:1") danno la STESSA chiave della
+ * gemella italiana: negli scambi IT ed EN sono la stessa carta, e la lingua
+ * della copia viaggia a parte (trade_haves.language). Le carte senza id del
+ * catalogo (quelle inglesi di PokeWallet) restituiscono null: restano fuori.
  */
 object TradeCardKey {
 
@@ -26,9 +28,8 @@ object TradeCardKey {
     private val NUMBER = Regex("^[A-Za-z0-9_]{1,20}$")
 
     fun fromApiCardId(apiCardId: String?): String? {
-        // Per ora solo il catalogo italiano: l'inglese entra negli scambi con la
-        // stessa chiave della gemella IT nella Fase 3 del piano carte EN.
-        val ref = CardRef.parse(apiCardId)?.takeIf { it.lang == CatalogLang.IT } ?: return null
+        // Italiano e inglese insieme: stessa cartella e stesso numero, stessa chiave.
+        val ref = CardRef.parse(apiCardId) ?: return null
         // Come ItalianCatalogNormalizer.toImageReference: i numeri perdono gli
         // zeri davanti, i promo a lettere (BW01, SWSH026) restano come sono.
         val number = ref.number.toIntOrNull()?.toString() ?: ref.number

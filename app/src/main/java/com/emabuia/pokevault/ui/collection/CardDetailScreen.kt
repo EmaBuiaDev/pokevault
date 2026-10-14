@@ -71,6 +71,7 @@ import com.emabuia.pokevault.ui.graded.onAccentColor
 import com.emabuia.pokevault.ui.graded.tierColor
 import com.emabuia.pokevault.ui.graded.tierLabel
 import com.emabuia.pokevault.util.GradeTier
+import com.emabuia.pokevault.viewmodel.IllustratorCatalogPref
 import com.emabuia.pokevault.util.GradedLab
 import kotlin.math.abs
 import kotlin.math.cos
@@ -263,8 +264,12 @@ fun CardDetailScreen(
             ?: return@LaunchedEffect
         if (illustratorByApiId.containsKey(apiCardId)) return@LaunchedEffect
 
-        illustratorByApiId[apiCardId] = tcgRepository
-            .italianIllustratorsByCardId(context, setOf(apiCardId))[apiCardId]
+        // Copia inglese: l'illustratore sta nella carta del suo set EN.
+        illustratorByApiId[apiCardId] = if (CardRef.isCatalogCard(apiCardId, CatalogLang.EN)) {
+            RepositoryProvider.englishCatalogRepository.findCard(context, apiCardId)?.artist
+        } else {
+            tcgRepository.italianIllustratorsByCardId(context, setOf(apiCardId))[apiCardId]
+        }
     }
 
     LaunchedEffect(selectedVariantIndex, variants) {
@@ -283,6 +288,18 @@ fun CardDetailScreen(
         }
 
         isLoadingLivePrices = true
+
+        // Carta del catalogo inglese: il listino EN e basta. PokeWallet, cercato
+        // col nome del set, costerebbe una chiamata e darebbe un prezzo a caso.
+        if (CardRef.isCatalogCard(selected.apiCardId, CatalogLang.EN)) {
+            val english = runCatching {
+                RepositoryProvider.englishPriceSnapshotRepository.priceForItalianCard(context, selected.apiCardId)
+            }.getOrNull()
+            livePriceCacheByApiId[selected.apiCardId] = english
+            livePrices = english
+            isLoadingLivePrices = false
+            return@LaunchedEffect
+        }
 
         val remoteCard = tcgRepository.getCard(selected.apiCardId).getOrNull()
         val localPriceData = remoteCard?.let { remote ->
@@ -746,7 +763,11 @@ fun CardDetailScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onIllustratorClick(key) }
+                                    .clickable {
+                                        // L'album dell'artista nella lingua di questa copia.
+                                        IllustratorCatalogPref.followCard(context, currentCard.apiCardId)
+                                        onIllustratorClick(key)
+                                    }
                                     .padding(vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically

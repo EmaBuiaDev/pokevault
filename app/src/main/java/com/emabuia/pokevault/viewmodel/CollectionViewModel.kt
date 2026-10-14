@@ -303,7 +303,8 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
      * prima di tutto, come nel resto dell'app.
      */
     private suspend fun italianSnapshotPrice(apiCardId: String, variant: String): Double =
-        italianPriceSnapshotRepository.priceForItalianCard(getApplication(), apiCardId)
+        // Carte "eng:": il listino EN; tutte le altre: lo snapshot italiano di sempre.
+        RepositoryProvider.priceSnapshotRepositoryFor(apiCardId).priceForItalianCard(getApplication(), apiCardId)
             ?.forVariant(variant)
             .minimumEurOrZero()
 

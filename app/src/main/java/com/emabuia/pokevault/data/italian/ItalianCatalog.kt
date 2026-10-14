@@ -111,7 +111,14 @@ data class ItalianExpansionSummary(
     val releaseDate: String? = null,
     val series: String? = null,
     /** La sigla ufficiale ("PAF"), schema/016 del Worker. Null dove manca. */
-    val abbreviation: String? = null
+    val abbreviation: String? = null,
+    /**
+     * Solo dal catalogo inglese (/v1/en/expansions): il set italiano gemello e
+     * il suo nome esatto. La carta inglese si salva con quel nome di set, e la
+     * Collezione la mette nella stessa tessera della carta italiana.
+     */
+    val itExpansionId: String? = null,
+    val itName: String? = null
 )
 
 data class ItalianExpansionsResponse(

@@ -43,6 +43,7 @@ class GoalAlbumViewModel : ViewModel() {
 
     private val repository = FirestoreRepository()
     private val tcgRepository = RepositoryProvider.tcgRepository
+    private val englishCatalog = RepositoryProvider.englishCatalogRepository
     private val premiumManager = PremiumManager.getInstance()
 
     // ── State ──────────────────────────────────────────────────────────────
@@ -109,7 +110,8 @@ class GoalAlbumViewModel : ViewModel() {
     }
 
     /**
-     * I set fra cui scegliere: il nostro catalogo italiano. Senza Context getSets() scartava proprio i set italiani, e si
+     * I set fra cui scegliere: i nostri cataloghi, italiano e (dove e' acceso)
+     * inglese. Senza Context getSets() scartava proprio i set italiani, e si
      * potevano scegliere solo set PokeWallet: chase che non contavano le copie
      * italiane e costavano chiamate a ogni apertura.
      */
@@ -117,8 +119,8 @@ class GoalAlbumViewModel : ViewModel() {
         if (availableSets.isNotEmpty()) return
         viewModelScope.launch {
             val italian = tcgRepository.getSets(context).getOrNull().orEmpty()
-            // Il catalogo inglese arriva con la 3.2 (piano carte EN): qui solo l'italiano.
-            availableSets = goalSetChoices(italian, emptyList())
+            val english = if (englishCatalog.isEnabled) englishCatalog.getSets(context).getOrNull().orEmpty() else emptyList()
+            availableSets = goalSetChoices(italian, english)
         }
     }
 

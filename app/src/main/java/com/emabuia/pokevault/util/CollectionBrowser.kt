@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.util
 
 import com.emabuia.pokevault.data.model.CardClassifier
+import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.model.collectionCardKey
 import java.util.Locale
@@ -194,6 +195,23 @@ object CollectionBrowser {
      */
     internal fun cleanLanguage(raw: String): String =
         raw.trim().dropWhile { !it.isLetter() }.trim()
+
+    /**
+     * Le bandiere delle lingue di una tessera ("🇮🇹🇬🇧"), per il badge in
+     * Collezione (piano carte EN). Vuoto quando c'e' solo l'italiano: chi
+     * colleziona solo in italiano non deve vedere niente di nuovo.
+     */
+    fun languageFlags(languages: Set<String>): String {
+        if (languages.isEmpty() || languages.all { it.equals("Italiano", ignoreCase = true) }) return ""
+        val order = listOf("Italiano", "English", "Giapponese", "Cinese")
+        return languages
+            .sortedBy { language -> order.indexOfFirst { it.equals(language, ignoreCase = true) }.let { if (it < 0) order.size else it } }
+            .mapNotNull { language ->
+                CardOptions.LANGUAGES.firstOrNull { cleanLanguage(it).equals(language, ignoreCase = true) }
+                    ?.trim()?.takeWhile { !it.isLetter() }?.trim()?.ifBlank { null }
+            }
+            .joinToString("")
+    }
 
     fun matches(group: CardGroup, filter: CollectionFilter): Boolean {
         val query = filter.query.trim().lowercase(Locale.ROOT)

@@ -14,7 +14,7 @@
 // tenuti 24 ore che ha il catalogo italiano.
 
 import { mapCardRow, type D1CardRow } from './card-row';
-import { CARDMARKET_EN_R2_KEY, enCardImageKey, enSetAssetKeys, parseEnglishRequest } from './catalog-en-paths';
+import { CARDMARKET_EN_R2_KEY, CATALOG_EN_MAX_AGE_MS, CATALOG_EN_R2_KEY, ILLUSTRATORS_EN_R2_KEY, enCardImageKey, enSetAssetKeys, parseEnglishRequest } from './catalog-en-paths';
 import { cardmarketBlobProblem, mergeCardmarketPrices, type CardmarketBlob, type PriceSnapshot } from './cardmarket-prices';
 import { resolveExpansionPrices } from './price-lookup';
 
@@ -45,6 +45,8 @@ async function loadEnglishPrices(bucket: R2Bucket | undefined): Promise<{ snapsh
 export interface EnglishCatalogEnv {
   catalog_en?: D1Database;
   IMAGES_BUCKET?: R2Bucket;
+  /** Il catalogo italiano, in sola lettura: il nome italiano dei set gemelli. */
+  pokevault_catalog?: D1Database;
 }
 
 const CATALOG_CACHE_CONTROL = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400';
@@ -74,6 +76,146 @@ async function serveR2(bucket: R2Bucket | undefined, keys: string[]): Promise<Re
     return new Response(object.body, { status: 200, headers });
   }
   return new Response('Not found', { status: 404, headers: { 'Cache-Control': MISSING_CACHE_CONTROL } });
+}
+
+/**
+ * Tutte le carte pubblicate, per la ricerca dell'app ({cards: [...]}, la forma
+ * di /v1/en/expansions/{id}/cards). Costruirlo legge ventimila righe di D1, piu'
+ * le stampe: si tiene su R2 e si rifa' solo quando ha piu' di
+ * CATALOG_EN_MAX_AGE_MS, cosi' l'import notturno compare entro qualche ora
+ * senza che ogni apertura dell'app costi la quota.
+ */
+async function serveEnglishCatalog(db: D1Database, bucket: R2Bucket | undefined): Promise<Response> {
+  return serveCachedOnR2(bucket, CATALOG_EN_R2_KEY, 'English catalog', () => buildEnglishCatalog(db), () => takedownsSignature(db));
+}
+
+/**
+ * Quanti takedown ci sono e quando e' arrivato l'ultimo: se cambia, le copie
+ * su R2 si rifanno subito invece di aspettare le 6 ore. Legge solo la tabella
+ * dei takedown (poche righe). Null se non si legge: la copia resta valida.
+ */
+async function takedownsSignature(db: D1Database): Promise<string | null> {
+  try {
+    const row = await db
+      .prepare('SELECT COUNT(*) AS n, COALESCE(MAX(created_at), 0) AS last FROM takedowns')
+      .first<{ n: number; last: number }>();
+    return row ? `${row.n}:${row.last}` : null;
+  } catch (error) {
+    console.error('catalogo EN: takedown illeggibili:', error);
+    return null;
+  }
+}
+
+/**
+ * Una risposta costosa da costruire (legge tutto D1) tenuta su R2 alla chiave
+ * [key] e rifatta solo quando ha piu' di CATALOG_EN_MAX_AGE_MS. Se D1 non
+ * risponde si serve la copia vecchia; senza copia, 503.
+ */
+async function serveCachedOnR2(
+  bucket: R2Bucket | undefined,
+  key: string,
+  what: string,
+  build: () => Promise<string>,
+  signature: () => Promise<string | null> = async () => null
+): Promise<Response> {
+  const headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': CATALOG_CACHE_CONTROL,
+  };
+  const stored = bucket ? await bucket.get(key).catch(() => null) : null;
+  const currentSignature = await signature();
+  const storedSignature = stored?.customMetadata?.signature ?? null;
+  const signatureChanged = currentSignature !== null && storedSignature !== currentSignature;
+  if (stored && !signatureChanged && Date.now() - stored.uploaded.getTime() < CATALOG_EN_MAX_AGE_MS) {
+    return new Response(stored.body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': stored.uploaded.toISOString() } });
+  }
+  try {
+    const body = await build();
+    if (bucket) {
+      await bucket.put(key, body, {
+        httpMetadata: { contentType: 'application/json; charset=utf-8' },
+        customMetadata: currentSignature ? { signature: currentSignature } : undefined,
+      })
+        .catch((error) => console.error(`catalogo EN: copia su R2 di ${key} non salvata:`, error));
+    }
+    return new Response(body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': new Date().toISOString() } });
+  } catch (error) {
+    // D1 non risponde: meglio la copia vecchia che niente.
+    console.error(`catalogo EN: ${key} non ricostruito:`, error);
+    if (stored) {
+      return new Response(stored.body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': stored.uploaded.toISOString() } });
+    }
+    return json({ error: `${what} not available` }, 503, MISSING_CACHE_CONTROL);
+  }
+}
+
+async function buildEnglishCatalog(db: D1Database): Promise<string> {
+  const { results } = await db
+    .prepare(
+      `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage, c.illustratore
+       FROM cards c JOIN expansions e ON e.id = c.expansion_id
+       WHERE e.published = 1
+         AND NOT EXISTS (SELECT 1 FROM takedowns t WHERE (t.target_type = 'card' AND t.target_id = c.card_id) OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id))
+       ORDER BY c.expansion_id, CAST(c.card_number AS INTEGER), c.card_number`
+    )
+    .all<D1CardRow>();
+  if (results.length === 0) throw new Error('nessuna carta pubblicata');
+
+  const variants = new Map<string, string[]>();
+  try {
+    const { results: rows } = await db
+      .prepare(
+        `SELECT v.card_id, v.variant FROM card_variants v JOIN cards c ON c.card_id = v.card_id
+         JOIN expansions e ON e.id = c.expansion_id
+         WHERE e.published = 1 ORDER BY v.card_id, v.kind, v.variant`
+      )
+      .all<{ card_id: string; variant: string }>();
+    for (const row of rows) {
+      const list = variants.get(row.card_id);
+      if (list) list.push(row.variant); else variants.set(row.card_id, [row.variant]);
+    }
+  } catch (error) {
+    console.error('catalogo EN: stampe illeggibili, il catalogo esce senza:', error);
+  }
+
+  return JSON.stringify({ cards: results.map((r) => mapCardRow(r, variants)) });
+}
+
+// Stessa forma di /v1/illustrators: per ogni nome grezzo le sue carte.
+async function buildEnglishIllustrators(db: D1Database): Promise<string> {
+  const takedownSql = `NOT EXISTS (SELECT 1 FROM takedowns t WHERE (t.target_type = 'card' AND t.target_id = c.card_id) OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id))`;
+  const { results } = await db
+    .prepare(
+      `SELECT c.illustratore AS name, c.card_id, c.expansion_id
+       FROM cards c JOIN expansions e ON e.id = c.expansion_id
+       WHERE e.published = 1 AND c.illustratore IS NOT NULL AND TRIM(c.illustratore) <> '' AND ${takedownSql}
+       ORDER BY c.illustratore`
+    )
+    .all<{ name: string; card_id: string; expansion_id: string }>();
+  if (results.length === 0) throw new Error('nessun illustratore');
+  const byName = new Map<string, { cardIds: string[]; expansions: Set<string> }>();
+  for (const row of results) {
+    const name = row.name.trim();
+    if (!name) continue;
+    let entry = byName.get(name);
+    if (!entry) {
+      entry = { cardIds: [], expansions: new Set() };
+      byName.set(name, entry);
+    }
+    entry.cardIds.push(row.card_id);
+    entry.expansions.add(row.expansion_id);
+  }
+  const illustrators = Array.from(byName.entries())
+    .map(([name, entry]) => ({ name, cardCount: entry.cardIds.length, expansionCount: entry.expansions.size, cardIds: entry.cardIds }))
+    .sort((a, b) => b.cardCount - a.cardCount || a.name.localeCompare(b.name));
+  const missing = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM cards c JOIN expansions e ON e.id = c.expansion_id
+       WHERE e.published = 1 AND (c.illustratore IS NULL OR TRIM(c.illustratore) = '') AND ${takedownSql}`
+    )
+    .first<{ n: number }>();
+  return JSON.stringify({ illustrators, cardsWithoutIllustrator: missing?.n ?? 0 });
 }
 
 /**
@@ -115,6 +257,20 @@ export async function handleEnglishCatalogRequest(request: Request, url: URL, en
           logo_key: string | null; base_set_code: string | null; release_date: string | null; series: string | null;
           abbreviation: string | null; it_expansion_id: string | null;
         }>();
+      // Il nome italiano del gemello: l'app salva la carta inglese con quello, e
+      // la Collezione la mette nella stessa tessera della carta italiana. Se il
+      // catalogo italiano non risponde, il set esce senza (l'app ripiega).
+      const itNames = new Map<string, string>();
+      if (env.pokevault_catalog && results.some((r) => r.it_expansion_id)) {
+        try {
+          const { results: itRows } = await env.pokevault_catalog
+            .prepare('SELECT id, name FROM expansions WHERE name IS NOT NULL')
+            .all<{ id: string; name: string }>();
+          for (const row of itRows) itNames.set(row.id, row.name);
+        } catch (error) {
+          console.error('catalogo EN: nomi italiani dei gemelli illeggibili:', error);
+        }
+      }
       // Stessi campi di /v1/expansions (ItalianExpansionSummary), piu' il gemello italiano.
       const expansions = results.map((r) => ({
         id: r.id,
@@ -128,6 +284,7 @@ export async function handleEnglishCatalogRequest(request: Request, url: URL, en
         baseSetCode: r.base_set_code,
         releaseDate: r.release_date,
         itExpansionId: r.it_expansion_id,
+        itName: r.it_expansion_id ? itNames.get(r.it_expansion_id) ?? null : null,
       }));
       return json({ expansions }, 200, CATALOG_CACHE_CONTROL);
     }
@@ -170,40 +327,12 @@ export async function handleEnglishCatalogRequest(request: Request, url: URL, en
       return json({ expansionId: route.expansionId, cards: results.map((r) => mapCardRow(r, variants)) }, 200, CATALOG_CACHE_CONTROL);
     }
 
+    case 'catalog':
+      return serveEnglishCatalog(db, env.IMAGES_BUCKET);
+
     // Stessa forma di /v1/illustrators e /v1/illustrators/{nome}/cards.
-    case 'illustrators': {
-      const takedownSql = `NOT EXISTS (SELECT 1 FROM takedowns t WHERE (t.target_type = 'card' AND t.target_id = c.card_id) OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id))`;
-      const { results } = await db
-        .prepare(
-          `SELECT c.illustratore AS name, c.card_id, c.expansion_id
-           FROM cards c JOIN expansions e ON e.id = c.expansion_id
-           WHERE e.published = 1 AND c.illustratore IS NOT NULL AND TRIM(c.illustratore) <> '' AND ${takedownSql}
-           ORDER BY c.illustratore`
-        )
-        .all<{ name: string; card_id: string; expansion_id: string }>();
-      const byName = new Map<string, { cardIds: string[]; expansions: Set<string> }>();
-      for (const row of results) {
-        const name = row.name.trim();
-        if (!name) continue;
-        let entry = byName.get(name);
-        if (!entry) {
-          entry = { cardIds: [], expansions: new Set() };
-          byName.set(name, entry);
-        }
-        entry.cardIds.push(row.card_id);
-        entry.expansions.add(row.expansion_id);
-      }
-      const illustrators = Array.from(byName.entries())
-        .map(([name, entry]) => ({ name, cardCount: entry.cardIds.length, expansionCount: entry.expansions.size, cardIds: entry.cardIds }))
-        .sort((a, b) => b.cardCount - a.cardCount || a.name.localeCompare(b.name));
-      const missing = await db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM cards c JOIN expansions e ON e.id = c.expansion_id
-           WHERE e.published = 1 AND (c.illustratore IS NULL OR TRIM(c.illustratore) = '') AND ${takedownSql}`
-        )
-        .first<{ n: number }>();
-      return json({ illustrators, cardsWithoutIllustrator: missing?.n ?? 0 }, 200, CATALOG_CACHE_CONTROL);
-    }
+    case 'illustrators':
+      return serveCachedOnR2(env.IMAGES_BUCKET, ILLUSTRATORS_EN_R2_KEY, 'English illustrators', () => buildEnglishIllustrators(db), () => takedownsSignature(db));
 
     case 'illustratorCards': {
       const { results } = await db

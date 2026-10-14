@@ -4,11 +4,18 @@
 export const EN_R2_PREFIX = 'en';
 // Deve restare uguale a CARDMARKET_EN_R2_KEY in scripts/build-cardmarket-prices-en.mjs.
 export const CARDMARKET_EN_R2_KEY = 'prezzi/cardmarket-en-v1.json';
+// Il catalogo EN intero per la ricerca dell'app, rifatto da D1 al massimo ogni
+// CATALOG_EN_MAX_AGE_MS: tenerlo su R2 risparmia la quota D1 (ventimila righe a giro).
+export const CATALOG_EN_R2_KEY = 'en/catalog/catalog.json';
+export const CATALOG_EN_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+// L'indice degli illustratori EN, stessa regola: anche lui legge tutte le carte.
+export const ILLUSTRATORS_EN_R2_KEY = 'en/catalog/illustrators.json';
 
 
 export type EnglishRequest =
   | { kind: 'health' }
   | { kind: 'expansions' }
+  | { kind: 'catalog' }
   | { kind: 'cards'; expansionId: string }
   | { kind: 'cardImage'; setCode: string; cardNumber: string }
   | { kind: 'setLogo'; setCode: string }
@@ -53,6 +60,8 @@ export function parseEnglishRequest(url: URL): EnglishRequest | null {
 
   if (pathname === '/v1/en/health') return { kind: 'health' };
   if (pathname === '/v1/en/expansions') return { kind: 'expansions' };
+  // Come /ita/catalog.json, ma nella forma di /v1/en/expansions/{id}/cards ({cards: [...]}).
+  if (pathname === '/en/catalog.json') return { kind: 'catalog' };
   if (pathname === '/v1/en/illustrators') return { kind: 'illustrators' };
   const illustrator = pathname.match(/^\/v1\/en\/illustrators\/(.+)\/cards$/);
   if (illustrator) {

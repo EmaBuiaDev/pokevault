@@ -26,3 +26,4 @@ firebase-debug.*.log
 firestore-debug.log
 ui-debug.log
 .firebase/
+scripts/.ingest-en-guardiano.txt

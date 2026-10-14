@@ -18,6 +18,7 @@ import com.emabuia.pokevault.data.italian.ItalianCardSearchFilter
 import com.emabuia.pokevault.data.italian.ItalianExpansionFacet
 import com.emabuia.pokevault.data.italian.ItalianHpBucket
 import com.emabuia.pokevault.data.italian.ItalianPriceBucket
+import com.emabuia.pokevault.data.italian.ItalianPriceSnapshotRepository
 import com.emabuia.pokevault.data.italian.ItalianSearchFacets
 import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.emabuia.pokevault.data.remote.CardMarket
@@ -29,6 +30,7 @@ import com.emabuia.pokevault.data.remote.TcgPlayer
 import com.emabuia.pokevault.data.remote.TcgPriceInfo
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
+import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.OwnedCardsIndex
 import com.emabuia.pokevault.util.hasPositiveEurPrice
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
@@ -90,13 +92,103 @@ data class SetsUiState(
     val isAddingCard: String? = null,
     val successMessage: String? = null,
     /** Le carte possedute, per il bordo verde nei risultati della ricerca. */
-    val owned: OwnedCardsIndex = OwnedCardsIndex()
+    val owned: OwnedCardsIndex = OwnedCardsIndex(),
+    /**
+     * Catalogo mostrato nel Pokedex (piano carte EN). Il selettore compare solo
+     * se [englishAvailable]: in prod l'inglese e' spento e tutto resta com'era.
+     */
+    val catalogLang: CatalogLang = CatalogLang.IT,
+    val englishAvailable: Boolean = false,
+    /** I set del catalogo inglese, caricati solo alla prima scelta di EN. */
+    val englishSets: List<TcgSet> = emptyList(),
+    val isLoadingEnglish: Boolean = false,
+    /** In quale catalogo cerca la ricerca carte: conta solo se [englishAvailable]. */
+    val searchScope: CardSearchScope = CardSearchScope.IT,
+    /**
+     * Con "Tutte": per ogni carta mostrata, la sua gemella nell'altra lingua
+     * (stesso set, stesso numero). Manca se la carta esiste in una lingua sola.
+     */
+    val searchTwins: Map<String, TcgCard> = emptyMap()
 ) {
     /** Quante voci di filtro sono accese, su tutte le dimensioni. */
     val activeCardFilterCount: Int
         get() = cardFilter.activeCount + cardSeriesFilter.size + cardPriceFilter.size
 
     val hasActiveCardFilters: Boolean get() = activeCardFilterCount > 0
+}
+
+/**
+ * Il catalogo con cui si apre il Pokedex: la scelta fatta col selettore
+ * ([saved], il nome di un [CatalogLang]) finche' l'app e' nella lingua che
+ * aveva quando la si e' fatta ([savedWithApp], il codice di AppLocale);
+ * altrimenti la lingua dell'app. Chi cambia lingua all'app si aspetta che il
+ * catalogo la segua, anche se prima aveva toccato il selettore.
+ */
+internal fun defaultCatalogLang(saved: String?, savedWithApp: String?, appLanguage: AppLocale.Language): CatalogLang {
+    val choice = CatalogLang.entries.firstOrNull { it.name == saved }
+    if (choice != null && savedWithApp == appLanguage.code) return choice
+    return if (appLanguage == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT
+}
+
+/** Dove cerca la ricerca carte: solo italiano, solo inglese o tutti e due. */
+enum class CardSearchScope { IT, EN, ALL;
+
+    val includesItalian: Boolean get() = this != EN
+    val includesEnglish: Boolean get() = this != IT
+}
+
+/**
+ * L'ambito con cui si apre la ricerca carte: la scelta fatta ([saved]) finche'
+ * l'app e' nella lingua che aveva allora ([savedWithApp]), altrimenti la lingua
+ * dell'app. "Tutte" non e' mai il predefinito: si sceglie.
+ */
+internal fun defaultSearchScope(saved: String?, savedWithApp: String?, appLanguage: AppLocale.Language): CardSearchScope {
+    val choice = CardSearchScope.entries.firstOrNull { it.name == saved }
+    if (choice != null && savedWithApp == appLanguage.code) return choice
+    return if (appLanguage == AppLocale.Language.EN) CardSearchScope.EN else CardSearchScope.IT
+}
+
+/** La lingua dell'app come catalogo: a parita' di tutto, si mostra questa. */
+internal fun preferredCatalogLang(): CatalogLang =
+    if (AppLocale.current == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT
+
+internal data class MergedTwins(val cards: List<TcgCard>, val twinOf: Map<String, TcgCard>)
+
+/**
+ * Una tessera per carta: la italiana e la gemella inglese (stesso set e stesso
+ * numero, come la chiave degli scambi) diventano una, al posto della prima
+ * delle due nell'ordine dei risultati. Si mostra la versione in [preferred];
+ * l'altra finisce in [MergedTwins.twinOf]. Le carte fuori dai nostri
+ * cataloghi restano come sono.
+ */
+internal fun mergeLanguageTwins(cards: List<TcgCard>, preferred: CatalogLang): MergedTwins {
+    fun keyOf(card: TcgCard): String? {
+        val ref = CardRef.parse(card.id) ?: return null
+        val number = ref.number.toIntOrNull()?.toString() ?: ref.number.uppercase(Locale.ROOT)
+        return "${ref.setCode}:$number"
+    }
+    val shown = ArrayList<TcgCard>(cards.size)
+    val slotByKey = HashMap<String, Int>()
+    val twinOf = HashMap<String, TcgCard>()
+    for (card in cards) {
+        val key = keyOf(card)
+        val slot = key?.let(slotByKey::get)
+        if (key == null || slot == null) {
+            key?.let { slotByKey[it] = shown.size }
+            shown += card
+            continue
+        }
+        val first = shown[slot]
+        // Stessa lingua (non dovrebbe succedere): si tiene la prima e basta.
+        if (CardRef.langOf(first.id) == CardRef.langOf(card.id)) continue
+        if (CardRef.langOf(card.id) == preferred) {
+            shown[slot] = card
+            twinOf[card.id] = first
+        } else {
+            twinOf[first.id] = card
+        }
+    }
+    return MergedTwins(shown, twinOf)
 }
 
 // Usa AndroidViewModel per accedere al Context
@@ -149,6 +241,86 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     init {
         TranslationService.loadCache(application.applicationContext)
         loadSets()
+        restoreCatalogLang()
+    }
+
+    // ── Catalogo IT | EN ────────────────────────────────────────────────────
+
+    // Un getter e non una val: restoreCatalogLang() parte dall'init, che sta
+    // sopra, e una val dichiarata qui sotto sarebbe ancora null (crash).
+    private val englishCatalog get() = RepositoryProvider.englishCatalogRepository
+
+    private fun pokedexPrefs() = getApplication<Application>()
+        .getSharedPreferences("pokedex_prefs", Context.MODE_PRIVATE)
+
+    /**
+     * La lingua scelta l'ultima volta nel selettore, se l'app non ha cambiato
+     * lingua da allora; altrimenti quella dell'app (che a sua volta segue il
+     * telefono, vedi AppLocale.init).
+     */
+    private fun restoreCatalogLang() {
+        if (!englishCatalog.isEnabled) return
+        uiState = uiState.copy(englishAvailable = true)
+        val prefs = runCatching { pokedexPrefs() }.getOrNull()
+        val saved = runCatching { prefs?.getString("catalog_lang", null) }.getOrNull()
+        val savedWithApp = runCatching { prefs?.getString("catalog_lang_app", null) }.getOrNull()
+        val lang = defaultCatalogLang(saved, savedWithApp, AppLocale.current)
+        val scope = defaultSearchScope(
+            runCatching { prefs?.getString("search_scope", null) }.getOrNull(),
+            runCatching { prefs?.getString("search_scope_app", null) }.getOrNull(),
+            AppLocale.current
+        )
+        uiState = uiState.copy(searchScope = scope)
+        // Il predefinito non si salva: solo un tocco sul selettore e' una scelta.
+        if (lang == CatalogLang.EN) selectCatalogLang(CatalogLang.EN, remember = false)
+    }
+
+    /** Il selettore della ricerca carte: la scelta si ricorda e rilancia la ricerca. */
+    fun selectSearchScope(scope: CardSearchScope) {
+        if (scope != CardSearchScope.IT && !englishCatalog.isEnabled) return
+        if (scope == uiState.searchScope) return
+        uiState = uiState.copy(searchScope = scope)
+        runCatching {
+            pokedexPrefs().edit()
+                .putString("search_scope", scope.name)
+                .putString("search_scope_app", AppLocale.current.code)
+                .apply()
+        }
+        runCardSearch()
+    }
+
+    fun selectCatalogLang(lang: CatalogLang) = selectCatalogLang(lang, remember = true)
+
+    private fun selectCatalogLang(lang: CatalogLang, remember: Boolean) {
+        if (lang == CatalogLang.EN && !englishCatalog.isEnabled) return
+        // Un errore del catalogo EN non deve restare sulla lista italiana (e viceversa).
+        val clearError = (lang == CatalogLang.IT && uiState.allSets.isNotEmpty()) ||
+            (lang == CatalogLang.EN && uiState.englishSets.isNotEmpty())
+        uiState = uiState.copy(catalogLang = lang, errorMessage = if (clearError) null else uiState.errorMessage)
+        if (remember) runCatching {
+            pokedexPrefs().edit()
+                .putString("catalog_lang", lang.name)
+                .putString("catalog_lang_app", AppLocale.current.code)
+                .apply()
+        }
+        viewModelScope.launch {
+            if (lang == CatalogLang.EN && uiState.englishSets.isEmpty()) loadEnglishSets()
+            applyFilters()
+        }
+    }
+
+    private suspend fun loadEnglishSets() {
+        uiState = uiState.copy(isLoadingEnglish = true)
+        val context = getApplication<Application>().applicationContext
+        withContext(Dispatchers.IO) { englishCatalog.getSets(context) }
+            .onSuccess { sets -> uiState = uiState.copy(englishSets = sets, isLoadingEnglish = false) }
+            .onFailure { error ->
+                Timber.w(error, "Pokedex: catalogo EN non caricato")
+                uiState = uiState.copy(
+                    isLoadingEnglish = false,
+                    errorMessage = if (uiState.catalogLang == CatalogLang.EN) buildSetsErrorMessage(error) else uiState.errorMessage
+                )
+            }
     }
 
     private fun loadSets() {
@@ -244,6 +416,19 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         // Pull-to-refresh esplicito: sempre forzato, e vale come rivalidazione
         // appena avvenuta per la finestra di revalidateSetsFromNetwork.
         lastRevalidationAtMs = System.currentTimeMillis()
+        // Con il catalogo inglese scelto si ricarica quello (anche dal "Riprova").
+        if (uiState.catalogLang == CatalogLang.EN) {
+            viewModelScope.launch {
+                uiState = uiState.copy(errorMessage = null)
+                val context = getApplication<Application>().applicationContext
+                uiState = uiState.copy(isLoadingEnglish = true)
+                withContext(Dispatchers.IO) { englishCatalog.getSets(context, forceRefresh = true) }
+                    .onSuccess { sets -> uiState = uiState.copy(englishSets = sets, isLoadingEnglish = false) }
+                    .onFailure { error -> uiState = uiState.copy(isLoadingEnglish = false, errorMessage = buildSetsErrorMessage(error)) }
+                applyFilters()
+            }
+            return
+        }
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
             val context = getApplication<Application>().applicationContext
@@ -325,6 +510,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             lastUnfilteredSearchCards = emptyList()
             uiState = uiState.copy(
                 searchedCards = emptyList(),
+                searchTwins = emptyMap(),
                 isSearchingCards = false,
                 isCardNumberSearch = false,
                 unrecognizedPrintedTotal = null,
@@ -348,29 +534,61 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             // costruiscono le voci del pannello, quindi deve essere quello che
             // la ricerca trova davvero, non gia' tagliato dai filtri.
             val numberQuery = parseCardNumberQuery(query)
+            // Italiano, inglese o tutti e due (piano carte EN). Dove l'inglese e'
+            // spento si cerca solo l'italiano, come sempre.
+            val scope = if (englishCatalog.isEnabled) uiState.searchScope else CardSearchScope.IT
+            // I set EN servono alla lista dei risultati (date, simboli, nomi inglesi).
+            if (scope.includesEnglish && uiState.englishSets.isEmpty() && !uiState.isLoadingEnglish) {
+                viewModelScope.launch { loadEnglishSets() }
+            }
             val found = if (numberQuery != null) {
                 // Numero e totale li confronta il repository, che e' l'unico ad
                 // avere tutti i totali noti di ogni espansione. Qui non si
                 // riordina: rimescolare per somiglianza di nome delle cifre
                 // rovinerebbe l'ordine buono.
-                repository.searchItalianCardsByNumber(
-                    number = numberQuery.number,
-                    printedTotal = numberQuery.printedTotal,
-                    context = context,
-                    limit = CARD_SEARCH_FETCH_LIMIT
-                ).getOrDefault(emptyList())
+                val italian = async {
+                    if (!scope.includesItalian) emptyList() else repository.searchItalianCardsByNumber(
+                        number = numberQuery.number,
+                        printedTotal = numberQuery.printedTotal,
+                        context = context,
+                        limit = CARD_SEARCH_FETCH_LIMIT
+                    ).getOrDefault(emptyList())
+                }
+                val english = async {
+                    if (!scope.includesEnglish) emptyList() else englishCatalog.searchByNumber(
+                        context = context,
+                        number = numberQuery.number,
+                        printedTotal = numberQuery.printedTotal,
+                        limit = CARD_SEARCH_FETCH_LIMIT
+                    ).onFailure { Timber.w(it, "Ricerca: catalogo EN non disponibile") }.getOrDefault(emptyList())
+                }
+                italian.await() + english.await()
             } else {
-                val byName = repository.searchItalianCardsByName(
-                    query = query,
-                    context = context,
-                    limit = CARD_SEARCH_FETCH_LIMIT
-                ).getOrDefault(emptyList())
+                val italian = async {
+                    if (!scope.includesItalian) emptyList() else repository.searchItalianCardsByName(
+                        query = query,
+                        context = context,
+                        limit = CARD_SEARCH_FETCH_LIMIT
+                    ).getOrDefault(emptyList())
+                }
+                val english = async {
+                    if (!scope.includesEnglish) emptyList() else englishCatalog.searchByName(
+                        context = context,
+                        query = query,
+                        limit = CARD_SEARCH_FETCH_LIMIT
+                    ).onFailure { Timber.w(it, "Ricerca: catalogo EN non disponibile") }.getOrDefault(emptyList())
+                }
+                val byName = italian.await() + english.await()
                 // Ordinare per somiglianza normalizza il nome a ogni confronto:
                 // su trecento carte e' lavoro che sul thread della UI si vedrebbe.
                 withContext(Dispatchers.Default) { rankCardSearchResults(query, byName) }
             }
 
-            val matched = enrichItalianCardsWithSnapshotPrices(found, context)
+            val enriched = enrichEnglishCardsWithSnapshotPrices(enrichItalianCardsWithSnapshotPrices(found, context), context)
+            // Con "Tutte" la carta italiana e la sua gemella inglese sono una
+            // tessera sola, con le bandiere delle lingue in cui esiste.
+            val twins = if (scope == CardSearchScope.ALL) mergeLanguageTwins(enriched, preferredCatalogLang()) else null
+            val matched = twins?.cards ?: enriched
             lastUnfilteredSearchCards = matched
 
             // Anche filtrare e ricostruire il pannello sono passate su trecento
@@ -381,6 +599,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
             uiState = uiState.copy(
                 searchedCards = filtered.first,
+                searchTwins = twins?.twinOf.orEmpty(),
                 searchFacets = filtered.second,
                 isCardNumberSearch = numberQuery != null,
                 // Se il totale digitato non compare in nessun risultato vuol dire
@@ -388,7 +607,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                 // con quel numero, e va detto invece di farla passare per la
                 // risposta esatta.
                 unrecognizedPrintedTotal = numberQuery?.printedTotal
-                    ?.takeIf { typed -> matched.none { it.set?.printedTotal == typed } },
+                    ?.takeIf { typed -> enriched.none { it.set?.printedTotal == typed } },
                 isSearchingCards = false
             )
         }
@@ -625,10 +844,17 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun applyFilters() {
         val query = uiState.searchQuery
         val allSets = uiState.allSets
+        val english = uiState.catalogLang == CatalogLang.EN
+        val englishSets = uiState.englishSets
 
         val groups = withContext(Dispatchers.Default) {
-            val displayableSets = allSets.filter(::isDisplayableExpansion)
-            val italianSets = displayableSets.filter { it.language.equals("ITA", ignoreCase = true) }
+            // Il nome resta "italianSets" per non toccare il resto: con EN scelto
+            // sono i set del catalogo inglese, che non passano dalla lista fusa.
+            val italianSets = if (english) {
+                englishSets.filter(::isDisplayableExpansion)
+            } else {
+                allSets.filter(::isDisplayableExpansion).filter { it.language.equals("ITA", ignoreCase = true) }
+            }
 
             val searched = if (query.isBlank()) {
                 italianSets
@@ -768,6 +994,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         val normalizedQuery = normalizeSearchName(query)
         if (normalizedQuery.isBlank()) return cards
         val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
+        val preferredLang = preferredCatalogLang()
 
         return cards.sortedWith(
             compareByDescending<TcgCard> { card ->
@@ -777,7 +1004,9 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                     queryTokens = queryTokens
                 )
             }
-                .thenByDescending { card -> if (isItalianCard(card)) 1 else 0 }
+                // A parita' di nome, prima la carta nella lingua dell'app (con
+                // "Tutte" l'inglese vede prima l'inglese, l'italiano l'italiano).
+                .thenByDescending { card -> if (CatalogSetId.langOf(card.set?.id) == preferredLang) 1 else 0 }
                 .thenBy { card -> extractCardNumberForSearch(card.number).toIntOrNull() ?: Int.MAX_VALUE }
                 .thenBy { card -> normalizeSearchName(card.name) }
                 .thenBy { card -> card.id }
@@ -801,26 +1030,36 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun isItalianCard(card: TcgCard): Boolean {
-        return CatalogSetId.isCatalogSet(card.set?.id, CatalogLang.IT)
-    }
-
     /** Applies pre-merged ITA snapshot prices to Italian search results (no API calls). */
     private suspend fun enrichItalianCardsWithSnapshotPrices(
         cards: List<TcgCard>,
         context: Context
+    ): List<TcgCard> = enrichCardsWithSnapshotPrices(cards, context, CatalogLang.IT, RepositoryProvider.italianPriceSnapshotRepository)
+
+    /** Lo stesso per le carte inglesi, dal listino EN (/en/prices.json). */
+    private suspend fun enrichEnglishCardsWithSnapshotPrices(
+        cards: List<TcgCard>,
+        context: Context
+    ): List<TcgCard> = enrichCardsWithSnapshotPrices(cards, context, CatalogLang.EN, RepositoryProvider.englishPriceSnapshotRepository)
+
+    private suspend fun enrichCardsWithSnapshotPrices(
+        cards: List<TcgCard>,
+        context: Context,
+        lang: CatalogLang,
+        prices: ItalianPriceSnapshotRepository
     ): List<TcgCard> {
-        if (cards.none { isItalianCard(it) }) return cards
-        val snapshot = RepositoryProvider.italianPriceSnapshotRepository
+        fun inCatalog(card: TcgCard) = CatalogSetId.isCatalogSet(card.set?.id, lang)
+        if (cards.none(::inCatalog)) return cards
+        val snapshot = prices
             .getSnapshot(context)
             .getOrNull()
             ?: return cards
 
         return cards.map { card ->
-            if (!isItalianCard(card) || card.cardmarket?.prices.hasPositiveEurPrice()) {
+            if (!inCatalog(card) || card.cardmarket?.prices.hasPositiveEurPrice()) {
                 return@map card
             }
-            val lookupCode = CardRef.setCodeOf(card.id, CatalogLang.IT)
+            val lookupCode = CardRef.setCodeOf(card.id, lang)
                 ?: card.set?.id?.substringBefore("__").orEmpty()
             val numberKey = normalizeSnapshotNumberKey(card.number) ?: return@map card
             val entry = snapshot.priceMapFor(lookupCode)[numberKey] ?: return@map card

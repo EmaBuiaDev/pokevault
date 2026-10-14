@@ -13,6 +13,7 @@ import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.PokemonCard
 import com.emabuia.pokevault.data.remote.PokeVaultApiClient
 import com.emabuia.pokevault.data.remote.RepositoryProvider
+import com.emabuia.pokevault.data.remote.TcgCard
 import com.emabuia.pokevault.data.trade.CoarseLocation
 import com.emabuia.pokevault.data.trade.dto.TradeAddSpotRequest
 import com.emabuia.pokevault.data.trade.dto.TradeBlockedUser
@@ -45,6 +46,7 @@ import com.emabuia.pokevault.data.trade.TradeBadge
 import com.emabuia.pokevault.data.trade.TradeCardKey
 import com.emabuia.pokevault.data.trade.TradeLists
 import com.emabuia.pokevault.data.trade.TradePush
+import com.emabuia.pokevault.util.minimumEurOrZero
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -58,6 +60,26 @@ import kotlinx.coroutines.launch
  * parte all'apertura della schermata e dopo ogni modifica fatta qui dentro:
  * non c'e' ancora nessun invio in background (arrivera' con le notifiche).
  */
+/**
+ * Il catalogo della lingua di una copia scambiata ("🇬🇧 English" -> EN), o
+ * null se la lingua non e' di un nostro catalogo o manca.
+ */
+internal fun receivedCardLanguage(language: String?): CatalogLang? {
+    val clean = language?.trim()?.dropWhile { !it.isLetter() }?.trim().orEmpty()
+    return CatalogLang.entries.firstOrNull { lang ->
+        lang.copyLanguageLabel.trim().dropWhile { !it.isLetter() }.trim().equals(clean, ignoreCase = true)
+    }
+}
+
+/**
+ * La carta con cui entra in collezione una copia ricevuta: quella della sua
+ * lingua. Una copia inglese prende la carta EN (immagine, prezzo, album EN),
+ * tutte le altre la carta IT. Quando la carta della lingua manca si ripiega
+ * sull'altra: e' il caso dei set che esistono solo in inglese.
+ */
+internal fun pickReceivedCard(lang: CatalogLang?, italian: TcgCard?, english: TcgCard?): TcgCard? =
+    if (lang == CatalogLang.EN) english ?: italian else italian ?: english
+
 class TradeRadarViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = FirestoreRepository()
@@ -885,9 +907,14 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         val giving: Boolean,
         val checked: Boolean = true,
         val docIds: List<String> = emptyList(),
-        /** Ricevuta e in wishlist: esce dalla wishlist. */
-        val inWishlist: Boolean = false
+        /**
+         * Gli apiCardId in wishlist con la chiave di questa carta (IT, EN o
+         * tutti e due): ricevuta, esce dalla wishlist.
+         */
+        val wishedIds: List<String> = emptyList()
     ) {
+        /** Ricevuta e in wishlist: esce dalla wishlist. */
+        val inWishlist: Boolean get() = wishedIds.isNotEmpty()
         val apiCardId: String get() = TradeCardKey.toApiCardId(item.key.orEmpty())
         /** Una carta da togliere che in collezione non c'e': non si puo' spuntare. */
         val missing: Boolean get() = giving && docIds.isEmpty()
@@ -913,14 +940,17 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
         closing = Closing(id, proposal.counterpart?.nickname.orEmpty())
         viewModelScope.launch {
             val cards = repository.getCards().first()
-            val wished = repository.getWishlists().first().flatMap { it.cardIds }.toSet()
+            // Per chiave e non per id: la wishlist puo' avere la carta inglese
+            // ("eng:") e lo scambio la chiama con la chiave comune alle due lingue.
+            val wishedByKey = repository.getWishlists().first().flatMap { it.cardIds }.distinct()
+                .groupBy { TradeCardKey.fromApiCardId(it) }
             fun docsFor(item: TradeOfferItem): List<String> = cards.filter {
                 TradeCardKey.fromApiCardId(it.apiCardId) == item.key &&
                     it.variant == item.variant && it.condition == item.condition && it.language == item.language
             }.map { it.id }
             val lines = proposal.give.orEmpty().map { ClosingLine(it, giving = true, docIds = docsFor(it)) }
                 .map { if (it.missing) it.copy(checked = false) else it } +
-                proposal.take.orEmpty().map { ClosingLine(it, giving = false, inWishlist = TradeCardKey.toApiCardId(it.key.orEmpty()) in wished) }
+                proposal.take.orEmpty().map { ClosingLine(it, giving = false, wishedIds = wishedByKey[it.key].orEmpty()) }
             closing = closing?.takeIf { it.proposalId == id }?.copy(lines = lines, loading = false)
         }
     }
@@ -942,6 +972,28 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
      * i dati del catalogo (come un'aggiunta a mano) e le toglie dalla
      * wishlist. Poi lo segna fatto, una volta per tutte, e riallinea le offerte.
      */
+    /**
+     * Le carte del catalogo EN per queste chiavi ("sv08:25" -> "eng:sv08:25"),
+     * caricando i loro set. Vuoto se l'inglese e' spento o il catalogo EN non
+     * risponde: la carta entra come prima, coi dati che manda il server.
+     */
+    private suspend fun englishCardsForKeys(context: Application, keys: List<String>): Map<String, TcgCard> {
+        val english = RepositoryProvider.englishCatalogRepository
+        if (!english.isEnabled || keys.isEmpty()) return emptyMap()
+        val out = HashMap<String, TcgCard>()
+        for (key in keys.distinct()) {
+            english.findCard(context, "${CatalogLang.EN.idPrefix}:$key")?.let { out[key] = it }
+        }
+        return out
+    }
+
+    /** Il prezzo di una carta "eng:" dal listino EN; null per le altre o se non c'e'. */
+    private suspend fun englishPrice(context: Application, apiCardId: String): Double? {
+        if (!CardRef.isCatalogCard(apiCardId, CatalogLang.EN)) return null
+        return RepositoryProvider.englishPriceSnapshotRepository.priceForItalianCard(context, apiCardId)
+            ?.minimumEurOrZero()?.takeIf { it > 0.0 }
+    }
+
     fun applyClosing() {
         val current = closing ?: return
         if (current.applying) return
@@ -958,16 +1010,26 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
             }
             val received = chosen.filter { !it.giving }
             val catalog = RepositoryProvider.tcgRepository.italianCardsByApiIds(context, received.map { it.apiCardId }.toSet())
+            // La carta del catalogo EN serve per le copie inglesi e per i set che
+            // esistono solo in inglese (la chiave non ha una carta italiana).
+            val englishByKey = englishCardsForKeys(context, received.filter {
+                receivedCardLanguage(it.item.language) == CatalogLang.EN || catalog[it.apiCardId] == null
+            }.mapNotNull { it.item.key })
             // Le carte italiane del catalogo quasi mai hanno un prezzo Cardmarket
             // (lo prendono dalla carta inglese di appoggio): il prezzo vero e'
             // nello snapshot italiano, lo stesso del bilancio. Atteso qui, non
             // in coda: senza, la carta entrava a 0 e il totale non si muoveva.
             val snapshot = loadPrices(received.mapNotNull { it.item.key }.map { TradeCardKey.setCodeOf(it) }.toSet())
             for (line in received) {
-                val card = catalog[line.apiCardId]
                 val key = line.item.key.orEmpty()
+                // La carta della lingua della copia: una copia inglese entra come
+                // carta EN (immagine, prezzo, album EN), una italiana come IT.
+                val card = pickReceivedCard(receivedCardLanguage(line.item.language), catalog[line.apiCardId], englishByKey[key])
+                val apiCardId = card?.id ?: line.apiCardId
                 val price = card?.cardmarket?.prices.minimumEurPriceOrZero().takeIf { it > 0.0 }
-                    ?: snapshot[key] ?: prices[key] ?: 0.0
+                    ?: snapshot[key] ?: prices[key]
+                    ?: englishPrice(context, apiCardId)
+                    ?: 0.0
                 repository.addCard(
                     PokemonCard(
                         name = card?.name ?: line.item.name.orEmpty(),
@@ -979,16 +1041,16 @@ class TradeRadarViewModel(application: Application) : AndroidViewModel(applicati
                         supertype = card?.supertype?.ifBlank { null } ?: "Pokémon",
                         subtypes = card?.subtypes.orEmpty(),
                         estimatedValue = price,
-                        apiCardId = line.apiCardId,
+                        apiCardId = apiCardId,
                         cardNumber = card?.number ?: line.item.key.orEmpty().substringAfter(':'),
                         variant = line.item.variant?.ifBlank { null } ?: "Normal",
                         quantity = line.item.qty ?: 1,
                         condition = line.item.condition?.ifBlank { null } ?: "Near Mint",
                         language = line.item.language?.ifBlank { null }
-                            ?: (CardRef.langOf(line.apiCardId) ?: CatalogLang.IT).copyLanguageLabel
+                            ?: (CardRef.langOf(apiCardId) ?: CatalogLang.IT).copyLanguageLabel
                     )
                 )
-                if (line.inWishlist) repository.removeCardFromAllWishlists(line.apiCardId)
+                line.wishedIds.forEach { repository.removeCardFromAllWishlists(it) }
             }
             appliedClosings = appliedClosings + current.proposalId
             prefs.edit().putStringSet(KEY_APPLIED_CLOSINGS, appliedClosings).apply()

@@ -14,6 +14,10 @@ import org.junit.Test
  */
 class NextStepTest {
 
+    // La regola di "Continua" senza album: il primo passo fra chase e artisti.
+    private fun firstStep(chases: List<ChaseRow>, illustrators: List<IllustratorRow>): NextStep? =
+        pickContinueSteps(emptyList(), chases, illustrators, limit = 1).firstOrNull()
+
     private fun chase(id: String, owned: Int, total: Int) =
         ChaseRow(id = id, name = id, criteriaLabel = "Set", owned = owned, total = total, createdAtSeconds = 0L)
 
@@ -24,7 +28,7 @@ class NextStepTest {
 
     @Test
     fun `vince il traguardo con meno carte mancanti, non la percentuale piu alta`() {
-        val step = pickNextStep(
+        val step = firstStep(
             chases = listOf(chase("set", owned = 9, total = 10)),        // 90%, ne manca 1
             illustrators = listOf(artist("arita", owned = 577, total = 579)) // 99%, ne mancano 2
         )
@@ -34,7 +38,7 @@ class NextStepTest {
 
     @Test
     fun `un artista enorme quasi finito batte un chase appena iniziato`() {
-        val step = pickNextStep(
+        val step = firstStep(
             chases = listOf(chase("set", owned = 1, total = 200)),
             illustrators = listOf(artist("arita", owned = 575, total = 579))
         )
@@ -44,7 +48,7 @@ class NextStepTest {
 
     @Test
     fun `i completati non sono un prossimo passo`() {
-        val step = pickNextStep(
+        val step = firstStep(
             chases = listOf(chase("fatto", owned = 10, total = 10)),
             illustrators = listOf(artist("finito", owned = 3, total = 3))
         )
@@ -53,7 +57,7 @@ class NextStepTest {
 
     @Test
     fun `quello che non e' iniziato non e' un traguardo vicino`() {
-        val step = pickNextStep(
+        val step = firstStep(
             chases = listOf(chase("vuoto", owned = 0, total = 5)),
             illustrators = listOf(artist("mai", owned = 0, total = 2))
         )
@@ -62,6 +66,6 @@ class NextStepTest {
 
     @Test
     fun `niente di niente, niente riquadro`() {
-        assertNull(pickNextStep(emptyList(), emptyList()))
+        assertNull(firstStep(emptyList(), emptyList()))
     }
 }

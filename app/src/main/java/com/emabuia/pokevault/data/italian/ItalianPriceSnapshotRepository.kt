@@ -89,9 +89,30 @@ data class ItalianExpansionPrices(
     val prices: Map<String, ItalianPriceEntry> = emptyMap()
 )
 
-class ItalianPriceSnapshotRepository {
+/**
+ * Il catalogo inglese (piano carte EN) usa la stessa classe con un'altra
+ * istanza: rotte `/en/prices`, cache in `filesDir/en_prices`, indirizzo del
+ * suo Worker. I valori predefiniti sono quelli italiani di sempre, quindi
+ * l'istanza italiana non cambia.
+ */
+class ItalianPriceSnapshotRepository(
+    private val catalogLang: CatalogLang = CatalogLang.IT,
+    private val endpointPath: String = ENDPOINT_PATH,
+    private val expansionEndpointDir: String = EXPANSION_ENDPOINT_DIR,
+    private val cacheDirName: String = CACHE_DIR_NAME,
+    private val baseUrl: () -> String = { BuildConfig.POKEWALLET_PROXY_URL }
+) {
 
     companion object {
+        /** L'istanza del catalogo inglese, sul Worker che serve /en/prices. */
+        fun english(baseUrl: () -> String): ItalianPriceSnapshotRepository = ItalianPriceSnapshotRepository(
+            catalogLang = CatalogLang.EN,
+            endpointPath = "en/prices.json",
+            expansionEndpointDir = "en/prices",
+            cacheDirName = "en_prices",
+            baseUrl = baseUrl
+        )
+
         /**
          * The snapshot used to live in SharedPreferences, which loads and
          * rewrites its whole XML file as a unit: a ~2.5 MB JSON string there
@@ -143,7 +164,7 @@ class ItalianPriceSnapshotRepository {
                 }
             }
 
-            val url = resolveEndpointUrl(ENDPOINT_PATH)
+            val url = resolveEndpointUrl(endpointPath)
                 ?: return Result.failure(IllegalStateException("POKEWALLET_PROXY_URL non configurato"))
 
             val networkResult: Result<ItalianPriceSnapshot> = runCatching {
@@ -209,7 +230,7 @@ class ItalianPriceSnapshotRepository {
             }
         }
 
-        val url = resolveEndpointUrl("$EXPANSION_ENDPOINT_DIR/$normalized.json")
+        val url = resolveEndpointUrl("$expansionEndpointDir/$normalized.json")
         if (url != null) {
             val payload = runCatching {
                 val rawJson = fetchJson(url)
@@ -244,7 +265,7 @@ class ItalianPriceSnapshotRepository {
      * Artisti, Scanner, il recupero dei prezzi mancanti in Collezione.
      */
     suspend fun priceForItalianCard(context: Context, apiCardId: String): PokeWalletPriceData? {
-        val ref = CardRef.parse(apiCardId)?.takeIf { it.lang == CatalogLang.IT } ?: return null
+        val ref = CardRef.parse(apiCardId)?.takeIf { it.lang == catalogLang } ?: return null
         val number = ref.number.toIntOrNull()?.toString() ?: ref.number.uppercase(Locale.ROOT)
         return runCatching { getPriceMap(context, ref.setCode) }.getOrNull()?.get(number)
     }
@@ -264,7 +285,7 @@ class ItalianPriceSnapshotRepository {
     }
 
     private fun resolveEndpointUrl(path: String): String? {
-        val base = BuildConfig.POKEWALLET_PROXY_URL.trim().trimEnd('/')
+        val base = baseUrl().trim().trimEnd('/')
         if (base.isBlank()) return null
         return "$base/$path"
     }
@@ -286,7 +307,7 @@ class ItalianPriceSnapshotRepository {
     }
 
     private fun cacheDir(context: Context): File =
-        File(context.filesDir, CACHE_DIR_NAME).apply { if (!exists()) mkdirs() }
+        File(context.filesDir, cacheDirName).apply { if (!exists()) mkdirs() }
 
     /** One file per expansion; the prefix keeps them apart from the full snapshot. */
     private fun expansionFile(context: Context, code: String): File {

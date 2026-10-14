@@ -155,7 +155,65 @@ data class IllustratorRow(
 /** CLOSEST = "quasi fatti", come per i chase: i completati scendono in fondo. */
 enum class IllustratorSort { CLOSEST, CARDS, NAME }
 
+/**
+ * Cosa serve di una carta per costruire una voce: l'apiCardId che porta in
+ * collezione, l'espansione (per contarle) e la miniatura. Cambia col catalogo
+ * (italiano o inglese), il raggruppamento no.
+ */
+data class IllustratorCardRef(val apiCardId: String, val expansion: String, val previewUrl: String)
+
 object Illustrators {
+
+    /** Accumulatore di [entries]: una persona, tutte le sue grafie. */
+    private class Bucket(
+        val rawNames: MutableSet<String> = linkedSetOf(),
+        val displayNames: MutableMap<String, Int> = linkedMapOf(),
+        val cardIds: MutableSet<String> = linkedSetOf()
+    )
+
+    /**
+     * Le voci della sezione dai nomi grezzi del catalogo ([rawEntries]: nome
+     * grezzo -> cardId), unendo le grafie della stessa persona con [IllustratorNames].
+     * Le carte che [refOf] non riconosce non contano.
+     */
+    fun entries(
+        rawEntries: List<Pair<String, List<String>>>,
+        refOf: (String) -> IllustratorCardRef?
+    ): List<IllustratorEntry> {
+        val buckets = LinkedHashMap<String, Bucket>()
+        for ((rawName, cardIds) in rawEntries) {
+            // Un credito a quattro mani vale per entrambi gli autori: le
+            // stesse carte finiscono in due bucket, ed e' voluto.
+            for (displayName in IllustratorNames.credits(rawName)) {
+                val key = IllustratorNames.keyOf(displayName)
+                if (key.isEmpty()) continue
+                val bucket = buckets.getOrPut(key) { Bucket() }
+                bucket.rawNames += rawName
+                bucket.displayNames[displayName] =
+                    (bucket.displayNames[displayName] ?: 0) + cardIds.size
+                bucket.cardIds += cardIds
+            }
+        }
+
+        return buckets.map { (key, bucket) ->
+            val references = bucket.cardIds.mapNotNull(refOf)
+            IllustratorEntry(
+                key = key,
+                displayName = IllustratorNames.bestDisplayName(bucket.displayNames),
+                rawNames = bucket.rawNames.toList(),
+                // La stessa chiave che PokemonCard.apiCardId porta in
+                // collezione: e' cio' che rende l'incrocio una sola
+                // intersezione di insiemi.
+                cardApiIds = references.map { it.apiCardId },
+                // Il conteggio delle espansioni si ricava dai cardId e non
+                // dall'expansionCount della rotta: quello e' per nome
+                // grezzo, e sommarlo dopo aver unito due grafie conterebbe
+                // due volte le espansioni che hanno in comune.
+                expansionCount = references.map { it.expansion }.distinct().size,
+                previewUrls = references.take(3).map { it.previewUrl }
+            )
+        }
+    }
 
     /**
      * Incrocia il catalogo con la collezione. Una passata sola, con gli id
