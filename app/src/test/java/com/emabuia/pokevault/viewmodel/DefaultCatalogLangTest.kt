@@ -7,25 +7,38 @@ import org.junit.Test
 
 /**
  * Il catalogo con cui si apre il Pokedex: chi e' inglese parte dall'inglese,
- * chi e' italiano dall'italiano, e la scelta fatta col selettore vince sempre.
+ * chi e' italiano dall'italiano; la scelta fatta col selettore vale finche'
+ * l'app non cambia lingua.
  */
 class DefaultCatalogLangTest {
 
     @Test
     fun `senza scelta segue la lingua dell'app`() {
-        assertEquals(CatalogLang.IT, defaultCatalogLang(null, AppLocale.Language.IT))
-        assertEquals(CatalogLang.EN, defaultCatalogLang(null, AppLocale.Language.EN))
+        assertEquals(CatalogLang.IT, defaultCatalogLang(null, null, AppLocale.Language.IT))
+        assertEquals(CatalogLang.EN, defaultCatalogLang(null, null, AppLocale.Language.EN))
     }
 
     @Test
-    fun `la scelta del selettore vince sulla lingua dell'app`() {
-        assertEquals(CatalogLang.IT, defaultCatalogLang("IT", AppLocale.Language.EN))
-        assertEquals(CatalogLang.EN, defaultCatalogLang("EN", AppLocale.Language.IT))
+    fun `la scelta del selettore vince finche' l'app resta nella stessa lingua`() {
+        assertEquals(CatalogLang.IT, defaultCatalogLang("IT", "en", AppLocale.Language.EN))
+        assertEquals(CatalogLang.EN, defaultCatalogLang("EN", "it", AppLocale.Language.IT))
+    }
+
+    @Test
+    fun `cambiare lingua all'app rimette il catalogo nella lingua nuova`() {
+        assertEquals(CatalogLang.EN, defaultCatalogLang("IT", "it", AppLocale.Language.EN))
+        assertEquals(CatalogLang.IT, defaultCatalogLang("EN", "en", AppLocale.Language.IT))
+    }
+
+    @Test
+    fun `una scelta salvata senza la lingua dell'app non conta`() {
+        // Le prove fatte con l'APK precedente salvavano solo "catalog_lang".
+        assertEquals(CatalogLang.EN, defaultCatalogLang("IT", null, AppLocale.Language.EN))
     }
 
     @Test
     fun `una preferenza illeggibile vale come nessuna scelta`() {
-        assertEquals(CatalogLang.EN, defaultCatalogLang("boh", AppLocale.Language.EN))
+        assertEquals(CatalogLang.EN, defaultCatalogLang("boh", "en", AppLocale.Language.EN))
     }
 
     @Test

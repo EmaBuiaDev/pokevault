@@ -111,11 +111,16 @@ data class SetsUiState(
 
 /**
  * Il catalogo con cui si apre il Pokedex: la scelta fatta col selettore
- * ([saved], il nome di un [CatalogLang]) se c'e', altrimenti la lingua dell'app.
+ * ([saved], il nome di un [CatalogLang]) finche' l'app e' nella lingua che
+ * aveva quando la si e' fatta ([savedWithApp], il codice di AppLocale);
+ * altrimenti la lingua dell'app. Chi cambia lingua all'app si aspetta che il
+ * catalogo la segua, anche se prima aveva toccato il selettore.
  */
-internal fun defaultCatalogLang(saved: String?, appLanguage: AppLocale.Language): CatalogLang =
-    CatalogLang.entries.firstOrNull { it.name == saved }
-        ?: if (appLanguage == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT
+internal fun defaultCatalogLang(saved: String?, savedWithApp: String?, appLanguage: AppLocale.Language): CatalogLang {
+    val choice = CatalogLang.entries.firstOrNull { it.name == saved }
+    if (choice != null && savedWithApp == appLanguage.code) return choice
+    return if (appLanguage == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT
+}
 
 // Usa AndroidViewModel per accedere al Context
 class SetsViewModel(application: Application) : AndroidViewModel(application) {
@@ -180,16 +185,19 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         .getSharedPreferences("pokedex_prefs", Context.MODE_PRIVATE)
 
     /**
-     * La lingua scelta l'ultima volta nel selettore; se non c'e' una scelta,
-     * quella dell'app (che a sua volta segue il telefono, vedi AppLocale.init).
+     * La lingua scelta l'ultima volta nel selettore, se l'app non ha cambiato
+     * lingua da allora; altrimenti quella dell'app (che a sua volta segue il
+     * telefono, vedi AppLocale.init).
      */
     private fun restoreCatalogLang() {
         if (!englishCatalog.isEnabled) return
         uiState = uiState.copy(englishAvailable = true)
-        val saved = runCatching { pokedexPrefs().getString("catalog_lang", null) }.getOrNull()
-        val lang = defaultCatalogLang(saved, AppLocale.current)
+        val prefs = runCatching { pokedexPrefs() }.getOrNull()
+        val saved = runCatching { prefs?.getString("catalog_lang", null) }.getOrNull()
+        val savedWithApp = runCatching { prefs?.getString("catalog_lang_app", null) }.getOrNull()
+        val lang = defaultCatalogLang(saved, savedWithApp, AppLocale.current)
         // Il predefinito non si salva: solo un tocco sul selettore e' una scelta.
-        if (lang == CatalogLang.EN) selectCatalogLang(CatalogLang.EN, remember = saved != null)
+        if (lang == CatalogLang.EN) selectCatalogLang(CatalogLang.EN, remember = false)
     }
 
     fun selectCatalogLang(lang: CatalogLang) = selectCatalogLang(lang, remember = true)
@@ -200,7 +208,12 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         val clearError = (lang == CatalogLang.IT && uiState.allSets.isNotEmpty()) ||
             (lang == CatalogLang.EN && uiState.englishSets.isNotEmpty())
         uiState = uiState.copy(catalogLang = lang, errorMessage = if (clearError) null else uiState.errorMessage)
-        if (remember) runCatching { pokedexPrefs().edit().putString("catalog_lang", lang.name).apply() }
+        if (remember) runCatching {
+            pokedexPrefs().edit()
+                .putString("catalog_lang", lang.name)
+                .putString("catalog_lang_app", AppLocale.current.code)
+                .apply()
+        }
         viewModelScope.launch {
             if (lang == CatalogLang.EN && uiState.englishSets.isEmpty()) loadEnglishSets()
             applyFilters()
