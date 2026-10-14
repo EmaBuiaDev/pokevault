@@ -49,3 +49,26 @@ class DefaultCatalogLangTest {
         assertEquals(AppLocale.Language.EN, AppLocale.forDeviceLanguage(null))
     }
 }
+
+/** Dove si cerca la prima volta: nella lingua dell'utente; "Tutte" solo se lo si sceglie. */
+class DefaultSearchScopeTest {
+
+    @Test
+    fun `senza scelta cerca nella lingua dell'app`() {
+        assertEquals(CardSearchScope.IT, defaultSearchScope(null, null, AppLocale.Language.IT))
+        assertEquals(CardSearchScope.EN, defaultSearchScope(null, null, AppLocale.Language.EN))
+    }
+
+    @Test
+    fun `Tutte resta finche' l'app non cambia lingua`() {
+        assertEquals(CardSearchScope.ALL, defaultSearchScope("ALL", "it", AppLocale.Language.IT))
+        assertEquals(CardSearchScope.EN, defaultSearchScope("ALL", "it", AppLocale.Language.EN))
+    }
+
+    @Test
+    fun `cosa include ogni ambito`() {
+        assertEquals(true to false, CardSearchScope.IT.includesItalian to CardSearchScope.IT.includesEnglish)
+        assertEquals(false to true, CardSearchScope.EN.includesItalian to CardSearchScope.EN.includesEnglish)
+        assertEquals(true to true, CardSearchScope.ALL.includesItalian to CardSearchScope.ALL.includesEnglish)
+    }
+}

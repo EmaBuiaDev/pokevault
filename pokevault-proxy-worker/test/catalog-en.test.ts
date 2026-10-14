@@ -7,6 +7,7 @@ const req = (path: string) => parseEnglishRequest(new URL(`https://w.example${pa
 test('le rotte del catalogo EN', () => {
   assert.deepEqual(req('/v1/en/health'), { kind: 'health' });
   assert.deepEqual(req('/v1/en/expansions'), { kind: 'expansions' });
+  assert.deepEqual(req('/en/catalog.json'), { kind: 'catalog' });
   assert.deepEqual(req('/v1/en/expansions/SV08/cards'), { kind: 'cards', expansionId: 'sv08' });
   assert.deepEqual(req('/v1/en/expansions/30th-c/cards'), { kind: 'cards', expansionId: '30th-c' });
   assert.deepEqual(req('/images/en/sv08/012?size=low'), { kind: 'cardImage', setCode: 'SV08', cardNumber: '012' });

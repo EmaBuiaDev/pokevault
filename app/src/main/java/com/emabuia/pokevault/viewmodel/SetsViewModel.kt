@@ -18,6 +18,7 @@ import com.emabuia.pokevault.data.italian.ItalianCardSearchFilter
 import com.emabuia.pokevault.data.italian.ItalianExpansionFacet
 import com.emabuia.pokevault.data.italian.ItalianHpBucket
 import com.emabuia.pokevault.data.italian.ItalianPriceBucket
+import com.emabuia.pokevault.data.italian.ItalianPriceSnapshotRepository
 import com.emabuia.pokevault.data.italian.ItalianSearchFacets
 import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.emabuia.pokevault.data.remote.CardMarket
@@ -100,7 +101,9 @@ data class SetsUiState(
     val englishAvailable: Boolean = false,
     /** I set del catalogo inglese, caricati solo alla prima scelta di EN. */
     val englishSets: List<TcgSet> = emptyList(),
-    val isLoadingEnglish: Boolean = false
+    val isLoadingEnglish: Boolean = false,
+    /** In quale catalogo cerca la ricerca carte: conta solo se [englishAvailable]. */
+    val searchScope: CardSearchScope = CardSearchScope.IT
 ) {
     /** Quante voci di filtro sono accese, su tutte le dimensioni. */
     val activeCardFilterCount: Int
@@ -120,6 +123,24 @@ internal fun defaultCatalogLang(saved: String?, savedWithApp: String?, appLangua
     val choice = CatalogLang.entries.firstOrNull { it.name == saved }
     if (choice != null && savedWithApp == appLanguage.code) return choice
     return if (appLanguage == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT
+}
+
+/** Dove cerca la ricerca carte: solo italiano, solo inglese o tutti e due. */
+enum class CardSearchScope { IT, EN, ALL;
+
+    val includesItalian: Boolean get() = this != EN
+    val includesEnglish: Boolean get() = this != IT
+}
+
+/**
+ * L'ambito con cui si apre la ricerca carte: la scelta fatta ([saved]) finche'
+ * l'app e' nella lingua che aveva allora ([savedWithApp]), altrimenti la lingua
+ * dell'app. "Tutte" non e' mai il predefinito: si sceglie.
+ */
+internal fun defaultSearchScope(saved: String?, savedWithApp: String?, appLanguage: AppLocale.Language): CardSearchScope {
+    val choice = CardSearchScope.entries.firstOrNull { it.name == saved }
+    if (choice != null && savedWithApp == appLanguage.code) return choice
+    return if (appLanguage == AppLocale.Language.EN) CardSearchScope.EN else CardSearchScope.IT
 }
 
 // Usa AndroidViewModel per accedere al Context
@@ -196,8 +217,28 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         val saved = runCatching { prefs?.getString("catalog_lang", null) }.getOrNull()
         val savedWithApp = runCatching { prefs?.getString("catalog_lang_app", null) }.getOrNull()
         val lang = defaultCatalogLang(saved, savedWithApp, AppLocale.current)
+        val scope = defaultSearchScope(
+            runCatching { prefs?.getString("search_scope", null) }.getOrNull(),
+            runCatching { prefs?.getString("search_scope_app", null) }.getOrNull(),
+            AppLocale.current
+        )
+        uiState = uiState.copy(searchScope = scope)
         // Il predefinito non si salva: solo un tocco sul selettore e' una scelta.
         if (lang == CatalogLang.EN) selectCatalogLang(CatalogLang.EN, remember = false)
+    }
+
+    /** Il selettore della ricerca carte: la scelta si ricorda e rilancia la ricerca. */
+    fun selectSearchScope(scope: CardSearchScope) {
+        if (scope != CardSearchScope.IT && !englishCatalog.isEnabled) return
+        if (scope == uiState.searchScope) return
+        uiState = uiState.copy(searchScope = scope)
+        runCatching {
+            pokedexPrefs().edit()
+                .putString("search_scope", scope.name)
+                .putString("search_scope_app", AppLocale.current.code)
+                .apply()
+        }
+        runCardSearch()
     }
 
     fun selectCatalogLang(lang: CatalogLang) = selectCatalogLang(lang, remember = true)
@@ -444,29 +485,57 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             // costruiscono le voci del pannello, quindi deve essere quello che
             // la ricerca trova davvero, non gia' tagliato dai filtri.
             val numberQuery = parseCardNumberQuery(query)
+            // Italiano, inglese o tutti e due (piano carte EN). Dove l'inglese e'
+            // spento si cerca solo l'italiano, come sempre.
+            val scope = if (englishCatalog.isEnabled) uiState.searchScope else CardSearchScope.IT
+            // I set EN servono alla lista dei risultati (date, simboli, nomi inglesi).
+            if (scope.includesEnglish && uiState.englishSets.isEmpty() && !uiState.isLoadingEnglish) {
+                viewModelScope.launch { loadEnglishSets() }
+            }
             val found = if (numberQuery != null) {
                 // Numero e totale li confronta il repository, che e' l'unico ad
                 // avere tutti i totali noti di ogni espansione. Qui non si
                 // riordina: rimescolare per somiglianza di nome delle cifre
                 // rovinerebbe l'ordine buono.
-                repository.searchItalianCardsByNumber(
-                    number = numberQuery.number,
-                    printedTotal = numberQuery.printedTotal,
-                    context = context,
-                    limit = CARD_SEARCH_FETCH_LIMIT
-                ).getOrDefault(emptyList())
+                val italian = async {
+                    if (!scope.includesItalian) emptyList() else repository.searchItalianCardsByNumber(
+                        number = numberQuery.number,
+                        printedTotal = numberQuery.printedTotal,
+                        context = context,
+                        limit = CARD_SEARCH_FETCH_LIMIT
+                    ).getOrDefault(emptyList())
+                }
+                val english = async {
+                    if (!scope.includesEnglish) emptyList() else englishCatalog.searchByNumber(
+                        context = context,
+                        number = numberQuery.number,
+                        printedTotal = numberQuery.printedTotal,
+                        limit = CARD_SEARCH_FETCH_LIMIT
+                    ).onFailure { Timber.w(it, "Ricerca: catalogo EN non disponibile") }.getOrDefault(emptyList())
+                }
+                italian.await() + english.await()
             } else {
-                val byName = repository.searchItalianCardsByName(
-                    query = query,
-                    context = context,
-                    limit = CARD_SEARCH_FETCH_LIMIT
-                ).getOrDefault(emptyList())
+                val italian = async {
+                    if (!scope.includesItalian) emptyList() else repository.searchItalianCardsByName(
+                        query = query,
+                        context = context,
+                        limit = CARD_SEARCH_FETCH_LIMIT
+                    ).getOrDefault(emptyList())
+                }
+                val english = async {
+                    if (!scope.includesEnglish) emptyList() else englishCatalog.searchByName(
+                        context = context,
+                        query = query,
+                        limit = CARD_SEARCH_FETCH_LIMIT
+                    ).onFailure { Timber.w(it, "Ricerca: catalogo EN non disponibile") }.getOrDefault(emptyList())
+                }
+                val byName = italian.await() + english.await()
                 // Ordinare per somiglianza normalizza il nome a ogni confronto:
                 // su trecento carte e' lavoro che sul thread della UI si vedrebbe.
                 withContext(Dispatchers.Default) { rankCardSearchResults(query, byName) }
             }
 
-            val matched = enrichItalianCardsWithSnapshotPrices(found, context)
+            val matched = enrichEnglishCardsWithSnapshotPrices(enrichItalianCardsWithSnapshotPrices(found, context), context)
             lastUnfilteredSearchCards = matched
 
             // Anche filtrare e ricostruire il pannello sono passate su trecento
@@ -871,6 +940,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         val normalizedQuery = normalizeSearchName(query)
         if (normalizedQuery.isBlank()) return cards
         val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
+        val preferredLang = if (AppLocale.current == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT
 
         return cards.sortedWith(
             compareByDescending<TcgCard> { card ->
@@ -880,7 +950,9 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                     queryTokens = queryTokens
                 )
             }
-                .thenByDescending { card -> if (isItalianCard(card)) 1 else 0 }
+                // A parita' di nome, prima la carta nella lingua dell'app (con
+                // "Tutte" l'inglese vede prima l'inglese, l'italiano l'italiano).
+                .thenByDescending { card -> if (CatalogSetId.langOf(card.set?.id) == preferredLang) 1 else 0 }
                 .thenBy { card -> extractCardNumberForSearch(card.number).toIntOrNull() ?: Int.MAX_VALUE }
                 .thenBy { card -> normalizeSearchName(card.name) }
                 .thenBy { card -> card.id }
@@ -904,26 +976,36 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun isItalianCard(card: TcgCard): Boolean {
-        return CatalogSetId.isCatalogSet(card.set?.id, CatalogLang.IT)
-    }
-
     /** Applies pre-merged ITA snapshot prices to Italian search results (no API calls). */
     private suspend fun enrichItalianCardsWithSnapshotPrices(
         cards: List<TcgCard>,
         context: Context
+    ): List<TcgCard> = enrichCardsWithSnapshotPrices(cards, context, CatalogLang.IT, RepositoryProvider.italianPriceSnapshotRepository)
+
+    /** Lo stesso per le carte inglesi, dal listino EN (/en/prices.json). */
+    private suspend fun enrichEnglishCardsWithSnapshotPrices(
+        cards: List<TcgCard>,
+        context: Context
+    ): List<TcgCard> = enrichCardsWithSnapshotPrices(cards, context, CatalogLang.EN, RepositoryProvider.englishPriceSnapshotRepository)
+
+    private suspend fun enrichCardsWithSnapshotPrices(
+        cards: List<TcgCard>,
+        context: Context,
+        lang: CatalogLang,
+        prices: ItalianPriceSnapshotRepository
     ): List<TcgCard> {
-        if (cards.none { isItalianCard(it) }) return cards
-        val snapshot = RepositoryProvider.italianPriceSnapshotRepository
+        fun inCatalog(card: TcgCard) = CatalogSetId.isCatalogSet(card.set?.id, lang)
+        if (cards.none(::inCatalog)) return cards
+        val snapshot = prices
             .getSnapshot(context)
             .getOrNull()
             ?: return cards
 
         return cards.map { card ->
-            if (!isItalianCard(card) || card.cardmarket?.prices.hasPositiveEurPrice()) {
+            if (!inCatalog(card) || card.cardmarket?.prices.hasPositiveEurPrice()) {
                 return@map card
             }
-            val lookupCode = CardRef.setCodeOf(card.id, CatalogLang.IT)
+            val lookupCode = CardRef.setCodeOf(card.id, lang)
                 ?: card.set?.id?.substringBefore("__").orEmpty()
             val numberKey = normalizeSnapshotNumberKey(card.number) ?: return@map card
             val entry = snapshot.priceMapFor(lookupCode)[numberKey] ?: return@map card

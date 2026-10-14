@@ -632,6 +632,7 @@ object AppLocale {
     val extensions: String get() = if (isItalian) "Espansioni" else "Expansions"
     val searchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
     val searchInSets: String get() = if (isItalian) "Cerca tra tutte le espansioni..." else "Search across all expansions..."
+    val searchAllLanguages: String get() = if (isItalian) "🌐 Tutte" else "🌐 All"
     val searchSetPlaceholder: String get() = if (isItalian) "Cerca un'espansione..." else "Search an expansion..."
     // Filtri della ricerca carte: le voci vengono dal catalogo, le etichette no.
     val searchFiltersHint: String get() = if (isItalian) "Restringono i risultati della ricerca" else "They narrow down the search results"

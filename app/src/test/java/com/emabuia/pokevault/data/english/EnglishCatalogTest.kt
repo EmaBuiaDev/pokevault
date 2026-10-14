@@ -100,4 +100,34 @@ class EnglishCatalogTest {
         assertTrue(BuildConfig.EN_CATALOG_ENABLED)
         assertEquals("https://pokevault-catalog-staging.pokevault-emanu.workers.dev", BuildConfig.EN_CATALOG_URL)
     }
+    private fun rec(id: String, exp: String, nome: String) = ItalianCardRecord(cardId = id, espansioneId = exp, nome = nome)
+
+    @Test
+    fun `ricerca EN per nome - prima il nome identico, poi chi comincia cosi'`() {
+        val records = listOf(
+            rec("SV08_EN_57.webp", "sv08", "Pikachu ex"),
+            rec("SV01_EN_63.webp", "sv01", "Pikachu"),
+            rec("SV03_EN_1.webp", "sv03", "Raichu"),
+            rec("SV05_EN_9.webp", "sv05", "Pikachu's Friend")
+        )
+        val found = EnglishCatalogSearch.byName(records, "pikachu", 300).map { it.cardId }
+        assertEquals("SV01_EN_63.webp", found.first())
+        assertFalse("SV03_EN_1.webp" in found)
+        assertEquals(3, found.size)
+        assertTrue(EnglishCatalogSearch.byName(records, "  ", 300).isEmpty())
+    }
+
+    @Test
+    fun `ricerca EN per numero - il totale stampato sceglie l'espansione`() {
+        val records = listOf(
+            rec("SV08_EN_25.webp", "sv08", "Volcarona"),
+            rec("SV01_EN_25.webp", "sv01", "Sprigatito"),
+            rec("SV01_EN_26.webp", "sv01", "Floragato")
+        )
+        val totals = mapOf("sv08" to listOf(191, 252), "sv01" to listOf(198, 258))
+        assertEquals(listOf("SV08_EN_25.webp"), EnglishCatalogSearch.byNumber(records, "025", 191, totals, 300).map { it.cardId })
+        // Senza totale, o con un totale che nessuno stampa, tutte le carte con quel numero.
+        assertEquals(2, EnglishCatalogSearch.byNumber(records, "25", null, totals, 300).size)
+        assertEquals(2, EnglishCatalogSearch.byNumber(records, "25", 999, totals, 300).size)
+    }
 }

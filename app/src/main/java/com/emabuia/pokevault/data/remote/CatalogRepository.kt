@@ -1,6 +1,7 @@
 package com.emabuia.pokevault.data.remote
 
 import android.content.Context
+import com.emabuia.pokevault.data.catalog.CardNameMatch
 import com.emabuia.pokevault.data.catalog.CardRef
 import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.catalog.CatalogSetId
@@ -32,7 +33,6 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
-import java.text.Normalizer
 import java.util.Locale
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -155,7 +155,6 @@ class CatalogRepository {
 
         private const val RATE_LIMIT_COOLDOWN_MS = 60 * 1000L
 
-        private val SANITIZE_MULTI_SPACE = Regex("\\s+")
         private val LEGACY_ID_REGEX = Regex("^([A-Za-z0-9]+)-(.+)$")
         private val HASH_ID_REGEX = Regex("^[a-f0-9]{32,}$", RegexOption.IGNORE_CASE)
         private val FULL_NUMBER_REGEX = Regex("""^(\d+)/(\d+)$""")
@@ -2021,26 +2020,7 @@ class CatalogRepository {
         normalizedName: String,
         normalizedQuery: String,
         queryTokens: List<String>
-    ): Int {
-        if (normalizedName == normalizedQuery) return 1000
-
-        val startsWith = normalizedName.startsWith(normalizedQuery)
-        val wordContains = " $normalizedName ".contains(" $normalizedQuery ")
-
-        if (startsWith) return 850
-        if (wordContains) return 700
-        if (normalizedName.contains(normalizedQuery)) return 560
-
-        val longTokens = queryTokens.filter { it.length >= 2 }
-        if (longTokens.isNotEmpty() && longTokens.all { token -> normalizedName.contains(token) }) {
-            return 420
-        }
-        if (longTokens.any { token -> token.length >= 3 && " $normalizedName ".contains(" $token ") }) {
-            return 260
-        }
-
-        return 0
-    }
+    ): Int = CardNameMatch.score(normalizedName, normalizedQuery, queryTokens)
 
     private fun scannerNameScore(normalizedName: String, normalizedQuery: String): Int {
         if (normalizedQuery.isBlank()) return 0
@@ -3334,20 +3314,9 @@ class CatalogRepository {
         }
     }
 
-    private fun sanitizeQuery(raw: String): String {
-        return raw.replace(SANITIZE_MULTI_SPACE, " ").trim()
-    }
+    private fun sanitizeQuery(raw: String): String = CardNameMatch.sanitize(raw)
 
-    private fun normalizeNameForLookup(raw: String?): String {
-        if (raw.isNullOrBlank()) return ""
-        val deCamel = raw.replace(Regex("([a-z])([A-Z])"), "$1 $2")
-        val normalized = Normalizer.normalize(deCamel, Normalizer.Form.NFD)
-            .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
-            .lowercase()
-            .replace(Regex("[^a-z0-9]+"), " ")
-            .trim()
-        return sanitizeQuery(normalized)
-    }
+    private fun normalizeNameForLookup(raw: String?): String = CardNameMatch.normalize(raw)
 
     private fun extractCardNumber(number: String): String {
         return number.substringBefore("/").trim().trimStart('0').ifEmpty { "0" }

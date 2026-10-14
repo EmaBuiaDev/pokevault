@@ -14,7 +14,7 @@
 // tenuti 24 ore che ha il catalogo italiano.
 
 import { mapCardRow, type D1CardRow } from './card-row';
-import { CARDMARKET_EN_R2_KEY, enCardImageKey, enSetAssetKeys, parseEnglishRequest } from './catalog-en-paths';
+import { CARDMARKET_EN_R2_KEY, CATALOG_EN_MAX_AGE_MS, CATALOG_EN_R2_KEY, enCardImageKey, enSetAssetKeys, parseEnglishRequest } from './catalog-en-paths';
 import { cardmarketBlobProblem, mergeCardmarketPrices, type CardmarketBlob, type PriceSnapshot } from './cardmarket-prices';
 import { resolveExpansionPrices } from './price-lookup';
 
@@ -76,6 +76,69 @@ async function serveR2(bucket: R2Bucket | undefined, keys: string[]): Promise<Re
     return new Response(object.body, { status: 200, headers });
   }
   return new Response('Not found', { status: 404, headers: { 'Cache-Control': MISSING_CACHE_CONTROL } });
+}
+
+/**
+ * Tutte le carte pubblicate, per la ricerca dell'app ({cards: [...]}, la forma
+ * di /v1/en/expansions/{id}/cards). Costruirlo legge ventimila righe di D1, piu'
+ * le stampe: si tiene su R2 e si rifa' solo quando ha piu' di
+ * CATALOG_EN_MAX_AGE_MS, cosi' l'import notturno compare entro qualche ora
+ * senza che ogni apertura dell'app costi la quota.
+ */
+async function serveEnglishCatalog(db: D1Database, bucket: R2Bucket | undefined): Promise<Response> {
+  const headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': CATALOG_CACHE_CONTROL,
+  };
+  const stored = bucket ? await bucket.get(CATALOG_EN_R2_KEY).catch(() => null) : null;
+  if (stored && Date.now() - stored.uploaded.getTime() < CATALOG_EN_MAX_AGE_MS) {
+    return new Response(stored.body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': stored.uploaded.toISOString() } });
+  }
+
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT c.card_id, c.expansion_id, c.nome, c.tipo, c.ps, c.regola_speciale, c.attacchi_json, c.rarity, c.stage, c.illustratore
+         FROM cards c JOIN expansions e ON e.id = c.expansion_id
+         WHERE e.published = 1
+           AND NOT EXISTS (SELECT 1 FROM takedowns t WHERE (t.target_type = 'card' AND t.target_id = c.card_id) OR (t.target_type = 'expansion' AND t.target_id = c.expansion_id))
+         ORDER BY c.expansion_id, CAST(c.card_number AS INTEGER), c.card_number`
+      )
+      .all<D1CardRow>();
+    if (results.length === 0) throw new Error('nessuna carta pubblicata');
+
+    const variants = new Map<string, string[]>();
+    try {
+      const { results: rows } = await db
+        .prepare(
+          `SELECT v.card_id, v.variant FROM card_variants v JOIN cards c ON c.card_id = v.card_id
+           JOIN expansions e ON e.id = c.expansion_id
+           WHERE e.published = 1 ORDER BY v.card_id, v.kind, v.variant`
+        )
+        .all<{ card_id: string; variant: string }>();
+      for (const row of rows) {
+        const list = variants.get(row.card_id);
+        if (list) list.push(row.variant); else variants.set(row.card_id, [row.variant]);
+      }
+    } catch (error) {
+      console.error('catalogo EN: stampe illeggibili, il catalogo esce senza:', error);
+    }
+
+    const body = JSON.stringify({ cards: results.map((r) => mapCardRow(r, variants)) });
+    if (bucket) {
+      await bucket.put(CATALOG_EN_R2_KEY, body, { httpMetadata: { contentType: 'application/json; charset=utf-8' } })
+        .catch((error) => console.error('catalogo EN: copia su R2 non salvata:', error));
+    }
+    return new Response(body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': new Date().toISOString() } });
+  } catch (error) {
+    // D1 non risponde: meglio la copia vecchia che niente.
+    console.error('catalogo EN: catalogo completo non ricostruito:', error);
+    if (stored) {
+      return new Response(stored.body, { status: 200, headers: { ...headers, 'X-Catalog-Built-At': stored.uploaded.toISOString() } });
+    }
+    return json({ error: 'English catalog not available' }, 503, MISSING_CACHE_CONTROL);
+  }
 }
 
 /**
@@ -186,6 +249,9 @@ export async function handleEnglishCatalogRequest(request: Request, url: URL, en
       }
       return json({ expansionId: route.expansionId, cards: results.map((r) => mapCardRow(r, variants)) }, 200, CATALOG_CACHE_CONTROL);
     }
+
+    case 'catalog':
+      return serveEnglishCatalog(db, env.IMAGES_BUCKET);
 
     // Stessa forma di /v1/illustrators e /v1/illustrators/{nome}/cards.
     case 'illustrators': {

@@ -2,6 +2,7 @@ package com.emabuia.pokevault.data.english
 
 import android.content.Context
 import com.emabuia.pokevault.BuildConfig
+import com.emabuia.pokevault.data.catalog.CardNameMatch
 import com.emabuia.pokevault.data.catalog.CardRef
 import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.catalog.CatalogSetId
@@ -9,6 +10,7 @@ import com.emabuia.pokevault.data.italian.ItalianCardRecord
 import com.emabuia.pokevault.data.italian.ItalianCatalogNormalizer
 import com.emabuia.pokevault.data.italian.ItalianExpansionSummary
 import com.emabuia.pokevault.data.italian.ItalianImageReference
+import com.emabuia.pokevault.data.italian.ItalianPrintedTotals
 import com.emabuia.pokevault.data.local.ItalianTranslations
 import com.emabuia.pokevault.data.remote.CardImages
 import com.emabuia.pokevault.data.remote.SetImages
@@ -21,6 +23,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -70,6 +73,58 @@ object EnglishCatalogIds {
     }
 }
 
+/** La ricerca sul catalogo EN completo: parti pure, senza rete. */
+internal object EnglishCatalogSearch {
+
+    fun byName(records: List<ItalianCardRecord>, query: String, limit: Int): List<ItalianCardRecord> {
+        val normalizedQuery = CardNameMatch.normalize(CardNameMatch.sanitize(query))
+        if (normalizedQuery.isBlank()) return emptyList()
+        val tokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
+        return records.asSequence()
+            .mapNotNull { record ->
+                val score = CardNameMatch.score(CardNameMatch.normalize(record.nome), normalizedQuery, tokens)
+                if (score <= 0) null else record to score
+            }
+            .sortedWith(
+                compareByDescending<Pair<ItalianCardRecord, Int>> { it.second }
+                    .thenBy { numberOf(it.first).toIntOrNull() ?: Int.MAX_VALUE }
+                    .thenBy { it.first.espansioneId }
+            )
+            .take(limit.coerceIn(1, 300))
+            .map { it.first }
+            .toList()
+    }
+
+    /**
+     * Le carte con quel numero. Col totale stampato si tengono le espansioni
+     * che lo stampano (o quasi, vedi ItalianPrintedTotals); se nessuna lo
+     * stampa si tiene tutto, come nella ricerca italiana.
+     */
+    fun byNumber(
+        records: List<ItalianCardRecord>,
+        number: String,
+        printedTotal: Int?,
+        totalsByExpansion: Map<String, List<Int>>,
+        limit: Int
+    ): List<ItalianCardRecord> {
+        val target = number.trim().trimStart('0').ifBlank { number.trim() }
+        if (target.isBlank()) return emptyList()
+        val matching = records.filter { numberOf(it).equals(target, ignoreCase = true) }
+        val scored = matching.map { record ->
+            record to ItalianPrintedTotals.matchScore(
+                totalsByExpansion[record.espansioneId.trim().lowercase(Locale.ROOT)].orEmpty(),
+                printedTotal
+            )
+        }
+        return ItalianPrintedTotals.keepBestMatches(scored)
+            .sortedBy { it.espansioneId }
+            .take(limit.coerceIn(1, 300))
+    }
+
+    private fun numberOf(record: ItalianCardRecord): String =
+        EnglishCatalogIds.reference(record.cardId)?.cardNumber.orEmpty()
+}
+
 /**
  * Il catalogo inglese, dal Worker indicato in [BuildConfig.EN_CATALOG_URL]
  * (/v1/en/expansions e /v1/en/expansions/{id}/cards).
@@ -89,6 +144,10 @@ class EnglishCatalogRepository(
         private const val KEY_EXPANSIONS_AT = "expansions_at"
         private const val CACHE_TTL_MS = 5L * 60L * 1000L
         private const val LANGUAGE = "ENG"
+        private const val CATALOG_DIR = "en_catalog"
+        private const val CATALOG_FILE = "catalog.json"
+        /** Il Worker lo rifa' al massimo ogni 6 ore: tenerlo di piu' non serve, di meno nemmeno. */
+        private const val CATALOG_TTL_MS = 6L * 60L * 60L * 1000L
     }
 
     val isEnabled: Boolean get() = enabled() && baseUrl().isNotBlank()
@@ -157,6 +216,87 @@ class EnglishCatalogRepository(
                     .sortedBy { it.number.toIntOrNull() ?: Int.MAX_VALUE }
             }.onSuccess { memoryCards[expansionId] = it to now }
         }
+    }
+
+    // ── Catalogo completo, per la ricerca ───────────────────────────────────
+
+    private val catalogMutex = Mutex()
+    @Volatile private var memoryCatalog: List<ItalianCardRecord>? = null
+    @Volatile private var memoryCatalogAt: Long = 0L
+
+    private fun catalogFile(context: Context): File =
+        File(File(context.filesDir, CATALOG_DIR).apply { mkdirs() }, CATALOG_FILE)
+
+    /**
+     * Tutte le carte EN pubblicate (/en/catalog.json, una decina di MB, meno di
+     * uno compresso). Si scarica solo alla prima ricerca in inglese e si tiene
+     * su file: chi cerca solo in italiano non lo scarica mai.
+     */
+    suspend fun getAllCards(context: Context): Result<List<ItalianCardRecord>> = catalogMutex.withLock {
+        if (!isEnabled) return@withLock Result.success(emptyList())
+        val now = System.currentTimeMillis()
+        memoryCatalog?.takeIf { now - memoryCatalogAt <= CATALOG_TTL_MS }?.let { return@withLock Result.success(it) }
+
+        val file = catalogFile(context)
+        if (file.exists() && now - file.lastModified() <= CATALOG_TTL_MS) {
+            readCatalogFile(file)?.let { records ->
+                memoryCatalog = records
+                memoryCatalogAt = file.lastModified()
+                return@withLock Result.success(records)
+            }
+        }
+
+        val network = runCatching {
+            val raw = fetch("${baseUrl().trim().trimEnd('/')}/en/catalog.json")
+            val records = withContext(Dispatchers.Default) { ItalianCatalogNormalizer.parseExpansionCardsResponse(raw) }
+            if (records.isEmpty()) error("catalogo EN vuoto")
+            withContext(Dispatchers.IO) { runCatching { file.writeText(raw) } }
+            records
+        }
+        network.onSuccess {
+            memoryCatalog = it
+            memoryCatalogAt = now
+        }
+        if (network.isSuccess) return@withLock network
+
+        // Senza rete: la copia che c'e', anche se vecchia.
+        val stale = memoryCatalog ?: file.takeIf { it.exists() }?.let { readCatalogFile(it) }
+        if (stale != null) Result.success(stale) else Result.failure(network.exceptionOrNull() ?: IllegalStateException("catalogo EN non raggiungibile"))
+    }
+
+    private suspend fun readCatalogFile(file: File): List<ItalianCardRecord>? = withContext(Dispatchers.IO) {
+        runCatching { ItalianCatalogNormalizer.parseExpansionCardsResponse(file.readText()) }
+            .getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    /** Le carte EN col nome piu' vicino a [query], stessa scala dell'italiano (CardNameMatch). */
+    suspend fun searchByName(context: Context, query: String, limit: Int = 300): Result<List<TcgCard>> {
+        if (!isEnabled) return Result.success(emptyList())
+        val records = getAllCards(context).getOrElse { return Result.failure(it) }
+        val summaries = getExpansions(context).getOrNull().orEmpty()
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                EnglishCatalogSearch.byName(records, query, limit).mapNotNull { toSearchCard(it, summaries) }
+            }
+        }
+    }
+
+    /** Le carte EN con quel numero; col totale ("25/191") tiene le espansioni che lo stampano. */
+    suspend fun searchByNumber(context: Context, number: String, printedTotal: Int?, limit: Int = 300): Result<List<TcgCard>> {
+        if (!isEnabled) return Result.success(emptyList())
+        val records = getAllCards(context).getOrElse { return Result.failure(it) }
+        val summaries = getExpansions(context).getOrNull().orEmpty()
+        val totals = summaries.associate { it.id.lowercase(Locale.ROOT) to listOfNotNull(it.officialCount, it.cardCount) }
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                EnglishCatalogSearch.byNumber(records, number, printedTotal, totals, limit).mapNotNull { toSearchCard(it, summaries) }
+            }
+        }
+    }
+
+    private fun toSearchCard(record: ItalianCardRecord, summaries: List<ItalianExpansionSummary>): TcgCard? {
+        val summary = summaries.firstOrNull { it.id.equals(record.espansioneId.trim(), ignoreCase = true) } ?: return null
+        return toTcgCard(record, toTcgSet(summary), collectionSetName = summary.itName)
     }
 
     /** Una carta EN gia' caricata (set aperti in questa sessione), o null. */
