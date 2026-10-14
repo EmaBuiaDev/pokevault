@@ -103,7 +103,12 @@ data class SetsUiState(
     val englishSets: List<TcgSet> = emptyList(),
     val isLoadingEnglish: Boolean = false,
     /** In quale catalogo cerca la ricerca carte: conta solo se [englishAvailable]. */
-    val searchScope: CardSearchScope = CardSearchScope.IT
+    val searchScope: CardSearchScope = CardSearchScope.IT,
+    /**
+     * Con "Tutte": per ogni carta mostrata, la sua gemella nell'altra lingua
+     * (stesso set, stesso numero). Manca se la carta esiste in una lingua sola.
+     */
+    val searchTwins: Map<String, TcgCard> = emptyMap()
 ) {
     /** Quante voci di filtro sono accese, su tutte le dimensioni. */
     val activeCardFilterCount: Int
@@ -141,6 +146,49 @@ internal fun defaultSearchScope(saved: String?, savedWithApp: String?, appLangua
     val choice = CardSearchScope.entries.firstOrNull { it.name == saved }
     if (choice != null && savedWithApp == appLanguage.code) return choice
     return if (appLanguage == AppLocale.Language.EN) CardSearchScope.EN else CardSearchScope.IT
+}
+
+/** La lingua dell'app come catalogo: a parita' di tutto, si mostra questa. */
+internal fun preferredCatalogLang(): CatalogLang =
+    if (AppLocale.current == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT
+
+internal data class MergedTwins(val cards: List<TcgCard>, val twinOf: Map<String, TcgCard>)
+
+/**
+ * Una tessera per carta: la italiana e la gemella inglese (stesso set e stesso
+ * numero, come la chiave degli scambi) diventano una, al posto della prima
+ * delle due nell'ordine dei risultati. Si mostra la versione in [preferred];
+ * l'altra finisce in [MergedTwins.twinOf]. Le carte fuori dai nostri
+ * cataloghi restano come sono.
+ */
+internal fun mergeLanguageTwins(cards: List<TcgCard>, preferred: CatalogLang): MergedTwins {
+    fun keyOf(card: TcgCard): String? {
+        val ref = CardRef.parse(card.id) ?: return null
+        val number = ref.number.toIntOrNull()?.toString() ?: ref.number.uppercase(Locale.ROOT)
+        return "${ref.setCode}:$number"
+    }
+    val shown = ArrayList<TcgCard>(cards.size)
+    val slotByKey = HashMap<String, Int>()
+    val twinOf = HashMap<String, TcgCard>()
+    for (card in cards) {
+        val key = keyOf(card)
+        val slot = key?.let(slotByKey::get)
+        if (key == null || slot == null) {
+            key?.let { slotByKey[it] = shown.size }
+            shown += card
+            continue
+        }
+        val first = shown[slot]
+        // Stessa lingua (non dovrebbe succedere): si tiene la prima e basta.
+        if (CardRef.langOf(first.id) == CardRef.langOf(card.id)) continue
+        if (CardRef.langOf(card.id) == preferred) {
+            shown[slot] = card
+            twinOf[card.id] = first
+        } else {
+            twinOf[first.id] = card
+        }
+    }
+    return MergedTwins(shown, twinOf)
 }
 
 // Usa AndroidViewModel per accedere al Context
@@ -462,6 +510,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
             lastUnfilteredSearchCards = emptyList()
             uiState = uiState.copy(
                 searchedCards = emptyList(),
+                searchTwins = emptyMap(),
                 isSearchingCards = false,
                 isCardNumberSearch = false,
                 unrecognizedPrintedTotal = null,
@@ -535,7 +584,11 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.Default) { rankCardSearchResults(query, byName) }
             }
 
-            val matched = enrichEnglishCardsWithSnapshotPrices(enrichItalianCardsWithSnapshotPrices(found, context), context)
+            val enriched = enrichEnglishCardsWithSnapshotPrices(enrichItalianCardsWithSnapshotPrices(found, context), context)
+            // Con "Tutte" la carta italiana e la sua gemella inglese sono una
+            // tessera sola, con le bandiere delle lingue in cui esiste.
+            val twins = if (scope == CardSearchScope.ALL) mergeLanguageTwins(enriched, preferredCatalogLang()) else null
+            val matched = twins?.cards ?: enriched
             lastUnfilteredSearchCards = matched
 
             // Anche filtrare e ricostruire il pannello sono passate su trecento
@@ -546,6 +599,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
 
             uiState = uiState.copy(
                 searchedCards = filtered.first,
+                searchTwins = twins?.twinOf.orEmpty(),
                 searchFacets = filtered.second,
                 isCardNumberSearch = numberQuery != null,
                 // Se il totale digitato non compare in nessun risultato vuol dire
@@ -553,7 +607,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
                 // con quel numero, e va detto invece di farla passare per la
                 // risposta esatta.
                 unrecognizedPrintedTotal = numberQuery?.printedTotal
-                    ?.takeIf { typed -> matched.none { it.set?.printedTotal == typed } },
+                    ?.takeIf { typed -> enriched.none { it.set?.printedTotal == typed } },
                 isSearchingCards = false
             )
         }
@@ -940,7 +994,7 @@ class SetsViewModel(application: Application) : AndroidViewModel(application) {
         val normalizedQuery = normalizeSearchName(query)
         if (normalizedQuery.isBlank()) return cards
         val queryTokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
-        val preferredLang = if (AppLocale.current == AppLocale.Language.EN) CatalogLang.EN else CatalogLang.IT
+        val preferredLang = preferredCatalogLang()
 
         return cards.sortedWith(
             compareByDescending<TcgCard> { card ->
