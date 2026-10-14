@@ -81,6 +81,8 @@ import com.emabuia.pokevault.ui.competitive.MatchLogScreen
 import com.emabuia.pokevault.ui.competitive.TournamentDetailScreen
 import com.emabuia.pokevault.ui.components.OfflineBanner
 import com.emabuia.pokevault.ui.components.ReviewPromptBanner
+import com.emabuia.pokevault.ui.whatsnew.WhatsNewDialog
+import com.emabuia.pokevault.util.WhatsNew
 import com.emabuia.pokevault.ui.deck.DeckLabScreen
 import com.emabuia.pokevault.ui.graded.GradedCardsScreen
 import com.emabuia.pokevault.ui.home.HomeScreen
@@ -234,6 +236,15 @@ fun AppNavigation(
         LaunchedEffect(loggedIn) { if (!loggedIn) TradeBadge.update(0) }
     }
     var showReviewPrompt by remember { mutableStateOf(false) }
+
+    // Le novita' della versione: una volta, al primo avvio dopo l'aggiornamento,
+    // con l'utente gia' dentro (mai sopra la schermata di accesso).
+    var showWhatsNew by remember { mutableStateOf(false) }
+    LaunchedEffect(authViewModel.uiState.isLoggedIn) {
+        if (authViewModel.uiState.isLoggedIn && WhatsNew.consumeOnLaunch(context, BuildConfig.VERSION_CODE)) {
+            showWhatsNew = true
+        }
+    }
     var navigationCount by remember { mutableIntStateOf(0) }
     var lastTrackedRoute by remember { mutableStateOf<String?>(null) }
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
@@ -880,7 +891,8 @@ fun AppNavigation(
         // una cosa appoggiata sull'app, non un pezzo della schermata. Non e'
         // modale, percio' dietro si continua a scorrere e a toccare.
         ReviewPromptBanner(
-            visible = showReviewPrompt,
+            // Mai insieme alle novita': due richieste d'attenzione una sopra l'altra.
+            visible = showReviewPrompt && !showWhatsNew,
             onReview = { openStoreForReview() },
             onLater = { snoozeReviewPrompt() },
             modifier = Modifier
@@ -892,6 +904,14 @@ fun AppNavigation(
                     bottom = if (showBottomBar) PokeVaultBottomBarHeight + 12.dp else 16.dp
                 )
         )
+
+        if (showWhatsNew) {
+            WhatsNewDialog(
+                versionName = BuildConfig.VERSION_NAME,
+                items = WhatsNew.notesFor(BuildConfig.VERSION_CODE),
+                onDismiss = { showWhatsNew = false }
+            )
+        }
 
         // Una modifica salvata sul telefono e rifiutata dal server (vedi
         // SyncErrors): Firestore l'ha gia' annullata, qui si dice perche' e'

@@ -88,10 +88,12 @@ class EnglishCatalogTest {
     }
 
     @Test
-    fun `in prod il catalogo inglese e' spento`() {
+    fun `in prod il catalogo inglese e' acceso e parla col Worker di produzione`() {
+        // Dalla 3.1.8: acceso nella build, senza aspettare /v1/app-config.
         assumeTrue(BuildConfig.FLAVOR == "prod")
-        assertFalse(BuildConfig.EN_CATALOG_ENABLED)
-        assertFalse(EnglishCatalogRepository().isEnabled)
+        assertTrue(BuildConfig.EN_CATALOG_ENABLED)
+        assertEquals("https://pokevault-proxy.pokevault-emanu.workers.dev", BuildConfig.EN_CATALOG_URL)
+        assertTrue(EnglishCatalogRepository().isEnabled)
     }
 
     @Test

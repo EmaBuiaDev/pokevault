@@ -22,8 +22,8 @@ android {
         applicationId = "com.emabuia.pokevault"
         minSdk = 26
         targetSdk = 36
-        versionCode = 40
-        versionName = "3.1.7"
+        versionCode = 41
+        versionName = "3.1.8"
 
         buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
         buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "${localProperties.getProperty("POKEWALLET_PROXY_ENABLED", "false")}")
@@ -62,10 +62,11 @@ android {
             buildConfigField("Boolean", "TRADE_ENABLED", "true")
             buildConfigField("String", "TRADE_API_URL", "\"https://pokevault-proxy.pokevault-emanu.workers.dev\"")
 
-            // Catalogo inglese (piano carte EN): SPENTO in produzione finche' il
-            // Worker di produzione non ha le rotte /v1/en e l'utente non da' il via.
-            // CatalogoEnFlagTest controlla che resti cosi'.
-            buildConfigField("Boolean", "EN_CATALOG_ENABLED", "false")
+            // Catalogo inglese ACCESO in produzione dalla 3.1.8. Acceso qui e non
+            // solo da /v1/app-config: il valore remoto vale dall'avvio dopo, e al
+            // primo avvio l'inglese mancherebbe proprio quando il pop-up delle
+            // novita' lo annuncia. EnglishCatalogTest controlla che resti cosi'.
+            buildConfigField("Boolean", "EN_CATALOG_ENABLED", "true")
             buildConfigField("String", "EN_CATALOG_URL", "\"https://pokevault-proxy.pokevault-emanu.workers.dev\"")
         }
         create("staging") {
