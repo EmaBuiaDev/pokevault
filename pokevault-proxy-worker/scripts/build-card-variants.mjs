@@ -55,6 +55,10 @@ const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const values = (name) => args.flatMap((a, i) => (a === name && args[i + 1] ? [args[i + 1]] : []));
 const APPLY = flag('--apply');
+// --en: il catalogo inglese (pokevault-catalog-en). Le carte si riconoscono
+// per set e numero, e per i set solo inglesi l'id dell'espansione e' gia'
+// quello di TCGdex: il resto del giro e' lo stesso.
+const DATABASE = flag('--en') ? 'pokevault-catalog-en' : 'pokevault-catalog';
 const ALL = flag('--all');
 const CACHE_FILE = values('--cache')[0] ?? null;
 const REPORT_FILE = values('--report')[0] ?? null;
@@ -204,7 +208,9 @@ const cards = await d1Select(
      FROM cards c JOIN expansions e ON e.id = c.expansion_id
      LEFT JOIN card_cardmarket m ON m.card_id = c.card_id
     WHERE 1=1 ${scope} ORDER BY c.expansion_id, c.card_id`,
+  DATABASE,
 );
+console.log(`Catalogo: ${DATABASE}`);
 console.log(`Carte: ${cards.length}`);
 
 // ── 2. listino ──
@@ -484,6 +490,24 @@ if (failedSets.length && !flag('--allow-missing-ptcg')) {
   console.error('Non scrivo: ci sono set senza pokemontcg.io (vedi sopra). Rilanciare, o --allow-missing-ptcg per scrivere lo stesso.');
   process.exit(1);
 }
+// --solo-mancanti: si scrivono solo le carte che oggi non hanno nessuna
+// stampa. L'analisi resta su tutto il set (le regole per set ne hanno
+// bisogno); le carte che le stampe le hanno gia' -- nel catalogo EN quelle
+// copiate ogni notte dal gemello italiano -- non si toccano.
+if (flag('--solo-mancanti')) {
+  const scoped = [...new Set(rows.map((r) => r.card_id))];
+  const withVariants = new Set();
+  for (let i = 0; i < scoped.length; i += 200) {
+    const found = await d1Select(
+      `SELECT DISTINCT card_id FROM card_variants WHERE card_id IN (${scoped.slice(i, i + 200).map(sqlString).join(',')})`,
+      DATABASE,
+    );
+    for (const r of found) withVariants.add(r.card_id);
+  }
+  const before = rows.length;
+  rows.splice(0, rows.length, ...rows.filter((r) => !withVariants.has(r.card_id)));
+  console.log(`Solo mancanti: ${rows.length} stampe su ${before} (${withVariants.size} carte gia' con stampe, lasciate com'erano)`);
+}
 const ids = [...new Set(rows.map((r) => r.card_id))];
 const sql = [];
 for (let i = 0; i < ids.length; i += 200) {
@@ -495,6 +519,6 @@ for (let i = 0; i < rows.length; i += 200) {
 }
 const file = path.join(workerRoot, 'card-variants.sql');
 fs.writeFileSync(file, sql.join('\n') + '\n');
-await d1ExecuteFile(file);
+await d1ExecuteFile(file, DATABASE);
 fs.rmSync(file);
 console.log(`Scritte ${rows.length} stampe per ${ids.length} carte.`);

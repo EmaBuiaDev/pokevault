@@ -26,6 +26,9 @@
 //   node scripts/ingest-en-set.mjs <tcgdexId> --apply
 //   node scripts/ingest-en-set.mjs <tcgdexId> --ptcg <id>      (forza il set pokemontcg.io)
 //   node scripts/ingest-en-set.mjs <tcgdexId> --no-ptcg
+//   node scripts/ingest-en-set.mjs <tcgdexId> --limitless MEP  (terza fonte: le scansioni EN di
+//        Limitless per il codice indicato, solo dove TCGdex e pokemontcg.io non hanno l'immagine;
+//        il codice si da' a mano, non si indovina)
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -45,13 +48,23 @@ const CONCURRENCY = 6;
 const tmpRoot = path.join(workerRoot, 'scripts', '.ingest-en-tmp');
 let tmpDir = tmpRoot;
 
+/**
+ * La scansione EN di Limitless: tpci/<CODICE>/<CODICE>_<numero a 3 cifre>_R_EN_LG.png.
+ * I numeri con lettere (promo) restano come sono.
+ */
+function limitlessImageUrl(code, number) {
+  const n = /^\d+$/.test(number) ? number.padStart(3, '0') : number;
+  return `https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/tpci/${code}/${code}_${n}_R_EN_LG.png`;
+}
+
 function parseArgs(argv) {
-  const out = { tcgdexId: argv[0], apply: false, ptcg: undefined, forceImages: false };
+  const out = { tcgdexId: argv[0], apply: false, ptcg: undefined, forceImages: false, limitless: null };
   for (let i = 1; i < argv.length; i += 1) {
     if (argv[i] === '--apply') out.apply = true;
     else if (argv[i] === '--ptcg') out.ptcg = argv[++i];
     else if (argv[i] === '--no-ptcg') out.ptcg = null;
     else if (argv[i] === '--force-images') out.forceImages = true;
+    else if (argv[i] === '--limitless') out.limitless = String(argv[++i] || '').toUpperCase() || null;
   }
   return out;
 }
@@ -255,6 +268,7 @@ async function main() {
         ...(ref.image ? [{ kind: 'tcgdex', url: `${ref.image}/high.webp`, webp: true }] : []),
         ...(ptcg?.images?.large ? [{ kind: 'pokemontcg', url: ptcg.images.large, webp: false }] : []),
         ...(ptcg?.images?.small ? [{ kind: 'pokemontcg', url: ptcg.images.small, webp: false }] : []),
+        ...(args.limitless ? [{ kind: 'limitless', url: limitlessImageUrl(args.limitless, number), webp: false }] : []),
       ],
     };
   });
