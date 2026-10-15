@@ -867,6 +867,30 @@ object AppLocale {
     else
         if (count == 1) "opponent may draw 1 extra card" else "opponent may draw $count extra cards"
 
+    // Il voto rapido dell'utente
+    val handRatingQuestion: String get() = if (isItalian) "Com'è questa mano?" else "How is this hand?"
+    val handRatingBad: String get() = if (isItalian) "Pessima" else "Bad"
+    val handRatingRisky: String get() = if (isItalian) "Rischiosa" else "Risky"
+    val handRatingGood: String get() = if (isItalian) "Buona" else "Good"
+    val handRatingBadPlural: String get() = if (isItalian) "Pessime" else "Bad"
+    val handRatingRiskyPlural: String get() = if (isItalian) "Rischiose" else "Risky"
+    val handRatingGoodPlural: String get() = if (isItalian) "Buone" else "Good"
+    fun handRatingFeedback(user: String, app: String): String = if (isItalian)
+        "Salvata come $user · per l'app è $app"
+    else
+        "Saved as $user · the app says $app"
+    fun handSimulatorAgreement(agreed: Int, rated: Int): String = if (isItalian)
+        "d'accordo con l'app su $agreed ${if (rated == 1) "mano" else "mani"} su $rated"
+    else
+        "you agree with the app on $agreed of $rated ${if (rated == 1) "hand" else "hands"}"
+    fun handSimulatorAppSays(label: String): String = if (isItalian) "per l'app: $label" else "app: $label"
+    val handSimulatorFromAnalysis: String get() = if (isItalian) "Dall'analisi" else "From the analysis"
+    val handSimulatorSavedFilterAll: String get() = if (isItalian) "Tutte" else "All"
+    val handSimulatorSavedFilteredEmpty: String get() = if (isItalian)
+        "Nessuna mano con questa valutazione."
+    else
+        "No hands with this rating."
+
     // Verdetto sulla singola mano
     val handVerdictGreat: String get() = if (isItalian) "Mano ottima" else "Great hand"
     val handVerdictPlayable: String get() = if (isItalian) "Giocabile" else "Playable"

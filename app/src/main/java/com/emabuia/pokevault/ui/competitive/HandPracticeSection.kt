@@ -2,6 +2,7 @@
 
 package com.emabuia.pokevault.ui.competitive
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,9 @@ import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -46,6 +50,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,6 +61,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.emabuia.pokevault.data.simulator.HandEvaluation
+import com.emabuia.pokevault.data.simulator.HandRating
+import com.emabuia.pokevault.data.simulator.filterByRating
+import com.emabuia.pokevault.data.simulator.resolveCards
 import com.emabuia.pokevault.data.simulator.HandTrait
 import com.emabuia.pokevault.data.simulator.PracticeHand
 import com.emabuia.pokevault.data.simulator.PracticeTally
@@ -84,10 +95,13 @@ internal fun LazyListScope.practiceSection(
     tally: PracticeTally,
     dealKey: Int,
     savedHands: List<SavedProblemHand>,
+    /** Le carte del mazzo: servono a ridisegnare le mani salvate. */
+    deckPool: List<SimulatorCard>,
+    rating: HandRating?,
+    appRating: HandRating?,
     turnOrder: TurnOrder,
     onTurnOrderChange: (TurnOrder) -> Unit,
     onCoinFlip: () -> Unit,
-    onSaveHand: () -> Unit,
     onDeleteSaved: (String) -> Unit,
     onCardClick: (SimulatorCard) -> Unit
 ) {
@@ -133,7 +147,8 @@ internal fun LazyListScope.practiceSection(
             PracticeTable(
                 hand = hand,
                 dealKey = dealKey,
-                onSaveHand = onSaveHand,
+                rating = rating,
+                appRating = appRating,
                 onCardClick = onCardClick
             )
         }
@@ -146,7 +161,9 @@ internal fun LazyListScope.practiceSection(
     item(key = "practice-vault") {
         SavedHandsCard(
             savedHands = savedHands,
-            onDelete = onDeleteSaved
+            deckPool = deckPool,
+            onDelete = onDeleteSaved,
+            onCardClick = onCardClick
         )
     }
 }
@@ -163,20 +180,157 @@ internal fun LazyListScope.practiceSection(
 @Composable
 internal fun PracticeActionBar(
     hand: PracticeHand?,
+    /** Il voto gia' dato a questa mano, null se non ancora valutata. */
+    rating: HandRating?,
+    onDeal: () -> Unit,
+    onMulligan: () -> Unit,
+    onDraw: () -> Unit,
+    onRate: (HandRating) -> Unit
+) {
+    Surface(color = AppColors.background) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Il voto sta qui, sempre a portata di pollice: era un "Salva mano"
+            // in fondo alla card, e per raggiungerlo bisognava scorrere. Una
+            // mano senza Base non si vota: va rimescolata.
+            if (hand != null && !hand.needsMulligan) {
+                RatingRow(selected = rating, onRate = onRate)
+            }
+            ActionButtons(hand = hand, onDeal = onDeal, onMulligan = onMulligan, onDraw = onDraw)
+        }
+    }
+}
+
+/**
+ * Pessima, Rischiosa, Buona: un tocco valuta e salva, un altro tocco sullo
+ * stesso tasto toglie il voto (e la mano salvata).
+ */
+@Composable
+private fun RatingRow(selected: HandRating?, onRate: (HandRating) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        HandRating.entries.forEach { rating ->
+            val isSelected = rating == selected
+            val tint = rating.color()
+            Surface(
+                onClick = { onRate(rating) },
+                color = if (isSelected) tint else AppColors.card,
+                contentColor = if (isSelected) AppColors.onAccent else tint,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, tint.copy(alpha = if (isSelected) 1f else 0.5f)),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(38.dp)
+                    .semantics { contentDescription = "${AppLocale.handRatingQuestion} ${rating.label()}" }
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(rating.icon(), contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text(
+                        text = rating.label(),
+                        fontSize = 13.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 6.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun HandRating.color(): Color = when (this) {
+    HandRating.BAD -> AppColors.red
+    HandRating.RISKY -> AppColors.orange
+    HandRating.GOOD -> AppColors.green
+}
+
+internal fun HandRating.label(): String = when (this) {
+    HandRating.BAD -> AppLocale.handRatingBad
+    HandRating.RISKY -> AppLocale.handRatingRisky
+    HandRating.GOOD -> AppLocale.handRatingGood
+}
+
+private fun HandRating.pluralLabel(): String = when (this) {
+    HandRating.BAD -> AppLocale.handRatingBadPlural
+    HandRating.RISKY -> AppLocale.handRatingRiskyPlural
+    HandRating.GOOD -> AppLocale.handRatingGoodPlural
+}
+
+private fun HandRating.icon(): ImageVector = when (this) {
+    HandRating.BAD -> Icons.Default.ThumbDown
+    HandRating.RISKY -> Icons.Default.WarningAmber
+    HandRating.GOOD -> Icons.Default.ThumbUp
+}
+
+@Composable
+private fun ActionButtons(
+    hand: PracticeHand?,
     onDeal: () -> Unit,
     onMulligan: () -> Unit,
     onDraw: () -> Unit
 ) {
-    Surface(color = AppColors.background) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            when {
-                hand == null -> Button(
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        when {
+            hand == null -> Button(
+                onClick = onDeal,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
+                modifier = Modifier.weight(1f).height(48.dp)
+            ) {
+                Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(
+                    text = AppLocale.handSimulatorDealButton,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+
+            hand.needsMulligan -> Button(
+                onClick = onMulligan,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AppColors.red,
+                    contentColor = AppColors.onAccent
+                ),
+                modifier = Modifier.weight(1f).height(48.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(
+                    text = AppLocale.handSimulatorMulliganButton,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+
+            else -> {
+                OutlinedButton(
+                    onClick = onDraw,
+                    enabled = hand.canDraw,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) {
+                    Text(
+                        text = if (hand.canDraw) {
+                            AppLocale.handSimulatorDrawTurn(hand.turn + 1)
+                        } else {
+                            AppLocale.handSimulatorDeckEmpty
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Button(
                     onClick = onDeal,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
@@ -184,60 +338,11 @@ internal fun PracticeActionBar(
                 ) {
                     Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text(
-                        text = AppLocale.handSimulatorDealButton,
+                        text = AppLocale.handSimulatorNewHand,
                         fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
                         modifier = Modifier.padding(start = 8.dp)
                     )
-                }
-
-                hand.needsMulligan -> Button(
-                    onClick = onMulligan,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppColors.red,
-                        contentColor = AppColors.onAccent
-                    ),
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(
-                        text = AppLocale.handSimulatorMulliganButton,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-
-                else -> {
-                    OutlinedButton(
-                        onClick = onDraw,
-                        enabled = hand.canDraw,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f).height(48.dp)
-                    ) {
-                        Text(
-                            text = if (hand.canDraw) {
-                                AppLocale.handSimulatorDrawTurn(hand.turn + 1)
-                            } else {
-                                AppLocale.handSimulatorDeckEmpty
-                            },
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Button(
-                        onClick = onDeal,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.blue),
-                        modifier = Modifier.weight(1f).height(48.dp)
-                    ) {
-                        Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(
-                            text = AppLocale.handSimulatorNewHand,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
                 }
             }
         }
@@ -292,7 +397,8 @@ private fun PracticeEmptyState(title: String, body: String) {
 private fun PracticeTable(
     hand: PracticeHand,
     dealKey: Int,
-    onSaveHand: () -> Unit,
+    rating: HandRating?,
+    appRating: HandRating?,
     onCardClick: (SimulatorCard) -> Unit
 ) {
     Card(
@@ -363,23 +469,26 @@ private fun PracticeTable(
                 }
             }
 
-            Text(
-                text = hand.evaluation.verdict.why(),
-                color = AppColors.textSecondary,
-                fontSize = 12.sp
-            )
+            // Il perche' del verdetto serve solo per il mulligan, dove spiega la
+            // regola. Per le altre mani lo dicono gia' la composizione e le
+            // etichette, e la riga in piu' spingeva mano e Premi fuori schermo.
+            if (hand.needsMulligan) {
+                Text(
+                    text = hand.evaluation.verdict.why(),
+                    color = AppColors.textSecondary,
+                    fontSize = 12.sp
+                )
+            }
 
-            if (!hand.needsMulligan) {
-                TextButton(
-                    onClick = onSaveHand,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = AppLocale.handSimulatorSaveProblem,
-                        color = AppColors.textSecondary,
-                        fontSize = 12.sp
-                    )
-                }
+            // Il voto dell'utente accanto a quello dell'app: e' il confronto da
+            // cui si impara a leggere una mano.
+            if (rating != null && appRating != null) {
+                Text(
+                    text = AppLocale.handRatingFeedback(rating.label(), appRating.label()),
+                    color = if (rating.startsWell == appRating.startsWell) AppColors.green else AppColors.orange,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
     }
@@ -413,6 +522,13 @@ private fun PracticeTallyRow(tally: PracticeTally) {
                         fontSize = 12.sp
                     )
                 }
+                if (tally.rated > 0) {
+                    Text(
+                        text = AppLocale.handSimulatorAgreement(tally.agreed, tally.rated),
+                        color = AppColors.textSecondary,
+                        fontSize = 12.sp
+                    )
+                }
             }
             tally.goodStartRate?.let { rate ->
                 SimChip(
@@ -427,8 +543,14 @@ private fun PracticeTallyRow(tally: PracticeTally) {
 @Composable
 private fun SavedHandsCard(
     savedHands: List<SavedProblemHand>,
-    onDelete: (String) -> Unit
+    deckPool: List<SimulatorCard>,
+    onDelete: (String) -> Unit,
+    onCardClick: (SimulatorCard) -> Unit
 ) {
+    // Null = tutte. Si azzera cambiando mazzo, perche' cambia la lista.
+    var filter by remember(savedHands.firstOrNull()?.deckId) { mutableStateOf<HandRating?>(null) }
+    val visible = remember(savedHands, filter) { savedHands.filterByRating(filter) }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = AppColors.card),
         shape = RoundedCornerShape(16.dp)
@@ -452,19 +574,59 @@ private fun SavedHandsCard(
                     color = AppColors.textSecondary,
                     fontSize = 12.sp
                 )
+                return@Column
+            }
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                SimChip(
+                    label = AppLocale.handSimulatorSavedFilterAll,
+                    tint = if (filter == null) AppColors.blue else null,
+                    onClick = { filter = null }
+                )
+                HandRating.entries.reversed().forEach { rating ->
+                    SimChip(
+                        label = rating.pluralLabel(),
+                        tint = if (filter == rating) rating.color() else null,
+                        onClick = { filter = rating }
+                    )
+                }
+            }
+
+            if (visible.isEmpty()) {
+                Text(
+                    text = AppLocale.handSimulatorSavedFilteredEmpty,
+                    color = AppColors.textSecondary,
+                    fontSize = 12.sp
+                )
             } else {
-                savedHands.take(12).forEach { saved ->
-                    SavedHandRow(hand = saved, onDelete = { onDelete(saved.id) })
+                visible.take(12).forEach { saved ->
+                    SavedHandRow(
+                        hand = saved,
+                        cards = remember(saved, deckPool) { saved.resolveCards(deckPool) },
+                        onDelete = { onDelete(saved.id) },
+                        onCardClick = onCardClick
+                    )
                 }
             }
         }
     }
 }
 
+/**
+ * Una mano salvata, con le carte disegnate.
+ *
+ * Fino alla 3.1.8 erano sette nomi in grigio: per riconoscere la mano
+ * bisognava ricordarsi a memoria ogni carta del mazzo.
+ */
 @Composable
 private fun SavedHandRow(
     hand: SavedProblemHand,
-    onDelete: () -> Unit
+    cards: List<SimulatorCard>,
+    onDelete: () -> Unit,
+    onCardClick: (SimulatorCard) -> Unit
 ) {
     val formatter = remember { SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()) }
     val dateLabel = remember(hand.createdAtMillis) { formatter.format(Date(hand.createdAtMillis)) }
@@ -473,25 +635,41 @@ private fun SavedHandRow(
         colors = CardDefaults.cardColors(containerColor = AppColors.background),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = hand.deckName,
-                        color = AppColors.textPrimary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = dateLabel,
-                        color = AppColors.textSecondary,
-                        fontSize = 11.sp
-                    )
+                FlowRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically
+                ) {
+                    val userRating = hand.userRating
+                    if (userRating != null) {
+                        SimChip(label = userRating.label(), tint = userRating.color())
+                    } else {
+                        SimChip(label = AppLocale.handSimulatorFromAnalysis)
+                    }
+                    hand.appHandRating?.let { app ->
+                        Text(
+                            text = AppLocale.handSimulatorAppSays(app.label()),
+                            color = AppColors.textSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                    hand.wentFirst?.let { first ->
+                        Text(
+                            text = if (first) AppLocale.handSimulatorGoingFirst else AppLocale.handSimulatorGoingSecond,
+                            color = AppColors.textMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Text(text = dateLabel, color = AppColors.textMuted, fontSize = 11.sp)
                 }
                 IconButton(onClick = onDelete) {
                     Icon(
@@ -502,29 +680,16 @@ private fun SavedHandRow(
                 }
             }
 
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                hand.tags.forEach { tag ->
-                    SimChip(label = translateProblemTag(tag))
-                }
-            }
+            HandStrip(cards = cards, onCardClick = onCardClick)
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                hand.cards.forEach { cardName ->
-                    Text(
-                        text = cardName,
-                        color = AppColors.textMuted,
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+            if (hand.tags.isNotEmpty()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    hand.tags.forEach { tag ->
+                        SimChip(label = translateProblemTag(tag))
+                    }
                 }
             }
         }

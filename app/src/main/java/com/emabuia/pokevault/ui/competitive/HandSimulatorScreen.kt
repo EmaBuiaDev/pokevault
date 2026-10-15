@@ -73,6 +73,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
 import com.emabuia.pokevault.data.simulator.HandEvaluation
+import com.emabuia.pokevault.data.simulator.HandRating
 import com.emabuia.pokevault.data.simulator.HandSimulationEngine
 import com.emabuia.pokevault.data.simulator.HandSimulationSummary
 import com.emabuia.pokevault.data.simulator.HandSimulatorLocalStore
@@ -140,6 +141,15 @@ fun HandSimulatorScreen(
     var savedReloadTick by remember { mutableIntStateOf(0) }
     var feedback by remember { mutableStateOf<String?>(null) }
 
+    // Il voto rapido sulla mano in tavola, e l'id con cui e' stata salvata.
+    var currentRating by remember { mutableStateOf<HandRating?>(null) }
+    var ratedHandId by remember { mutableStateOf<String?>(null) }
+
+    // Il giudizio dell'app su cui si confronta il voto: sulle 7 carte, come la
+    // mano che si salva, e non sulle pescate fatte dopo.
+    fun appRatingOf(hand: PracticeHand): HandRating =
+        HandRating.fromVerdict(hand.openingEvaluation(selectedKeyCards).verdict)
+
     var deckMenuOpen by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
@@ -185,6 +195,8 @@ fun HandSimulatorScreen(
         summary = null
         accuracyWarnings = emptyList()
         feedback = null
+        currentRating = null
+        ratedHandId = null
     }
 
     // Ogni mano scoperta passa dal conteggio: le valide sono partite iniziate,
@@ -193,6 +205,49 @@ fun HandSimulatorScreen(
         practiceHand = hand
         hand?.let { tally = tally.record(it) }
         dealKey += 1
+        // Mano nuova, voto nuovo: quello di prima resta sulla mano salvata.
+        ratedHandId = null
+        currentRating = null
+    }
+
+    /**
+     * Un tocco su Pessima, Rischiosa o Buona. La prima volta salva la mano;
+     * un altro voto la aggiorna; lo stesso voto di nuovo la toglie.
+     */
+    fun rate(rating: HandRating) {
+        val deck = selectedDeck ?: return
+        val hand = practiceHand ?: return
+        val app = appRatingOf(hand)
+        val savedId = ratedHandId
+        when {
+            savedId != null && rating == currentRating -> {
+                localStore.deleteProblemHand(savedId)
+                tally = tally.withoutRating(savedId)
+                ratedHandId = null
+                currentRating = null
+            }
+            savedId != null -> {
+                localStore.updateRating(savedId, rating)
+                tally = tally.withRating(savedId, rating, app)
+                currentRating = rating
+            }
+            else -> {
+                val id = localStore.saveProblemHand(
+                    deckId = deck.id,
+                    deckName = deck.name,
+                    cards = hand.opening.map { it.name },
+                    tags = hand.openingEvaluation(selectedKeyCards).storeTags(),
+                    cardIds = hand.opening.map { it.id },
+                    rating = rating,
+                    appRating = app,
+                    turnOrder = hand.turnOrder
+                ) ?: return
+                tally = tally.withRating(id, rating, app)
+                ratedHandId = id
+                currentRating = rating
+            }
+        }
+        savedReloadTick += 1
     }
 
     fun dealFresh() {
@@ -245,13 +300,15 @@ fun HandSimulatorScreen(
             if (showPracticeBar) {
                 PracticeActionBar(
                     hand = practiceHand,
+                    rating = currentRating,
                     onDeal = { dealFresh() },
                     onMulligan = { takeMulligan() },
                     onDraw = {
                         practiceHand?.let { current ->
                             practiceHand = PracticeDealer.drawOne(current, selectedKeyCards)
                         }
-                    }
+                    },
+                    onRate = { rate(it) }
                 )
             }
         }
@@ -362,22 +419,18 @@ fun HandSimulatorScreen(
                             practiceHand = practiceHand?.let { PracticeDealer.withTurnOrder(it, order, selectedKeyCards) }
                             feedback = if (order == TurnOrder.FIRST) AppLocale.handSimulatorGoingFirst else AppLocale.handSimulatorGoingSecond
                         },
-                        onSaveHand = {
-                            val deck = selectedDeck
-                            val hand = practiceHand
-                            if (deck != null && hand != null) {
-                                localStore.saveProblemHand(
-                                    deckId = deck.id,
-                                    deckName = deck.name,
-                                    cards = hand.opening.map { it.name },
-                                    tags = hand.evaluation.storeTags()
-                                )
-                                savedReloadTick += 1
-                                feedback = AppLocale.handSimulatorSavedToast
-                            }
-                        },
+                        deckPool = cardPool,
+                        rating = currentRating,
+                        appRating = practiceHand?.let { appRatingOf(it) },
                         onDeleteSaved = { id ->
                             localStore.deleteProblemHand(id)
+                            // Cancellata dalla lista la mano che si sta
+                            // guardando: il voto sul tavolo non vale piu'.
+                            if (id == ratedHandId) {
+                                ratedHandId = null
+                                currentRating = null
+                            }
+                            tally = tally.withoutRating(id)
                             savedReloadTick += 1
                         },
                         onCardClick = { zoomedCard = it }
@@ -436,6 +489,7 @@ fun HandSimulatorScreen(
                                 deckId = deck.id,
                                 deckName = deck.name,
                                 cards = hand.cards.map { it.name },
+                                cardIds = hand.cards.map { it.id },
                                 tags = hand.tags
                             )
                             savedReloadTick += 1
