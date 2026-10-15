@@ -22,6 +22,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -647,7 +649,10 @@ private fun placementWithPlayers(archetype: MetaArchetype): String =
  * a occhio i numeri di ognuna.
  */
 @Composable
-private fun MetaSummaryCard(archetypes: List<MetaArchetype>) {
+internal fun MetaSummaryCard(
+    archetypes: List<MetaArchetype>,
+    initiallyExpanded: Boolean = false
+) {
     if (archetypes.isEmpty()) return
     val (top, others) = remember(archetypes) { archetypes.topShares() }
     val palette = listOf(
@@ -655,26 +660,58 @@ private fun MetaSummaryCard(archetypes: List<MetaArchetype>) {
         AppColors.red, AppColors.gold, AppColors.lavender, AppColors.yellow
     )
     val sample = archetypes.first()
+    // Chiusa di default: aperta prendeva mezza schermata prima della
+    // classifica. Da chiusa resta la barra, che da' gia' le proporzioni.
+    var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
+    val chevronRotation by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(AppMotion.chevron),
+        label = "metaSummaryChevron"
+    )
 
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = AppColors.card)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    onClickLabel = if (expanded) AppLocale.metaHideBreakdown else AppLocale.metaShowBreakdown
+                ) { expanded = !expanded }
+                .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = AppLocale.metaTopEightTitle,
-                color = AppColors.textPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
-            )
-            if (sample.sampleTournaments > 0) {
+            // Il titolo e, a destra, cosa succede toccando: "Mostra" con la
+            // freccia, che diventa "Nascondi" da aperta. Una freccia da sola
+            // non diceva abbastanza che la card si apre.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = AppLocale.metaTopEightTitle,
+                        color = AppColors.textPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    if (sample.sampleTournaments > 0) {
+                        Text(
+                            text = AppLocale.metaSampleSummary(sample.sampleTournaments, sample.sampleDecks),
+                            color = AppColors.textMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
                 Text(
-                    text = AppLocale.metaSampleSummary(sample.sampleTournaments, sample.sampleDecks),
-                    color = AppColors.textMuted,
-                    fontSize = 11.sp
+                    text = if (expanded) AppLocale.metaHideBreakdown else AppLocale.metaShowBreakdown,
+                    color = AppColors.blue,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Icon(
+                    imageVector = Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = AppColors.blue,
+                    modifier = Modifier.size(20.dp).rotate(chevronRotation)
                 )
             }
 
@@ -683,8 +720,8 @@ private fun MetaSummaryCard(archetypes: List<MetaArchetype>) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(14.dp)
-                    .clip(RoundedCornerShape(7.dp))
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(5.dp))
             ) {
                 top.forEachIndexed { index, archetype ->
                     if (archetype.metaShare > 0.0) {
@@ -706,42 +743,50 @@ private fun MetaSummaryCard(archetypes: List<MetaArchetype>) {
                 }
             }
 
-            // Legenda in due colonne: nome e quota, nello stesso colore.
-            top.chunked(2).forEachIndexed { rowIndex, pair ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    pair.forEachIndexed { columnIndex, archetype ->
-                        val color = palette[(rowIndex * 2 + columnIndex) % palette.size]
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = archetype.name,
-                                color = AppColors.textSecondary,
-                                fontSize = 11.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = "${"%.1f".format(archetype.metaShare)}%",
-                                color = AppColors.textPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Legenda in due colonne: nome e quota, nello stesso colore.
+                    top.chunked(2).forEachIndexed { rowIndex, pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            pair.forEachIndexed { columnIndex, archetype ->
+                                val color = palette[(rowIndex * 2 + columnIndex) % palette.size]
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = archetype.name,
+                                        color = AppColors.textSecondary,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = "${"%.1f".format(archetype.metaShare)}%",
+                                        color = AppColors.textPrimary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                            if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
                         }
                     }
-                    if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
+                    if (others > 0.5) {
+                        Text(
+                            text = "${AppLocale.metaOthers} ${"%.1f".format(others)}%",
+                            color = AppColors.textMuted,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
-            }
-            if (others > 0.5) {
-                Text(
-                    text = "${AppLocale.metaOthers} ${"%.1f".format(others)}%",
-                    color = AppColors.textMuted,
-                    fontSize = 11.sp
-                )
             }
         }
     }

@@ -1174,6 +1174,8 @@ object AppLocale {
         "Over ${if (tournaments == 1) "1 recent tournament" else "$tournaments recent tournaments"} · $decks decks in the top 32"
     val metaTopEightTitle: String get() = if (isItalian) "I più giocati" else "Most played"
     val metaOthers: String get() = if (isItalian) "Altri" else "Others"
+    val metaShowBreakdown: String get() = if (isItalian) "Mostra" else "Show"
+    val metaHideBreakdown: String get() = if (isItalian) "Nascondi" else "Hide"
     val metaWinRate: String get() = "Win rate"
     fun metaGames(games: Int): String = if (isItalian)
         if (games == 1) "su 1 partita" else "su $games partite"
