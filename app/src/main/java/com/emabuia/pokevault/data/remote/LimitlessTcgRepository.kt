@@ -151,7 +151,9 @@ class LimitlessTcgRepository {
         // v2: le voci salvate prima contano i ritirati come piazzamento 0 (vedi
         // LimitlessPlacing). Con la chiave vecchia la cache su disco le avrebbe
         // rimostrate fino alla scadenza.
-        private fun archetypesKey(format: String) = "archetypes_v2_$format"
+        // v3 dalla 3.1.9: win rate pesato e campi nuovi. Le v2 su disco hanno
+        // il win rate calcolato come media, e non vanno piu' mostrate.
+        private fun archetypesKey(format: String) = "archetypes_v3_$format"
     }
 
     /**
@@ -201,14 +203,6 @@ class LimitlessTcgRepository {
             val tournaments = getTournamentCandidates(apiFormat).take(ARCHETYPE_TOURNAMENTS)
             if (tournaments.isEmpty()) return Result.success(emptyList())
 
-            // Raccogli tutti gli standings con deck info
-            data class DeckEntry(
-                val archetype: String,
-                val placement: Int,
-                val winrate: Double?,
-                val metaDeck: MetaDeck
-            )
-
             // Fetch in parallelo: per 15 tornei sequenziali avremmo sommato
             // 15x la latenza di rete; con coroutineScope+async partono insieme.
             val allEntries = coroutineScope {
@@ -227,19 +221,16 @@ class LimitlessTcgRepository {
                                     ?: inferArchetype(parseDecklistCards(standing.decklist))
                                 if (archName.isBlank() || archName == "Unknown") return@mapNotNull null
 
-                                val record = standing.record
-                                val wr = if (record != null) {
-                                    val total = record.wins + record.losses + record.ties
-                                    if (total > 0) record.wins.toDouble() / total else null
-                                } else null
-
-                                val metaDeck = mapToMetaDeck(standing, tournament)
-
-                                DeckEntry(
+                                ArchetypeEntry(
                                     archetype = archName,
                                     placement = standing.placing,
-                                    winrate = wr,
-                                    metaDeck = metaDeck
+                                    wins = standing.record?.wins ?: 0,
+                                    losses = standing.record?.losses ?: 0,
+                                    ties = standing.record?.ties ?: 0,
+                                    players = tournament.players,
+                                    tournamentDate = tournament.date,
+                                    tournamentId = tournament.id,
+                                    metaDeck = mapToMetaDeck(standing, tournament)
                                 )
                             }
                         } catch (e: Exception) {
@@ -252,34 +243,7 @@ class LimitlessTcgRepository {
 
             if (allEntries.isEmpty()) return Result.success(emptyList())
 
-            // Raggruppa per archetipo
-            val totalDecks = allEntries.size
-            val grouped = allEntries.groupBy { it.archetype.lowercase().trim() }
-
-            val archetypes = grouped.map { (_, entries) ->
-                val displayName = entries.first().archetype
-                val count = entries.size
-                val metaShare = (count.toDouble() / totalDecks) * 100.0
-                val winrates = entries.mapNotNull { it.winrate }
-                val avgWr = if (winrates.isNotEmpty()) winrates.average() else 0.0
-                val topPlace = LimitlessPlacing.best(entries.map { it.placement })
-                val recent = LimitlessPlacing.ranked(entries) { it.placement }
-                    .map { it.placement }
-                    .filter(LimitlessPlacing::isKnown)
-                    .take(5)
-                // Usa il deck con miglior piazzamento come sample
-                val bestDeck = LimitlessPlacing.ranked(entries) { it.placement }.firstOrNull()?.metaDeck
-
-                MetaArchetype(
-                    name = displayName,
-                    count = count,
-                    metaShare = metaShare,
-                    avgWinrate = avgWr,
-                    topPlacement = topPlace,
-                    recentResults = recent,
-                    sampleDeck = bestDeck
-                )
-            }.sortedByDescending { it.metaShare }
+            val archetypes = MetaArchetypeAggregator.aggregate(allEntries)
 
             archetypeCache[cacheKey] = CachedArchetypes(archetypes, System.currentTimeMillis())
             LimitlessLocalCache.write(cacheKey, archetypes)

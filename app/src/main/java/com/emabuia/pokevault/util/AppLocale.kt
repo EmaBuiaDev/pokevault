@@ -1158,10 +1158,40 @@ object AppLocale {
     val metaImportSample: String get() = if (isItalian) "Importa deck esempio" else "Import sample deck"
 
     // Meta info banner & refresh
+    // Diceva "ultimi 15 tornei" mentre il codice ne legge 12: il numero vero
+    // ora sta nel riepilogo in cima alla lista, calcolato sui dati.
     val metaArchetypeInfoBody: String get() = if (isItalian)
-        "Aggregato dagli ultimi 15 tornei competitivi su LimitlessTCG (top 32 di ogni torneo). Gli archetipi sono ordinati per meta share: la % di copie del deck nel pool competitivo."
+        "Calcolato sui tornei recenti di LimitlessTCG, guardando i primi 32 classificati di ognuno. La presenza è la quota di quei deck che usa l'archetipo; il win rate somma vittorie e partite di tutti i suoi deck (i pareggi contano come partite non vinte)."
     else
-        "Aggregated from the last 15 competitive tournaments on LimitlessTCG (top 32 per event). Archetypes are ranked by meta share: the % of copies in the competitive pool."
+        "Computed from recent LimitlessTCG tournaments, looking at the top 32 of each. Presence is the share of those decks using the archetype; win rate adds up the wins and games of all its decks (ties count as games not won)."
+
+    // ── Meta Deck: classifica degli archetipi (3.1.9) ──
+    val metaPresence: String get() = if (isItalian) "Presenza" else "Presence"
+    val metaInTop32: String get() = if (isItalian) "nei top 32" else "in top 32"
+    fun metaSampleSummary(tournaments: Int, decks: Int): String = if (isItalian)
+        "Su ${if (tournaments == 1) "1 torneo recente" else "$tournaments tornei recenti"} · $decks deck nei top 32"
+    else
+        "Over ${if (tournaments == 1) "1 recent tournament" else "$tournaments recent tournaments"} · $decks decks in the top 32"
+    val metaTopEightTitle: String get() = if (isItalian) "I più giocati" else "Most played"
+    val metaOthers: String get() = if (isItalian) "Altri" else "Others"
+    val metaWinRate: String get() = "Win rate"
+    fun metaGames(games: Int): String = if (isItalian)
+        if (games == 1) "su 1 partita" else "su $games partite"
+    else
+        if (games == 1) "over 1 game" else "over $games games"
+    val metaFewData: String get() = if (isItalian) "pochi dati" else "too few games"
+    val metaBestPlacement: String get() = if (isItalian) "Miglior piazz." else "Best place"
+    fun metaPlacementOf(placement: Int): String = if (isItalian) "$placement°" else "#$placement"
+    fun metaOfPlayers(players: Int): String = if (isItalian) "su $players" else "of $players"
+    val metaTop8: String get() = "Top 8"
+    fun metaTop8Times(count: Int): String = if (isItalian)
+        if (count == 1) "1 volta" else "$count volte"
+    else
+        if (count == 1) "once" else "$count times"
+    val metaTrendUp: String get() = if (isItalian) "In crescita nei tornei più recenti" else "Rising in the most recent tournaments"
+    val metaTrendDown: String get() = if (isItalian) "In calo nei tornei più recenti" else "Falling in the most recent tournaments"
+    val metaTrendFlat: String get() = if (isItalian) "Stabile" else "Steady"
+    val metaSortPlacement: String get() = if (isItalian) "Piazzamento" else "Placement"
     val winTournamentInfoBody: String get() = if (isItalian)
         "I top 3 piazzati (con decklist) degli ultimi tornei su LimitlessTCG, dal piu' recente. Sono esclusi gli eventi sotto gli 8 giocatori, che non sono risultati competitivi. Tocca un piazzamento per vedere la decklist completa e importarla."
     else

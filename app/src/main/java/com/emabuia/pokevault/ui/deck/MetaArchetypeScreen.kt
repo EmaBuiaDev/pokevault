@@ -35,6 +35,7 @@ import com.emabuia.pokevault.ui.theme.*
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.MetaDeckViewModel
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 private enum class ArchetypeSortMode { META_SHARE, WIN_RATE, BEST_PLACEMENT }
 
@@ -80,7 +81,7 @@ fun MetaArchetypeSection(
     val sortedArchetypes = remember(viewModel.archetypes, sortMode) {
         when (sortMode) {
             ArchetypeSortMode.META_SHARE    -> viewModel.archetypes
-            ArchetypeSortMode.WIN_RATE      -> viewModel.archetypes.sortedByDescending { it.avgWinrate }
+            ArchetypeSortMode.WIN_RATE      -> viewModel.archetypes.sortedByWinRate()
             // Senza piazzamento (0) in fondo, non in testa: vedi LimitlessPlacing.
             ArchetypeSortMode.BEST_PLACEMENT -> viewModel.archetypes.sortedWith(
                 compareBy<MetaArchetype> { if (it.topPlacement > 0) 0 else 1 }.thenBy { it.topPlacement }
@@ -134,17 +135,17 @@ fun MetaArchetypeSection(
                     fontSize = 11.sp
                 )
                 SortChip(
-                    label = AppLocale.metaShare,
+                    label = AppLocale.metaPresence,
                     selected = sortMode == ArchetypeSortMode.META_SHARE,
                     onClick = { sortMode = ArchetypeSortMode.META_SHARE }
                 )
                 SortChip(
-                    label = "Win Rate",
+                    label = AppLocale.metaWinRate,
                     selected = sortMode == ArchetypeSortMode.WIN_RATE,
                     onClick = { sortMode = ArchetypeSortMode.WIN_RATE }
                 )
                 SortChip(
-                    label = if (AppLocale.isItalian) "Piazz." else "Place",
+                    label = AppLocale.metaSortPlacement,
                     selected = sortMode == ArchetypeSortMode.BEST_PLACEMENT,
                     onClick = { sortMode = ArchetypeSortMode.BEST_PLACEMENT }
                 )
@@ -239,6 +240,9 @@ fun MetaArchetypeSection(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    item(key = "meta-summary") {
+                        MetaSummaryCard(archetypes = viewModel.archetypes)
+                    }
 
                     itemsIndexed(sortedArchetypes, key = { _, a -> a.name }) { index, archetype ->
                         val previousTier = if (index > 0 && showTierHeaders)
@@ -288,9 +292,9 @@ private fun TierInfoPanel() {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = if (AppLocale.isItalian)
-                    "Il tier indica quanto un archetipo è diffuso nel meta competitivo, calcolato sul numero di deck giocati negli ultimi tornei rispetto al totale."
+                    "Il tier indica quanto un archetipo è diffuso fra i primi 32 classificati dei tornei recenti: la quota di quei deck che lo usa."
                 else
-                    "The tier indicates how widespread an archetype is in the competitive meta, calculated on the number of decks played in recent tournaments vs. the total.",
+                    "The tier shows how widespread an archetype is among the top 32 of recent tournaments: the share of those decks using it.",
                 color = AppColors.textMuted,
                 fontSize = 11.sp,
                 lineHeight = 15.sp
@@ -341,7 +345,7 @@ private fun TierHeader(tier: Int) {
     val color = tierColor(tier)
     val label = tierLabel(tier)
     val subtitle = when (tier) {
-        1    -> if (AppLocale.isItalian) "Dominante (≥15% meta share)" else "Dominant (≥15% meta share)"
+        1    -> if (AppLocale.isItalian) "Dominante (≥15% nei top 32)" else "Dominant (≥15% in top 32)"
         2    -> if (AppLocale.isItalian) "Rilevante (8–15%)" else "Relevant (8–15%)"
         3    -> if (AppLocale.isItalian) "Presente (3–8%)" else "Present (3–8%)"
         else -> if (AppLocale.isItalian) "Fringe (<3%)" else "Fringe (<3%)"
@@ -381,30 +385,23 @@ private fun ArchetypeCard(
         else -> AppColors.textMuted
     }
 
-    val wrColor = when {
-        archetype.avgWinrate >= 0.65 -> AppColors.green
-        archetype.avgWinrate >= 0.50 -> AppColors.yellow
-        else                          -> AppColors.red
+    val winRateLevel = archetype.winRateLevel()
+    val wrColor = when (winRateLevel) {
+        WinRateLevel.HIGH -> AppColors.green
+        WinRateLevel.LOW -> AppColors.red
+        WinRateLevel.AVERAGE -> AppColors.blue
+        WinRateLevel.FEW_DATA -> AppColors.textMuted
     }
 
-    // Trend: confronta i primi 2 piazzamenti recenti con gli ultimi 2.
-    // I colori si leggono FUORI dal remember: il blocco di calcolo di remember
-    // non e' un contesto @Composable, quindi non puo' leggere i token del tema.
-    val trendUpColor = AppColors.green
-    val trendDownColor = AppColors.red
-    val trendFlatColor = AppColors.textMuted
-    val trendInfo: Pair<androidx.compose.ui.graphics.vector.ImageVector, Color>? =
-        remember(archetype.recentResults, trendUpColor, trendDownColor, trendFlatColor) {
-            val results = archetype.recentResults
-            if (results.size >= 4) {
-                val early = results.take(2).average()
-                val late  = results.takeLast(2).average()
-                when {
-                    late < early - 4  -> Icons.AutoMirrored.Filled.TrendingUp   to trendUpColor
-                    late > early + 4  -> Icons.AutoMirrored.Filled.TrendingDown to trendDownColor
-                    else              -> Icons.AutoMirrored.Filled.TrendingFlat to trendFlatColor
-                }
-            } else null
+    // Trend: la quota nei tornei piu' recenti contro quella nei piu' vecchi.
+    // Fino alla 3.1.8 confrontava i piazzamenti ordinati dal migliore al
+    // peggiore, cioe' niente che avesse a che fare col tempo.
+    val trendInfo: Triple<androidx.compose.ui.graphics.vector.ImageVector, Color, String>? =
+        when (archetype.trendDirection()) {
+            TrendDirection.UP -> Triple(Icons.AutoMirrored.Filled.TrendingUp, AppColors.green, AppLocale.metaTrendUp)
+            TrendDirection.DOWN -> Triple(Icons.AutoMirrored.Filled.TrendingDown, AppColors.red, AppLocale.metaTrendDown)
+            TrendDirection.FLAT -> Triple(Icons.AutoMirrored.Filled.TrendingFlat, AppColors.textMuted, AppLocale.metaTrendFlat)
+            null -> null
         }
 
     Card(
@@ -480,7 +477,7 @@ private fun ArchetypeCard(
                                 Icon(Icons.Default.EmojiEvents, null, tint = trophyColor, modifier = Modifier.size(12.dp))
                                 Spacer(modifier = Modifier.width(2.dp))
                                 Text(
-                                    "Top ${archetype.topPlacement}",
+                                    placementWithPlayers(archetype),
                                     color = trophyColor,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -490,8 +487,8 @@ private fun ArchetypeCard(
 
                         // Trend indicator
                         if (trendInfo != null) {
-                            val (trendIcon, trendColor) = trendInfo
-                            Icon(trendIcon, null, tint = trendColor, modifier = Modifier.size(14.dp))
+                            val (trendIcon, trendColor, trendLabel) = trendInfo
+                            Icon(trendIcon, contentDescription = trendLabel, tint = trendColor, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -513,7 +510,7 @@ private fun ArchetypeCard(
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 17.sp
                         )
-                        Text("meta", color = tColor.copy(alpha = 0.75f), fontSize = 9.sp)
+                        Text(AppLocale.metaInTop32, color = tColor.copy(alpha = 0.75f), fontSize = 9.sp)
                     }
                 }
             }
@@ -548,23 +545,32 @@ private fun ArchetypeCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Il win rate porta sempre con se' su quante partite e'
+                // calcolato: sotto la soglia non si mostra il numero.
                 ArchetypeStat(
-                    label = "Win Rate",
-                    value = "${(archetype.avgWinrate * 100).toInt()}%",
+                    label = if (winRateLevel == WinRateLevel.FEW_DATA) AppLocale.metaFewData
+                        else AppLocale.metaGames(archetype.games),
+                    value = if (winRateLevel == WinRateLevel.FEW_DATA) "—"
+                        else "${(archetype.avgWinrate * 100).roundToInt()}%",
                     color = wrColor,
-                    modifier = Modifier.weight(1f)
+                    title = AppLocale.metaWinRate,
+                    modifier = Modifier.weight(1.2f)
                 )
+                // "1° su 128": un primo posto a un torneo da 8 giocatori non
+                // vale uno a un Regional, e "#1" li faceva sembrare uguali.
                 ArchetypeStat(
-                    label = if (AppLocale.isItalian) "Piazzamento" else "Best Place",
-                    value = if (archetype.topPlacement > 0) "#${archetype.topPlacement}" else "—",
+                    label = if (archetype.topPlacementPlayers > 0) AppLocale.metaOfPlayers(archetype.topPlacementPlayers) else "",
+                    value = if (archetype.topPlacement > 0) AppLocale.metaPlacementOf(archetype.topPlacement) else "—",
                     color = AppColors.blue,
+                    title = AppLocale.metaBestPlacement,
                     modifier = Modifier.weight(1f)
                 )
                 ArchetypeStat(
-                    label = "Deck",
-                    value = "${archetype.count}",
+                    label = AppLocale.metaTop8Times(archetype.top8Count),
+                    value = "${archetype.top8Count}",
                     color = AppColors.lavender,
-                    modifier = Modifier.weight(0.8f)
+                    title = AppLocale.metaTop8,
+                    modifier = Modifier.weight(0.9f)
                 )
 
                 // Import button
@@ -596,25 +602,147 @@ private fun ArchetypeCard(
 
 // ── Support composables ────────────────────────────────────────────────────
 
+/**
+ * Un numero della card: cosa misura sopra, il valore, e sotto su cosa e'
+ * calcolato ("su 140 partite", "su 128 giocatori").
+ */
 @Composable
 private fun ArchetypeStat(
     label: String,
     value: String,
     color: Color,
+    title: String,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.height(42.dp),
+        modifier = modifier.height(56.dp),
         color = color.copy(alpha = 0.1f),
         shape = RoundedCornerShape(10.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(text = value, color = color, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(text = label, color = color.copy(alpha = 0.75f), fontSize = 10.sp, maxLines = 1)
+            Text(text = title, color = AppColors.textMuted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = value, color = color, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+            if (label.isNotEmpty()) {
+                Text(text = label, color = color.copy(alpha = 0.75f), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+private fun placementWithPlayers(archetype: MetaArchetype): String =
+    if (archetype.topPlacementPlayers > 0) {
+        "${AppLocale.metaPlacementOf(archetype.topPlacement)} ${AppLocale.metaOfPlayers(archetype.topPlacementPlayers)}"
+    } else {
+        AppLocale.metaPlacementOf(archetype.topPlacement)
+    }
+
+/**
+ * In cima alla classifica: su cosa e' calcolata, e come si divide il meta fra
+ * i primi otto archetipi. Prima la classifica partiva subito con le card, e
+ * per capire quanto pesava il primo rispetto agli altri bisognava confrontare
+ * a occhio i numeri di ognuna.
+ */
+@Composable
+private fun MetaSummaryCard(archetypes: List<MetaArchetype>) {
+    if (archetypes.isEmpty()) return
+    val (top, others) = remember(archetypes) { archetypes.topShares() }
+    val palette = listOf(
+        AppColors.blue, AppColors.purple, AppColors.green, AppColors.orange,
+        AppColors.red, AppColors.gold, AppColors.lavender, AppColors.yellow
+    )
+    val sample = archetypes.first()
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = AppColors.card)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = AppLocale.metaTopEightTitle,
+                color = AppColors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+            if (sample.sampleTournaments > 0) {
+                Text(
+                    text = AppLocale.metaSampleSummary(sample.sampleTournaments, sample.sampleDecks),
+                    color = AppColors.textMuted,
+                    fontSize = 11.sp
+                )
+            }
+
+            // Una barra sola, divisa per quota: le proporzioni si vedono
+            // senza leggere nessun numero.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(7.dp))
+            ) {
+                top.forEachIndexed { index, archetype ->
+                    if (archetype.metaShare > 0.0) {
+                        Box(
+                            modifier = Modifier
+                                .weight(archetype.metaShare.toFloat())
+                                .fillMaxHeight()
+                                .background(palette[index % palette.size])
+                        )
+                    }
+                }
+                if (others > 0.0) {
+                    Box(
+                        modifier = Modifier
+                            .weight(others.toFloat())
+                            .fillMaxHeight()
+                            .background(AppColors.textMuted.copy(alpha = 0.25f))
+                    )
+                }
+            }
+
+            // Legenda in due colonne: nome e quota, nello stesso colore.
+            top.chunked(2).forEachIndexed { rowIndex, pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    pair.forEachIndexed { columnIndex, archetype ->
+                        val color = palette[(rowIndex * 2 + columnIndex) % palette.size]
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = archetype.name,
+                                color = AppColors.textSecondary,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "${"%.1f".format(archetype.metaShare)}%",
+                                color = AppColors.textPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                    if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+            if (others > 0.5) {
+                Text(
+                    text = "${AppLocale.metaOthers} ${"%.1f".format(others)}%",
+                    color = AppColors.textMuted,
+                    fontSize = 11.sp
+                )
+            }
         }
     }
 }
