@@ -22,6 +22,27 @@ import com.emabuia.pokevault.viewmodel.DeckLabViewModel
 // IMPORT DIALOGS
 // ══════════════════════════════════════
 
+/**
+ * Il tasto che apre l'import di una decklist.
+ *
+ * Era un'icona sola, FileDownload: una freccia verso il basso, che si legge
+ * come "scarica" e non dice che qui si incolla una lista copiata da Limitless
+ * o da Live. Ora ha gli appunti e la scritta, come il tasto "Crea" sotto.
+ */
+@Composable
+internal fun DeckImportButton(onClick: () -> Unit) {
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        containerColor = AppColors.purple,
+        contentColor = AppColors.onAccent,
+        shape = RoundedCornerShape(12.dp),
+        // La descrizione sta sull'icona e non sulla scritta: M3 toglie il testo
+        // dell'ExtendedFAB dall'accessibilita' e legge solo l'icona.
+        icon = { Icon(Icons.Default.ContentPaste, contentDescription = AppLocale.importDeck) },
+        text = { Text(AppLocale.import) }
+    )
+}
+
 @Composable
 fun DeckImportDialog(
     onDismiss: () -> Unit,
@@ -34,7 +55,7 @@ fun DeckImportDialog(
         containerColor = AppColors.surface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.FileDownload, contentDescription = null, tint = AppColors.purple, modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.ContentPaste, contentDescription = null, tint = AppColors.purple, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(AppLocale.importDeck, color = AppColors.textPrimary, fontWeight = FontWeight.Bold)
             }
@@ -87,7 +108,7 @@ fun DeckImportDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = AppColors.purple),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(AppLocale.import)
             }

@@ -102,19 +102,12 @@ fun DeckItem(
             // finche' l'elenco era a schermo, e in cambio davano un movimento
             // che non raccontava niente del mazzo.
             val accent = TypeColors.of(normalizeTypeKey(deck.mainTypes.firstOrNull().orEmpty()))
+            val palette = deckHeroPalette(LocalPokeVaultColors.current, accent, accentAlpha = 0.30f)
 
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                Color(0xFF10151F),
-                                Color(0xFF1C2D44),
-                                accent.copy(alpha = 0.30f)
-                            )
-                        )
-                    )
+                    .background(Brush.linearGradient(palette.background))
             )
 
             // Il fondo si schiarisce verso destra, dove stanno gli sprite,
@@ -144,19 +137,13 @@ fun DeckItem(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.16f),
-                                Color.Black.copy(alpha = 0.62f)
-                            )
-                        )
-                    )
-            )
+            palette.bottomShade?.let { shade ->
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Brush.verticalGradient(shade))
+                )
+            }
 
             // Informazioni a sinistra, sprite a destra, ognuno nel suo spazio.
             // Prima stavano tutti e due sopra lo stesso Box, il riquadro in
@@ -174,18 +161,8 @@ fun DeckItem(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.30f),
-                                    Color.Black.copy(alpha = 0.62f)
-                                )
-                            )
-                        )
-                        .border(
-                            BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                            RoundedCornerShape(12.dp)
-                        )
+                        .background(Brush.verticalGradient(palette.infoBox))
+                        .border(BorderStroke(1.dp, palette.infoBorder), RoundedCornerShape(12.dp))
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 ) {
                     // "Deck di prova" sta sopra il nome, non accanto: accanto
@@ -208,7 +185,7 @@ fun DeckItem(
                     }
                     Text(
                         text = deck.name,
-                        color = Color.White,
+                        color = palette.title,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -227,7 +204,7 @@ fun DeckItem(
                     // legale. Era un'informazione che l'elenco non dava affatto:
                     // per sapere se un deck era finito bisognava aprirlo.
                     Spacer(modifier = Modifier.height(6.dp))
-                    DeckSizeBar(cardCount = deck.cards.size)
+                    DeckSizeBar(cardCount = deck.cards.size, trackColor = palette.track)
                 }
 
                 // Gli sprite dei Pokemon che danno il nome al mazzo: sono
@@ -258,6 +235,68 @@ fun DeckItem(
     }
 }
 
+/**
+ * I colori della card di un mazzo e della testata del dettaglio.
+ *
+ * Prima erano un blu notte e veli neri fissi, con il testo bianco, anche col
+ * tema chiaro: il mazzo spiccava come un blocco scuro in una pagina chiara.
+ * Sono raccolti qui, fuori dai composable, perche' i test possano controllare
+ * tutti e due i temi senza disegnare niente.
+ */
+internal data class DeckHeroPalette(
+    /** Fondo, da diagonale: neutro e poi il colore del tipo. */
+    val background: List<Color>,
+    /** Velo verticale sopra il fondo della card; null se non serve. */
+    val bottomShade: List<Color>?,
+    /** Velo verticale della testata: in alto e in basso, dove raccorda. */
+    val headerShade: List<Color>,
+    /** Il riquadro con nome e conteggi, dall'alto in basso. */
+    val infoBox: List<Color>,
+    val infoBorder: Color,
+    /** Il nome del mazzo. */
+    val title: Color,
+    /** Il binario della barra delle 60 carte. */
+    val track: Color,
+    /** I pulsanti tondi della testata e il colore della freccia indietro. */
+    val button: Color,
+    val onButton: Color,
+    val divider: Color
+)
+
+internal fun deckHeroPalette(colors: PokeVaultColors, accent: Color, accentAlpha: Float): DeckHeroPalette =
+    if (colors.isLight) {
+        DeckHeroPalette(
+            background = listOf(colors.card, accent.copy(alpha = 0.06f), accent.copy(alpha = accentAlpha * 0.6f)),
+            // Il velo scuro in basso sporcava la card di grigio: sul chiaro
+            // il riquadro si stacca col bordo, non scurendo il fondo.
+            bottomShade = null,
+            headerShade = listOf(Color.Transparent, Color.Transparent, colors.background),
+            // Un bianco quasi pieno non basta da solo: card e surface sono lo
+            // stesso bianco, e a staccare il riquadro e' il bordo.
+            infoBox = listOf(colors.surface.copy(alpha = 0.78f), colors.surface.copy(alpha = 0.92f)),
+            infoBorder = accent.copy(alpha = 0.22f),
+            title = colors.textPrimary,
+            track = colors.textMuted.copy(alpha = 0.18f),
+            button = colors.surface.copy(alpha = 0.85f),
+            onButton = colors.textPrimary,
+            divider = colors.textMuted.copy(alpha = 0.2f)
+        )
+    } else {
+        DeckHeroPalette(
+            background = listOf(Color(0xFF10151F), Color(0xFF1C2D44), accent.copy(alpha = accentAlpha)),
+            bottomShade = listOf(Color.Transparent, Color.Black.copy(alpha = 0.16f), Color.Black.copy(alpha = 0.62f)),
+            // In alto il nero tiene leggibile la barra di stato.
+            headerShade = listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent, colors.background),
+            infoBox = listOf(Color.Black.copy(alpha = 0.30f), Color.Black.copy(alpha = 0.62f)),
+            infoBorder = Color.White.copy(alpha = 0.12f),
+            title = Color.White,
+            track = Color.White.copy(alpha = 0.16f),
+            button = Color.Black.copy(alpha = 0.5f),
+            onButton = Color.White,
+            divider = Color.White.copy(alpha = 0.1f)
+        )
+    }
+
 /** Due sprite da 64dp che si accavallano di 14. */
 private val SPRITE_AREA_WIDTH = 114.dp
 
@@ -270,7 +309,7 @@ private val SPRITE_AREA_WIDTH = 114.dp
  * quanto uno da 61.
  */
 @Composable
-private fun DeckSizeBar(cardCount: Int) {
+private fun DeckSizeBar(cardCount: Int, trackColor: Color) {
     val legal = cardCount == LEGAL_DECK_SIZE
     val accent = if (legal) AppColors.green else AppColors.textMuted
 
@@ -280,7 +319,7 @@ private fun DeckSizeBar(cardCount: Int) {
                 .weight(1f)
                 .height(4.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.16f))
+                .background(trackColor)
         ) {
             Box(
                 modifier = Modifier

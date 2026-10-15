@@ -230,21 +230,15 @@ fun DeckLabScreen(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Bottone Importa
-                    SmallFloatingActionButton(
+                    DeckImportButton(
                         onClick = {
                             if (premiumManager.canCreateDeck(viewModel.decks.size)) {
                                 showImportDialog = true
                             } else {
                                 showPremiumDeckDialog = true
                             }
-                        },
-                        containerColor = AppColors.purple,
-                        contentColor = AppColors.textPrimary,
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.FileDownload, contentDescription = AppLocale.importDeck)
-                    }
+                        }
+                    )
                     // Bottone Crea
                     ExtendedFloatingActionButton(
                         onClick = {
@@ -259,9 +253,11 @@ fun DeckLabScreen(
                             }
                         },
                         containerColor = AppColors.blue,
-                        contentColor = AppColors.textPrimary,
+                        // onAccent, non textPrimary: col tema chiaro
+                        // textPrimary e' quasi nero, e sul blu non si leggeva.
+                        contentColor = AppColors.onAccent,
                         shape = RoundedCornerShape(16.dp),
-                        icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                        icon = { Icon(Icons.Default.Add, contentDescription = AppLocale.createNewDeck) },
                         text = { Text(AppLocale.createNewDeck) }
                     )
                 }

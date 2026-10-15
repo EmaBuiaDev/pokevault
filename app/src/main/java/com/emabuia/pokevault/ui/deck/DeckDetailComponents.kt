@@ -169,6 +169,9 @@ fun DeckDetailView(
         )
     }
 
+    val accent = TypeColors.of(normalizeTypeKey(deck.mainTypes.firstOrNull().orEmpty()))
+    val palette = deckHeroPalette(LocalPokeVaultColors.current, accent, accentAlpha = 0.32f)
+
     Column(modifier = Modifier.fillMaxSize().background(AppColors.background)) {
         Box(modifier = Modifier.fillMaxWidth().height(190.dp)) {
             // Stessa lingua dell'elenco: il colore del tipo e i due Pokemon
@@ -176,20 +179,11 @@ fun DeckDetailView(
             // carta ritagliata a tutta larghezza -- pesante da scaricare, e a
             // quel taglio se ne vedeva un pezzo di illustrazione che non
             // diceva quale carta fosse.
-            val accent = TypeColors.of(normalizeTypeKey(deck.mainTypes.firstOrNull().orEmpty()))
 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                Color(0xFF10151F),
-                                Color(0xFF1C2D44),
-                                accent.copy(alpha = 0.32f)
-                            )
-                        )
-                    )
+                    .background(Brush.linearGradient(palette.background))
             )
 
             // Scurisce sotto, dove vanno nome e conteggio, e raccorda con lo
@@ -199,15 +193,7 @@ fun DeckDetailView(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.35f),
-                                Color.Transparent,
-                                AppColors.background
-                            )
-                        )
-                    )
+                    .background(Brush.verticalGradient(palette.headerShade))
             )
 
             if (heroSpriteUrls.isNotEmpty()) {
@@ -242,33 +228,33 @@ fun DeckDetailView(
             ) {
                 IconButton(
                     onClick = onBack,
-                    modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
+                    modifier = Modifier.size(36.dp).clip(CircleShape).background(palette.button)
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = palette.onButton, modifier = Modifier.size(20.dp))
                 }
                 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButton(
                         onClick = onEdit,
-                        modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
+                        modifier = Modifier.size(36.dp).clip(CircleShape).background(palette.button)
                     ) {
                         Icon(Icons.Default.Edit, contentDescription = null, tint = AppColors.blue, modifier = Modifier.size(18.dp))
                     }
                     IconButton(
                         onClick = onDuplicate,
-                        modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
+                        modifier = Modifier.size(36.dp).clip(CircleShape).background(palette.button)
                     ) {
                         Icon(Icons.Default.ContentCopy, contentDescription = null, tint = AppColors.green, modifier = Modifier.size(18.dp))
                     }
                     IconButton(
                         onClick = onDelete,
-                        modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
+                        modifier = Modifier.size(36.dp).clip(CircleShape).background(palette.button)
                     ) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = AppColors.red, modifier = Modifier.size(18.dp))
                     }
                     IconButton(
                         onClick = onExport,
-                        modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
+                        modifier = Modifier.size(36.dp).clip(CircleShape).background(palette.button)
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null, tint = AppColors.gold, modifier = Modifier.size(18.dp))
                     }
@@ -282,7 +268,7 @@ fun DeckDetailView(
             ) {
                 Text(
                     text = deck.name,
-                    color = Color.White,
+                    color = palette.title,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Black
                 )
@@ -345,7 +331,7 @@ fun DeckDetailView(
                             letterSpacing = 1.sp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        HorizontalDivider(modifier = Modifier.weight(1f), color = Color.White.copy(alpha = 0.1f))
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = palette.divider)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "${cardsList.sumOf { it.second }}",
