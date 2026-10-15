@@ -187,10 +187,27 @@ fun HandSimulatorScreen(
         feedback = null
     }
 
-    fun dealFresh() {
-        practiceHand = PracticeDealer.deal(cardPool, selectedKeyCards, turnOrder = turnOrder)
+    // Ogni mano scoperta passa dal conteggio: le valide sono partite iniziate,
+    // quelle senza Base aspettano il mulligan.
+    fun show(hand: PracticeHand?) {
+        practiceHand = hand
+        hand?.let { tally = tally.record(it) }
         dealKey += 1
     }
+
+    fun dealFresh() {
+        show(PracticeDealer.deal(cardPool, selectedKeyCards, turnOrder = turnOrder))
+    }
+
+    fun takeMulligan() {
+        val current = practiceHand ?: return dealFresh()
+        tally = tally.recordMulligan()
+        show(PracticeDealer.mulligan(current, cardPool, selectedKeyCards))
+    }
+
+    val showPracticeBar = mode == MODE_PRACTICE &&
+        selectedDeck != null &&
+        cardPool.size >= PracticeDealer.OPENING_SIZE
 
     Scaffold(
         containerColor = AppColors.background,
@@ -223,6 +240,20 @@ fun HandSimulatorScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
+        },
+        bottomBar = {
+            if (showPracticeBar) {
+                PracticeActionBar(
+                    hand = practiceHand,
+                    onDeal = { dealFresh() },
+                    onMulligan = { takeMulligan() },
+                    onDraw = {
+                        practiceHand?.let { current ->
+                            practiceHand = PracticeDealer.drawOne(current, selectedKeyCards)
+                        }
+                    }
+                )
+            }
         }
     ) { padding ->
         Column(
@@ -331,29 +362,6 @@ fun HandSimulatorScreen(
                             practiceHand = practiceHand?.let { PracticeDealer.withTurnOrder(it, order, selectedKeyCards) }
                             feedback = if (order == TurnOrder.FIRST) AppLocale.handSimulatorGoingFirst else AppLocale.handSimulatorGoingSecond
                         },
-                        onDeal = { dealFresh() },
-                        onKeep = {
-                            tally = tally.copy(dealt = tally.dealt + 1, kept = tally.kept + 1)
-                            dealFresh()
-                        },
-                        onMulligan = {
-                            val current = practiceHand
-                            tally = tally.copy(
-                                dealt = tally.dealt + 1,
-                                mulliganed = tally.mulliganed + 1
-                            )
-                            practiceHand = if (current == null) {
-                                PracticeDealer.deal(cardPool, selectedKeyCards, turnOrder = turnOrder)
-                            } else {
-                                PracticeDealer.mulligan(current, cardPool, selectedKeyCards)
-                            }
-                            dealKey += 1
-                        },
-                        onDraw = {
-                            practiceHand?.let { current ->
-                                practiceHand = PracticeDealer.drawOne(current, selectedKeyCards)
-                            }
-                        },
                         onSaveHand = {
                             val deck = selectedDeck
                             val hand = practiceHand
@@ -377,6 +385,7 @@ fun HandSimulatorScreen(
                 } else {
                     analysisSection(
                         hasDeck = selectedDeck != null,
+                        deckSize = cardPool.size,
                         summary = summary,
                         accuracyWarnings = accuracyWarnings,
                         isSimulating = isSimulating,
@@ -730,7 +739,7 @@ private fun HelpDialog(onDismiss: () -> Unit) {
             )
         },
         text = {
-            // Undici voci: su uno schermo corto il dialog non le contiene.
+            // Su uno schermo corto il dialog non contiene tutto.
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.verticalScroll(rememberScrollState())
@@ -740,23 +749,25 @@ private fun HelpDialog(onDismiss: () -> Unit) {
                     color = AppColors.textSecondary,
                     fontSize = 12.sp
                 )
-                Text(
-                    text = AppLocale.handSimulatorMetricScore,
-                    color = AppColors.textSecondary,
-                    fontSize = 12.sp
-                )
-                // Tutte le metriche che la schermata mostra, anche quelle
-                // chiuse dentro "Tutte le metriche": una riga vista e non
+                // Le regole sono quelle del regolamento ufficiale: chi usa il
+                // simulatore deve poter controllare su cosa si basano i numeri.
+                HelpHeading(AppLocale.handSimulatorRulesTitle)
+                Text(AppLocale.handSimulatorRulesBody, color = AppColors.textSecondary, fontSize = 12.sp)
+                // Tutte le misure che l'analisi mostra: una riga vista e non
                 // spiegata e' peggio di una riga non mostrata.
-                Text(AppLocale.handSimulatorMetricStarter, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricEnergyT1, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricOutT1, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricSetupT2, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricKeyByT2, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricRuns, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricMulligan, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricAvgBasics, color = AppColors.textSecondary, fontSize = 12.sp)
-                Text(AppLocale.handSimulatorMetricAvgMulligans, color = AppColors.textSecondary, fontSize = 12.sp)
+                HelpHeading(AppLocale.handSimulatorMetricsTitle)
+                listOf(
+                    AppLocale.handSimulatorMetricScore,
+                    AppLocale.handSimulatorMetricMulligan,
+                    AppLocale.handSimulatorMetricBasics,
+                    AppLocale.handSimulatorMetricEnergy,
+                    AppLocale.handSimulatorMetricSupporters,
+                    AppLocale.handSimulatorMetricDrawSearch,
+                    AppLocale.handSimulatorMetricFullStart,
+                    AppLocale.handSimulatorMetricKeyCards
+                ).forEach { line ->
+                    Text(line, color = AppColors.textSecondary, fontSize = 12.sp)
+                }
             }
         },
         confirmButton = {
@@ -767,6 +778,17 @@ private fun HelpDialog(onDismiss: () -> Unit) {
                 Text(text = AppLocale.handSimulatorDone)
             }
         }
+    )
+}
+
+@Composable
+private fun HelpHeading(text: String) {
+    Text(
+        text = text,
+        color = AppColors.textPrimary,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 13.sp,
+        modifier = Modifier.padding(top = 6.dp)
     )
 }
 
@@ -807,8 +829,9 @@ private fun CardZoomDialog(
     }
 }
 
+/** "1.000" e non "1k": la sigla e' gergo, il numero si legge. */
 private fun formatRunPreset(preset: Int): String =
-    if (preset >= 1000) "${preset / 1000}k" else preset.toString()
+    java.text.NumberFormat.getIntegerInstance(if (AppLocale.isItalian) java.util.Locale.ITALIAN else java.util.Locale.ENGLISH).format(preset)
 
 /**
  * I tag con cui una mano finisce nel vault locale.

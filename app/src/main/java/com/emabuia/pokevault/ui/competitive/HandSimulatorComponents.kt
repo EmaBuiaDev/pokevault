@@ -231,7 +231,7 @@ internal fun HandFan(
                     FannedCard(
                         card = card,
                         isDrawn = index >= openingSize,
-                        turnLabel = if (index >= openingSize) "T${index - openingSize + 1}" else null,
+                        turnLabel = if (index >= openingSize) AppLocale.handSimulatorDrawnBadge(index - openingSize + 1) else null,
                         angle = offsetFromCenter * step,
                         entryIndex = index,
                         dealKey = dealKey,
