@@ -102,7 +102,10 @@ fun WelcomeHeader(
                 text = AppLocale.helloUser(userName),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                // Il colore del tema, non un bianco fisso: l'header sta sullo
+                // sfondo della pagina, che col tema chiaro e' quasi bianco e
+                // rendeva il nome dell'utente illeggibile.
+                color = AppColors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
