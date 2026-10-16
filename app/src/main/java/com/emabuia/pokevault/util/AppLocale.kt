@@ -640,7 +640,7 @@ object AppLocale {
     val cardsAndExpansions: String get() = if (isItalian) "Carte e Espansioni" else "Cards & Expansions"
     val extensions: String get() = if (isItalian) "Espansioni" else "Expansions"
     val searchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
-    val searchInSets: String get() = if (isItalian) "Cerca tra tutte le espansioni..." else "Search across all expansions..."
+    val searchInSets: String get() = if (isItalian) "Cerca carta" else "Search card"
     val searchAllLanguages: String get() = if (isItalian) "🌐 Tutte" else "🌐 All"
     val searchSetPlaceholder: String get() = if (isItalian) "Cerca un'espansione..." else "Search an expansion..."
     // Filtri della ricerca carte: le voci vengono dal catalogo, le etichette no.
@@ -667,7 +667,8 @@ object AppLocale {
     val searchEmptyHint: String get() = if (isItalian) "Scrivi un nome o un numero (67/87)" else "Type a name or a number (67/87)"
 
     // ── Filtri dentro un'espansione ──
-    val setSearchPlaceholder: String get() = if (isItalian) "Cerca in italiano o inglese..." else "Search in Italian or English..."
+    // Generico: in un set italiano le carte inglesi non ci sono, e viceversa.
+    val setSearchPlaceholder: String get() = if (isItalian) "Cerca carta" else "Search card"
     fun setMissingCount(count: Int): String = if (isItalian) "Mancanti $count" else "Missing $count"
     fun setOwnedCount(count: Int): String = if (isItalian) "Possedute $count" else "Owned $count"
     val sortBy: String get() = if (isItalian) "Ordina per" else "Sort by"
