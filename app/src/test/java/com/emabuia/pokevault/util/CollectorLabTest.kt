@@ -127,6 +127,26 @@ class CollectorLabTest {
         assertTrue(page.all { it == null })
     }
 
+    @Test
+    fun `binder pages follow the chosen pocket layout`() {
+        val cards = (1..14).map { "c$it" }
+        assertEquals(2, CollectorLab.binderPageCount(24, perPage = 12))
+        assertEquals(5, CollectorLab.binderPageCount(18, perPage = 4))
+        val second = CollectorLab.binderPage(1, cards, perPage = 12)
+        assertEquals(12, second.size)
+        assertEquals("c13", second[0])
+        assertNull(second[2])
+        assertEquals(listOf("c5", "c6", "c7", "c8"), CollectorLab.binderPage(1, cards, perPage = 4))
+    }
+
+    @Test
+    fun `an album row without cards to find counts every slot as found`() {
+        val row = album("a", used = 5, size = 9)
+        assertEquals(5, row.found)
+        assertEquals(0, row.toFind)
+        assertEquals(3, row.copy(found = 2).toFind)
+    }
+
     // ── Album ─────────────────────────────────────────────────────────────
 
     @Test

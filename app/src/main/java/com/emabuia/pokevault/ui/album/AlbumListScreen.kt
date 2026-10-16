@@ -297,9 +297,11 @@ internal fun pickContinueSteps(
     illustrators: List<IllustratorRow>,
     limit: Int = 3
 ): List<NextStep> {
+    // Conta cio' che hai trovato, non le tasche occupate: un album riempito di
+    // carte "da trovare" non e' a un passo dal traguardo.
     val fromAlbums = albums
-        .filter { it.size > 0 && it.used > 0 && !it.isFull }
-        .map { NextStep(NextStepKind.ALBUM, it.id, it.name, it.used, it.size, it.fillPercent) }
+        .filter { it.size > 0 && it.found > 0 && it.found < it.size }
+        .map { NextStep(NextStepKind.ALBUM, it.id, it.name, it.found, it.size, CollectorLab.fillPercent(it.found, it.size)) }
     val fromChases = chases
         .filter { it.total > 0 && it.owned > 0 && !it.isComplete }
         .map { NextStep(NextStepKind.CHASE, it.id, it.name, it.owned, it.total, it.percent) }

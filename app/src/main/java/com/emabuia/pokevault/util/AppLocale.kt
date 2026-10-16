@@ -1607,6 +1607,9 @@ object AppLocale {
     val albumThemeElectric: String get() = if (isItalian) "Elettro" else "Electric"
     val albumThemeDark: String get() = if (isItalian) "Oscuro" else "Dark"
     val albumThemePsychic: String get() = if (isItalian) "Psico" else "Psychic"
+    val albumThemeMetal: String get() = if (isItalian) "Metallo" else "Metal"
+    val albumThemeFairy: String get() = if (isItalian) "Folletto" else "Fairy"
+    val albumThemeDragon: String get() = if (isItalian) "Drago" else "Dragon"
     val albumCardAdded: String get() = if (isItalian) "Carta aggiunta all'album" else "Card added to album"
     val albumCardRemoved: String get() = if (isItalian) "Carta rimossa dall'album" else "Card removed from album"
 
@@ -2897,6 +2900,58 @@ object AppLocale {
         if (count == 1) "1 card added to the album" else "$count cards added to the album"
     }
     val undo: String get() = if (isItalian) "Annulla" else "Undo"
+
+    // Album: carte dal catalogo e raccoglitore su misura
+    val albumTabCollection: String get() = if (isItalian) "Collezione" else "Collection"
+    val albumTabCatalog: String get() = if (isItalian) "Catalogo" else "Catalog"
+    val albumCatalogSearchHint: String get() = if (isItalian) "Cerca una carta per nome" else "Search a card by name"
+    val albumCatalogIntro: String get() = if (isItalian)
+        "Cerca qualsiasi carta. Se non ce l'hai entra come \"da trovare\" e si accende quando arriva in collezione."
+    else
+        "Search any card. If you don't own it, it goes in as \"to find\" and lights up once it's in your collection."
+    val albumCatalogNoResults: String get() = if (isItalian) "Nessuna carta trovata" else "No cards found"
+    val albumCatalogError: String get() = if (isItalian) "Ricerca non riuscita, riprova" else "Search failed, try again"
+    fun albumHiddenByRules(count: Int): String = if (isItalian) {
+        if (count == 1) "1 carta nascosta dalle regole dell'album" else "$count carte nascoste dalle regole dell'album"
+    } else {
+        if (count == 1) "1 card hidden by the album rules" else "$count cards hidden by the album rules"
+    }
+    val albumOwnedBadge: String get() = if (isItalian) "Ce l'hai" else "Owned"
+    val albumToFind: String get() = if (isItalian) "Da trovare" else "To find"
+    val albumAlreadyInside: String get() = if (isItalian) "Già nell'album" else "Already in album"
+    val albumIHaveIt: String get() = if (isItalian) "Ce l'ho: aggiungi alla collezione" else "I have it: add to collection"
+    val albumAddedToCollection: String get() = if (isItalian) "Aggiunta alla collezione" else "Added to your collection"
+    val albumAddToCollectionFailed: String get() = if (isItalian) "Non sono riuscito ad aggiungerla" else "Couldn't add it"
+    val albumFoundLabel: String get() = if (isItalian) "Trovate" else "Found"
+    val albumSearchCatalog: String get() = if (isItalian) "Cerca nel catalogo" else "Search the catalog"
+    val albumFromCollection: String get() = if (isItalian) "Dalla collezione" else "From collection"
+    val albumEmptyTitle: String get() = if (isItalian) "Un raccoglitore tutto da riempire" else "A binder waiting to be filled"
+    val albumEmptyHint: String get() = if (isItalian)
+        "Metti le tue carte nelle tasche, oppure cerca nel catalogo quelle che vuoi trovare."
+    else
+        "Put your cards in the pockets, or search the catalog for the ones you want to find."
+    fun albumFoundOf(found: Int, used: Int): String = if (isItalian) "$found di $used trovate" else "$found of $used found"
+    fun albumToFindCount(count: Int): String = if (isItalian) "$count da trovare" else "$count to find"
+    val albumPreviewUntitled: String get() = if (isItalian) "Il tuo album" else "Your album"
+    val albumLayoutTitle: String get() = if (isItalian) "Pagine del raccoglitore" else "Binder pages"
+    fun albumPocketsPerPage(count: Int): String = if (isItalian) "$count tasche" else "$count pockets"
+    val albumPagesTitle: String get() = if (isItalian) "Quante pagine" else "How many pages"
+    fun albumPagesSummary(pages: Int, pockets: Int): String = if (isItalian) {
+        (if (pages == 1) "1 pagina" else "$pages pagine") + " · $pockets tasche"
+    } else {
+        (if (pages == 1) "1 page" else "$pages pages") + " · $pockets pockets"
+    }
+    fun albumMinPagesHint(cards: Int): String = if (isItalian)
+        "Dentro ci sono già $cards carte: non si scende sotto."
+    else
+        "There are already $cards cards inside: it can't go lower."
+    val albumColorTitle: String get() = if (isItalian) "Colore" else "Color"
+    val albumRulesTitle: String get() = if (isItalian) "Regole (facoltative)" else "Rules (optional)"
+    val albumRulesHint: String get() = if (isItalian)
+        "Se le imposti, quando aggiungi carte ti proponiamo solo quelle che le rispettano. Puoi lasciarle vuote."
+    else
+        "If you set them, only cards that match are suggested when you add. You can leave them empty."
+    val albumRuleAny: String get() = if (isItalian) "Qualsiasi" else "Any"
 
     // Lista chase
     val chaseSortClosest: String get() = if (isItalian) "Quasi fatti" else "Almost there"

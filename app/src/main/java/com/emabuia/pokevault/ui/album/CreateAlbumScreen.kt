@@ -1,8 +1,14 @@
 package com.emabuia.pokevault.ui.album
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -18,16 +24,43 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.emabuia.pokevault.data.model.BinderLayout
+import com.emabuia.pokevault.data.model.CardClassifier
+import com.emabuia.pokevault.ui.components.pressScale
 import com.emabuia.pokevault.ui.theme.*
+import com.emabuia.pokevault.util.AlbumEntries
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.viewmodel.AlbumViewModel
 
+/** I colori fra cui scegliere, nell'ordine in cui si vedono. */
+internal val ALBUM_THEMES = listOf(
+    "classic", "fire", "water", "grass", "electric", "psychic", "dark", "metal", "fairy", "dragon"
+)
+
+/** Pagine proposte a un tocco: il resto si regola col - e il +. */
+private val QUICK_PAGES = listOf(1, 2, 4, 8, 12, 20)
+
+/**
+ * Crea o modifica un album.
+ *
+ * Prima era un modulo di tendine: tipo, espansione e categoria in cima, una
+ * grandezza in numeri astratti (9, 18, 36...) e nessuna idea di come sarebbe
+ * venuto. Chi lo apriva pensava che le tendine fossero obbligatorie e non
+ * capiva a cosa servissero.
+ *
+ * Ora si costruisce il raccoglitore: in cima l'anteprima che cambia mentre si
+ * sceglie, poi il tipo di pagina (4, 9 o 12 tasche, come in negozio), quante
+ * pagine e il colore. Le regole restano, chiuse e spiegate, per chi le vuole.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateAlbumScreen(
@@ -35,31 +68,36 @@ fun CreateAlbumScreen(
     editAlbumId: String? = null,
     viewModel: AlbumViewModel = viewModel()
 ) {
-    // Se siamo in modifica, carica i dati dell'album
-    LaunchedEffect(editAlbumId) {
-        if (editAlbumId != null) {
-            val album = viewModel.getAlbumById(editAlbumId)
-            if (album != null) {
-                viewModel.loadAlbumForEdit(album)
-            }
-        } else {
+    // In modifica l'album puo' arrivare dopo il primo frame (Firestore): si
+    // carica appena c'e', una volta sola, senza ricoprire quello che l'utente
+    // sta gia' cambiando.
+    var loadedForEdit by remember(editAlbumId) { mutableStateOf(false) }
+    val editingAlbum = editAlbumId?.let { viewModel.getAlbumById(it) }
+    LaunchedEffect(editAlbumId, editingAlbum != null) {
+        if (editAlbumId == null) {
             viewModel.resetForm()
+        } else if (editingAlbum != null && !loadedForEdit) {
+            viewModel.loadAlbumForEdit(editingAlbum)
+            loadedForEdit = true
         }
     }
 
     val isEditing = editAlbumId != null
-    val scrollState = rememberScrollState()
+    val layout = viewModel.albumLayout
+    val minCards = viewModel.editingCardCount
+    val pages = AlbumEntries.pagesFor(viewModel.albumSize, layout.perPage)
+    val minPages = AlbumEntries.pagesFor(minCards.coerceAtLeast(1), layout.perPage)
+    val maxPages = (AlbumEntries.MAX_SIZE / layout.perPage).coerceAtLeast(minPages)
+    val themeColors = getThemeColors(viewModel.albumTheme)
+    val accent = themeColors.first()
+    val rulesCount = listOf(viewModel.albumPokemonType, viewModel.albumExpansion, viewModel.albumSupertype)
+        .count { it.isNotBlank() }
+    var rulesOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(loadedForEdit) { if (loadedForEdit && rulesCount > 0) rulesOpen = true }
 
-    val pokemonTypes = listOf("") + AppLocale.getTypes()
-    val expansions = listOf("") + viewModel.getAvailableExpansions()
-    val categories = listOf("", "Pokémon", "Trainer", "Energy")
-    val sizes = listOf(9, 18, 36, 72, 120)
-    val themes = listOf("classic", "fire", "water", "grass", "electric", "dark", "psychic")
-    val isCustomSizeSelected = viewModel.albumSize !in sizes
-
-    var showTypeDropdown by remember { mutableStateOf(false) }
-    var showExpansionDropdown by remember { mutableStateOf(false) }
-    var showCategoryDropdown by remember { mutableStateOf(false) }
+    fun setPages(newPages: Int) {
+        viewModel.albumSize = AlbumEntries.sizeFor(newPages.coerceIn(minPages, maxPages), layout.perPage, minCards)
+    }
 
     Scaffold(
         containerColor = AppColors.background,
@@ -81,372 +119,643 @@ fun CreateAlbumScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppColors.background
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
+        },
+        bottomBar = {
+            // Il salva resta sempre sotto il pollice: prima stava in fondo al
+            // modulo e con la tastiera aperta non si vedeva.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(AppColors.background)
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                Button(
+                    onClick = { viewModel.saveAlbum(onSuccess = onBack) },
+                    enabled = viewModel.albumName.isNotBlank() && !viewModel.isSaving,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = accent,
+                        disabledContainerColor = accent.copy(alpha = 0.35f)
+                    )
+                ) {
+                    if (viewModel.isSaving) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            if (isEditing) Icons.Default.Check else Icons.Default.AutoStories,
+                            contentDescription = null,
+                            tint = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (isEditing) AppLocale.save else AppLocale.createAlbum,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                }
+            }
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(scrollState)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
-            // Nome Album
-            OutlinedTextField(
+            AlbumPreviewCard(
+                name = viewModel.albumName,
+                description = viewModel.albumDescription,
+                colors = themeColors,
+                layout = layout,
+                pages = pages,
+                pockets = viewModel.albumSize
+            )
+
+            AlbumTextField(
                 value = viewModel.albumName,
-                onValueChange = { viewModel.albumName = it },
-                label = { Text(AppLocale.albumName) },
-                placeholder = { Text(AppLocale.albumNamePlaceholder) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = AppColors.orange,
-                    unfocusedBorderColor = AppColors.textMuted,
-                    cursorColor = AppColors.orange,
-                    focusedLabelColor = AppColors.orange,
-                    unfocusedLabelColor = AppColors.textMuted,
-                    focusedTextColor = AppColors.textPrimary,
-                    unfocusedTextColor = AppColors.textPrimary,
-                    focusedPlaceholderColor = AppColors.textMuted,
-                    unfocusedPlaceholderColor = AppColors.textMuted
-                ),
-                shape = RoundedCornerShape(12.dp)
+                onValueChange = { viewModel.albumName = it.take(60) },
+                label = AppLocale.albumName,
+                placeholder = AppLocale.albumNamePlaceholder,
+                accent = accent,
+                singleLine = true
             )
-
-            // Descrizione
-            OutlinedTextField(
+            AlbumTextField(
                 value = viewModel.albumDescription,
-                onValueChange = { viewModel.albumDescription = it },
-                label = { Text(AppLocale.albumDescription) },
-                maxLines = 3,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = AppColors.orange,
-                    unfocusedBorderColor = AppColors.textMuted,
-                    cursorColor = AppColors.orange,
-                    focusedLabelColor = AppColors.orange,
-                    unfocusedLabelColor = AppColors.textMuted,
-                    focusedTextColor = AppColors.textPrimary,
-                    unfocusedTextColor = AppColors.textPrimary,
-                    focusedPlaceholderColor = AppColors.textMuted,
-                    unfocusedPlaceholderColor = AppColors.textMuted
-                ),
-                shape = RoundedCornerShape(12.dp)
+                onValueChange = { viewModel.albumDescription = it.take(200) },
+                label = AppLocale.albumDescription,
+                accent = accent,
+                singleLine = false
             )
 
-            // Tipo Pokémon Dropdown
-            SectionLabel(AppLocale.albumPokemonType)
-            ExposedDropdownMenuBox(
-                expanded = showTypeDropdown,
-                onExpandedChange = { showTypeDropdown = it }
-            ) {
-                OutlinedTextField(
-                    value = if (viewModel.albumPokemonType.isBlank()) AppLocale.albumAllTypes
-                    else AppLocale.translateType(viewModel.albumPokemonType),
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showTypeDropdown) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AppColors.orange,
-                        unfocusedBorderColor = AppColors.textMuted,
-                        focusedTextColor = AppColors.textPrimary,
-                        unfocusedTextColor = AppColors.textPrimary,
-                        focusedTrailingIconColor = AppColors.orange,
-                        unfocusedTrailingIconColor = AppColors.textMuted
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                ExposedDropdownMenu(
-                    expanded = showTypeDropdown,
-                    onDismissRequest = { showTypeDropdown = false },
-                    containerColor = AppColors.surface
-                ) {
-                    pokemonTypes.forEach { type ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (type.isBlank()) AppLocale.albumAllTypes else type,
-                                    color = AppColors.textPrimary
-                                )
-                            },
+            // ── Pagine ────────────────────────────────────────────────────
+            FormSection(title = AppLocale.albumLayoutTitle) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    BinderLayout.entries.forEach { option ->
+                        LayoutOption(
+                            layout = option,
+                            selected = option == layout,
+                            accent = accent,
                             onClick = {
-                                viewModel.albumPokemonType = type
-                                showTypeDropdown = false
-                            }
+                                if (option != layout) {
+                                    // Si tengono le pagine, cambia quante tasche hanno.
+                                    val keepPages = pages
+                                    viewModel.albumLayout = option
+                                    viewModel.albumSize = AlbumEntries.sizeFor(
+                                        keepPages.coerceAtMost(AlbumEntries.MAX_SIZE / option.perPage),
+                                        option.perPage,
+                                        minCards
+                                    )
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
             }
 
-            // Espansione Dropdown
-            SectionLabel(AppLocale.albumExpansion)
-            ExposedDropdownMenuBox(
-                expanded = showExpansionDropdown,
-                onExpandedChange = { showExpansionDropdown = it }
-            ) {
-                OutlinedTextField(
-                    value = if (viewModel.albumExpansion.isBlank()) AppLocale.albumAllExpansions
-                    else viewModel.albumExpansion,
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showExpansionDropdown) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AppColors.orange,
-                        unfocusedBorderColor = AppColors.textMuted,
-                        focusedTextColor = AppColors.textPrimary,
-                        unfocusedTextColor = AppColors.textPrimary,
-                        focusedTrailingIconColor = AppColors.orange,
-                        unfocusedTrailingIconColor = AppColors.textMuted
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                ExposedDropdownMenu(
-                    expanded = showExpansionDropdown,
-                    onDismissRequest = { showExpansionDropdown = false },
-                    containerColor = AppColors.surface
-                ) {
-                    expansions.forEach { exp ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (exp.isBlank()) AppLocale.albumAllExpansions else exp,
-                                    color = AppColors.textPrimary
-                                )
-                            },
-                            onClick = {
-                                viewModel.albumExpansion = exp
-                                showExpansionDropdown = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            // Categoria Dropdown
-            SectionLabel(AppLocale.albumCategory)
-            ExposedDropdownMenuBox(
-                expanded = showCategoryDropdown,
-                onExpandedChange = { showCategoryDropdown = it }
-            ) {
-                OutlinedTextField(
-                    value = if (viewModel.albumSupertype.isBlank()) AppLocale.albumAllCategories
-                    else viewModel.albumSupertype,
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showCategoryDropdown) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AppColors.orange,
-                        unfocusedBorderColor = AppColors.textMuted,
-                        focusedTextColor = AppColors.textPrimary,
-                        unfocusedTextColor = AppColors.textPrimary,
-                        focusedTrailingIconColor = AppColors.orange,
-                        unfocusedTrailingIconColor = AppColors.textMuted
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                ExposedDropdownMenu(
-                    expanded = showCategoryDropdown,
-                    onDismissRequest = { showCategoryDropdown = false },
-                    containerColor = AppColors.surface
-                ) {
-                    categories.forEach { cat ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (cat.isBlank()) AppLocale.albumAllCategories else cat,
-                                    color = AppColors.textPrimary
-                                )
-                            },
-                            onClick = {
-                                viewModel.albumSupertype = cat
-                                showCategoryDropdown = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            // Grandezza Album
-            SectionLabel(AppLocale.albumSize)
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(sizes) { size ->
-                    val isSelected = viewModel.albumSize == size
-                    Box(
-                        modifier = Modifier
-                            .height(40.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) AppColors.orange else AppColors.card)
-                            .border(
-                                width = if (isSelected) 0.dp else 1.dp,
-                                color = if (isSelected) Color.Transparent else AppColors.textMuted,
-                                shape = RoundedCornerShape(10.dp)
+            FormSection(title = AppLocale.albumPagesTitle) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PageStepper(
+                        pages = pages,
+                        canDecrease = pages > minPages,
+                        canIncrease = pages < maxPages,
+                        accent = accent,
+                        summary = AppLocale.albumPagesSummary(pages, viewModel.albumSize),
+                        onChange = ::setPages
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(QUICK_PAGES.filter { it in minPages..maxPages }) { quick ->
+                            ChoiceChip(
+                                label = "$quick",
+                                selected = quick == pages,
+                                accent = accent,
+                                onClick = { setPages(quick) }
                             )
-                            .clickable { viewModel.albumSize = size }
-                            .padding(horizontal = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "$size",
-                            color = if (isSelected) Color.White else AppColors.textSecondary,
-                            fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                        )
-                    }
-                }
-
-                item {
-                    val customSelected = isCustomSizeSelected
-                    Box(
-                        modifier = Modifier
-                            .height(40.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (customSelected) AppColors.orange else AppColors.card)
-                            .border(
-                                width = if (customSelected) 0.dp else 1.dp,
-                                color = if (customSelected) Color.Transparent else AppColors.textMuted,
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                            .clickable {
-                                if (!customSelected) viewModel.albumSize = 150
-                            }
-                            .padding(horizontal = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = AppLocale.albumSizeCustom,
-                            color = if (customSelected) Color.White else AppColors.textSecondary,
-                            fontSize = 14.sp,
-                            fontWeight = if (customSelected) FontWeight.Bold else FontWeight.Normal
-                        )
-                    }
-                }
-            }
-
-            if (isCustomSizeSelected) {
-                OutlinedTextField(
-                    value = viewModel.albumSize.toString(),
-                    onValueChange = { raw ->
-                        val parsed = raw.filter { it.isDigit() }.toIntOrNull()
-                        if (parsed != null) {
-                            viewModel.albumSize = parsed.coerceIn(1, 999)
                         }
-                    },
-                    label = { Text(AppLocale.albumCustomSizeLabel) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AppColors.orange,
-                        unfocusedBorderColor = AppColors.textMuted,
-                        cursorColor = AppColors.orange,
-                        focusedLabelColor = AppColors.orange,
-                        unfocusedLabelColor = AppColors.textMuted,
-                        focusedTextColor = AppColors.textPrimary,
-                        unfocusedTextColor = AppColors.textPrimary
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-            }
-
-            // Tematica
-            SectionLabel(AppLocale.albumTheme)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                themes.forEach { theme ->
-                    val isSelected = viewModel.albumTheme == theme
-                    val colors = getThemeColors(theme)
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(brush = Brush.linearGradient(colors))
-                            .then(
-                                if (isSelected) Modifier.border(
-                                    2.dp,
-                                    Color.White,
-                                    CircleShape
-                                ) else Modifier
-                            )
-                            .clickable { viewModel.albumTheme = theme }
-                    )
+                    }
+                    if (minCards > 0 && pages == minPages) {
+                        Text(AppLocale.albumMinPagesHint(minCards), color = AppColors.textMuted, fontSize = 12.sp)
+                    }
                 }
             }
 
-            // Theme name label
-            Text(
-                text = getThemeLabel(viewModel.albumTheme),
-                color = AppColors.textMuted,
-                fontSize = 12.sp
+            // ── Colore ────────────────────────────────────────────────────
+            FormSection(title = AppLocale.albumColorTitle, trailing = getThemeLabel(viewModel.albumTheme)) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(vertical = 2.dp)
+                ) {
+                    items(ALBUM_THEMES) { theme ->
+                        ThemeSwatch(
+                            colors = getThemeColors(theme),
+                            selected = viewModel.albumTheme == theme,
+                            label = getThemeLabel(theme),
+                            onClick = { viewModel.albumTheme = theme }
+                        )
+                    }
+                }
+            }
+
+            // ── Regole ────────────────────────────────────────────────────
+            RulesSection(
+                open = rulesOpen,
+                activeCount = rulesCount,
+                accent = accent,
+                onToggle = { rulesOpen = !rulesOpen },
+                viewModel = viewModel
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
 
-            // Save button
-            Button(
-                onClick = { viewModel.saveAlbum(onSuccess = onBack) },
-                enabled = viewModel.albumName.isNotBlank() && !viewModel.isSaving,
+// ── Anteprima ─────────────────────────────────────────────────────────────────
+
+/**
+ * Il raccoglitore come verra': copertina col colore scelto e la pagina con
+ * le sue tasche. Cambia mentre si sceglie, cosi' "9 o 12 tasche" smette di
+ * essere un numero e diventa una forma.
+ */
+@Composable
+private fun AlbumPreviewCard(
+    name: String,
+    description: String,
+    colors: List<Color>,
+    layout: BinderLayout,
+    pages: Int,
+    pockets: Int
+) {
+    val accent = colors.first()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.22f), AppColors.surface)))
+            .border(1.dp, accent.copy(alpha = 0.30f), RoundedCornerShape(22.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // La copertina con la pagina aperta accanto
+        Box(modifier = Modifier.width(118.dp).height(112.dp)) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AppColors.orange,
-                    disabledContainerColor = AppColors.orange.copy(alpha = 0.4f)
-                )
+                    .align(Alignment.CenterStart)
+                    .width(66.dp)
+                    .height(92.dp)
+                    .clip(RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 12.dp, bottomEnd = 12.dp))
+                    .background(Brush.linearGradient(colors))
             ) {
-                if (viewModel.isSaving) {
-                    CircularProgressIndicator(
-                        color = Color.White,
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(Icons.Default.Save, contentDescription = null, tint = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = AppLocale.save,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
+                Box(
+                    modifier = Modifier
+                        .padding(start = 7.dp)
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .background(Color.White.copy(alpha = 0.25f))
+                )
+                Icon(
+                    Icons.Default.AutoStories,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier.align(Alignment.Center).size(26.dp)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .rotate(4f)
+                    .width(70.dp)
+                    .height(96.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(AppColors.background)
+                    .border(1.dp, AppColors.textMuted.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                    .padding(5.dp)
+            ) {
+                PocketGrid(layout = layout, accent = accent, gap = 3.dp, filled = minOf(pockets, layout.perPage) / 2)
+            }
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                name.ifBlank { AppLocale.albumPreviewUntitled },
+                color = if (name.isBlank()) AppColors.textMuted else AppColors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (description.isNotBlank()) {
+                Text(
+                    description,
+                    color = AppColors.textSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.16f))
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    AppLocale.albumPagesSummary(pages, pockets),
+                    color = accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+/** Le tasche di una pagina; le prime [filled] colorate, come carte gia' infilate. */
+@Composable
+private fun PocketGrid(layout: BinderLayout, accent: Color, gap: Dp, filled: Int = 0) {
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
+        repeat(layout.rows) { row ->
+            Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                repeat(layout.columns) { col ->
+                    val index = row * layout.columns + col
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(
+                                if (index < filled) accent.copy(alpha = 0.55f)
+                                else AppColors.textMuted.copy(alpha = 0.18f)
+                            )
                     )
                 }
             }
+        }
+    }
+}
 
-            Spacer(modifier = Modifier.height(20.dp))
+// ── Mattoni del modulo ────────────────────────────────────────────────────────
+
+@Composable
+private fun FormSection(title: String, trailing: String? = null, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                color = AppColors.textSecondary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            if (trailing != null) {
+                Text(trailing, color = AppColors.textMuted, fontSize = 12.sp)
+            }
+        }
+        content()
+    }
+}
+
+@Composable
+private fun AlbumTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    accent: Color,
+    singleLine: Boolean,
+    placeholder: String? = null
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
+        singleLine = singleLine,
+        maxLines = if (singleLine) 1 else 3,
+        modifier = Modifier.fillMaxWidth(),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = accent,
+            unfocusedBorderColor = AppColors.textMuted.copy(alpha = 0.45f),
+            cursorColor = accent,
+            focusedLabelColor = accent,
+            unfocusedLabelColor = AppColors.textMuted,
+            focusedTextColor = AppColors.textPrimary,
+            unfocusedTextColor = AppColors.textPrimary,
+            focusedPlaceholderColor = AppColors.textMuted,
+            unfocusedPlaceholderColor = AppColors.textMuted,
+            focusedContainerColor = AppColors.card,
+            unfocusedContainerColor = AppColors.card
+        ),
+        shape = RoundedCornerShape(14.dp)
+    )
+}
+
+@Composable
+private fun LayoutOption(
+    layout: BinderLayout,
+    selected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val border by animateColorAsState(
+        if (selected) accent else AppColors.textMuted.copy(alpha = 0.25f),
+        label = "layoutBorder"
+    )
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) accent.copy(alpha = 0.10f) else AppColors.card)
+            .border(if (selected) 2.dp else 1.dp, border, RoundedCornerShape(16.dp))
+            .pressScale(onClick = onClick)
+            .padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(modifier = Modifier.width(44.dp).height(52.dp)) {
+            PocketGrid(layout = layout, accent = accent, gap = 2.dp, filled = if (selected) layout.perPage else 0)
+        }
+        Text(
+            AppLocale.albumPocketsPerPage(layout.perPage),
+            color = if (selected) accent else AppColors.textSecondary,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+private fun PageStepper(
+    pages: Int,
+    canDecrease: Boolean,
+    canIncrease: Boolean,
+    accent: Color,
+    summary: String,
+    onChange: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.card)
+            .border(1.dp, AppColors.textMuted.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        StepButton(icon = Icons.Default.Remove, enabled = canDecrease, accent = accent, onClick = { onChange(pages - 1) })
+        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("$pages", color = AppColors.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(summary, color = AppColors.textMuted, fontSize = 12.sp)
+        }
+        StepButton(icon = Icons.Default.Add, enabled = canIncrease, accent = accent, onClick = { onChange(pages + 1) })
+    }
+}
+
+@Composable
+private fun StepButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean,
+    accent: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(if (enabled) accent.copy(alpha = 0.15f) else AppColors.background)
+            .pressScale(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = if (enabled) accent else AppColors.textMuted.copy(alpha = 0.5f))
+    }
+}
+
+@Composable
+private fun ChoiceChip(label: String, selected: Boolean, accent: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) accent else AppColors.card)
+            .border(1.dp, if (selected) accent else AppColors.textMuted.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+            .pressScale(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label,
+            color = if (selected) Color.White else AppColors.textSecondary,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun ThemeSwatch(colors: List<Color>, selected: Boolean, label: String, onClick: () -> Unit) {
+    val scale by animateFloatAsState(if (selected) 1f else 0.86f, label = "swatch")
+    Box(
+        modifier = Modifier
+            .size(46.dp)
+            .clip(CircleShape)
+            .border(2.dp, if (selected) colors.first() else Color.Transparent, CircleShape)
+            .padding(4.dp)
+            .pressScale(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize(scale)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(colors)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Icon(Icons.Default.Check, contentDescription = label, tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+// ── Regole ────────────────────────────────────────────────────────────────────
+
+/**
+ * Le regole dell'album, chiuse finche' non servono.
+ *
+ * Erano le prime tre tendine del modulo, e sembravano obbligatorie. Ora si
+ * aprono a richiesta, dicono a cosa servono, e si scelgono a chip invece che
+ * da un menu.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun RulesSection(
+    open: Boolean,
+    activeCount: Int,
+    accent: Color,
+    onToggle: () -> Unit,
+    viewModel: AlbumViewModel
+) {
+    val arrow by animateFloatAsState(if (open) 180f else 0f, label = "rulesArrow")
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(AppColors.card)
+            .border(1.dp, AppColors.textMuted.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .pressScale(scaleDown = 0.99f, onClick = onToggle)
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Tune, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                AppLocale.albumRulesTitle,
+                color = AppColors.textPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            if (activeCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(accent)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text("$activeCount", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Icon(
+                Icons.Default.ExpandMore,
+                contentDescription = null,
+                tint = AppColors.textMuted,
+                modifier = Modifier.rotate(arrow)
+            )
+        }
+
+        AnimatedVisibility(
+            visible = open,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(AppLocale.albumRulesHint, color = AppColors.textMuted, fontSize = 12.sp)
+
+                RuleLabel(AppLocale.albumPokemonType)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ChoiceChip(AppLocale.albumRuleAny, viewModel.albumPokemonType.isBlank(), accent) {
+                        viewModel.albumPokemonType = ""
+                    }
+                    AppLocale.getTypes().forEach { type ->
+                        val selected = AppLocale.typeToEnglish(viewModel.albumPokemonType)
+                            .equals(AppLocale.typeToEnglish(type), ignoreCase = true) && viewModel.albumPokemonType.isNotBlank()
+                        ChoiceChip(type, selected, accent) {
+                            viewModel.albumPokemonType = type
+                        }
+                    }
+                }
+
+                RuleLabel(AppLocale.albumCategory)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ChoiceChip(AppLocale.albumRuleAny, viewModel.albumSupertype.isBlank(), accent) {
+                        viewModel.albumSupertype = ""
+                    }
+                    listOf(
+                        CardClassifier.POKEMON to AppLocale.categoryPokemon,
+                        CardClassifier.TRAINER to AppLocale.categoryTrainer,
+                        CardClassifier.ENERGY to AppLocale.categoryEnergy
+                    ).forEach { (value, label) ->
+                        ChoiceChip(label, viewModel.albumSupertype.equals(value, ignoreCase = true), accent) {
+                            viewModel.albumSupertype = value
+                        }
+                    }
+                }
+
+                RuleLabel(AppLocale.albumExpansion)
+                ExpansionPicker(viewModel = viewModel, accent = accent)
+            }
         }
     }
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        color = AppColors.textSecondary,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.SemiBold
-    )
+private fun RuleLabel(text: String) {
+    Text(text, color = AppColors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
 }
 
-private fun getThemeLabel(theme: String): String {
+/** Le espansioni sono decine: per loro resta il menu, ma dentro le regole. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExpansionPicker(viewModel: AlbumViewModel, accent: Color) {
+    var expanded by remember { mutableStateOf(false) }
+    val expansions = remember(viewModel.ownedCards) { listOf("") + viewModel.getAvailableExpansions() }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = viewModel.albumExpansion.ifBlank { AppLocale.albumAllExpansions },
+            onValueChange = {},
+            readOnly = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = accent,
+                unfocusedBorderColor = AppColors.textMuted.copy(alpha = 0.4f),
+                focusedTextColor = AppColors.textPrimary,
+                unfocusedTextColor = AppColors.textPrimary,
+                focusedTrailingIconColor = accent,
+                unfocusedTrailingIconColor = AppColors.textMuted,
+                focusedContainerColor = AppColors.background,
+                unfocusedContainerColor = AppColors.background
+            ),
+            shape = RoundedCornerShape(12.dp)
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = AppColors.surface
+        ) {
+            expansions.forEach { exp ->
+                DropdownMenuItem(
+                    text = { Text(exp.ifBlank { AppLocale.albumAllExpansions }, color = AppColors.textPrimary) },
+                    onClick = {
+                        viewModel.albumExpansion = exp
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+internal fun getThemeLabel(theme: String): String {
     return when (theme) {
         "fire" -> AppLocale.albumThemeFire
         "water" -> AppLocale.albumThemeWater
@@ -454,6 +763,9 @@ private fun getThemeLabel(theme: String): String {
         "electric" -> AppLocale.albumThemeElectric
         "dark" -> AppLocale.albumThemeDark
         "psychic" -> AppLocale.albumThemePsychic
+        "metal" -> AppLocale.albumThemeMetal
+        "fairy" -> AppLocale.albumThemeFairy
+        "dragon" -> AppLocale.albumThemeDragon
         else -> AppLocale.albumThemeClassic
     }
 }

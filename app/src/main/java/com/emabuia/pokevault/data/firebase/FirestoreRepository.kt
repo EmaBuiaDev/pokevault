@@ -1,6 +1,8 @@
 package com.emabuia.pokevault.data.firebase
 
 import com.emabuia.pokevault.data.model.Album
+import com.emabuia.pokevault.data.model.AlbumCatalogCard
+import com.emabuia.pokevault.data.model.toFirestoreMap
 import com.emabuia.pokevault.data.model.Deck
 import com.emabuia.pokevault.data.model.GoalAlbum
 import com.emabuia.pokevault.data.model.GoalCriteriaType
@@ -1053,6 +1055,8 @@ class FirestoreRepository {
                 "theme" to album.theme,
                 "cardIds" to album.cardIds,
                 "coverImageUrl" to album.coverImageUrl,
+                "layout" to album.layout,
+                "catalogCards" to album.catalogCards.map { it.toFirestoreMap() },
                 "createdAt" to (album.createdAt ?: com.google.firebase.Timestamp.now())
             )
             val docRef = if (album.id.isEmpty()) albumsCollection.document() else albumsCollection.document(album.id)
@@ -1108,6 +1112,49 @@ class FirestoreRepository {
         return try {
             albumsCollection.document(albumId)
                 .update("cardIds", cardIds)
+                .localFirst("update")
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Aggiunge tasche in fondo, insieme alle carte del catalogo che servono a
+     * mostrarle: una scrittura sola, cosi' una voce "cat:" non arriva mai
+     * senza la sua carta.
+     */
+    suspend fun addAlbumEntries(
+        albumId: String,
+        entries: List<String>,
+        catalogCards: List<AlbumCatalogCard>
+    ): Result<Unit> {
+        if (entries.isEmpty()) return Result.success(Unit)
+        return try {
+            val doc = albumsCollection.document(albumId)
+            val task = if (catalogCards.isEmpty()) {
+                doc.update("cardIds", FieldValue.arrayUnion(*entries.toTypedArray()))
+            } else {
+                doc.update(
+                    "cardIds", FieldValue.arrayUnion(*entries.toTypedArray()),
+                    "catalogCards", FieldValue.arrayUnion(*catalogCards.map { it.toFirestoreMap() }.toTypedArray())
+                )
+            }
+            task.localFirst("update")
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /** Riscrive tasche e carte del catalogo insieme: rimozione, annulla, riordino. */
+    suspend fun setAlbumContent(
+        albumId: String,
+        cardIds: List<String>,
+        catalogCards: List<AlbumCatalogCard>
+    ): Result<Unit> {
+        return try {
+            albumsCollection.document(albumId)
+                .update(
+                    "cardIds", cardIds,
+                    "catalogCards", catalogCards.map { it.toFirestoreMap() }
+                )
                 .localFirst("update")
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }

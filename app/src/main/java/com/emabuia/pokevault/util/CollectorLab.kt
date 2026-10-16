@@ -29,10 +29,17 @@ data class AlbumRow(
     val used: Int,
     val size: Int,
     val value: Double,
-    val createdAtSeconds: Long
+    val createdAtSeconds: Long,
+    /**
+     * Le tasche con una carta che possiedi. [used] conta anche le carte del
+     * catalogo "da trovare"; per un album di sole carte della collezione i
+     * due numeri coincidono.
+     */
+    val found: Int = used
 ) {
     val fillPercent: Float get() = CollectorLab.fillPercent(used, size)
     val isFull: Boolean get() = size > 0 && used >= size
+    val toFind: Int get() = (used - found).coerceAtLeast(0)
 }
 
 /** Una riga della lista chase, con l'avanzamento gia' calcolato. */

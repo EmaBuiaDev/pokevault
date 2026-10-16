@@ -319,6 +319,15 @@ private fun AlbumRowCard(
                         color = AppColors.textMuted,
                         fontSize = 12.sp
                     )
+                    if (row.toFind > 0) {
+                        Text(
+                            text = AppLocale.albumToFindCount(row.toFind),
+                            color = AppColors.gold,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                    }
                     if (row.value > 0.0) {
                         Text(
                             text = formatEurCompact(row.value),
