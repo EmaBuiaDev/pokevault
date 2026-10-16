@@ -10,6 +10,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Euro
+import androidx.compose.material.icons.filled.Leaderboard
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.ThumbsUpDown
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -127,4 +131,8 @@ private fun iconFor(icon: WhatsNew.Icon): Pair<ImageVector, Color> = when (icon)
     WhatsNew.Icon.LANGUAGE -> Icons.Filled.Translate to AppColors.blue
     WhatsNew.Icon.SCANNER -> Icons.Filled.DocumentScanner to AppColors.green
     WhatsNew.Icon.PRICE -> Icons.Filled.Euro to AppColors.gold
+    WhatsNew.Icon.ALBUM -> Icons.Filled.PhotoLibrary to AppColors.orange
+    WhatsNew.Icon.HAND -> Icons.Filled.Style to AppColors.green
+    WhatsNew.Icon.RATING -> Icons.Filled.ThumbsUpDown to AppColors.blue
+    WhatsNew.Icon.META -> Icons.Filled.Leaderboard to AppColors.purple
 }

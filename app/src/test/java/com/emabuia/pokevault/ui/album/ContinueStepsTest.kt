@@ -57,4 +57,25 @@ class ContinueStepsTest {
         )
         assertEquals(3, steps.size)
     }
+
+    @Test
+    fun `un album di carte da trovare conta quelle trovate, non le tasche occupate`() {
+        val pieno = AlbumRow(
+            id = "da-trovare", name = "da-trovare", description = "", theme = "", pokemonType = "", coverUrl = "",
+            previewUrls = emptyList(), used = 9, size = 9, value = 0.0, createdAtSeconds = 0L, found = 7
+        )
+        val step = pickContinueSteps(listOf(pieno), emptyList(), emptyList()).single()
+        assertEquals(7, step.owned)
+        assertEquals(9, step.total)
+        assertEquals(2, step.missing)
+    }
+
+    @Test
+    fun `un album di sole carte da trovare non e' ancora iniziato`() {
+        val niente = AlbumRow(
+            id = "niente", name = "niente", description = "", theme = "", pokemonType = "", coverUrl = "",
+            previewUrls = emptyList(), used = 5, size = 9, value = 0.0, createdAtSeconds = 0L, found = 0
+        )
+        assertTrue(pickContinueSteps(listOf(niente), emptyList(), emptyList()).isEmpty())
+    }
 }

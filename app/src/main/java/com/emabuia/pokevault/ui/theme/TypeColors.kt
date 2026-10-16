@@ -74,6 +74,9 @@ object TypeColors {
         "electric" -> listOf(of("lightning"), Color(0xFFFBBF24))
         "dark" -> listOf(Color(0xFF6B21A8), Color(0xFF4C1D95))
         "psychic" -> listOf(Color(0xFFD946EF), of("psychic"))
+        "metal" -> listOf(of("metal"), Color(0xFF94A3B8))
+        "fairy" -> listOf(of("fairy"), Color(0xFFF9A8D4))
+        "dragon" -> listOf(of("dragon"), Color(0xFFF59E0B))
         else -> listOf(AppColors.orange, AppColors.orange.copy(alpha = 0.7f))
     }
 }

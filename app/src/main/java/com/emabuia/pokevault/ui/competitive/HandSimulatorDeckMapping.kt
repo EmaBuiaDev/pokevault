@@ -214,7 +214,11 @@ internal fun translateProblemTag(tag: String): String {
 
 internal fun Double.roundPercent(): Int = roundToInt()
 
-internal fun Double.roundTo2Decimals(): String {
-    val rounded = (this * 100.0).roundToInt() / 100.0
-    return rounded.toString()
+/** Due decimali al massimo, con la virgola in italiano: "2,13", "0,3", "1". */
+internal fun Double.roundTo2Decimals(italian: Boolean = AppLocale.isItalian): String {
+    val format = java.text.DecimalFormat(
+        "0.##",
+        java.text.DecimalFormatSymbols(if (italian) java.util.Locale.ITALIAN else java.util.Locale.ENGLISH)
+    )
+    return format.format(this)
 }

@@ -32,22 +32,72 @@ data class PracticeHand(
     /** 0 = apertura, 1 = dopo la pescata del T1, e cosi' via. */
     val turn: Int get() = draws.size
 
-    val canDraw: Boolean get() = library.isNotEmpty()
+    /**
+     * Le 7 carte non hanno Pokemon Base: per regolamento si rivelano e si
+     * rimescolano. Non e' una scelta, e finche' non si fa non si pesca.
+     */
+    val needsMulligan: Boolean get() = opening.none { it.isBasic }
+
+    val canDraw: Boolean get() = library.isNotEmpty() && !needsMulligan
+
+    /**
+     * Il giudizio sulle sole 7 carte iniziali, qualunque cosa sia stata pescata
+     * dopo: e' la mano che si salva e si vota.
+     */
+    fun openingEvaluation(keyCardNames: Collection<String> = emptyList()): HandEvaluation =
+        HandEvaluator.evaluate(opening, keyCardNames, turnOrder, prizes)
 }
 
-/** Quanto e' andata la sessione di prova, per la riga di riepilogo. */
+/**
+ * Com'e' andata la sessione di prova.
+ *
+ * Fino alla 3.1.8 contava le mani "tenute" e quelle "rimescolate" per scelta:
+ * ma il regolamento non permette di rimescolare una mano che ha un Pokemon
+ * Base, quindi quel numero non corrispondeva a niente del gioco. Ora conta le
+ * partite iniziate, i mulligan obbligati e come partivano le mani.
+ */
 data class PracticeTally(
-    val dealt: Int = 0,
-    val kept: Int = 0,
-    val mulliganed: Int = 0
+    /** Mani valide viste, cioe' partite iniziate. */
+    val games: Int = 0,
+    /** Mulligan obbligati, in tutto. */
+    val mulligans: Int = 0,
+    /** Partite iniziate con una mano ottima o giocabile. */
+    val goodStarts: Int = 0,
+    /**
+     * Le mani valutate dall'utente, per id della mano salvata: vero se il voto
+     * concorda con l'app sulla domanda "parte bene?". Una mappa e non due
+     * contatori perche' il voto si puo' cambiare o togliere.
+     */
+    val agreements: Map<String, Boolean> = emptyMap()
 ) {
-    /** Percentuale di mani tenute, null finche' non se ne e' vista nessuna. */
-    val keepRate: Int?
-        get() {
-            val total = kept + mulliganed
-            return if (total == 0) null else (kept * 100) / total
-        }
+    val rated: Int get() = agreements.size
+    val agreed: Int get() = agreements.values.count { it }
+
+    /** Registra (o aggiorna) il voto dell'utente su una mano. */
+    fun withRating(savedId: String, user: HandRating, app: HandRating): PracticeTally =
+        copy(agreements = agreements + (savedId to (user.startsWell == app.startsWell)))
+
+    /** Il voto tolto: la mano non conta piu'. */
+    fun withoutRating(savedId: String): PracticeTally = copy(agreements = agreements - savedId)
+
+    /** Percentuale di partenze buone, null finche' non si e' iniziata una partita. */
+    val goodStartRate: Int?
+        get() = if (games == 0) null else (goodStarts * 100) / games
+
+    /** Conta una mano nuova appena scoperta: valida (una partita) o da rimescolare. */
+    fun record(hand: PracticeHand): PracticeTally = when {
+        hand.needsMulligan -> this
+        else -> copy(
+            games = games + 1,
+            goodStarts = goodStarts + if (hand.evaluation.verdict.isGoodStart) 1 else 0
+        )
+    }
+
+    fun recordMulligan(): PracticeTally = copy(mulligans = mulligans + 1)
 }
+
+private val HandVerdict.isGoodStart: Boolean
+    get() = this == HandVerdict.GREAT || this == HandVerdict.PLAYABLE
 
 object PracticeDealer {
 
@@ -100,6 +150,7 @@ object PracticeDealer {
         current: PracticeHand,
         keyCardNames: Collection<String> = emptyList()
     ): PracticeHand {
+        if (current.needsMulligan) return current
         val next = current.library.firstOrNull() ?: return current
         val draws = current.draws + next
 

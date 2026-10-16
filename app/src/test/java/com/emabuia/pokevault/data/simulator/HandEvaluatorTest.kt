@@ -148,6 +148,32 @@ class PracticeDealerTest {
 
     @Test
     fun `il verdetto si aggiorna sulle carte pescate`() {
+        val opening = listOf(
+            SimulatorCard("Pikachu", isBasic = true, isEnergy = false, isSupporter = false, isOutCard = false)
+        ) + List(6) {
+            SimulatorCard("Filler $it", isBasic = false, isEnergy = false, isSupporter = false, isOutCard = false)
+        }
+        val library = listOf(
+            SimulatorCard("Lightning Energy", isBasic = false, isEnergy = true, isSupporter = false, isOutCard = false)
+        )
+        val hand = PracticeHand(
+            opening = opening,
+            draws = emptyList(),
+            library = library,
+            mulligans = 0,
+            evaluation = HandEvaluator.evaluate(opening)
+        )
+
+        assertEquals(0, hand.evaluation.energies)
+        assertEquals(1, PracticeDealer.drawOne(hand).evaluation.energies)
+    }
+
+    /**
+     * Regolamento: senza Pokemon Base in mano si rivela e si rimescola. La
+     * pescata del turno arriva solo con una mano valida, cioe' dopo il mulligan.
+     */
+    @Test
+    fun `senza Base non si pesca, si fa mulligan`() {
         val opening = List(7) {
             SimulatorCard("Filler $it", isBasic = false, isEnergy = false, isSupporter = false, isOutCard = false)
         }
@@ -162,8 +188,9 @@ class PracticeDealerTest {
             evaluation = HandEvaluator.evaluate(opening)
         )
 
-        assertEquals(HandVerdict.MULLIGAN, hand.evaluation.verdict)
-        assertEquals(1, PracticeDealer.drawOne(hand).evaluation.basics)
+        assertTrue(hand.needsMulligan)
+        assertFalse(hand.canDraw)
+        assertEquals(hand, PracticeDealer.drawOne(hand))
     }
 
     @Test
@@ -194,11 +221,35 @@ class PracticeDealerTest {
         assertEquals(hand, PracticeDealer.drawOne(hand))
     }
 
-    @Test
-    fun `il conteggio della sessione riporta la percentuale di mani tenute`() {
-        val tally = PracticeTally(dealt = 10, kept = 7, mulliganed = 3)
+    private fun handOf(vararg cards: SimulatorCard) = PracticeHand(
+        opening = cards.toList(),
+        draws = emptyList(),
+        library = emptyList(),
+        mulligans = 0,
+        evaluation = HandEvaluator.evaluate(cards.toList())
+    )
 
-        assertEquals(70, tally.keepRate)
-        assertEquals(null, PracticeTally().keepRate)
+    private val pikachu = SimulatorCard("Pikachu", isBasic = true, isEnergy = false, isSupporter = false, isOutCard = false)
+    private val energy = SimulatorCard("Energy", isBasic = false, isEnergy = true, isSupporter = false, isOutCard = false)
+    private val ball = SimulatorCard("Ultra Ball", isBasic = false, isEnergy = false, isSupporter = false, isOutCard = true)
+    private val filler = SimulatorCard("Filler", isBasic = false, isEnergy = false, isSupporter = false, isOutCard = false)
+
+    @Test
+    fun `la sessione conta le partite, i mulligan e le partenze buone`() {
+        val good = handOf(pikachu, pikachu, energy, ball, filler, filler, filler)
+        val poor = handOf(pikachu, filler, filler, filler, filler, filler, filler)
+        val noBasic = handOf(filler, filler, filler, filler, filler, filler, filler)
+
+        val tally = PracticeTally()
+            .record(noBasic).recordMulligan()
+            .record(good)
+            .record(poor)
+
+        // La mano senza Base non e' una partita: e' un mulligan.
+        assertEquals(2, tally.games)
+        assertEquals(1, tally.mulligans)
+        assertEquals(1, tally.goodStarts)
+        assertEquals(50, tally.goodStartRate)
+        assertEquals(null, PracticeTally().goodStartRate)
     }
 }

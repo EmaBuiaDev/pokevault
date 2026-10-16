@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.emabuia.pokevault.data.billing.PremiumManager
+import com.emabuia.pokevault.data.model.AlbumCover
 import com.emabuia.pokevault.ui.components.LabSearchField
 import com.emabuia.pokevault.ui.components.CoverCollage
 import com.emabuia.pokevault.ui.components.EmptyStateView
@@ -287,7 +288,20 @@ private fun AlbumRowCard(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CoverCollage(urls = covers, gradient = gradient, slotSize = 66.dp)
+            if (AlbumCover.isDesigned(row.coverPattern)) {
+                AlbumCoverArt(
+                    theme = row.theme,
+                    pattern = row.coverPattern,
+                    pokemon = row.coverPokemon,
+                    modifier = Modifier
+                        .width(78.dp)
+                        .height(66.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                )
+            } else {
+                // Album nati prima delle copertine: le loro carte, come sempre.
+                CoverCollage(urls = covers, gradient = gradient, slotSize = 66.dp)
+            }
 
             Spacer(modifier = Modifier.width(10.dp))
 
@@ -319,6 +333,15 @@ private fun AlbumRowCard(
                         color = AppColors.textMuted,
                         fontSize = 12.sp
                     )
+                    if (row.toFind > 0) {
+                        Text(
+                            text = AppLocale.albumToFindCount(row.toFind),
+                            color = AppColors.gold,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                    }
                     if (row.value > 0.0) {
                         Text(
                             text = formatEurCompact(row.value),

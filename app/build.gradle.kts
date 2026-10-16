@@ -22,8 +22,8 @@ android {
         applicationId = "com.emabuia.pokevault"
         minSdk = 26
         targetSdk = 36
-        versionCode = 41
-        versionName = "3.1.8"
+        versionCode = 42
+        versionName = "3.1.9"
 
         buildConfigField("String", "POKEWALLET_API_KEY", "\"${localProperties.getProperty("POKEWALLET_API_KEY", "")}\"")
         buildConfigField("Boolean", "POKEWALLET_PROXY_ENABLED", "${localProperties.getProperty("POKEWALLET_PROXY_ENABLED", "false")}")
@@ -297,6 +297,10 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.core.ktx)
     testImplementation(libs.androidx.lifecycle.runtime.ktx)
+    // Compose sotto Robolectric: la BOM tiene ui-test allineato a ui.
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.compose.ui.test.manifest)
 
     // Niente test strumentati (androidTest): i due che c'erano non giravano,
     // mancava il testInstrumentationRunner. Il test di SetDao sta ora con gli

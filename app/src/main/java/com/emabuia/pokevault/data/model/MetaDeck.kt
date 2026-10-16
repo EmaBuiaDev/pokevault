@@ -62,9 +62,35 @@ enum class TournamentKind {
 data class MetaArchetype(
     val name: String,               // Nome archetipo (es. "Charizard ex")
     val count: Int,                 // Quanti deck usano questo archetipo
-    val metaShare: Double,          // Percentuale meta share (0-100)
-    val avgWinrate: Double,         // Win rate medio (0-1)
+    /**
+     * Quota dei deck nei top 32 dei tornei letti (0-100). Non e' la quota
+     * dell'intero torneo: Limitless da' l'archetipo dei primi, e la schermata
+     * lo dice ("nei top 32").
+     */
+    val metaShare: Double,
+    /** Vittorie su partite giocate, sommate su tutti i deck (0-1). Vedi [games]. */
+    val avgWinrate: Double,
     val topPlacement: Int,          // Miglior piazzamento
-    val recentResults: List<Int>,   // Ultimi piazzamenti (per trend)
-    val sampleDeck: MetaDeck?       // Un deck di esempio per import
-)
+    /** I migliori piazzamenti. Non e' un andamento nel tempo: per quello c'e' [trend]. */
+    val recentResults: List<Int>,
+    val sampleDeck: MetaDeck?,      // Un deck di esempio per import
+    // Dalla 3.1.9. Con valori predefiniti: la cache su disco scritta prima
+    // non li ha, e Gson li lascerebbe a zero comunque.
+    val wins: Int = 0,
+    val losses: Int = 0,
+    val ties: Int = 0,
+    /** Giocatori del torneo in cui e' arrivato [topPlacement]: "1° su 128". */
+    val topPlacementPlayers: Int = 0,
+    /** Quante volte un deck di questo archetipo e' entrato nei primi 8. */
+    val top8Count: Int = 0,
+    /**
+     * Punti di quota guadagnati o persi fra i tornei piu' vecchi e i piu'
+     * recenti della finestra. Null se una delle due meta' non ha dati.
+     */
+    val trend: Double? = null,
+    /** Su quanti tornei e quanti deck e' calcolato tutto: uguale per ogni archetipo. */
+    val sampleTournaments: Int = 0,
+    val sampleDecks: Int = 0
+) {
+    val games: Int get() = wins + losses + ties
+}

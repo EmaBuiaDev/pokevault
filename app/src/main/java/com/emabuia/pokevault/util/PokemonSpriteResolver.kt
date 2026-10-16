@@ -264,6 +264,60 @@ object PokemonSpriteResolver {
         return found.map { "$SPRITE_BASE/$it.png" }
     }
 
+    // ── Ricerca per nome (copertine degli album) ──────────────────────────
+
+    /** Una specie da scegliere: numero di Pokedex e nome da mostrare. */
+    data class Species(val dex: Int, val name: String)
+
+    @Volatile
+    private var speciesList: List<Species>? = null
+
+    /**
+     * Tutte le specie in ordine di Pokedex, con il nome leggibile ("mr-mime"
+     * -> "Mr Mime"). I Paradosso compaiono anche col nome italiano, come per
+     * le carte: chi cerca "Furiatonante" deve trovarlo.
+     */
+    suspend fun allSpecies(context: Context): List<Species> {
+        speciesList?.let { return it }
+        return withContext(Dispatchers.IO) {
+            val base = try {
+                context.applicationContext.assets.open(ASSET).bufferedReader().useLines { lines ->
+                    lines.mapNotNull { line ->
+                        if (line.isBlank() || line.startsWith("#")) return@mapNotNull null
+                        val id = line.substringBefore(',').trim().toIntOrNull() ?: return@mapNotNull null
+                        Species(id, displayName(line.substringAfter(',')))
+                    }.distinctBy { it.dex }.toList()
+                }
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val byKey = base.associateBy { matchKey(it.name) }
+            val italian = PokemonNameMatcher.translatedSpecies.mapNotNull { (en, it) ->
+                byKey[matchKey(en)]?.let { species -> Species(species.dex, displayName(it)) }
+            }
+            (base + italian).also { if (base.isNotEmpty()) speciesList = it }
+        }
+    }
+
+    /** "mr-mime" -> "Mr Mime", "iron valiant" -> "Iron Valiant". */
+    internal fun displayName(raw: String): String =
+        raw.trim().split('-', ' ').filter { it.isNotEmpty() }
+            .joinToString(" ") { part -> part.replaceFirstChar { it.uppercaseChar() } }
+
+    /**
+     * Le specie che corrispondono a [query]: prima quelle il cui nome inizia
+     * cosi', poi quelle che lo contengono, ognuna in ordine di Pokedex. Gli
+     * accenti e la punteggiatura non contano ("flabebe" trova Flabébé).
+     */
+    internal fun searchSpecies(all: List<Species>, query: String, limit: Int = 24): List<Species> {
+        val q = matchKey(query)
+        if (q.isEmpty()) return emptyList()
+        val keyed = all.map { it to matchKey(it.name) }
+        val starts = keyed.filter { it.second.startsWith(q) }.map { it.first }
+        val contains = keyed.filter { !it.second.startsWith(q) && it.second.contains(q) }.map { it.first }
+        return (starts + contains).distinctBy { it.dex to it.name }.take(limit)
+    }
+
     fun spriteUrlForCardName(context: Context, cardName: String): String? {
         if (!isReady) return null
         val id = dexNumberForCardName(context, cardName) ?: return null

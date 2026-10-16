@@ -2,10 +2,10 @@
 
 package com.emabuia.pokevault.ui.competitive
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Science
@@ -32,13 +31,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,7 +44,6 @@ import com.emabuia.pokevault.data.simulator.HandSimulationSummary
 import com.emabuia.pokevault.data.simulator.ProblemHandSample
 import com.emabuia.pokevault.data.simulator.SimulatorCard
 import com.emabuia.pokevault.ui.theme.AppColors
-import com.emabuia.pokevault.ui.theme.AppMotion
 import com.emabuia.pokevault.util.AppLocale
 
 /**
@@ -66,15 +61,24 @@ private const val TARGET_SETUP_T2 = 60
 private const val TARGET_KEY_T2 = 70
 
 /**
+ * Almeno un Aiuto in mano entro il 2° turno. E' una soglia nostra, come le
+ * altre: segna il punto sotto cui una mano su quattro resta senza Aiuto nel
+ * primo turno in cui tutti possono giocarlo.
+ */
+private const val TARGET_SUPPORTER_T2 = 75
+
+/**
  * Modalita' Analisi: migliaia di mani, riassunte in un voto.
  *
- * La struttura e' deliberatamente a imbuto — punteggio, poi le quattro
- * metriche che lo compongono, poi il resto dietro a un espandibile — perche'
- * prima le nove percentuali erano affiancate tutte allo stesso peso e non
- * dicevano da dove cominciare a guardare.
+ * La struttura e' deliberatamente a imbuto — prima il voto, poi una sezione
+ * per ogni domanda (mulligan, Pokemon Base, Energia, Aiuti, come si parte),
+ * infine le mani peggiori — perche' nove percentuali affiancate allo stesso
+ * peso non dicevano da dove cominciare a guardare.
  */
 internal fun LazyListScope.analysisSection(
     hasDeck: Boolean,
+    /** Carte del mazzo simulato: le sezioni dicono su quante sono calcolate. */
+    deckSize: Int,
     summary: HandSimulationSummary?,
     accuracyWarnings: List<String>,
     isSimulating: Boolean,
@@ -121,12 +125,29 @@ internal fun LazyListScope.analysisSection(
         }
     }
 
-    item(key = "analysis-metrics") {
-        MetricsCard(summary = summary)
+    // Una sezione per domanda, nell'ordine in cui si pongono al tavolo:
+    // la partita comincia? con quanti Pokemon? posso attaccare? posso
+    // pescare? Fino alla 3.1.8 c'erano sette barre e un elenco "Tutte le
+    // metriche" con le stesse sigle: niente sulle Energie oltre al primo
+    // turno, niente sulle carte Aiuto.
+    item(key = "analysis-mulligan") {
+        MulliganCard(summary = summary, deckSize = deckSize)
     }
 
-    item(key = "analysis-details") {
-        DetailsCard(summary = summary)
+    item(key = "analysis-basics") {
+        BasicsCard(summary = summary)
+    }
+
+    item(key = "analysis-energy") {
+        EnergyCard(summary = summary, deckSize = deckSize)
+    }
+
+    item(key = "analysis-supporters") {
+        SupportersCard(summary = summary, deckSize = deckSize)
+    }
+
+    item(key = "analysis-start") {
+        StartCard(summary = summary)
     }
 
     if (summary.problemHands.isNotEmpty()) {
@@ -374,8 +395,17 @@ private fun AccuracyCard(warnings: List<String>) {
     }
 }
 
+/**
+ * Una sezione dell'analisi: titolo, una riga che dice su cosa e' calcolata, e
+ * i numeri. Le sezioni sono una per domanda che il giocatore si fa quando
+ * taglia una lista, nell'ordine in cui se la fa.
+ */
 @Composable
-private fun MetricsCard(summary: HandSimulationSummary) {
+private fun StatCard(
+    title: String,
+    subtitle: String?,
+    content: @Composable () -> Unit
+) {
     Card(
         colors = CardDefaults.cardColors(containerColor = AppColors.card),
         shape = RoundedCornerShape(16.dp)
@@ -384,188 +414,274 @@ private fun MetricsCard(summary: HandSimulationSummary) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            MetricBar(
-                label = AppLocale.handSimulatorMetricStarterShort,
-                percent = summary.starterRate,
-                target = TARGET_STARTER,
-                index = 0,
-                advice = AppLocale.handSimulatorInsightBrickMessage(summary.mulliganRate.roundPercent())
-            )
-            MetricBar(
-                label = AppLocale.handSimulatorMetricEnergyShort,
-                percent = summary.energyByT1Rate,
-                target = TARGET_ENERGY_T1,
-                index = 1,
-                advice = AppLocale.handSimulatorInsightEnergyMessage(summary.energyByT1Rate.roundPercent())
-            )
-            // Out e setup dipendono da chi inizia: chi va per primo al T1 non
-            // gioca Aiuti, e un mazzo che si regge sugli Aiuti li' rallenta.
-            MetricBar(
-                label = AppLocale.handSimulatorMetricOutFirst,
-                percent = summary.goingFirst.outByT1Rate,
-                target = TARGET_OUT_T1,
-                index = 2,
-                advice = AppLocale.handSimulatorInsightOutFirstMessage(summary.goingFirst.outByT1Rate.roundPercent())
-            )
-            MetricBar(
-                label = AppLocale.handSimulatorMetricOutSecond,
-                percent = summary.goingSecond.outByT1Rate,
-                target = TARGET_OUT_T1,
-                index = 3,
-                advice = AppLocale.handSimulatorInsightOutMessage(summary.goingSecond.outByT1Rate.roundPercent())
-            )
-            MetricBar(
-                label = AppLocale.handSimulatorMetricSetupFirst,
-                percent = summary.goingFirst.setupByT2Rate,
-                target = TARGET_SETUP_T2,
-                index = 4,
-                advice = AppLocale.handSimulatorInsightSetupMessage(summary.goingFirst.setupByT2Rate.roundPercent())
-            )
-            MetricBar(
-                label = AppLocale.handSimulatorMetricSetupSecond,
-                percent = summary.goingSecond.setupByT2Rate,
-                target = TARGET_SETUP_T2,
-                index = 5,
-                advice = AppLocale.handSimulatorInsightSetupMessage(summary.goingSecond.setupByT2Rate.roundPercent())
-            )
-            summary.keyCardByT2Rate?.let { keyRate ->
-                MetricBar(
-                    label = AppLocale.handSimulatorMetricKeyShort,
-                    percent = keyRate,
-                    target = TARGET_KEY_T2,
-                    index = 6,
-                    advice = summary.keyCardPrizedRate?.let { prized ->
-                        AppLocale.handSimulatorInsightPrizedMessage(prized.roundPercent())
-                    }
-                )
-            }
-        }
-    }
-}
-
-/**
- * Le metriche grezze, chiuse di default.
- *
- * Restano raggiungibili perche' a chi costruisce liste servono davvero (la
- * media di Basic in apertura dice se la linea di starter e' troppo sottile),
- * ma non competono piu' con il punteggio per l'attenzione di chi apre la
- * schermata la prima volta.
- */
-@Composable
-private fun DetailsCard(summary: HandSimulationSummary) {
-    var expanded by remember { mutableStateOf(false) }
-    val chevronRotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = tween(AppMotion.chevron),
-        label = "detailsChevron"
-    )
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = AppColors.card),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            TextButton(
-                onClick = { expanded = !expanded },
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    text = AppLocale.handSimulatorAllMetrics,
+                    text = title,
                     color = AppColors.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    modifier = Modifier.weight(1f)
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
                 )
-                Icon(
-                    imageVector = Icons.Default.ExpandMore,
-                    contentDescription = null,
-                    tint = AppColors.textSecondary,
-                    modifier = Modifier.rotate(chevronRotation)
-                )
-            }
-
-            AnimatedVisibility(visible = expanded) {
-                Column(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    DetailRow(AppLocale.handSimulatorTotalRuns, summary.totalRuns.toString())
-                    DetailRow(
-                        AppLocale.handSimulatorMulliganRate,
-                        "${summary.mulliganRate.roundPercent()}%"
-                    )
-                    DetailRow(
-                        AppLocale.handSimulatorAvgBasics,
-                        summary.averageBasics.roundTo2Decimals()
-                    )
-                    DetailRow(
-                        AppLocale.handSimulatorAvgMulligans,
-                        summary.averageMulligans.roundTo2Decimals()
-                    )
-                    DetailRow(
-                        AppLocale.handSimulatorStarterRate,
-                        "${summary.starterRate.roundPercent()}%"
-                    )
-                    DetailRow(
-                        AppLocale.handSimulatorEnergyT1,
-                        "${summary.energyByT1Rate.roundPercent()}%"
-                    )
-                    DetailRow(
-                        AppLocale.handSimulatorMetricOutFirst,
-                        "${summary.goingFirst.outByT1Rate.roundPercent()}%"
-                    )
-                    DetailRow(
-                        AppLocale.handSimulatorMetricOutSecond,
-                        "${summary.goingSecond.outByT1Rate.roundPercent()}%"
-                    )
-                    DetailRow(
-                        AppLocale.handSimulatorMetricSetupFirst,
-                        "${summary.goingFirst.setupByT2Rate.roundPercent()}%"
-                    )
-                    DetailRow(
-                        AppLocale.handSimulatorMetricSetupSecond,
-                        "${summary.goingSecond.setupByT2Rate.roundPercent()}%"
-                    )
-                    summary.keyCardByT2Rate?.let { keyRate ->
-                        DetailRow(
-                            AppLocale.handSimulatorKeyByT2,
-                            "${keyRate.roundPercent()}%"
-                        )
-                    }
-                    summary.keyCardPrizedRate?.let { prized ->
-                        DetailRow(
-                            AppLocale.handSimulatorKeyPrizedRate,
-                            "${prized.roundPercent()}%"
-                        )
-                    }
+                subtitle?.let {
+                    Text(text = it, color = AppColors.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
                 }
             }
+            content()
         }
     }
 }
 
+/** Una percentuale con la sua barra sottile, senza soglia. */
 @Composable
-private fun DetailRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+private fun StatLine(label: String, percent: Double, color: Color = AppColors.blue) {
+    val value = percent.coerceIn(0.0, 100.0)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                color = AppColors.textSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${value.roundPercent()}%",
+                color = AppColors.textPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(AppColors.textMuted.copy(alpha = 0.18f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth((value / 100.0).toFloat())
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(color)
+            )
+        }
+    }
+}
+
+/** Un numero che non e' una percentuale: medie, conteggi. */
+@Composable
+private fun StatValue(label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
             color = AppColors.textSecondary,
             fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
-        Text(
-            text = value,
-            color = AppColors.textPrimary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold
+        Text(text = value, color = AppColors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** Un avvertimento sul gioco, non un consiglio di lista. */
+@Composable
+private fun StatNote(text: String, tint: Color = AppColors.textMuted) {
+    Text(text = text, color = tint, fontSize = 11.sp, lineHeight = 15.sp)
+}
+
+/**
+ * Quante mani su cento finiscono in ciascun gruppo: una colonna per gruppo,
+ * alta quanto la sua quota. Si legge come la forma della distribuzione, che
+ * e' quello che una media da sola nasconde.
+ */
+@Composable
+private fun DistributionBars(
+    labels: List<String>,
+    values: List<Double>,
+    highlight: Int? = null
+) {
+    val max = values.maxOrNull()?.takeIf { it > 0.0 } ?: 1.0
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        labels.forEachIndexed { index, label ->
+            val value = values.getOrElse(index) { 0.0 }
+            val color = if (index == highlight) AppColors.orange else AppColors.blue
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "${value.roundPercent()}%",
+                    color = AppColors.textPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(DISTRIBUTION_HEIGHT * (value / max).toFloat().coerceIn(0.02f, 1f))
+                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                        .background(color)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = label,
+                    color = AppColors.textSecondary,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+private val DISTRIBUTION_HEIGHT = 56.dp
+
+/**
+ * Il mulligan, per primo: e' il dato che decide se la partita comincia.
+ * Numeri esatti, non simulati (vedi HandSimulationEngine.exactMulligan).
+ */
+@Composable
+private fun MulliganCard(summary: HandSimulationSummary, deckSize: Int) {
+    val mulligan = summary.mulligan
+    StatCard(
+        title = AppLocale.handSimulatorMulliganTitle,
+        subtitle = AppLocale.handSimulatorMulliganSubtitle(summary.basics.inDeck, deckSize)
+    ) {
+        MetricBar(
+            label = AppLocale.handSimulatorFirstHandLegal,
+            percent = 100.0 - mulligan.firstHandRate,
+            target = TARGET_STARTER,
+            index = 0,
+            advice = AppLocale.handSimulatorInsightBrickMessage(mulligan.firstHandRate.roundPercent())
         )
+        StatLine(AppLocale.handSimulatorMulliganFirst, mulligan.firstHandRate, AppColors.orange)
+        StatLine(AppLocale.handSimulatorMulliganTwice, mulligan.twoOrMoreRate, AppColors.red)
+        StatValue(AppLocale.handSimulatorMulliganAverage, mulligan.averagePerGame.roundTo2Decimals())
+        StatNote(AppLocale.handSimulatorMulliganNote)
+    }
+}
+
+@Composable
+private fun BasicsCard(summary: HandSimulationSummary) {
+    val basics = summary.basics
+    StatCard(
+        title = AppLocale.handSimulatorBasicsTitle,
+        subtitle = AppLocale.handSimulatorBasicsSubtitle
+    ) {
+        DistributionBars(
+            labels = List(4) { AppLocale.handSimulatorBasicsBucket(it) },
+            values = basics.distribution,
+            // Il Base solitario e' un rischio di regolamento, non solo di
+            // ritmo: lo si colora diverso dagli altri gruppi.
+            highlight = 0
+        )
+        StatNote(AppLocale.handSimulatorBasicsAverage(basics.average.roundTo2Decimals()), AppColors.textSecondary)
+        if (basics.loneBasicRate.roundPercent() > 0) {
+            StatNote(AppLocale.handSimulatorLoneBasicWarning(basics.loneBasicRate.roundPercent()), AppColors.orange)
+        }
+    }
+}
+
+@Composable
+private fun EnergyCard(summary: HandSimulationSummary, deckSize: Int) {
+    val energy = summary.energy
+    StatCard(
+        title = AppLocale.handSimulatorEnergyTitle,
+        subtitle = AppLocale.handSimulatorEnergySubtitle(energy.inDeck, deckSize)
+    ) {
+        StatLine(AppLocale.handSimulatorEnergyInOpening, energy.inOpeningRate)
+        MetricBar(
+            label = AppLocale.handSimulatorEnergyByTurn1,
+            percent = energy.byTurn1Rate,
+            target = TARGET_ENERGY_T1,
+            index = 1,
+            advice = AppLocale.handSimulatorInsightEnergyMessage(energy.byTurn1Rate.roundPercent())
+        )
+        StatLine(AppLocale.handSimulatorEnergyByTurn2, energy.byTurn2Rate)
+        StatNote(AppLocale.handSimulatorEnergyAverage(energy.averageInOpening.roundTo2Decimals()), AppColors.textSecondary)
+    }
+}
+
+@Composable
+private fun SupportersCard(summary: HandSimulationSummary, deckSize: Int) {
+    val supporters = summary.supporters
+    StatCard(
+        title = AppLocale.handSimulatorSupportersTitle,
+        subtitle = AppLocale.handSimulatorSupportersSubtitle(supporters.inDeck, deckSize)
+    ) {
+        MetricBar(
+            label = AppLocale.handSimulatorSupportersByTurn2,
+            percent = supporters.byTurn2Rate,
+            target = TARGET_SUPPORTER_T2,
+            index = 2,
+            advice = AppLocale.handSimulatorInsightSupporterMessage((100.0 - supporters.byTurn2Rate).roundPercent())
+        )
+        DistributionBars(
+            labels = List(3) { AppLocale.handSimulatorSupportersBucket(it) },
+            values = supporters.distributionByTurn2,
+            highlight = 0
+        )
+        StatNote(AppLocale.handSimulatorSupportersAverage(supporters.averageByTurn2.roundTo2Decimals()), AppColors.textSecondary)
+        StatLine(AppLocale.handSimulatorSupportersByTurn1, supporters.byTurn1Rate)
+    }
+}
+
+/**
+ * Come parte il mazzo nei due casi. Dipende da chi inizia, perche' chi
+ * inizia non gioca carte Aiuto al primo turno.
+ */
+@Composable
+private fun StartCard(summary: HandSimulationSummary) {
+    StatCard(
+        title = AppLocale.handSimulatorStartTitle,
+        subtitle = AppLocale.handSimulatorStartSubtitle
+    ) {
+        MetricBar(
+            label = AppLocale.handSimulatorDrawSearchFirst,
+            percent = summary.goingFirst.outByT1Rate,
+            target = TARGET_OUT_T1,
+            index = 3,
+            advice = AppLocale.handSimulatorInsightOutFirstMessage(summary.goingFirst.outByT1Rate.roundPercent())
+        )
+        MetricBar(
+            label = AppLocale.handSimulatorDrawSearchSecond,
+            percent = summary.goingSecond.outByT1Rate,
+            target = TARGET_OUT_T1,
+            index = 4,
+            advice = AppLocale.handSimulatorInsightOutMessage(summary.goingSecond.outByT1Rate.roundPercent())
+        )
+        MetricBar(
+            label = AppLocale.handSimulatorFullStartFirst,
+            percent = summary.goingFirst.setupByT2Rate,
+            target = TARGET_SETUP_T2,
+            index = 5,
+            advice = AppLocale.handSimulatorInsightSetupMessage(summary.goingFirst.setupByT2Rate.roundPercent())
+        )
+        MetricBar(
+            label = AppLocale.handSimulatorFullStartSecond,
+            percent = summary.goingSecond.setupByT2Rate,
+            target = TARGET_SETUP_T2,
+            index = 6,
+            advice = AppLocale.handSimulatorInsightSetupMessage(summary.goingSecond.setupByT2Rate.roundPercent())
+        )
+        summary.keyCardByT2Rate?.let { keyRate ->
+            MetricBar(
+                label = AppLocale.handSimulatorKeyCardByTurn2,
+                percent = keyRate,
+                target = TARGET_KEY_T2,
+                index = 7,
+                advice = summary.keyCardPrizedRate?.let { prized ->
+                    AppLocale.handSimulatorInsightPrizedMessage(prized.roundPercent())
+                }
+            )
+        }
     }
 }
 
@@ -597,6 +713,11 @@ private fun ProblemHandsCard(
                 color = AppColors.textPrimary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp
+            )
+            Text(
+                text = AppLocale.handSimulatorProblemsSubtitle,
+                color = AppColors.textSecondary,
+                fontSize = 12.sp
             )
 
             hands.forEach { hand ->
