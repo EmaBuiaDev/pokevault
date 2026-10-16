@@ -64,6 +64,8 @@ import com.emabuia.pokevault.ui.components.RaritySymbolIcon
 import com.emabuia.pokevault.ui.components.VariantChoiceChip
 import com.emabuia.pokevault.util.RarityInfo
 import com.emabuia.pokevault.util.RarityUtils
+import com.emabuia.pokevault.util.minimumEurPriceOrZero
+import androidx.compose.runtime.snapshots.Snapshot
 import com.emabuia.pokevault.viewmodel.SetDetailViewModel
 import com.emabuia.pokevault.viewmodel.WishlistViewModel
 import java.util.Locale
@@ -240,8 +242,7 @@ fun SetDetailScreen(
     val isPremium by premiumManager.isPremium.collectAsStateWithLifecycle()
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
     var quickAddCard by remember { mutableStateOf<TcgCard?>(null) }
-    var selectedRarityFilter by remember(setId, sourceMacro) { mutableStateOf<String?>(null) }
-    var filtersExpanded by rememberSaveable { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(false) }
     var pickerCard by remember { mutableStateOf<TcgCard?>(null) }
     var createDialogCard by remember { mutableStateOf<TcgCard?>(null) }
     var showWishlistPremiumDialog by remember { mutableStateOf(false) }
@@ -267,10 +268,8 @@ fun SetDetailScreen(
     }
 
     LaunchedEffect(setId, sourceMacro) {
-        // Ensure a fresh view every time a set is opened: stale local filters can
-        // make users think cards are missing even when repository loaded all cards.
-        selectedRarityFilter = null
-        filtersExpanded = false
+        // I filtri li azzera loadSet, e solo cambiando espansione: tornando
+        // dall'illustratore restano com'erano, tutti.
         isSelectionMode = false
         selectedCardIds = emptySet()
         viewModel.loadSet(setId, sourceMacro)
@@ -289,46 +288,45 @@ fun SetDetailScreen(
         }
     }
 
-    val sortedCards = remember(state.cards, state.ownedCardIds, state.searchQuery, state.translatedQuery, state.showOnlyMissing, state.showOnlyOwned, state.selectedType, state.selectedSupertype, selectedRarityFilter) {
-        val searchCtx = buildSearchContext(state.searchQuery, state.translatedQuery)
-        state.cards.filter { card ->
-            val matchesRarity = selectedRarityFilter == null || card.rarity == selectedRarityFilter
-            val matchesSearch = matchesSearchContext(card, searchCtx)
-            val matchesMissing = !state.showOnlyMissing || card.id !in state.ownedCardIds
-            val matchesOwned = !state.showOnlyOwned || card.id in state.ownedCardIds
-            val matchesType = state.selectedType == null || card.types?.contains(state.selectedType) == true
-            val matchesSupertype = state.selectedSupertype == null || card.supertype == state.selectedSupertype
-            
-            matchesRarity && matchesSearch && matchesMissing && matchesOwned && matchesType && matchesSupertype
-        }.sortedBy {
-            it.number.replace(Regex("[^0-9]"), "").toIntOrNull() ?: Int.MAX_VALUE
+    // I prezzi fotografati quando si sceglie il filtro o l'ordine, non seguiti
+    // man mano che arrivano: ogni prezzo nuovo rimescolerebbe la griglia sotto
+    // il dito. Letti senza osservare, o ogni prezzo ricomporrebbe la schermata
+    // intera invece della sola cella (vedi pricedCards).
+    val needsPrices = state.filter.usesPrices || state.sort.usesPrices
+    val knownPrices = remember(state.cards, needsPrices, state.filter.priceBuckets, state.sort) {
+        if (!needsPrices) emptyMap() else Snapshot.withoutReadObservation {
+            state.cards.mapNotNull { card ->
+                val price = (viewModel.pricedCards[card.id] ?: card).cardmarket?.prices.minimumEurPriceOrZero()
+                if (price > 0) card.id to price else null
+            }.toMap()
         }
     }
+    val wishlistedIds = if (state.filter.onlyWishlist) wishlistViewModel.wishlistedCardIds else emptySet()
 
-    val hasExplicitCardFilters = remember(
-        state.searchQuery,
-        state.showOnlyMissing,
-        state.showOnlyOwned,
-        state.selectedType,
-        state.selectedSupertype,
-        selectedRarityFilter
-    ) {
-        state.searchQuery.isNotBlank() ||
-            state.showOnlyMissing ||
-            state.showOnlyOwned ||
-            state.selectedType != null ||
-            state.selectedSupertype != null ||
-            selectedRarityFilter != null
+    val sortedCards = remember(state.cards, state.ownedCardIds, state.ownedVariants, state.searchQuery, state.translatedQuery, state.filter, state.sort, knownPrices, wishlistedIds) {
+        val searchCtx = buildSearchContext(state.searchQuery, state.translatedQuery)
+        val ctx = SetCardContext(
+            ownedIds = state.ownedCardIds,
+            ownedVariants = state.ownedVariants,
+            wishlistedIds = wishlistedIds,
+            priceOf = { knownPrices[it.id] }
+        )
+        val filtered = state.cards.filter { card ->
+            matchesSearchContext(card, searchCtx) && matchesSetCardFilter(card, state.filter, ctx)
+        }
+        sortSetCards(filtered, state.sort, ctx.priceOf)
     }
+
+    val hasExplicitCardFilters = state.searchQuery.isNotBlank() || !state.filter.isEmpty
     val displayedCards = remember(state.cards, sortedCards, hasExplicitCardFilters) {
         if (sortedCards.isEmpty() && state.cards.isNotEmpty() && !hasExplicitCardFilters) {
-            state.cards.sortedBy {
-                it.number.replace(Regex("[^0-9]"), "").toIntOrNull() ?: Int.MAX_VALUE
-            }
+            state.cards.sortedBy { it.numberSortKey() }
         } else {
             sortedCards
         }
     }
+
+    val facets = remember(state.cards) { SetCardFacets.from(state.cards) }
 
     // La stessa chiave che la griglia da' alle celle, per risalire dalla cella
     // toccata alla carta durante la selezione a trascinamento. Calcolata una
@@ -344,11 +342,6 @@ fun SetDetailScreen(
             .toSortedMap(compareBy { it.sortOrder })
     }
 
-    val distinctRarities = remember(state.cards) {
-        state.cards.mapNotNull { it.rarity }
-            .distinct()
-            .sortedBy { RarityUtils.getRarityInfo(it).sortOrder }
-    }
 
     selectedCard?.let { sheetCard ->
         CardDetailBottomSheet(
@@ -370,6 +363,16 @@ fun SetDetailScreen(
             // La scheda sa dire quali stampe si hanno gia', come la griglia.
             ownedVariants = state.ownedVariants[sheetCard.id].orEmpty(),
             onIllustratorClick = onIllustratorClick
+        )
+    }
+
+    if (showFilterSheet) {
+        SetFilterSheet(
+            filter = state.filter,
+            facets = facets,
+            resultCount = sortedCards.size,
+            onFilterChange = viewModel::updateFilter,
+            onDismiss = { showFilterSheet = false }
         )
     }
 
@@ -452,6 +455,16 @@ fun SetDetailScreen(
                         PokeballLoadingAnimation(message = AppLocale.loading)
                     }
                 } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                SetFilterBar(
+                    state = state,
+                    onSearch = viewModel::updateSearchQuery,
+                    onToggleOwnership = viewModel::toggleOwnership,
+                    onOpenFilters = { showFilterSheet = true },
+                    onSort = viewModel::setSort,
+                    onViewMode = viewModel::setViewMode,
+                    onFilterChange = viewModel::updateFilter
+                )
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Fixed(3),
@@ -461,7 +474,7 @@ fun SetDetailScreen(
                     ),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.pointerInput(cardsByGridKey, state.viewMode) {
+                    modifier = Modifier.weight(1f).pointerInput(cardsByGridKey, state.viewMode) {
                         if (state.viewMode == "grid") {
                             // La carta si trova per la chiave dell'elemento, non
                             // contando gli header: erano quattro e il conto
@@ -514,233 +527,6 @@ fun SetDetailScreen(
                         )
                     }
 
-                    item(span = { GridItemSpan(3) }) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(AppColors.card)
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Search, null, tint = AppColors.textMuted, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        if (state.searchQuery.isEmpty()) Text(if (AppLocale.isItalian) "Cerca in italiano o inglese..." else "Search in Italian or English...", color = AppColors.textMuted, fontSize = 13.sp)
-                                        BasicTextField(
-                                            value = state.searchQuery,
-                                            onValueChange = { viewModel.updateSearchQuery(it) },
-                                            textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.textPrimary, fontSize = 13.sp),
-                                            singleLine = true,
-                                            cursorBrush = SolidColor(AppColors.blue)
-                                        )
-                                    }
-                                    // Translation indicator
-                                    val isTranslating = state.searchQuery.length >= 3 && state.translatedQuery.isEmpty()
-                                        && !state.cards.any { it.name.contains(state.searchQuery, ignoreCase = true) }
-                                    if (isTranslating && state.searchQuery.isNotEmpty()) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(12.dp),
-                                            color = AppColors.blue,
-                                            strokeWidth = 1.5.dp
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                    } else if (state.translatedQuery.isNotBlank() && state.searchQuery.isNotEmpty()) {
-                                        Icon(Icons.Default.Translate, null, tint = AppColors.green, modifier = Modifier.size(14.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                    }
-                                    if (state.searchQuery.isNotEmpty()) {
-                                        Icon(Icons.Default.Close, null, tint = AppColors.textMuted, modifier = Modifier
-                                            .size(16.dp)
-                                            .clickable { viewModel.updateSearchQuery("") })
-                                    }
-                                }
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(if (state.showOnlyMissing) AppColors.red.copy(alpha = 0.2f) else AppColors.card)
-                                    .border(1.dp, if (state.showOnlyMissing) AppColors.red else Color.Transparent, RoundedCornerShape(12.dp))
-                                    .clickable { viewModel.toggleShowOnlyMissing() }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.FilterAltOff,
-                                    contentDescription = null,
-                                    tint = if (state.showOnlyMissing) AppColors.red else AppColors.textMuted,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(if (state.showOnlyOwned) AppColors.green.copy(alpha = 0.2f) else AppColors.card)
-                                    .border(1.dp, if (state.showOnlyOwned) AppColors.green else Color.Transparent, RoundedCornerShape(12.dp))
-                                    .clickable { viewModel.toggleShowOnlyOwned() }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = if (state.showOnlyOwned) AppColors.green else AppColors.textMuted,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    item(span = { GridItemSpan(3) }) {
-                        val activeFiltersCount = listOf(
-                            state.selectedSupertype,
-                            state.selectedType,
-                            selectedRarityFilter
-                        ).count { it != null }
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(AppColors.card)
-                                .padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable { filtersExpanded = !filtersExpanded }
-                                    .padding(horizontal = 2.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Tune,
-                                    contentDescription = null,
-                                    tint = if (activeFiltersCount > 0) AppColors.blue else AppColors.textMuted,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (AppLocale.isItalian) "Filtri" else "Filters",
-                                    color = AppColors.textPrimary,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.weight(1f)
-                                )
-
-                                if (activeFiltersCount > 0) {
-                                    Text(
-                                        text = "$activeFiltersCount",
-                                        color = AppColors.blue,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(999.dp))
-                                            .border(1.dp, AppColors.blue.copy(alpha = 0.6f), RoundedCornerShape(999.dp))
-                                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                }
-
-                                Icon(
-                                    imageVector = if (filtersExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = null,
-                                    tint = AppColors.textMuted,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            AnimatedVisibility(
-                                visible = filtersExpanded,
-                                enter = fadeIn(animationSpec = tween(180)) + expandVertically(animationSpec = tween(220)),
-                                exit = fadeOut(animationSpec = tween(140)) + shrinkVertically(animationSpec = tween(180))
-                            ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    LazyRow(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        state.availableSupertypes.forEach { supertype ->
-                                            item {
-                                                FilterChip(
-                                                    label = AppLocale.translateSupertype(supertype),
-                                                    isSelected = state.selectedSupertype == supertype,
-                                                    onClick = { viewModel.selectSupertype(if (state.selectedSupertype == supertype) null else supertype) }
-                                                )
-                                            }
-                                        }
-
-                                        item {
-                                            VerticalDivider(
-                                                modifier = Modifier
-                                                    .height(20.dp)
-                                                    .padding(horizontal = 4.dp),
-                                                color = AppColors.textMuted.copy(alpha = 0.3f)
-                                            )
-                                        }
-
-                                        state.availableTypes.forEach { type ->
-                                            item {
-                                                FilterChip(
-                                                    label = AppLocale.translateType(type),
-                                                    isSelected = state.selectedType == type,
-                                                    onClick = { viewModel.selectType(if (state.selectedType == type) null else type) }
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    LazyRow(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        modifier = Modifier.padding(top = 2.dp)
-                                    ) {
-                                        item {
-                                            RarityFilterChip("${AppLocale.all} (${state.cards.size})", selectedRarityFilter == null) {
-                                                selectedRarityFilter = null
-                                            }
-                                        }
-                                        items(distinctRarities, key = { it }) { rarity ->
-                                            val info = RarityUtils.getRarityInfo(rarity)
-                                            val count = state.cards.count { it.rarity == rarity }
-                                            RarityFilterChip(
-                                                info = info,
-                                                name = AppLocale.translateRarity(rarity),
-                                                count = count,
-                                                isSelected = selectedRarityFilter == rarity
-                                            ) { selectedRarityFilter = rarity }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    item(span = { GridItemSpan(3) }) {
-                        Row(modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(AppColors.card), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            listOf((if (AppLocale.isItalian) "Carte" else "Cards") to "grid", (if (AppLocale.isItalian) "Lista" else "List") to "list").forEach { (label, mode) ->
-                                Text(label, color = if (state.viewMode == mode) AppColors.textPrimary else AppColors.textMuted,
-                                    fontWeight = if (state.viewMode == mode) FontWeight.SemiBold else FontWeight.Normal,
-                                    fontSize = 13.sp, textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { viewModel.setViewMode(mode) }
-                                        .background(if (state.viewMode == mode) AppColors.blue.copy(alpha = 0.3f) else Color.Transparent)
-                                        .padding(vertical = 10.dp))
-                            }
-                        }
-                    }
-
                     if (state.isLoadingCards) {
                         // Shimmer placeholder while cards load
                         items(12) {
@@ -751,7 +537,25 @@ fun SetDetailScreen(
                             Box(modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 40.dp), contentAlignment = Alignment.Center) {
-                                Text(AppLocale.noResults, color = AppColors.textMuted, fontSize = 14.sp)
+                                // Coi filtri accesi il vuoto e' "non cosi'", e
+                                // si esce con un tocco.
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        if (state.filter.isEmpty) AppLocale.noResults else AppLocale.noResultsWithFilters,
+                                        color = AppColors.textMuted,
+                                        fontSize = 14.sp
+                                    )
+                                    if (!state.filter.isEmpty) {
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Text(
+                                            AppLocale.clearFilters,
+                                            color = AppColors.blue,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.clickable { viewModel.updateFilter { SetCardFilter() } }
+                                        )
+                                    }
+                                }
                             }
                         }
                     } else {
@@ -840,6 +644,7 @@ fun SetDetailScreen(
                     }
 
                     item(span = { GridItemSpan(3) }) { Spacer(modifier = Modifier.height(40.dp)) }
+                }
                 }
 
                 // Selection bottom bar
