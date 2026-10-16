@@ -18,13 +18,14 @@ object WhatsNew {
     private const val PREFS_NAME = "pokevault_prefs"
     private const val KEY_SEEN_VERSION = "whats_new_seen_version"
 
-    enum class Icon { NAME, LANGUAGE, SCANNER, PRICE }
+    enum class Icon { NAME, LANGUAGE, SCANNER, PRICE, ALBUM, HAND, RATING, META }
 
     data class Item(val icon: Icon, val title: String, val body: String)
 
     /** Le note di una versione, nella lingua dell'app; vuota se non ce ne sono. */
     fun notesFor(versionCode: Int): List<Item> = when (versionCode) {
         41 -> notes318()
+        42 -> notes319()
         else -> emptyList()
     }
 
@@ -107,6 +108,42 @@ object WhatsNew {
         Item(
             Icon.PRICE, "The right price for your copy",
             "Cardmarket price and link follow the exact print you own: Holo, Reverse, stamped."
+        ),
+    )
+
+    private fun notes319(): List<Item> = if (AppLocale.isItalian) listOf(
+        Item(
+            Icon.ALBUM, "Album tutti nuovi",
+            "Pagine da 4, 9 o 12 tasche, colore e copertina col tuo Pokémon. Cerchi le carte dal catalogo: quelle che non hai restano «da trovare»."
+        ),
+        Item(
+            Icon.HAND, "Hand Simulator con le regole vere",
+            "Mulligan solo senza Pokémon Base, pulsanti sempre a portata di mano e analisi di Base, Energia e Aiuti nei primi turni."
+        ),
+        Item(
+            Icon.RATING, "Vota le tue mani",
+            "Pessima, rischiosa o buona: con un tocco la mano si salva con le sue 7 carte, accanto al giudizio dell'app."
+        ),
+        Item(
+            Icon.META, "Meta Deck più chiaro",
+            "Win rate su tutte le partite, piazzamenti con il loro contesto e la tendenza vera dei mazzi nei tornei recenti."
+        ),
+    ) else listOf(
+        Item(
+            Icon.ALBUM, "Brand-new albums",
+            "Pages with 4, 9 or 12 pockets, color and a cover with your Pokémon. Search cards from the catalog: the ones you don't own stay \"to find\"."
+        ),
+        Item(
+            Icon.HAND, "Hand Simulator with the real rules",
+            "Mulligan only without Basic Pokémon, buttons always within reach and analysis of Basics, Energy and Supporters in the first turns."
+        ),
+        Item(
+            Icon.RATING, "Rate your hands",
+            "Bad, risky or good: one tap saves the hand with its 7 cards, next to the app's verdict."
+        ),
+        Item(
+            Icon.META, "Clearer Meta Deck",
+            "Win rate over all games, placements with their context and the real trend of decks in recent tournaments."
         ),
     )
 }
