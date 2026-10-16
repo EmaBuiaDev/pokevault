@@ -1,0 +1,1372 @@
+{
+ "meganium": [
+  {
+   "qty": 2,
+   "name": "Bayleef",
+   "set": "MEG",
+   "number": "9",
+   "expectApiId": "ita:me01:9",
+   "expectName": "Bayleef"
+  },
+  {
+   "qty": 2,
+   "name": "Arboliva ex",
+   "set": "DRI",
+   "number": "207",
+   "expectApiId": "ita:sv10:207",
+   "expectName": "Arboliva-ex"
+  },
+  {
+   "qty": 1,
+   "name": "Maractus",
+   "set": "JTG",
+   "number": "8",
+   "expectApiId": "ita:sv09:8",
+   "expectName": "Maractus"
+  },
+  {
+   "qty": 2,
+   "name": "Meowth ex",
+   "set": "POR",
+   "number": "121",
+   "expectApiId": "ita:me03:121",
+   "expectName": "Meowth-ex"
+  },
+  {
+   "qty": 1,
+   "name": "Fezandipiti ex",
+   "set": "ASC",
+   "number": "288",
+   "expectApiId": "ita:me2pt5:288",
+   "expectName": "Fezandipiti-ex"
+  },
+  {
+   "qty": 1,
+   "name": "Teal Mask Ogerpon ex",
+   "set": "TWM",
+   "number": "221",
+   "expectApiId": "ita:sv06:221",
+   "expectName": "Ogerpon Maschera Turchese-ex"
+  },
+  {
+   "qty": 3,
+   "name": "Teal Mask Ogerpon ex",
+   "set": "PRE",
+   "number": "177",
+   "expectApiId": "ita:sv8pt5:177",
+   "expectName": "Ogerpon Maschera Turchese-ex"
+  },
+  {
+   "qty": 2,
+   "name": "Meganium",
+   "set": "MEP",
+   "number": "1",
+   "expectApiId": "ita:mep:1",
+   "expectName": "Meganium"
+  },
+  {
+   "qty": 2,
+   "name": "Chikorita",
+   "set": "MEP",
+   "number": "69",
+   "expectApiId": "ita:mep:69",
+   "expectName": "Chikorita"
+  },
+  {
+   "qty": 2,
+   "name": "Smoliv",
+   "set": "DRI",
+   "number": "21",
+   "expectApiId": "ita:sv10:21",
+   "expectName": "Smoliv"
+  },
+  {
+   "qty": 2,
+   "name": "Dolliv",
+   "set": "DRI",
+   "number": "22",
+   "expectApiId": "ita:sv10:22",
+   "expectName": "Dolliv"
+  },
+  {
+   "qty": 4,
+   "name": "Forest of Vitality",
+   "set": "POR",
+   "number": "109",
+   "expectApiId": "ita:me03:109",
+   "expectName": "Bosco della Vitalità"
+  },
+  {
+   "qty": 2,
+   "name": "Ultra Ball",
+   "set": "ASC",
+   "number": "264",
+   "expectApiId": "ita:me2pt5:264",
+   "expectName": "Ultra Ball"
+  },
+  {
+   "qty": 2,
+   "name": "Boss's Orders",
+   "set": "ASC",
+   "number": "256",
+   "expectApiId": "ita:me2pt5:256",
+   "expectName": "Ordini del Capo"
+  },
+  {
+   "qty": 1,
+   "name": "Judge",
+   "set": "DRI",
+   "number": "222",
+   "expectApiId": "ita:sv10:222",
+   "expectName": "Arbitro"
+  },
+  {
+   "qty": 1,
+   "name": "Lana's Aid",
+   "set": "TWM",
+   "number": "155",
+   "expectApiId": "ita:sv06:155",
+   "expectName": "Soccorso di Suiren"
+  },
+  {
+   "qty": 1,
+   "name": "Night Stretcher",
+   "set": "SSP",
+   "number": "251",
+   "expectApiId": "ita:sv08:251",
+   "expectName": "Barella Notturna"
+  },
+  {
+   "qty": 2,
+   "name": "Dawn",
+   "set": "PFL",
+   "number": "129",
+   "expectApiId": "ita:me02:129",
+   "expectName": "Lucinda"
+  },
+  {
+   "qty": 1,
+   "name": "Air Balloon",
+   "set": "MEG",
+   "number": "166",
+   "expectApiId": "ita:me01:166",
+   "expectName": "Palloncino"
+  },
+  {
+   "qty": 1,
+   "name": "Special Red Card",
+   "set": "CRI",
+   "number": "113",
+   "expectApiId": "ita:me04:113",
+   "expectName": "Cartelrosso Speciale"
+  },
+  {
+   "qty": 1,
+   "name": "Unfair Stamp",
+   "set": "TWM",
+   "number": "165",
+   "expectApiId": "ita:sv06:165",
+   "expectName": "Timbro Ingiusto"
+  },
+  {
+   "qty": 2,
+   "name": "Energy Switch",
+   "set": "PBL",
+   "number": "107",
+   "expectApiId": "ita:me05:107",
+   "expectName": "Scambio di Energia"
+  },
+  {
+   "qty": 2,
+   "name": "Poké Pad",
+   "set": "POR",
+   "number": "113",
+   "expectApiId": "ita:me03:113",
+   "expectName": "Poké Pad"
+  },
+  {
+   "qty": 4,
+   "name": "Bug Catching Set",
+   "set": "TWM",
+   "number": "143",
+   "expectApiId": "ita:sv06:143",
+   "expectName": "Set Pigliamosche"
+  },
+  {
+   "qty": 4,
+   "name": "Lillie's Determination",
+   "set": "MEG",
+   "number": "184",
+   "expectApiId": "ita:me01:184",
+   "expectName": "Determinazione di Lylia"
+  }
+ ],
+ "dragapult": [
+  {
+   "qty": 4,
+   "name": "Dreepy",
+   "set": "TWM",
+   "number": "128",
+   "expectApiId": "ita:sv06:128",
+   "expectName": "Dreepy"
+  },
+  {
+   "qty": 4,
+   "name": "Drakloak",
+   "set": "TWM",
+   "number": "129",
+   "expectApiId": "ita:sv06:129",
+   "expectName": "Drakloak"
+  },
+  {
+   "qty": 3,
+   "name": "Dragapult ex",
+   "set": "TWM",
+   "number": "130",
+   "expectApiId": "ita:sv06:130",
+   "expectName": "Dragapult-ex"
+  },
+  {
+   "qty": 2,
+   "name": "Munkidori",
+   "set": "TWM",
+   "number": "95",
+   "expectApiId": "ita:sv06:95",
+   "expectName": "Munkidori"
+  },
+  {
+   "qty": 2,
+   "name": "Budew",
+   "set": "ASC",
+   "number": "16",
+   "expectApiId": "ita:me2pt5:16",
+   "expectName": "Budew"
+  },
+  {
+   "qty": 1,
+   "name": "Meowth ex",
+   "set": "POR",
+   "number": "62",
+   "expectApiId": "ita:me03:62",
+   "expectName": "Meowth-ex"
+  },
+  {
+   "qty": 1,
+   "name": "Fezandipiti ex",
+   "set": "ASC",
+   "number": "142",
+   "expectApiId": "ita:me2pt5:142",
+   "expectName": "Fezandipiti-ex"
+  },
+  {
+   "qty": 1,
+   "name": "Moltres",
+   "set": "PFL",
+   "number": "14",
+   "expectApiId": "ita:me02:14",
+   "expectName": "Moltres"
+  },
+  {
+   "qty": 4,
+   "name": "Lillie's Determination",
+   "set": "MEG",
+   "number": "119",
+   "expectApiId": "ita:me01:119",
+   "expectName": "Determinazione di Lylia"
+  },
+  {
+   "qty": 3,
+   "name": "Boss's Orders",
+   "set": "MEG",
+   "number": "114",
+   "expectApiId": "ita:me01:114",
+   "expectName": "Ordini del Capo"
+  },
+  {
+   "qty": 2,
+   "name": "Crispin",
+   "set": "SCR",
+   "number": "133",
+   "expectApiId": "ita:sv07:133",
+   "expectName": "Piros"
+  },
+  {
+   "qty": 1,
+   "name": "Rosa's Encouragement",
+   "set": "POR",
+   "number": "84",
+   "expectApiId": "ita:me03:84",
+   "expectName": "Incoraggiamento di Rina"
+  },
+  {
+   "qty": 1,
+   "name": "Judge",
+   "set": "POR",
+   "number": "76",
+   "expectApiId": "ita:me03:76",
+   "expectName": "Arbitro"
+  },
+  {
+   "qty": 4,
+   "name": "Buddy-Buddy Poffin",
+   "set": "TEF",
+   "number": "144",
+   "expectApiId": "ita:sv05:144",
+   "expectName": "Poffin del Cuore"
+  },
+  {
+   "qty": 4,
+   "name": "Poké Pad",
+   "set": "POR",
+   "number": "81",
+   "expectApiId": "ita:me03:81",
+   "expectName": "Poké Pad"
+  },
+  {
+   "qty": 4,
+   "name": "Crushing Hammer",
+   "set": "POR",
+   "number": "71",
+   "expectApiId": "ita:me03:71",
+   "expectName": "Martello Dirompente"
+  },
+  {
+   "qty": 3,
+   "name": "Night Stretcher",
+   "set": "ASC",
+   "number": "196",
+   "expectApiId": "ita:me2pt5:196",
+   "expectName": "Barella Notturna"
+  },
+  {
+   "qty": 3,
+   "name": "Ultra Ball",
+   "set": "MEG",
+   "number": "131",
+   "expectApiId": "ita:me01:131",
+   "expectName": "Ultra Ball"
+  },
+  {
+   "qty": 1,
+   "name": "Unfair Stamp",
+   "set": "TWM",
+   "number": "165",
+   "expectApiId": "ita:sv06:165",
+   "expectName": "Timbro Ingiusto"
+  },
+  {
+   "qty": 2,
+   "name": "Risky Ruins",
+   "set": "MEG",
+   "number": "127",
+   "expectApiId": "ita:me01:127",
+   "expectName": "Rovine Insidiose"
+  },
+  {
+   "qty": 1,
+   "name": "Jamming Tower",
+   "set": "TWM",
+   "number": "153",
+   "expectApiId": "ita:sv06:153",
+   "expectName": "Torre di Interferenza"
+  }
+ ],
+ "owned": [
+  {
+   "id": "doc0",
+   "apiId": "ita:sv06:24",
+   "name": "Ogerpon Maschera Turchese",
+   "number": "24"
+  },
+  {
+   "id": "doc1",
+   "apiId": "ita:sv06:25",
+   "name": "Ogerpon Maschera Turchese-ex",
+   "number": "25"
+  },
+  {
+   "id": "doc2",
+   "apiId": "ita:sv06:40",
+   "name": "Ogerpon Maschera Focolare-ex",
+   "number": "40"
+  },
+  {
+   "id": "doc3",
+   "apiId": "ita:sv06:64",
+   "name": "Ogerpon Maschera Pozzo-ex",
+   "number": "64"
+  },
+  {
+   "id": "doc4",
+   "apiId": "ita:sv06:95",
+   "name": "Munkidori",
+   "number": "95"
+  },
+  {
+   "id": "doc5",
+   "apiId": "ita:sv06:96",
+   "name": "Fezandipiti",
+   "number": "96"
+  },
+  {
+   "id": "doc6",
+   "apiId": "ita:sv06:112",
+   "name": "Ogerpon Maschera Fondamenta-ex",
+   "number": "112"
+  },
+  {
+   "id": "doc7",
+   "apiId": "ita:sv06:128",
+   "name": "Dreepy",
+   "number": "128"
+  },
+  {
+   "id": "doc8",
+   "apiId": "ita:sv06:129",
+   "name": "Drakloak",
+   "number": "129"
+  },
+  {
+   "id": "doc9",
+   "apiId": "ita:sv06:130",
+   "name": "Dragapult-ex",
+   "number": "130"
+  },
+  {
+   "id": "doc10",
+   "apiId": "ita:sv06:143",
+   "name": "Set Pigliamosche",
+   "number": "143"
+  },
+  {
+   "id": "doc11",
+   "apiId": "ita:sv06:153",
+   "name": "Torre di Interferenza",
+   "number": "153"
+  },
+  {
+   "id": "doc12",
+   "apiId": "ita:sv06:155",
+   "name": "Soccorso di Suiren",
+   "number": "155"
+  },
+  {
+   "id": "doc13",
+   "apiId": "ita:sv06:165",
+   "name": "Timbro Ingiusto",
+   "number": "165"
+  },
+  {
+   "id": "doc14",
+   "apiId": "ita:sv06:190",
+   "name": "Ogerpon Maschera Turchese-ex",
+   "number": "190"
+  },
+  {
+   "id": "doc15",
+   "apiId": "ita:sv06:192",
+   "name": "Ogerpon Maschera Focolare-ex",
+   "number": "192"
+  },
+  {
+   "id": "doc16",
+   "apiId": "ita:sv06:194",
+   "name": "Ogerpon Maschera Pozzo-ex",
+   "number": "194"
+  },
+  {
+   "id": "doc17",
+   "apiId": "ita:sv06:199",
+   "name": "Ogerpon Maschera Fondamenta-ex",
+   "number": "199"
+  },
+  {
+   "id": "doc18",
+   "apiId": "ita:sv06:200",
+   "name": "Dragapult-ex",
+   "number": "200"
+  },
+  {
+   "id": "doc19",
+   "apiId": "ita:sv06:207",
+   "name": "Soccorso di Suiren",
+   "number": "207"
+  },
+  {
+   "id": "doc20",
+   "apiId": "ita:sv06:211",
+   "name": "Ogerpon Maschera Turchese-ex",
+   "number": "211"
+  },
+  {
+   "id": "doc21",
+   "apiId": "ita:sv06:212",
+   "name": "Ogerpon Maschera Focolare-ex",
+   "number": "212"
+  },
+  {
+   "id": "doc22",
+   "apiId": "ita:sv06:213",
+   "name": "Ogerpon Maschera Pozzo-ex",
+   "number": "213"
+  },
+  {
+   "id": "doc23",
+   "apiId": "ita:sv06:215",
+   "name": "Ogerpon Maschera Fondamenta-ex",
+   "number": "215"
+  },
+  {
+   "id": "doc24",
+   "apiId": "ita:sv06:219",
+   "name": "Soccorso di Suiren",
+   "number": "219"
+  },
+  {
+   "id": "doc25",
+   "apiId": "ita:sv06:221",
+   "name": "Ogerpon Maschera Turchese-ex",
+   "number": "221"
+  },
+  {
+   "id": "doc26",
+   "apiId": "ita:sv06:223",
+   "name": "Poffin del Cuore",
+   "number": "223"
+  },
+  {
+   "id": "doc27",
+   "apiId": "ita:sv05:144",
+   "name": "Poffin del Cuore",
+   "number": "144"
+  },
+  {
+   "id": "doc28",
+   "apiId": "ita:sv07:133",
+   "name": "Piros",
+   "number": "133"
+  },
+  {
+   "id": "doc29",
+   "apiId": "ita:sv07:164",
+   "name": "Piros",
+   "number": "164"
+  },
+  {
+   "id": "doc30",
+   "apiId": "ita:sv08:186",
+   "name": "Scambio Pazzo",
+   "number": "186"
+  },
+  {
+   "id": "doc31",
+   "apiId": "ita:sv08:251",
+   "name": "Barella Notturna",
+   "number": "251"
+  },
+  {
+   "id": "doc32",
+   "apiId": "ita:sv8pt5:4",
+   "name": "Budew",
+   "number": "4"
+  },
+  {
+   "id": "doc33",
+   "apiId": "ita:sv8pt5:12",
+   "name": "Ogerpon Maschera Turchese-ex",
+   "number": "12"
+  },
+  {
+   "id": "doc34",
+   "apiId": "ita:sv8pt5:17",
+   "name": "Ogerpon Maschera Focolare-ex",
+   "number": "17"
+  },
+  {
+   "id": "doc35",
+   "apiId": "ita:sv8pt5:27",
+   "name": "Ogerpon Maschera Pozzo-ex",
+   "number": "27"
+  },
+  {
+   "id": "doc36",
+   "apiId": "ita:sv8pt5:44",
+   "name": "Munkidori",
+   "number": "44"
+  },
+  {
+   "id": "doc37",
+   "apiId": "ita:sv8pt5:45",
+   "name": "Fezandipiti",
+   "number": "45"
+  },
+  {
+   "id": "doc38",
+   "apiId": "ita:sv8pt5:58",
+   "name": "Ogerpon Maschera Fondamenta-ex",
+   "number": "58"
+  },
+  {
+   "id": "doc39",
+   "apiId": "ita:sv8pt5:71",
+   "name": "Dreepy",
+   "number": "71"
+  },
+  {
+   "id": "doc40",
+   "apiId": "ita:sv8pt5:72",
+   "name": "Drakloak",
+   "number": "72"
+  },
+  {
+   "id": "doc41",
+   "apiId": "ita:sv8pt5:73",
+   "name": "Dragapult-ex",
+   "number": "73"
+  },
+  {
+   "id": "doc42",
+   "apiId": "ita:sv8pt5:101",
+   "name": "Poffin del Cuore",
+   "number": "101"
+  },
+  {
+   "id": "doc43",
+   "apiId": "ita:sv8pt5:102",
+   "name": "Set Pigliamosche",
+   "number": "102"
+  },
+  {
+   "id": "doc44",
+   "apiId": "ita:sv8pt5:105",
+   "name": "Piros",
+   "number": "105"
+  },
+  {
+   "id": "doc45",
+   "apiId": "ita:sv8pt5:145",
+   "name": "Ogerpon Maschera Turchese-ex",
+   "number": "145"
+  },
+  {
+   "id": "doc46",
+   "apiId": "ita:sv8pt5:148",
+   "name": "Ogerpon Maschera Focolare-ex",
+   "number": "148"
+  },
+  {
+   "id": "doc47",
+   "apiId": "ita:sv8pt5:152",
+   "name": "Ogerpon Maschera Pozzo-ex",
+   "number": "152"
+  },
+  {
+   "id": "doc48",
+   "apiId": "ita:sv8pt5:160",
+   "name": "Ogerpon Maschera Fondamenta-ex",
+   "number": "160"
+  },
+  {
+   "id": "doc49",
+   "apiId": "ita:sv8pt5:165",
+   "name": "Dragapult-ex",
+   "number": "165"
+  },
+  {
+   "id": "doc50",
+   "apiId": "ita:sv8pt5:171",
+   "name": "Piros",
+   "number": "171"
+  },
+  {
+   "id": "doc51",
+   "apiId": "ita:sv8pt5:177",
+   "name": "Ogerpon Maschera Turchese-ex",
+   "number": "177"
+  },
+  {
+   "id": "doc52",
+   "apiId": "ita:sv09:8",
+   "name": "Maractus",
+   "number": "8"
+  },
+  {
+   "id": "doc53",
+   "apiId": "ita:sv09:160",
+   "name": "Maractus",
+   "number": "160"
+  },
+  {
+   "id": "doc54",
+   "apiId": "ita:sv10:21",
+   "name": "Smoliv",
+   "number": "21"
+  },
+  {
+   "id": "doc55",
+   "apiId": "ita:sv10:22",
+   "name": "Dolliv",
+   "number": "22"
+  },
+  {
+   "id": "doc56",
+   "apiId": "ita:sv10:23",
+   "name": "Arboliva-ex",
+   "number": "23"
+  },
+  {
+   "id": "doc57",
+   "apiId": "ita:sv10:26",
+   "name": "Ogerpon Maschera Turchese",
+   "number": "26"
+  },
+  {
+   "id": "doc58",
+   "apiId": "ita:sv10:31",
+   "name": "Moltres-ex del Team Rocket",
+   "number": "31"
+  },
+  {
+   "id": "doc59",
+   "apiId": "ita:sv10:44",
+   "name": "Ogerpon Maschera Focolare",
+   "number": "44"
+  },
+  {
+   "id": "doc60",
+   "apiId": "ita:sv10:67",
+   "name": "Ogerpon Maschera Pozzo",
+   "number": "67"
+  },
+  {
+   "id": "doc61",
+   "apiId": "ita:sv10:111",
+   "name": "Ogerpon Maschera Fondamenta",
+   "number": "111"
+  },
+  {
+   "id": "doc62",
+   "apiId": "ita:sv10:149",
+   "name": "Meowth del Team Rocket",
+   "number": "149"
+  },
+  {
+   "id": "doc63",
+   "apiId": "ita:sv10:167",
+   "name": "Arbitro",
+   "number": "167"
+  },
+  {
+   "id": "doc64",
+   "apiId": "ita:sv10:180",
+   "name": "Torre di Guardia del Team Rocket",
+   "number": "180"
+  },
+  {
+   "id": "doc65",
+   "apiId": "ita:sv10:203",
+   "name": "Meowth del Team Rocket",
+   "number": "203"
+  },
+  {
+   "id": "doc66",
+   "apiId": "ita:sv10:207",
+   "name": "Arboliva-ex",
+   "number": "207"
+  },
+  {
+   "id": "doc67",
+   "apiId": "ita:sv10:208",
+   "name": "Moltres-ex del Team Rocket",
+   "number": "208"
+  },
+  {
+   "id": "doc68",
+   "apiId": "ita:sv10:222",
+   "name": "Arbitro",
+   "number": "222"
+  },
+  {
+   "id": "doc69",
+   "apiId": "ita:sv10:229",
+   "name": "Moltres-ex del Team Rocket",
+   "number": "229"
+  },
+  {
+   "id": "doc70",
+   "apiId": "ita:sv10:243",
+   "name": "Torre di Interferenza",
+   "number": "243"
+  },
+  {
+   "id": "doc71",
+   "apiId": "ita:me01:8",
+   "name": "Chikorita",
+   "number": "8"
+  },
+  {
+   "id": "doc72",
+   "apiId": "ita:me01:9",
+   "name": "Bayleef",
+   "number": "9"
+  },
+  {
+   "id": "doc73",
+   "apiId": "ita:me01:10",
+   "name": "Meganium",
+   "number": "10"
+  },
+  {
+   "id": "doc74",
+   "apiId": "ita:me01:114",
+   "name": "Ordini del Capo",
+   "number": "114"
+  },
+  {
+   "id": "doc75",
+   "apiId": "ita:me01:115",
+   "name": "Scambio di Energia",
+   "number": "115"
+  },
+  {
+   "id": "doc76",
+   "apiId": "ita:me01:117",
+   "name": "Bosco della Vitalità",
+   "number": "117"
+  },
+  {
+   "id": "doc77",
+   "apiId": "ita:me01:119",
+   "name": "Determinazione di Lylia",
+   "number": "119"
+  },
+  {
+   "id": "doc78",
+   "apiId": "ita:me01:127",
+   "name": "Rovine Insidiose",
+   "number": "127"
+  },
+  {
+   "id": "doc79",
+   "apiId": "ita:me01:130",
+   "name": "Scambio",
+   "number": "130"
+  },
+  {
+   "id": "doc80",
+   "apiId": "ita:me01:131",
+   "name": "Ultra Ball",
+   "number": "131"
+  },
+  {
+   "id": "doc81",
+   "apiId": "ita:me01:166",
+   "name": "Palloncino",
+   "number": "166"
+  },
+  {
+   "id": "doc82",
+   "apiId": "ita:me01:167",
+   "name": "Poffin del Cuore",
+   "number": "167"
+  },
+  {
+   "id": "doc83",
+   "apiId": "ita:me01:169",
+   "name": "Determinazione di Lylia",
+   "number": "169"
+  },
+  {
+   "id": "doc84",
+   "apiId": "ita:me01:173",
+   "name": "Barella Notturna",
+   "number": "173"
+  },
+  {
+   "id": "doc85",
+   "apiId": "ita:me01:184",
+   "name": "Determinazione di Lylia",
+   "number": "184"
+  },
+  {
+   "id": "doc86",
+   "apiId": "ita:me02:14",
+   "name": "Moltres",
+   "number": "14"
+  },
+  {
+   "id": "doc87",
+   "apiId": "ita:me02:87",
+   "name": "Lucinda",
+   "number": "87"
+  },
+  {
+   "id": "doc88",
+   "apiId": "ita:me02:106",
+   "name": "Meowth",
+   "number": "106"
+  },
+  {
+   "id": "doc89",
+   "apiId": "ita:me02:118",
+   "name": "Lucinda",
+   "number": "118"
+  },
+  {
+   "id": "doc90",
+   "apiId": "ita:me02:123",
+   "name": "Scambio",
+   "number": "123"
+  },
+  {
+   "id": "doc91",
+   "apiId": "ita:me02:129",
+   "name": "Lucinda",
+   "number": "129"
+  },
+  {
+   "id": "doc92",
+   "apiId": "ita:me03:62",
+   "name": "Meowth-ex",
+   "number": "62"
+  },
+  {
+   "id": "doc93",
+   "apiId": "ita:me03:71",
+   "name": "Martello Dirompente",
+   "number": "71"
+  },
+  {
+   "id": "doc94",
+   "apiId": "ita:me03:76",
+   "name": "Arbitro",
+   "number": "76"
+  },
+  {
+   "id": "doc95",
+   "apiId": "ita:me03:80",
+   "name": "Poké Ball",
+   "number": "80"
+  },
+  {
+   "id": "doc96",
+   "apiId": "ita:me03:81",
+   "name": "Poké Pad",
+   "number": "81"
+  },
+  {
+   "id": "doc97",
+   "apiId": "ita:me03:84",
+   "name": "Incoraggiamento di Rina",
+   "number": "84"
+  },
+  {
+   "id": "doc98",
+   "apiId": "ita:me03:107",
+   "name": "Meowth-ex",
+   "number": "107"
+  },
+  {
+   "id": "doc99",
+   "apiId": "ita:me03:109",
+   "name": "Bosco della Vitalità",
+   "number": "109"
+  },
+  {
+   "id": "doc100",
+   "apiId": "ita:me03:113",
+   "name": "Poké Pad",
+   "number": "113"
+  },
+  {
+   "id": "doc101",
+   "apiId": "ita:me03:114",
+   "name": "Incoraggiamento di Rina",
+   "number": "114"
+  },
+  {
+   "id": "doc102",
+   "apiId": "ita:me03:121",
+   "name": "Meowth-ex",
+   "number": "121"
+  },
+  {
+   "id": "doc103",
+   "apiId": "ita:me03:123",
+   "name": "Incoraggiamento di Rina",
+   "number": "123"
+  },
+  {
+   "id": "doc104",
+   "apiId": "ita:me04:80",
+   "name": "Torre Prisma",
+   "number": "80"
+  },
+  {
+   "id": "doc105",
+   "apiId": "ita:me04:82",
+   "name": "Cartelrosso Speciale",
+   "number": "82"
+  },
+  {
+   "id": "doc106",
+   "apiId": "ita:me04:111",
+   "name": "Torre Prisma",
+   "number": "111"
+  },
+  {
+   "id": "doc107",
+   "apiId": "ita:me04:113",
+   "name": "Cartelrosso Speciale",
+   "number": "113"
+  },
+  {
+   "id": "doc108",
+   "apiId": "ita:me05:105",
+   "name": "Martello Dirompente",
+   "number": "105"
+  },
+  {
+   "id": "doc109",
+   "apiId": "ita:me05:107",
+   "name": "Scambio di Energia",
+   "number": "107"
+  },
+  {
+   "id": "doc110",
+   "apiId": "ita:me2pt5:8",
+   "name": "Chikorita",
+   "number": "8"
+  },
+  {
+   "id": "doc111",
+   "apiId": "ita:me2pt5:9",
+   "name": "Bayleef",
+   "number": "9"
+  },
+  {
+   "id": "doc112",
+   "apiId": "ita:me2pt5:16",
+   "name": "Budew",
+   "number": "16"
+  },
+  {
+   "id": "doc113",
+   "apiId": "ita:me2pt5:99",
+   "name": "Munkidori",
+   "number": "99"
+  },
+  {
+   "id": "doc114",
+   "apiId": "ita:me2pt5:142",
+   "name": "Fezandipiti-ex",
+   "number": "142"
+  },
+  {
+   "id": "doc115",
+   "apiId": "ita:me2pt5:158",
+   "name": "Dreepy",
+   "number": "158"
+  },
+  {
+   "id": "doc116",
+   "apiId": "ita:me2pt5:159",
+   "name": "Drakloak",
+   "number": "159"
+  },
+  {
+   "id": "doc117",
+   "apiId": "ita:me2pt5:160",
+   "name": "Dragapult-ex",
+   "number": "160"
+  },
+  {
+   "id": "doc118",
+   "apiId": "ita:me2pt5:161",
+   "name": "Meowth del Team Rocket",
+   "number": "161"
+  },
+  {
+   "id": "doc119",
+   "apiId": "ita:me2pt5:181",
+   "name": "Palloncino",
+   "number": "181"
+  },
+  {
+   "id": "doc120",
+   "apiId": "ita:me2pt5:183",
+   "name": "Ordini del Capo",
+   "number": "183"
+  },
+  {
+   "id": "doc121",
+   "apiId": "ita:me2pt5:184",
+   "name": "Poffin del Cuore",
+   "number": "184"
+  },
+  {
+   "id": "doc122",
+   "apiId": "ita:me2pt5:188",
+   "name": "Bosco della Vitalità",
+   "number": "188"
+  },
+  {
+   "id": "doc123",
+   "apiId": "ita:me2pt5:192",
+   "name": "Determinazione di Lylia",
+   "number": "192"
+  },
+  {
+   "id": "doc124",
+   "apiId": "ita:me2pt5:196",
+   "name": "Barella Notturna",
+   "number": "196"
+  },
+  {
+   "id": "doc125",
+   "apiId": "ita:me2pt5:198",
+   "name": "Poké Pad",
+   "number": "198"
+  },
+  {
+   "id": "doc126",
+   "apiId": "ita:me2pt5:210",
+   "name": "Torre di Guardia del Team Rocket",
+   "number": "210"
+  },
+  {
+   "id": "doc127",
+   "apiId": "ita:me2pt5:213",
+   "name": "Ultra Ball",
+   "number": "213"
+  },
+  {
+   "id": "doc128",
+   "apiId": "ita:me2pt5:221",
+   "name": "Budew",
+   "number": "221"
+  },
+  {
+   "id": "doc129",
+   "apiId": "ita:me2pt5:247",
+   "name": "Dreepy",
+   "number": "247"
+  },
+  {
+   "id": "doc130",
+   "apiId": "ita:me2pt5:248",
+   "name": "Drakloak",
+   "number": "248"
+  },
+  {
+   "id": "doc131",
+   "apiId": "ita:me2pt5:256",
+   "name": "Ordini del Capo",
+   "number": "256"
+  },
+  {
+   "id": "doc132",
+   "apiId": "ita:me2pt5:261",
+   "name": "Torre di Interferenza",
+   "number": "261"
+  },
+  {
+   "id": "doc133",
+   "apiId": "ita:me2pt5:264",
+   "name": "Ultra Ball",
+   "number": "264"
+  },
+  {
+   "id": "doc134",
+   "apiId": "ita:me2pt5:288",
+   "name": "Fezandipiti-ex",
+   "number": "288"
+  },
+  {
+   "id": "doc135",
+   "apiId": "ita:mep:1",
+   "name": "Meganium",
+   "number": "1"
+  },
+  {
+   "id": "doc136",
+   "apiId": "ita:mep:46",
+   "name": "Chikorita",
+   "number": "46"
+  },
+  {
+   "id": "doc137",
+   "apiId": "ita:mep:69",
+   "name": "Chikorita",
+   "number": "69"
+  },
+  {
+   "id": "doc138",
+   "apiId": "ita:sv6pt5:37",
+   "name": "Munkidori-ex",
+   "number": "37"
+  },
+  {
+   "id": "doc139",
+   "apiId": "ita:sv6pt5:38",
+   "name": "Fezandipiti-ex",
+   "number": "38"
+  },
+  {
+   "id": "doc140",
+   "apiId": "ita:sv6pt5:48",
+   "name": "Meowth",
+   "number": "48"
+  },
+  {
+   "id": "doc141",
+   "apiId": "ita:sv6pt5:61",
+   "name": "Barella Notturna",
+   "number": "61"
+  },
+  {
+   "id": "doc142",
+   "apiId": "ita:sv6pt5:62",
+   "name": "Poké Vitale A",
+   "number": "62"
+  },
+  {
+   "id": "doc143",
+   "apiId": "ita:sv6pt5:72",
+   "name": "Munkidori",
+   "number": "72"
+  },
+  {
+   "id": "doc144",
+   "apiId": "ita:sv6pt5:73",
+   "name": "Fezandipiti",
+   "number": "73"
+  },
+  {
+   "id": "doc145",
+   "apiId": "ita:sv6pt5:83",
+   "name": "Munkidori-ex",
+   "number": "83"
+  },
+  {
+   "id": "doc146",
+   "apiId": "ita:sv6pt5:84",
+   "name": "Fezandipiti-ex",
+   "number": "84"
+  },
+  {
+   "id": "doc147",
+   "apiId": "ita:sv6pt5:91",
+   "name": "Munkidori-ex",
+   "number": "91"
+  },
+  {
+   "id": "doc148",
+   "apiId": "ita:sv6pt5:92",
+   "name": "Fezandipiti-ex",
+   "number": "92"
+  },
+  {
+   "id": "doc149",
+   "apiId": "ita:sv02:172",
+   "name": "Ordini del Capo (Ghecis)",
+   "number": "172"
+  },
+  {
+   "id": "doc150",
+   "apiId": "ita:sv02:248",
+   "name": "Ordini del Capo (Ghecis)",
+   "number": "248"
+  },
+  {
+   "id": "doc151",
+   "apiId": "ita:sv02:265",
+   "name": "Ordini del Capo (Ghecis)",
+   "number": "265"
+  },
+  {
+   "id": "doc152",
+   "apiId": "ita:sv03:19",
+   "name": "Smoliv",
+   "number": "19"
+  },
+  {
+   "id": "doc153",
+   "apiId": "ita:sv03:20",
+   "name": "Dolliv",
+   "number": "20"
+  },
+  {
+   "id": "doc154",
+   "apiId": "ita:sv03:21",
+   "name": "Arboliva",
+   "number": "21"
+  },
+  {
+   "id": "doc155",
+   "apiId": "ita:sv01:20",
+   "name": "Smoliv",
+   "number": "20"
+  },
+  {
+   "id": "doc156",
+   "apiId": "ita:sv01:21",
+   "name": "Smoliv",
+   "number": "21"
+  },
+  {
+   "id": "doc157",
+   "apiId": "ita:sv01:22",
+   "name": "Dolliv",
+   "number": "22"
+  },
+  {
+   "id": "doc158",
+   "apiId": "ita:sv01:23",
+   "name": "Arboliva",
+   "number": "23"
+  },
+  {
+   "id": "doc159",
+   "apiId": "ita:sv01:168",
+   "name": "Martello Dirompente",
+   "number": "168"
+  },
+  {
+   "id": "doc160",
+   "apiId": "ita:sv01:173",
+   "name": "Scambio di Energia",
+   "number": "173"
+  },
+  {
+   "id": "doc161",
+   "apiId": "ita:sv01:176",
+   "name": "Arbitro",
+   "number": "176"
+  },
+  {
+   "id": "doc162",
+   "apiId": "ita:sv01:185",
+   "name": "Poké Ball",
+   "number": "185"
+  },
+  {
+   "id": "doc163",
+   "apiId": "ita:sv01:194",
+   "name": "Scambio",
+   "number": "194"
+  },
+  {
+   "id": "doc164",
+   "apiId": "ita:sv01:196",
+   "name": "Ultra Ball",
+   "number": "196"
+  },
+  {
+   "id": "doc165",
+   "apiId": "ita:sv01:200",
+   "name": "Dolliv",
+   "number": "200"
+  }
+ ]
+}

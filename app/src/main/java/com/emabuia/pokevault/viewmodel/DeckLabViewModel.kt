@@ -676,11 +676,6 @@ class DeckLabViewModel : ViewModel() {
         val totalRequested: Int
     )
 
-    private data class OwnedMatch(
-        val cards: List<PokemonCard>,
-        val usedFallbackSet: Boolean
-    )
-
     var importResult by mutableStateOf<ImportResult?>(null)
         private set
 
@@ -791,87 +786,9 @@ class DeckLabViewModel : ViewModel() {
         return result
     }
 
-    /**
-     * Cerca le carte possedute che corrispondono a nome, set e numero.
-     * Prima prova matching esatto, poi fallback su nome.
-     */
-    private fun findOwnedCards(name: String, set: String?, number: String?): OwnedMatch {
-        val nameLower = name.lowercase().trim()
-
-        // Le energie base si cercano per tipo, non per stampa: "Basic Psychic
-        // Energy SVE 5" e l'"Energia Psico" gia' in collezione sono la stessa
-        // carta, e pretendere lo stesso set e lo stesso numero significava non
-        // trovarla mai e aggiungerne una copia nuova a ogni import.
-        if (BasicEnergyResolver.isBasicEnergy(name)) {
-            val ownedEnergies = ownedCards.filter { card ->
-                BasicEnergyResolver.isSameBasicEnergy(card.name, name)
-            }
-            if (ownedEnergies.isNotEmpty()) {
-                return OwnedMatch(
-                    // Prima quelle con un'immagine: se in collezione ci sono
-                    // gia' dei segnaposto di import precedenti, non e' il caso
-                    // di sceglierli proprio adesso.
-                    cards = ownedEnergies.sortedByDescending { it.imageUrl.isNotBlank() },
-                    usedFallbackSet = false
-                )
-            }
-        }
-
-        // 1. Match esatto: nome + set + numero
-        if (set != null && number != null) {
-            val exact = ownedCards.filter { card ->
-                card.name.lowercase().trim() == nameLower &&
-                    SetCodeMapper.matchesImportedSet(
-                        importedSet = set,
-                        cardSetName = card.set,
-                        cardApiSetId = card.apiCardId.substringBefore("-"),
-                        cardApiId = card.apiCardId
-                    ) &&
-                    card.cardNumber == number
-            }
-            if (exact.isNotEmpty()) return OwnedMatch(exact, usedFallbackSet = false)
-        }
-
-        // 2. Match per nome + numero, con preferenza set quando disponibile
-        if (number != null) {
-            val byNameAndNumber = ownedCards
-                .filter { card ->
-                card.name.lowercase().trim() == nameLower &&
-                    card.cardNumber == number
-                }
-                .sortedByDescending { card ->
-                    SetCodeMapper.matchesImportedSet(
-                        importedSet = set,
-                        cardSetName = card.set,
-                        cardApiSetId = card.apiCardId.substringBefore("-"),
-                        cardApiId = card.apiCardId
-                    )
-                }
-
-            if (byNameAndNumber.isNotEmpty()) {
-                val hasSetMatch = set.isNullOrBlank() || SetCodeMapper.matchesImportedSet(
-                    importedSet = set,
-                    cardSetName = byNameAndNumber.first().set,
-                    cardApiSetId = byNameAndNumber.first().apiCardId.substringBefore("-"),
-                    cardApiId = byNameAndNumber.first().apiCardId
-                )
-                return OwnedMatch(byNameAndNumber, usedFallbackSet = !hasSetMatch)
-            }
-        }
-
-        // 3. Match per nome esatto
-        val byName = ownedCards.filter { card ->
-            card.name.lowercase().trim() == nameLower
-        }
-        if (byName.isNotEmpty()) return OwnedMatch(byName, usedFallbackSet = !set.isNullOrBlank())
-
-        // 4. Match parziale per nome (contiene)
-        val byPartial = ownedCards.filter { card ->
-            card.name.lowercase().contains(nameLower) ||
-                nameLower.contains(card.name.lowercase())
-        }
-        return OwnedMatch(byPartial, usedFallbackSet = byPartial.isNotEmpty() && !set.isNullOrBlank())
-    }
+    /** Vedi [DeckImportMatcher]: la logica sta li', dove si prova senza Firestore. */
+    private fun findOwnedCards(name: String, set: String?, number: String?): OwnedMatch =
+        DeckImportMatcher.find(ownedCards, name, set, number)
 
     fun clearImportResult() {
         importResult = null

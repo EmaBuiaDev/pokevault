@@ -18,7 +18,7 @@ object WhatsNew {
     private const val PREFS_NAME = "pokevault_prefs"
     private const val KEY_SEEN_VERSION = "whats_new_seen_version"
 
-    enum class Icon { NAME, LANGUAGE, SCANNER, PRICE, ALBUM, HAND, RATING, META }
+    enum class Icon { NAME, LANGUAGE, SCANNER, PRICE, ALBUM, HAND, RATING, META, IMPORT, THEME }
 
     data class Item(val icon: Icon, val title: String, val body: String)
 
@@ -26,6 +26,7 @@ object WhatsNew {
     fun notesFor(versionCode: Int): List<Item> = when (versionCode) {
         41 -> notes318()
         42 -> notes319()
+        43 -> notes3110()
         else -> emptyList()
     }
 
@@ -144,6 +145,34 @@ object WhatsNew {
         Item(
             Icon.META, "Clearer Meta Deck",
             "Win rate over all games, placements with their context and the real trend of decks in recent tournaments."
+        ),
+    )
+
+    private fun notes3110(): List<Item> = if (AppLocale.isItalian) listOf(
+        Item(
+            Icon.IMPORT, "Import dei mazzi preciso",
+            "Le liste da Limitless e dal Meta Deck prendono dalla tua collezione la stampa esatta: stesso set, stesso numero."
+        ),
+        Item(
+            Icon.HAND, "Niente più carte scambiate",
+            "Una carta ex non viene più sostituita dalla versione normale, e le copie che ti mancano arrivano nella stampa giusta."
+        ),
+        Item(
+            Icon.THEME, "Tema chiaro più leggibile",
+            "Il tuo nome in cima alla Home ora si legge bene anche col tema chiaro."
+        ),
+    ) else listOf(
+        Item(
+            Icon.IMPORT, "Accurate deck import",
+            "Lists from Limitless and Meta Deck now take the exact print from your collection: same set, same number."
+        ),
+        Item(
+            Icon.HAND, "No more swapped cards",
+            "An ex card is no longer replaced by its regular version, and the copies you're missing come in the right print."
+        ),
+        Item(
+            Icon.THEME, "Easier to read in light theme",
+            "Your name at the top of Home is now clearly readable in the light theme too."
         ),
     )
 }

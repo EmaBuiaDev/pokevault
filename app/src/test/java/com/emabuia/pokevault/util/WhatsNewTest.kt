@@ -65,9 +65,9 @@ class WhatsNewTest {
         installTimes(first = 1_000L, lastUpdate = 1_000L)
         assertFalse(WhatsNew.consumeOnLaunch(app, 41))
         installTimes(first = 1_000L, lastUpdate = 5_000L)
-        // 43 non ha note: niente pop-up vuoto, ma la versione resta segnata.
-        assertFalse(WhatsNew.consumeOnLaunch(app, 43))
-        assertEquals(43, app.getSharedPreferences("pokevault_prefs", Context.MODE_PRIVATE).getInt("whats_new_seen_version", 0))
+        // 44 non ha note: niente pop-up vuoto, ma la versione resta segnata.
+        assertFalse(WhatsNew.consumeOnLaunch(app, 44))
+        assertEquals(44, app.getSharedPreferences("pokevault_prefs", Context.MODE_PRIVATE).getInt("whats_new_seen_version", 0))
     }
 
     // ── Note ──
@@ -87,7 +87,7 @@ class WhatsNewTest {
     @Test
     fun `le versioni senza note non hanno pop-up`() {
         assertTrue(WhatsNew.notesFor(40).isEmpty())
-        assertTrue(WhatsNew.notesFor(43).isEmpty())
+        assertTrue(WhatsNew.notesFor(44).isEmpty())
     }
 
     @Test
@@ -110,5 +110,26 @@ class WhatsNewTest {
         assertTrue(WhatsNew.consumeOnLaunch(app, 41))
         installTimes(first = 1_000L, lastUpdate = 9_000L)
         assertTrue(WhatsNew.consumeOnLaunch(app, 42))
+    }
+
+    @Test
+    fun `le note della 3_1_10 ci sono in italiano e in inglese`() {
+        for (lang in AppLocale.Language.values()) {
+            AppLocale.setLanguage(lang, app)
+            val notes = WhatsNew.notesFor(43)
+            assertEquals(
+                listOf(WhatsNew.Icon.IMPORT, WhatsNew.Icon.HAND, WhatsNew.Icon.THEME),
+                notes.map { it.icon }
+            )
+            assertTrue(notes.all { it.title.isNotBlank() && it.body.isNotBlank() })
+        }
+    }
+
+    @Test
+    fun `chi aggiorna dalla 3_1_9 vede le note della 3_1_10`() {
+        installTimes(first = 1_000L, lastUpdate = 2_000L)
+        assertTrue(WhatsNew.consumeOnLaunch(app, 42))
+        installTimes(first = 1_000L, lastUpdate = 9_000L)
+        assertTrue(WhatsNew.consumeOnLaunch(app, 43))
     }
 }
