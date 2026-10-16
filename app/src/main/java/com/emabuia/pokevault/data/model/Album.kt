@@ -23,8 +23,32 @@ data class Album(
     val layout: String = BinderLayout.DEFAULT.key,
     /** Le carte del catalogo messe nelle tasche, con quanto serve a mostrarle offline. */
     val catalogCards: List<AlbumCatalogCard> = emptyList(),
+    /**
+     * Il motivo della copertina disegnata ([AlbumCover]). Vuoto = album nato
+     * prima delle copertine: continua a mostrare le sue carte.
+     */
+    val coverPattern: String = "",
+    /** Il Pokemon della copertina, numero di Pokedex; 0 = nessuno. */
+    val coverPokemon: Int = 0,
     val createdAt: Timestamp? = null
 )
+
+/** I motivi della copertina. Il colore e' quello dell'album ([Album.theme]). */
+object AlbumCover {
+    const val DOTS = "dots"
+    const val STRIPES = "stripes"
+    const val PLAIN = "plain"
+
+    val PATTERNS = listOf(DOTS, STRIPES, PLAIN)
+
+    /** Ha una copertina disegnata, o mostra ancora le carte come prima. */
+    fun isDesigned(pattern: String): Boolean = pattern in PATTERNS
+
+    /** L'artwork ufficiale del Pokemon: grande, nitido, su sfondo trasparente. */
+    fun artworkUrl(dexNumber: Int): String? =
+        if (dexNumber <= 0) null
+        else "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/$dexNumber.png"
+}
 
 /**
  * Una carta del catalogo dentro un album, anche se non la possiedi.

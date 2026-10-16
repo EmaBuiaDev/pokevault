@@ -1057,6 +1057,8 @@ class FirestoreRepository {
                 "coverImageUrl" to album.coverImageUrl,
                 "layout" to album.layout,
                 "catalogCards" to album.catalogCards.map { it.toFirestoreMap() },
+                "coverPattern" to album.coverPattern,
+                "coverPokemon" to album.coverPokemon,
                 "createdAt" to (album.createdAt ?: com.google.firebase.Timestamp.now())
             )
             val docRef = if (album.id.isEmpty()) albumsCollection.document() else albumsCollection.document(album.id)

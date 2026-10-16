@@ -12,6 +12,7 @@ import com.emabuia.pokevault.data.catalog.CatalogLang
 import com.emabuia.pokevault.data.firebase.FirestoreRepository
 import com.emabuia.pokevault.data.model.Album
 import com.emabuia.pokevault.data.model.AlbumCatalogCard
+import com.emabuia.pokevault.data.model.AlbumCover
 import com.emabuia.pokevault.data.model.BinderLayout
 import com.emabuia.pokevault.data.model.CardOptions
 import com.emabuia.pokevault.data.model.PokemonCard
@@ -22,6 +23,7 @@ import com.emabuia.pokevault.util.AlbumEntries
 import com.emabuia.pokevault.util.AlbumRow
 import com.emabuia.pokevault.util.AlbumSlot
 import com.emabuia.pokevault.util.AppLocale
+import com.emabuia.pokevault.util.PokemonSpriteResolver
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
@@ -57,6 +59,15 @@ class AlbumViewModel : ViewModel() {
     var albumSize by mutableStateOf(18)
     var albumTheme by mutableStateOf("classic")
     var albumLayout by mutableStateOf(BinderLayout.DEFAULT)
+    var albumCoverPattern by mutableStateOf(AlbumCover.DOTS)
+    var albumCoverPokemon by mutableStateOf(0)
+
+    // Ricerca del Pokemon di copertina: la tabella delle specie sta negli asset.
+    var speciesQuery by mutableStateOf("")
+        private set
+    var speciesResults by mutableStateOf<List<PokemonSpriteResolver.Species>>(emptyList())
+        private set
+    private var allSpecies: List<PokemonSpriteResolver.Species> = emptyList()
 
     /** Le carte gia' nell'album in modifica: sotto questo numero di tasche non si scende. */
     var editingCardCount by mutableStateOf(0)
@@ -162,6 +173,8 @@ class AlbumViewModel : ViewModel() {
                 // in collezione non valgono niente: si sommano solo le trovate.
                 value = slots.sumOf { it.value },
                 createdAtSeconds = album.createdAt?.seconds ?: 0L,
+                coverPattern = album.coverPattern,
+                coverPokemon = album.coverPokemon,
                 // Si tolgono solo le tasche "da trovare": un album di sole carte
                 // della collezione resta contato esattamente come prima.
                 found = album.cardIds.size - slots.count { !it.isOwned }
@@ -334,6 +347,22 @@ class AlbumViewModel : ViewModel() {
         }
     }
 
+    // ── Pokemon di copertina ─────────────────────────────────────────────
+
+    /** Cerca la specie per nome: la tabella si legge dagli asset una volta sola. */
+    fun searchSpecies(query: String, context: Context) {
+        speciesQuery = query
+        if (query.isBlank()) {
+            speciesResults = emptyList()
+            return
+        }
+        viewModelScope.launch {
+            if (allSpecies.isEmpty()) allSpecies = PokemonSpriteResolver.allSpecies(context)
+            // Il testo puo' essere cambiato mentre si caricava la tabella.
+            if (speciesQuery == query) speciesResults = PokemonSpriteResolver.searchSpecies(allSpecies, query)
+        }
+    }
+
     // ── Salvataggio ──────────────────────────────────────────────────────
 
     fun saveAlbum(onSuccess: () -> Unit = {}) {
@@ -356,6 +385,8 @@ class AlbumViewModel : ViewModel() {
                 cardIds = cardIds,
                 coverImageUrl = existing?.coverImageUrl ?: "",
                 layout = albumLayout.key,
+                coverPattern = albumCoverPattern,
+                coverPokemon = albumCoverPokemon,
                 catalogCards = existing?.catalogCards ?: emptyList(),
                 createdAt = existing?.createdAt
             )
@@ -396,6 +427,9 @@ class AlbumViewModel : ViewModel() {
         albumSize = album.size
         albumTheme = album.theme
         albumLayout = BinderLayout.of(album.layout)
+        // Un album di prima, aperto nel modulo, passa alla copertina disegnata.
+        albumCoverPattern = album.coverPattern.takeIf { AlbumCover.isDesigned(it) } ?: AlbumCover.DOTS
+        albumCoverPokemon = album.coverPokemon
         editingCardCount = album.cardIds.size
     }
 
@@ -410,6 +444,10 @@ class AlbumViewModel : ViewModel() {
         albumTheme = "classic"
         albumLayout = BinderLayout.DEFAULT
         editingCardCount = 0
+        albumCoverPattern = AlbumCover.DOTS
+        albumCoverPokemon = 0
+        speciesQuery = ""
+        speciesResults = emptyList()
     }
 
     private companion object {

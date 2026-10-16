@@ -32,7 +32,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.emabuia.pokevault.data.model.AlbumCover
 import com.emabuia.pokevault.data.model.BinderLayout
 import com.emabuia.pokevault.data.model.CardClassifier
 import com.emabuia.pokevault.ui.components.pressScale
@@ -177,6 +182,9 @@ fun CreateAlbumScreen(
                 name = viewModel.albumName,
                 description = viewModel.albumDescription,
                 colors = themeColors,
+                theme = viewModel.albumTheme,
+                coverPattern = viewModel.albumCoverPattern,
+                coverPokemon = viewModel.albumCoverPokemon,
                 layout = layout,
                 pages = pages,
                 pockets = viewModel.albumSize
@@ -267,6 +275,11 @@ fun CreateAlbumScreen(
                 }
             }
 
+            // ── Copertina ─────────────────────────────────────────────────
+            FormSection(title = AppLocale.albumCoverTitle) {
+                CoverPicker(viewModel = viewModel, accent = accent)
+            }
+
             // ── Regole ────────────────────────────────────────────────────
             RulesSection(
                 open = rulesOpen,
@@ -293,6 +306,9 @@ private fun AlbumPreviewCard(
     name: String,
     description: String,
     colors: List<Color>,
+    theme: String,
+    coverPattern: String,
+    coverPokemon: Int,
     layout: BinderLayout,
     pages: Int,
     pockets: Int
@@ -307,42 +323,42 @@ private fun AlbumPreviewCard(
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // La copertina con la pagina aperta accanto
-        Box(modifier = Modifier.width(118.dp).height(112.dp)) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .width(66.dp)
-                    .height(92.dp)
-                    .clip(RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 12.dp, bottomEnd = 12.dp))
-                    .background(Brush.linearGradient(colors))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .padding(start = 7.dp)
-                        .width(3.dp)
-                        .fillMaxHeight()
-                        .background(Color.White.copy(alpha = 0.25f))
-                )
-                Icon(
-                    Icons.Default.AutoStories,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.align(Alignment.Center).size(26.dp)
-                )
-            }
+        // La pagina aperta dietro, la copertina davanti
+        Box(modifier = Modifier.width(128.dp).height(118.dp)) {
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .rotate(4f)
-                    .width(70.dp)
-                    .height(96.dp)
+                    .rotate(5f)
+                    .width(66.dp)
+                    .height(92.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(AppColors.background)
                     .border(1.dp, AppColors.textMuted.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
                     .padding(5.dp)
             ) {
                 PocketGrid(layout = layout, accent = accent, gap = 3.dp, filled = minOf(pockets, layout.perPage) / 2)
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .width(84.dp)
+                    .height(112.dp)
+                    .clip(RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 14.dp, bottomEnd = 14.dp))
+            ) {
+                AlbumCoverArt(
+                    theme = theme,
+                    pattern = coverPattern,
+                    pokemon = coverPokemon,
+                    modifier = Modifier.fillMaxSize()
+                )
+                // Il dorso del raccoglitore
+                Box(
+                    modifier = Modifier
+                        .padding(start = 7.dp)
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .background(Color.White.copy(alpha = 0.3f))
+                )
             }
         }
 
@@ -767,5 +783,115 @@ internal fun getThemeLabel(theme: String): String {
         "fairy" -> AppLocale.albumThemeFairy
         "dragon" -> AppLocale.albumThemeDragon
         else -> AppLocale.albumThemeClassic
+    }
+}
+
+// ── Copertina ─────────────────────────────────────────────────────────────────
+
+/**
+ * La copertina: un motivo e, se si vuole, un Pokemon cercato per nome.
+ *
+ * Volutamente niente carte: una carta rimpicciolita nell'elenco degli album
+ * non si riconosce, un Pokemon disegnato si'.
+ */
+@Composable
+private fun CoverPicker(viewModel: AlbumViewModel, accent: Color) {
+    val context = LocalContext.current
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                AlbumCover.DOTS to AppLocale.albumCoverDots,
+                AlbumCover.STRIPES to AppLocale.albumCoverStripes,
+                AlbumCover.PLAIN to AppLocale.albumCoverPlain
+            ).forEach { (pattern, label) ->
+                ChoiceChip(label, viewModel.albumCoverPattern == pattern, accent) {
+                    viewModel.albumCoverPattern = pattern
+                }
+            }
+        }
+
+        OutlinedTextField(
+            value = viewModel.speciesQuery,
+            onValueChange = { viewModel.searchSpecies(it, context) },
+            placeholder = { Text(AppLocale.albumCoverSearchHint, color = AppColors.textMuted, fontSize = 13.sp) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = accent,
+                unfocusedBorderColor = AppColors.textMuted.copy(alpha = 0.45f),
+                cursorColor = accent,
+                focusedTextColor = AppColors.textPrimary,
+                unfocusedTextColor = AppColors.textPrimary,
+                focusedLeadingIconColor = accent,
+                unfocusedLeadingIconColor = AppColors.textMuted,
+                focusedContainerColor = AppColors.card,
+                unfocusedContainerColor = AppColors.card
+            )
+        )
+
+        val results = viewModel.speciesResults
+        if (viewModel.speciesQuery.isNotBlank() && results.isEmpty()) {
+            Text(AppLocale.albumCoverNoMatch, color = AppColors.textMuted, fontSize = 12.sp)
+        }
+        if (results.isNotEmpty() || viewModel.albumCoverPokemon > 0) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item(key = "none") {
+                    PokemonTile(
+                        dex = 0,
+                        name = AppLocale.albumCoverNoPokemon,
+                        selected = viewModel.albumCoverPokemon == 0,
+                        accent = accent,
+                        onClick = { viewModel.albumCoverPokemon = 0 }
+                    )
+                }
+                items(results, key = { "${it.dex}-${it.name}" }) { species ->
+                    PokemonTile(
+                        dex = species.dex,
+                        name = species.name,
+                        selected = viewModel.albumCoverPokemon == species.dex,
+                        accent = accent,
+                        onClick = { viewModel.albumCoverPokemon = species.dex }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PokemonTile(dex: Int, name: String, selected: Boolean, accent: Color, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(76.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (selected) accent.copy(alpha = 0.12f) else AppColors.card)
+            .border(if (selected) 2.dp else 1.dp, if (selected) accent else AppColors.textMuted.copy(alpha = 0.2f), RoundedCornerShape(14.dp))
+            .pressScale(onClick = onClick)
+            .padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        val artwork = AlbumCover.artworkUrl(dex)
+        Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+            if (artwork != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(artwork).crossfade(true).build(),
+                    contentDescription = name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(Icons.Default.Block, contentDescription = null, tint = AppColors.textMuted, modifier = Modifier.size(26.dp))
+            }
+        }
+        Text(
+            name,
+            color = if (selected) accent else AppColors.textSecondary,
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }

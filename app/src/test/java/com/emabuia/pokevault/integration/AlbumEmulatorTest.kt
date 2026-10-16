@@ -59,7 +59,7 @@ class AlbumEmulatorTest {
     fun `carte del catalogo salvate e rilette`() {
         emu { nuovoUtente() }
         val id = emu {
-            repo.saveAlbum(Album(name = "Fuoco", size = 12, layout = "4x3")).getOrThrow()
+            repo.saveAlbum(Album(name = "Fuoco", size = 12, layout = "4x3", coverPattern = "stripes", coverPokemon = 6)).getOrThrow()
         }
         emu {
             repo.addAlbumEntries(id, listOf("doc1", AlbumEntries.catalogEntry(charizard.apiId)), listOf(charizard)).getOrThrow()
@@ -69,6 +69,8 @@ class AlbumEmulatorTest {
 
         val album = emu { albumSalvato(id) }
         assertEquals("4x3", album.layout)
+        assertEquals("stripes", album.coverPattern)
+        assertEquals(6, album.coverPokemon)
         assertEquals(listOf("doc1", "cat:ita:sv03:125"), album.cardIds)
         assertEquals(listOf(charizard), album.catalogCards)
     }
@@ -109,6 +111,8 @@ class AlbumEmulatorTest {
         val album = emu { albumSalvato("vecchio") }
         assertEquals(listOf("a", "b"), album.cardIds)
         assertEquals("3x3", album.layout)
+        assertEquals("", album.coverPattern)
+        assertEquals(0, album.coverPokemon)
         assertEquals(emptyList<AlbumCatalogCard>(), album.catalogCards)
     }
 }

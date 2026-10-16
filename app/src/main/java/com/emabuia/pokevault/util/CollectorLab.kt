@@ -35,7 +35,10 @@ data class AlbumRow(
      * catalogo "da trovare"; per un album di sole carte della collezione i
      * due numeri coincidono.
      */
-    val found: Int = used
+    val found: Int = used,
+    /** Motivo della copertina disegnata; vuoto = copertina di carte come prima. */
+    val coverPattern: String = "",
+    val coverPokemon: Int = 0
 ) {
     val fillPercent: Float get() = CollectorLab.fillPercent(used, size)
     val isFull: Boolean get() = size > 0 && used >= size

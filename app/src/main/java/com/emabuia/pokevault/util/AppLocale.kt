@@ -2952,6 +2952,13 @@ object AppLocale {
     else
         "If you set them, only cards that match are suggested when you add. You can leave them empty."
     val albumRuleAny: String get() = if (isItalian) "Qualsiasi" else "Any"
+    val albumCoverTitle: String get() = if (isItalian) "Copertina" else "Cover"
+    val albumCoverDots: String get() = if (isItalian) "Pois" else "Dots"
+    val albumCoverStripes: String get() = if (isItalian) "Righe" else "Stripes"
+    val albumCoverPlain: String get() = if (isItalian) "Tinta unita" else "Plain"
+    val albumCoverSearchHint: String get() = if (isItalian) "Cerca un Pokémon per la copertina" else "Search a Pokémon for the cover"
+    val albumCoverNoMatch: String get() = if (isItalian) "Nessun Pokémon con questo nome" else "No Pokémon with this name"
+    val albumCoverNoPokemon: String get() = if (isItalian) "Nessuno" else "None"
 
     // Lista chase
     val chaseSortClosest: String get() = if (isItalian) "Quasi fatti" else "Almost there"

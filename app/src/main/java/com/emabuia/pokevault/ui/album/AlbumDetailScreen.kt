@@ -36,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.emabuia.pokevault.data.model.Album
+import com.emabuia.pokevault.data.model.AlbumCover
 import com.emabuia.pokevault.data.model.BinderLayout
 import com.emabuia.pokevault.ui.components.FillBar
 import com.emabuia.pokevault.ui.components.NotFoundOrLoadingView
@@ -231,7 +232,7 @@ fun AlbumDetailScreen(
                         items(slots, key = { it.key }) { slot ->
                             SlotItem(
                                 slot = slot,
-                                isCover = album.coverImageUrl.isNotBlank() && album.coverImageUrl == slot.imageUrl,
+                                isCover = !AlbumCover.isDesigned(album.coverPattern) && album.coverImageUrl.isNotBlank() && album.coverImageUrl == slot.imageUrl,
                                 onClick = { actionSlot = slot },
                                 onRemove = { removeWithUndo(slot) }
                             )
@@ -302,10 +303,14 @@ fun AlbumDetailScreen(
                     }
                 }
             },
-            onSetCover = {
-                viewModel.setAlbumCover(albumId, slot.imageUrl)
-                actionSlot = null
-                scope.launch { snackbarHostState.showSnackbar(AppLocale.albumCoverUpdated) }
+            // Con la copertina disegnata la carta non fa da copertina: l'azione
+            // resta solo agli album di prima.
+            onSetCover = if (AlbumCover.isDesigned(album.coverPattern)) null else {
+                {
+                    viewModel.setAlbumCover(albumId, slot.imageUrl)
+                    actionSlot = null
+                    scope.launch { snackbarHostState.showSnackbar(AppLocale.albumCoverUpdated) }
+                }
             },
             onMove = { delta ->
                 viewModel.moveCardInAlbum(albumId, slot.key, delta)
@@ -523,7 +528,7 @@ private fun BinderView(
                                 when {
                                     slot != null -> SlotImage(
                                         slot = slot,
-                                        isCover = album.coverImageUrl.isNotBlank() && album.coverImageUrl == slot.imageUrl,
+                                        isCover = !AlbumCover.isDesigned(album.coverPattern) && album.coverImageUrl.isNotBlank() && album.coverImageUrl == slot.imageUrl,
                                         onClick = { onSlotClick(slot) },
                                         modifier = Modifier.fillMaxSize()
                                     )
@@ -711,7 +716,7 @@ private fun SlotActionsSheet(
     onDismiss: () -> Unit,
     onOpen: (() -> Unit)?,
     onIHaveIt: (() -> Unit)?,
-    onSetCover: () -> Unit,
+    onSetCover: (() -> Unit)?,
     onMove: (Int) -> Unit,
     onRemove: () -> Unit
 ) {
@@ -784,7 +789,7 @@ private fun SlotActionsSheet(
             onOpen?.let {
                 SheetAction(icon = Icons.AutoMirrored.Filled.OpenInNew, label = AppLocale.albumOpenCard, onClick = it)
             }
-            SheetAction(icon = Icons.Default.Star, label = AppLocale.albumSetCover, tint = AppColors.gold, onClick = onSetCover)
+            onSetCover?.let { SheetAction(icon = Icons.Default.Star, label = AppLocale.albumSetCover, tint = AppColors.gold, onClick = it) }
             if (!isFirst) {
                 SheetAction(icon = Icons.Default.VerticalAlignTop, label = AppLocale.albumMoveFirst, onClick = { onMove(-index) })
                 SheetAction(icon = Icons.Default.ArrowUpward, label = AppLocale.albumMoveBack, onClick = { onMove(-1) })
