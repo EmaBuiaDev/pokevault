@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.ThumbsUpDown
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -139,4 +141,6 @@ private fun iconFor(icon: WhatsNew.Icon): Pair<ImageVector, Color> = when (icon)
     WhatsNew.Icon.META -> Icons.Filled.Leaderboard to AppColors.purple
     WhatsNew.Icon.IMPORT -> Icons.Filled.FileDownload to AppColors.blue
     WhatsNew.Icon.THEME -> Icons.Filled.LightMode to AppColors.yellow
+    WhatsNew.Icon.FILTER -> Icons.Filled.Tune to AppColors.blue
+    WhatsNew.Icon.FOLD -> Icons.Filled.UnfoldMore to AppColors.green
 }

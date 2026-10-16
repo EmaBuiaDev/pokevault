@@ -160,7 +160,7 @@ class WishlistViewModel : ViewModel() {
      * wishlist facendo `cardId in it.cardIds` su una List: una scansione
      * lineare dentro un ciclo, cioe' lavoro quadratico durante lo scroll.
      */
-    private val wishlistedCardIds: Set<String> by derivedStateOf {
+    val wishlistedCardIds: Set<String> by derivedStateOf {
         wishlists.flatMapTo(HashSet()) { it.cardIds }
     }
 

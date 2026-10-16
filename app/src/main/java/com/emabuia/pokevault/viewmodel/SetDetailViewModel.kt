@@ -25,6 +25,9 @@ import com.emabuia.pokevault.data.remote.TcgPlayer
 import com.emabuia.pokevault.data.remote.TcgPriceInfo
 import com.emabuia.pokevault.data.remote.TcgSet
 import com.emabuia.pokevault.data.remote.TranslationService
+import com.emabuia.pokevault.ui.pokedex.SetCardFilter
+import com.emabuia.pokevault.ui.pokedex.SetCardSort
+import com.emabuia.pokevault.ui.pokedex.SetOwnership
 import com.emabuia.pokevault.util.AppLocale
 import com.emabuia.pokevault.util.hasPositiveEurPrice
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
@@ -56,10 +59,9 @@ data class SetDetailUiState(
     val viewMode: String = "grid",
     val searchQuery: String = "",
     val translatedQuery: String = "",
-    val showOnlyMissing: Boolean = false,
-    val showOnlyOwned: Boolean = false,
-    val selectedType: String? = null,
-    val selectedSupertype: String? = null,
+    /** Tutti i filtri dell'espansione, vedi [SetCardFilter]. */
+    val filter: SetCardFilter = SetCardFilter(),
+    val sort: SetCardSort = SetCardSort.NUMBER,
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val selectedCardPokeWalletPrices: PokeWalletPriceData? = null,
@@ -71,8 +73,6 @@ data class SetDetailUiState(
     val completionPercent: Int get() =
         if (displayTotal > 0) (ownedCount * 100 / displayTotal) else 0
 
-    val availableTypes: List<String> get() = cards.flatMap { it.types ?: emptyList() }.distinct().sorted()
-    val availableSupertypes: List<String> get() = cards.map { it.supertype }.distinct().sorted()
 }
 
 class SetDetailViewModel(application: Application) : AndroidViewModel(application) {
@@ -316,10 +316,8 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
             isLoadingCards = true,
             searchQuery = "",
             translatedQuery = "",
-            showOnlyMissing = false,
-            showOnlyOwned = false,
-            selectedType = null,
-            selectedSupertype = null,
+            filter = SetCardFilter(),
+            sort = SetCardSort.NUMBER,
             errorMessage = null
         )
 
@@ -441,26 +439,20 @@ class SetDetailViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun toggleShowOnlyMissing() {
+    /** Mancanti e Possedute si escludono: toccare quella accesa torna a Tutte. */
+    fun toggleOwnership(ownership: SetOwnership) {
+        val current = uiState.filter
         uiState = uiState.copy(
-            showOnlyMissing = !uiState.showOnlyMissing,
-            showOnlyOwned = false
+            filter = current.copy(ownership = if (current.ownership == ownership) SetOwnership.ALL else ownership)
         )
     }
 
-    fun toggleShowOnlyOwned() {
-        uiState = uiState.copy(
-            showOnlyOwned = !uiState.showOnlyOwned,
-            showOnlyMissing = false
-        )
+    fun updateFilter(change: (SetCardFilter) -> SetCardFilter) {
+        uiState = uiState.copy(filter = change(uiState.filter))
     }
 
-    fun selectType(type: String?) {
-        uiState = uiState.copy(selectedType = type)
-    }
-
-    fun selectSupertype(supertype: String?) {
-        uiState = uiState.copy(selectedSupertype = supertype)
+    fun setSort(sort: SetCardSort) {
+        uiState = uiState.copy(sort = sort)
     }
 
     fun addCardWithDetails(tcgCard: TcgCard, variant: String, quantity: Int, condition: String, language: String) {

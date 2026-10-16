@@ -65,9 +65,9 @@ class WhatsNewTest {
         installTimes(first = 1_000L, lastUpdate = 1_000L)
         assertFalse(WhatsNew.consumeOnLaunch(app, 41))
         installTimes(first = 1_000L, lastUpdate = 5_000L)
-        // 44 non ha note: niente pop-up vuoto, ma la versione resta segnata.
-        assertFalse(WhatsNew.consumeOnLaunch(app, 44))
-        assertEquals(44, app.getSharedPreferences("pokevault_prefs", Context.MODE_PRIVATE).getInt("whats_new_seen_version", 0))
+        // 45 non ha note: niente pop-up vuoto, ma la versione resta segnata.
+        assertFalse(WhatsNew.consumeOnLaunch(app, 45))
+        assertEquals(45, app.getSharedPreferences("pokevault_prefs", Context.MODE_PRIVATE).getInt("whats_new_seen_version", 0))
     }
 
     // ── Note ──
@@ -87,7 +87,7 @@ class WhatsNewTest {
     @Test
     fun `le versioni senza note non hanno pop-up`() {
         assertTrue(WhatsNew.notesFor(40).isEmpty())
-        assertTrue(WhatsNew.notesFor(44).isEmpty())
+        assertTrue(WhatsNew.notesFor(45).isEmpty())
     }
 
     @Test
@@ -131,5 +131,23 @@ class WhatsNewTest {
         assertTrue(WhatsNew.consumeOnLaunch(app, 42))
         installTimes(first = 1_000L, lastUpdate = 9_000L)
         assertTrue(WhatsNew.consumeOnLaunch(app, 43))
+    }
+
+    @Test
+    fun `le note della 3_1_11 ci sono in italiano e in inglese`() {
+        for (lang in AppLocale.Language.values()) {
+            AppLocale.setLanguage(lang, app)
+            val notes = WhatsNew.notesFor(44)
+            assertEquals(listOf(WhatsNew.Icon.FILTER, WhatsNew.Icon.FOLD), notes.map { it.icon })
+            assertTrue(notes.all { it.title.isNotBlank() && it.body.isNotBlank() })
+        }
+    }
+
+    @Test
+    fun `chi aggiorna dalla 3_1_10 vede le note della 3_1_11`() {
+        installTimes(first = 1_000L, lastUpdate = 2_000L)
+        assertTrue(WhatsNew.consumeOnLaunch(app, 43))
+        installTimes(first = 1_000L, lastUpdate = 9_000L)
+        assertTrue(WhatsNew.consumeOnLaunch(app, 44))
     }
 }

@@ -18,7 +18,7 @@ object WhatsNew {
     private const val PREFS_NAME = "pokevault_prefs"
     private const val KEY_SEEN_VERSION = "whats_new_seen_version"
 
-    enum class Icon { NAME, LANGUAGE, SCANNER, PRICE, ALBUM, HAND, RATING, META, IMPORT, THEME }
+    enum class Icon { NAME, LANGUAGE, SCANNER, PRICE, ALBUM, HAND, RATING, META, IMPORT, THEME, FILTER, FOLD }
 
     data class Item(val icon: Icon, val title: String, val body: String)
 
@@ -27,6 +27,7 @@ object WhatsNew {
         41 -> notes318()
         42 -> notes319()
         43 -> notes3110()
+        44 -> notes3111()
         else -> emptyList()
     }
 
@@ -173,6 +174,26 @@ object WhatsNew {
         Item(
             Icon.THEME, "Easier to read in light theme",
             "Your name at the top of Home is now clearly readable in the light theme too."
+        ),
+    )
+
+    private fun notes3111(): List<Item> = if (AppLocale.isItalian) listOf(
+        Item(
+            Icon.FILTER, "Filtri nuovi nelle espansioni",
+            "Meccanica (ex, V, VMAX...), PS, illustratore, prezzo e \"Ti manca una stampa\", anche più insieme. E puoi ordinare per prezzo, nome o rarità."
+        ),
+        Item(
+            Icon.FOLD, "Pokédex più comodo",
+            "Apri o chiudi tutte le serie con un tocco, e tornando da un'espansione ritrovi tutto come l'avevi lasciato."
+        ),
+    ) else listOf(
+        Item(
+            Icon.FILTER, "New filters in expansions",
+            "Mechanic (ex, V, VMAX...), HP, illustrator, price and \"Missing a print\", even combined. And you can sort by price, name or rarity."
+        ),
+        Item(
+            Icon.FOLD, "Handier Pokédex",
+            "Open or close every series with one tap, and coming back from an expansion you find everything as you left it."
         ),
     )
 }

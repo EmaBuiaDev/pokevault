@@ -640,7 +640,7 @@ object AppLocale {
     val cardsAndExpansions: String get() = if (isItalian) "Carte e Espansioni" else "Cards & Expansions"
     val extensions: String get() = if (isItalian) "Espansioni" else "Expansions"
     val searchCards: String get() = if (isItalian) "Cerca carte" else "Search cards"
-    val searchInSets: String get() = if (isItalian) "Cerca tra tutte le espansioni..." else "Search across all expansions..."
+    val searchInSets: String get() = if (isItalian) "Cerca carta" else "Search card"
     val searchAllLanguages: String get() = if (isItalian) "🌐 Tutte" else "🌐 All"
     val searchSetPlaceholder: String get() = if (isItalian) "Cerca un'espansione..." else "Search an expansion..."
     // Filtri della ricerca carte: le voci vengono dal catalogo, le etichette no.
@@ -665,6 +665,33 @@ object AppLocale {
     else
         "Prices exist only for expansions already downloaded: filtering by range leaves cards without a price out."
     val searchEmptyHint: String get() = if (isItalian) "Scrivi un nome o un numero (67/87)" else "Type a name or a number (67/87)"
+
+    // ── Filtri dentro un'espansione ──
+    // Generico: in un set italiano le carte inglesi non ci sono, e viceversa.
+    val setSearchPlaceholder: String get() = if (isItalian) "Cerca carta" else "Search card"
+    fun setMissingCount(count: Int): String = if (isItalian) "Mancanti $count" else "Missing $count"
+    fun setOwnedCount(count: Int): String = if (isItalian) "Possedute $count" else "Owned $count"
+    val sortBy: String get() = if (isItalian) "Ordina per" else "Sort by"
+    val sortByNumber: String get() = if (isItalian) "Numero" else "Number"
+    val sortByPriceDesc: String get() = if (isItalian) "Prezzo: dal più alto" else "Price: high to low"
+    val sortByPriceAsc: String get() = if (isItalian) "Prezzo: dal più basso" else "Price: low to high"
+    val sortByName: String get() = if (isItalian) "Nome (A-Z)" else "Name (A-Z)"
+    val sortByRarity: String get() = if (isItalian) "Rarità: dalla più alta" else "Rarity: rarest first"
+    val sortByHp: String get() = if (isItalian) "PS: dal più alto" else "HP: highest first"
+    val filterCollectionSection: String get() = if (isItalian) "Collezione" else "Collection"
+    val filterOnlyWishlist: String get() = if (isItalian) "Nella wishlist" else "In a wishlist"
+    val filterMissingVariant: String get() = if (isItalian) "Ti manca una stampa" else "Missing a print"
+    val filterMissingVariantHint: String get() = if (isItalian)
+        "Carte che hai, ma non in tutte le stampe (es. hai la Normale e non la Reverse)."
+    else
+        "Cards you own, but not in every print (e.g. you have the Normal but not the Reverse)."
+    val filterStage: String get() = if (isItalian) "Fase" else "Stage"
+    fun showAllArtists(count: Int): String = if (isItalian) "Tutti i $count illustratori" else "All $count illustrators"
+    val clearShort: String get() = if (isItalian) "Azzera" else "Clear"
+    val setPriceCaveat: String get() = if (isItalian)
+        "Contano i prezzi già caricati: le carte senza prezzo restano fuori dalle fasce e in fondo all'ordine per prezzo."
+    else
+        "Only prices already loaded count: cards without a price fall outside the ranges and last in price order."
 
     val searchCardPlaceholder: String get() = if (isItalian) "Cerca carte" else "Search cards"
     val loadingSets: String get() = if (isItalian) "Caricamento espansioni..." else "Loading expansions..."
