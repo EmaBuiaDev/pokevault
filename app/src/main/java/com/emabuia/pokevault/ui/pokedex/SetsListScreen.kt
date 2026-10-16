@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +69,7 @@ import com.emabuia.pokevault.util.CollectionLayout
 import com.emabuia.pokevault.util.RarityUtils
 import com.emabuia.pokevault.util.minimumEurPriceOrZero
 import com.emabuia.pokevault.viewmodel.CardSearchScope
+import com.emabuia.pokevault.viewmodel.SeriesSetsGroup
 import com.emabuia.pokevault.viewmodel.SetsUiState
 import com.emabuia.pokevault.util.ImageUrlUtils
 import com.emabuia.pokevault.viewmodel.SetsViewModel
@@ -206,12 +208,21 @@ fun SetsListScreen(
     val state = viewModel.uiState
     // Arrivando dalla barra della Home la schermata parte gia' sulla ricerca
     // carte invece che sull'elenco espansioni.
-    var isSearchingCards by remember { mutableStateOf(openCardSearch) }
+    // Saveable, come le serie chiuse e la vista qui sotto: aprendo un'espansione
+    // la navigazione butta via i remember, e tornando indietro si ritrovava
+    // l'elenco espansioni al posto della ricerca, e ogni serie riaperta.
+    var isSearchingCards by rememberSaveable { mutableStateOf(openCardSearch) }
     val cardSearchFocus = remember { FocusRequester() }
     var selectedCard by remember { mutableStateOf<TcgCard?>(null) }
-    var collapsedSeriesKeys by remember { mutableStateOf(emptySet<String>()) }
+    // Si ricordano le serie chiuse, non quelle aperte: una serie nuova arriva
+    // aperta. Salvate come lista, come in Collezione.
+    var collapsedSeriesKeys by rememberSaveable(
+        stateSaver = listSaver<Set<String>, String>(save = { it.toList() }, restore = { it.toSet() })
+    ) { mutableStateOf(emptySet<String>()) }
+    // "Chiudi tutte" lascia la griglia sulla serie che si stava guardando.
+    var scrollToSeriesKey by remember { mutableStateOf<String?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
-    var cardViewMode by remember { mutableStateOf(CardViewMode.GRID) }
+    var cardViewMode by rememberSaveable { mutableStateOf(CardViewMode.GRID) }
     // Risultati divisi per espansione (com'era) o tutti in una griglia sola.
     var cardResultsLayout by rememberSaveable { mutableStateOf(CollectionLayout.BY_EXPANSION) }
     val setReleaseDateById = remember(state.allSets, state.englishSets) {
@@ -284,10 +295,33 @@ fun SetsListScreen(
     //
     // Il giro di frame serve perche' alla prima composizione il campo non e'
     // ancora agganciato e requestFocus() lancerebbe.
+    // Una volta sola: tornando da un'espansione l'effetto riparte, e la
+    // tastiera risaltava su da sola.
+    var cardSearchFocused by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(openCardSearch) {
-        if (!openCardSearch) return@LaunchedEffect
+        if (!openCardSearch || cardSearchFocused) return@LaunchedEffect
         delay(120)
         runCatching { cardSearchFocus.requestFocus() }
+        cardSearchFocused = true
+    }
+
+    // Cercando un'espansione per nome le serie si riaprono, o il risultato
+    // starebbe dentro una serie chiusa. Solo quando la ricerca comincia: al
+    // ritorno da un'espansione, con la ricerca gia' scritta, resta tutto com'era.
+    val isFilteringSets = state.searchQuery.isNotBlank()
+    var wasFilteringSets by rememberSaveable { mutableStateOf(isFilteringSets) }
+    LaunchedEffect(isFilteringSets) {
+        if (isFilteringSets && !wasFilteringSets) collapsedSeriesKeys = emptySet()
+        wasFilteringSets = isFilteringSets
+    }
+
+    // Dopo la ricomposizione, cosi' la griglia ha gia' le righe nuove: a
+    // scorrere prima si misurerebbe ancora sulle vecchie.
+    LaunchedEffect(scrollToSeriesKey) {
+        val key = scrollToSeriesKey ?: return@LaunchedEffect
+        val index = seriesHeaderGridIndex(state.seriesGroups, collapsedSeriesKeys, key)
+        if (index >= 0) setsGridState.scrollToItem(index)
+        scrollToSeriesKey = null
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -589,6 +623,23 @@ fun SetsListScreen(
                     Text(AppLocale.noResults, color = AppColors.textMuted, fontSize = 14.sp)
                 }
             } else {
+                val visibleSeriesKeys = state.seriesGroups.map { it.seriesKey }.toSet()
+                SeriesToggleAllRow(
+                    setCount = state.seriesGroups.sumOf { it.sets.size },
+                    canOpenAll = visibleSeriesKeys.any { it in collapsedSeriesKeys },
+                    onToggleAll = {
+                        val closingAll = visibleSeriesKeys.none { it in collapsedSeriesKeys }
+                        if (closingAll) {
+                            // La serie in cima prima di chiudere: le sue espansioni
+                            // spariscono, e con loro il punto in cui era la griglia.
+                            val anchor = state.seriesGroups.getOrNull(
+                                seriesIndexAtGridItem(setsGridState.firstVisibleItemIndex, state.seriesGroups, collapsedSeriesKeys)
+                            )
+                            scrollToSeriesKey = anchor?.seriesKey
+                        }
+                        collapsedSeriesKeys = toggleAllSeries(collapsedSeriesKeys, visibleSeriesKeys)
+                    }
+                )
                 LazyVerticalGrid(
                     state = setsGridState,
                     columns = GridCells.Fixed(2),
@@ -663,6 +714,77 @@ private fun SeriesSectionHeader(label: String, count: Int, isCollapsed: Boolean,
             )
         }
     }
+}
+
+// ── Apri / chiudi tutte le serie: la stessa pillola di Collezione ──
+@Composable
+private fun SeriesToggleAllRow(setCount: Int, canOpenAll: Boolean, onToggleAll: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            AppLocale.collectionExpansionsCount(setCount),
+            color = AppColors.textMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(AppColors.searchBar)
+                .clickable(onClick = onToggleAll)
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Icon(
+                imageVector = if (canOpenAll) Icons.Default.UnfoldMore else Icons.Default.UnfoldLess,
+                contentDescription = null,
+                tint = AppColors.textSecondary,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                if (canOpenAll) AppLocale.openAll else AppLocale.collapseAll,
+                color = AppColors.textPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+/**
+ * Le serie chiuse dopo "Apri tutte" / "Chiudi tutte". Si chiude tutto solo
+ * se e' gia' tutto aperto, come in Collezione. Tocca solo le serie a schermo:
+ * quelle dell'altra lingua restano come le si era lasciate.
+ */
+internal fun toggleAllSeries(collapsed: Set<String>, visibleKeys: Set<String>): Set<String> =
+    if (visibleKeys.none { it in collapsed }) collapsed + visibleKeys else collapsed - visibleKeys
+
+/** Le righe di una serie nella griglia: l'intestazione, piu' le espansioni se e' aperta. */
+private fun seriesGridItemCount(group: SeriesSetsGroup, collapsed: Set<String>): Int =
+    1 + if (group.seriesKey in collapsed) 0 else group.sets.size
+
+/** La serie a cui appartiene la riga [itemIndex] della griglia espansioni. */
+internal fun seriesIndexAtGridItem(itemIndex: Int, groups: List<SeriesSetsGroup>, collapsed: Set<String>): Int {
+    var start = 0
+    groups.forEachIndexed { index, group ->
+        start += seriesGridItemCount(group, collapsed)
+        if (itemIndex < start) return index
+    }
+    return groups.lastIndex
+}
+
+/** La riga dell'intestazione della serie [seriesKey], -1 se non c'e'. */
+internal fun seriesHeaderGridIndex(groups: List<SeriesSetsGroup>, collapsed: Set<String>, seriesKey: String): Int {
+    var start = 0
+    for (group in groups) {
+        if (group.seriesKey == seriesKey) return start
+        start += seriesGridItemCount(group, collapsed)
+    }
+    return -1
 }
 
 // ── Visualizzazione risultati ricerca carte: griglia (default) o lista (piu' dettagli per riga) ──
