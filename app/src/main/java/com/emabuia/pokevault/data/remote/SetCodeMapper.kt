@@ -1,5 +1,6 @@
 package com.emabuia.pokevault.data.remote
 
+import com.emabuia.pokevault.data.catalog.CardRef
 import java.text.Normalizer
 
 object SetCodeMapper {
@@ -166,6 +167,12 @@ object SetCodeMapper {
 
         normalizeDecklistSetCode(cardApiSetId)?.let { cardCanonical += it }
         normalizeDecklistSetCode(cardApiId?.substringBefore("-"))?.let { cardCanonical += it }
+        // Le carte dei nostri cataloghi hanno l'id "ita:sv06:128" / "eng:me01:9":
+        // tagliato al trattino diventava "ITA:SV06:128", che non e' nessun set, e
+        // il nome del set e' quello italiano ("Crepuscolo Mascherato"), che qui
+        // non si riconosce. Cosi' nessuna carta del catalogo risultava mai dello
+        // stesso set della decklist, e l'import ripiegava sul solo nome.
+        normalizeDecklistSetCode(CardRef.parse(cardApiId)?.setCode)?.let { cardCanonical += it }
         normalizeDecklistSetCode(cardSetName)?.let { cardCanonical += it }
 
         return importedCanonical in cardCanonical
