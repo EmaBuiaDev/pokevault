@@ -115,7 +115,8 @@ class DeckImportMatcherTest {
         val meg = card("doc-meg", "Bayleef", "ita:me01:30", "30")
         val match = DeckImportMatcher.find(listOf(asc, meg), "Bayleef", "MEG", "9")
         assertEquals(listOf("doc-meg", "doc-asc"), match.cards.map { it.id })
-        assertFalse(match.usedFallbackSet)
+        // Non e' la stampa chiesta (numero diverso): si usa, ma si dice.
+        assertTrue(match.usedFallbackSet)
     }
 
     @Test

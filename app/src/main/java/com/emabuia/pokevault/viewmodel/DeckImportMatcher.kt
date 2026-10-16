@@ -24,7 +24,7 @@ internal data class OwnedMatch(
 internal object DeckImportMatcher {
 
     fun find(owned: List<PokemonCard>, name: String, set: String?, number: String?): OwnedMatch {
-        val nameLower = name.lowercase().trim()
+        val nameKey = nameKey(name)
 
         // Le energie base si cercano per tipo, non per stampa: "Basic Psychic
         // Energy SVE 5" e l'"Energia Psico" gia' in collezione sono la stessa
@@ -53,7 +53,7 @@ internal object DeckImportMatcher {
         if (!set.isNullOrBlank() && !number.isNullOrBlank()) {
             val exact = owned.filter { card ->
                 sameNumber(card, number) && sameSet(card) &&
-                    (card.name.lowercase().trim() == nameLower || CardRef.parse(card.apiCardId) != null)
+                    (nameKey(card.name) == nameKey || CardRef.parse(card.apiCardId) != null)
             }
             if (exact.isNotEmpty()) return OwnedMatch(exact, usedFallbackSet = false)
         }
@@ -61,7 +61,7 @@ internal object DeckImportMatcher {
         // 2. Nome + numero, con lo stesso set davanti quando c'e'.
         if (number != null) {
             val byNameAndNumber = owned
-                .filter { card -> card.name.lowercase().trim() == nameLower && sameNumber(card, number) }
+                .filter { card -> nameKey(card.name) == nameKey && sameNumber(card, number) }
                 .sortedByDescending { sameSet(it) }
             if (byNameAndNumber.isNotEmpty()) {
                 val hasSetMatch = set.isNullOrBlank() || sameSet(byNameAndNumber.first())
@@ -72,15 +72,22 @@ internal object DeckImportMatcher {
         // 3. Solo il nome: le copie dello stesso set per prime, cosi' le copie
         //    mancanti si prendono da altre stampe solo dopo aver usato quelle giuste.
         val byName = owned
-            .filter { card -> card.name.lowercase().trim() == nameLower }
+            .filter { card -> nameKey(card.name) == nameKey }
             .sortedByDescending { sameSet(it) }
         if (byName.isNotEmpty()) {
-            return OwnedMatch(byName, usedFallbackSet = !set.isNullOrBlank() && !sameSet(byName.first()))
+            // Qui si arriva solo se la stampa esatta non c'e': anche dallo stesso
+            // set e' un'altra carta (Meowth ex POR 62 non e' la 121), e va detto.
+            return OwnedMatch(byName, usedFallbackSet = !set.isNullOrBlank())
         }
 
-        // 4. Nome parziale (contiene).
+        // 4. Nome parziale (contiene), ma mai fra una carta con la regola ex/V/GX
+        //    e la sua versione normale: "Meowth ex" contiene "Meowth", e cosi'
+        //    l'import metteva nel mazzo il Meowth base al posto dell'ex.
+        val ruleBox = hasRuleBox(name)
         val byPartial = owned.filter { card ->
-            card.name.lowercase().contains(nameLower) || nameLower.contains(card.name.lowercase())
+            val own = nameKey(card.name)
+            own.isNotEmpty() && nameKey.isNotEmpty() &&
+                (own.contains(nameKey) || nameKey.contains(own)) && hasRuleBox(card.name) == ruleBox
         }
         return OwnedMatch(byPartial, usedFallbackSet = byPartial.isNotEmpty() && !set.isNullOrBlank())
     }
@@ -95,6 +102,22 @@ internal object DeckImportMatcher {
         val own = CardRef.parse(card.apiCardId)?.number ?: card.cardNumber.trim()
         return stripZeros(own).equals(stripZeros(wanted), ignoreCase = true)
     }
+
+    /**
+     * Il nome per il confronto: minuscolo, senza accenti, spazi e punteggiatura.
+     * "Meowth ex", "Meowth-ex" e "Meowth EX" sono la stessa carta scritta da
+     * fonti diverse (decklist inglese, catalogo italiano).
+     */
+    internal fun nameKey(raw: String): String =
+        java.text.Normalizer.normalize(raw.lowercase().trim(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z0-9]+"), "")
+
+    private val RULE_BOX = setOf("ex", "gx", "v", "vmax", "vstar", "vunion", "break", "lvx", "prime")
+
+    /** La carta ha una regola speciale nel nome (ex, V, VMAX, GX...): "Meowth ex" si', "Meowth" no. */
+    internal fun hasRuleBox(raw: String): Boolean =
+        raw.lowercase().split(Regex("[^a-z0-9]+")).any { it in RULE_BOX }
 
     private fun stripZeros(raw: String): String =
         raw.trim().substringBefore('/').trimStart('0').ifEmpty { "0" }
