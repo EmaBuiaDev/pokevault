@@ -12,5 +12,5 @@
 -- 4102444800000 = 2100-01-01 in millisecondi epoch.
 
 INSERT INTO gift_redemptions (uid, code, device_hash, granted_until_ms)
-VALUES ('<UID>', 'LIFETIME-OWNER', NULL, 4102444800000)
+VALUES ('yDj6CiAXrjYv58aNVicuYMWW2vw2', 'LIFETIME-OWNER', NULL, 4102444800000)
 ON CONFLICT(uid) DO UPDATE SET granted_until_ms = 4102444800000;
