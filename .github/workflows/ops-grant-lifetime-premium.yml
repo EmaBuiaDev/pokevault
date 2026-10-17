@@ -1,0 +1,30 @@
+name: Ops - grant lifetime premium
+
+# One-off operator utility: applies pokevault-proxy-worker/scripts/grant-lifetime-premium.sql
+# to the production D1 (gift_redemptions), giving one account premium until 2100.
+# Manual trigger only. Reuses the repo's existing CLOUDFLARE_API_TOKEN secret.
+# Idempotent (ON CONFLICT DO UPDATE).
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  grant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: pokevault-proxy-worker
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply grant
+        run: npx --yes wrangler d1 execute pokevault-catalog --remote --file scripts/grant-lifetime-premium.sql
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Verify
+        run: npx --yes wrangler d1 execute pokevault-catalog --remote --command "SELECT uid, granted_until_ms FROM gift_redemptions WHERE code = 'LIFETIME-OWNER'"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
